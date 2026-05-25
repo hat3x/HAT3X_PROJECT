@@ -22,6 +22,10 @@ beforeEach(() => {
   } as any)
 })
 
+afterEach(() => {
+  vi.resetModules()
+})
+
 describe("createCheckpoint", () => {
   it("inserts a checkpoint row with correct fields", async () => {
     const { createCheckpoint } = await import("../../src/checkpoint/factory")
@@ -70,5 +74,25 @@ describe("resolveCheckpoint", () => {
     const { resolveCheckpoint } = await import("../../src/checkpoint/factory")
     await resolveCheckpoint("CHK-001", "rejected", "Needs rework")
     expect(MOCK_UPDATE).toHaveBeenCalledOnce()
+  })
+})
+
+describe("createCheckpoint — error handling", () => {
+  it("throws when insert fails", async () => {
+    MOCK_INSERT.mockResolvedValue({ error: { message: "DB error" } })
+    const { createCheckpoint } = await import("../../src/checkpoint/factory")
+    await expect(
+      createCheckpoint({ taskId: "HAT3X-001", afterPhase: 1, reason: "test", requiredApproval: "jose" })
+    ).rejects.toThrow("Failed to create checkpoint: DB error")
+  })
+})
+
+describe("resolveCheckpoint — error handling", () => {
+  it("throws when update fails", async () => {
+    MOCK_UPDATE.mockResolvedValue({ error: { message: "DB error" } })
+    const { resolveCheckpoint } = await import("../../src/checkpoint/factory")
+    await expect(
+      resolveCheckpoint("CHK-001", "approved", "ok")
+    ).rejects.toThrow("Failed to resolve checkpoint: DB error")
   })
 })
