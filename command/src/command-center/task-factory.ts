@@ -7,6 +7,7 @@ interface CreateTaskInput {
   clientId?: string
 }
 
+// Single-user CLI — sequential ID generation is safe; no concurrent callers expected
 async function getNextTaskId(): Promise<string> {
   const client = getSupabaseClient()
   const { data, error } = await client
@@ -16,13 +17,16 @@ async function getNextTaskId(): Promise<string> {
     .limit(1)
     .single()
 
-  if (error && error.code !== "PGRST116") {
+  if (error != null && error.code !== "PGRST116") {
     throw new Error(`Failed to get last task ID: ${error.message}`)
   }
 
   if (!data) return "HAT3X-001"
 
-  const lastNumber = parseInt((data as { id: string }).id.replace("HAT3X-", ""), 10)
+  const rawId = (data as { id?: string } | null)?.id ?? ""
+  if (!rawId.startsWith("HAT3X-")) return "HAT3X-001"
+  const lastNumber = parseInt(rawId.replace("HAT3X-", ""), 10)
+  if (isNaN(lastNumber)) return "HAT3X-001"
   return `HAT3X-${String(lastNumber + 1).padStart(3, "0")}`
 }
 
