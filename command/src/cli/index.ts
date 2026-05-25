@@ -1,6 +1,7 @@
 import { Command } from "commander"
 import { runNueva } from "./commands/nueva.js"
 import { runStatus } from "./commands/status.js"
+import { runPlan } from "./commands/plan.js"
 
 export function buildCli(): Command {
   const program = new Command()
@@ -19,6 +20,18 @@ export function buildCli(): Command {
     .command("status [id]")
     .description("Ver estado de proyectos")
     .action(async (id?: string) => { console.log(await runStatus({ id })) })
+
+  program
+    .command("plan <id>")
+    .description("Ver plan de ejecucion de una tarea")
+    .action(async (id: string) => {
+      try {
+        await runPlan(id)
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err))
+        process.exit(1)
+      }
+    })
 
   return program
 }
