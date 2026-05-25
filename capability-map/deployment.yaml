@@ -1,0 +1,9 @@
+vertical: deployment
+agentId: pm-webs-apps
+skills:
+  - deploy-vercel
+  - github
+  - testing-vitest
+maxParallelSubtasks: 2
+typicalHoursPerSubtask: 3
+requiresClientApproval: false

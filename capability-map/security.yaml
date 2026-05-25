@@ -1,0 +1,9 @@
+vertical: security
+agentId: pm-webs-apps
+skills:
+  - security-audit
+  - code-review
+  - api-design
+maxParallelSubtasks: 2
+typicalHoursPerSubtask: 5
+requiresClientApproval: true

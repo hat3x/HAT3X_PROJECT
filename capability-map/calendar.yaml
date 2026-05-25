@@ -1,0 +1,9 @@
+vertical: calendar
+agentId: pm-automatizaciones
+skills:
+  - integrations/calendar
+  - integrations/crm
+  - n8n-advanced
+maxParallelSubtasks: 2
+typicalHoursPerSubtask: 3
+requiresClientApproval: false

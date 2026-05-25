@@ -1,0 +1,9 @@
+vertical: testing
+agentId: pm-webs-apps
+skills:
+  - testing-qa
+  - testing-vitest
+  - code-review
+maxParallelSubtasks: 3
+typicalHoursPerSubtask: 4
+requiresClientApproval: false
