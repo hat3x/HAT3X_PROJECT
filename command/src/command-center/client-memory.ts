@@ -16,12 +16,19 @@ export async function loadClientMemory(clientId: string): Promise<ClientMemory |
   if (data == null) return null
 
   const row = data as Record<string, unknown>
+
+  if (typeof row["id"] !== "string" || typeof row["name"] !== "string") {
+    throw new Error(`Invalid client record from DB: missing id or name`)
+  }
+
   return {
-    id: row["id"] as string,
-    name: row["name"] as string,
-    sector: (row["sector"] as string | null) ?? null,
-    previousProjects: (row["previous_projects"] as string[] | null) ?? [],
-    notes: (row["notes"] as string | null) ?? null,
+    id: row["id"],
+    name: row["name"],
+    sector: typeof row["sector"] === "string" ? row["sector"] : null,
+    previousProjects: Array.isArray(row["previous_projects"])
+      ? (row["previous_projects"] as string[])
+      : [],
+    notes: typeof row["notes"] === "string" ? row["notes"] : null,
   }
 }
 
