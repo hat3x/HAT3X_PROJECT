@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS hat3x_clients (
 
 CREATE TABLE IF NOT EXISTS bus_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  task_id TEXT NOT NULL REFERENCES hat3x_tasks(id),
+  task_id TEXT NOT NULL REFERENCES hat3x_tasks(id) ON DELETE CASCADE,
   event_type TEXT NOT NULL,
   agent_id TEXT,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,

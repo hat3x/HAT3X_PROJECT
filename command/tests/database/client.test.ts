@@ -1,8 +1,22 @@
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { getSupabaseClient, resetClient } from "../../src/database/client.js"
 
 describe("getSupabaseClient", () => {
-  beforeEach(() => resetClient())
+  let originalUrl: string | undefined
+
+  beforeEach(() => {
+    originalUrl = process.env["SUPABASE_URL"]
+    resetClient()
+  })
+
+  afterEach(() => {
+    if (originalUrl !== undefined) {
+      process.env["SUPABASE_URL"] = originalUrl
+    } else {
+      delete process.env["SUPABASE_URL"]
+    }
+    resetClient()
+  })
 
   it("returns a client when env vars are set", () => {
     const client = getSupabaseClient()
@@ -16,11 +30,8 @@ describe("getSupabaseClient", () => {
   })
 
   it("throws when SUPABASE_URL is missing", () => {
-    const url = process.env["SUPABASE_URL"]
     delete process.env["SUPABASE_URL"]
     resetClient()
     expect(() => getSupabaseClient()).toThrow("SUPABASE_URL")
-    process.env["SUPABASE_URL"] = url
-    resetClient()
   })
 })
