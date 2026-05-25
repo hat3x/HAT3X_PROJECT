@@ -55,8 +55,8 @@ export async function createTask(input: CreateTaskInput): Promise<HatTask> {
     id: string
     client_id: string | null
     order_raw: string
-    subtasks: unknown
-    execution_plan: unknown
+    subtasks: HatTask["subtasks"]
+    execution_plan: HatTask["executionPlan"]
     control_mode: string
     status: string
     created_at: string
@@ -66,8 +66,8 @@ export async function createTask(input: CreateTaskInput): Promise<HatTask> {
     id: row.id,
     clientId: row.client_id,
     orderRaw: row.order_raw,
-    subtasks: row.subtasks,
-    executionPlan: row.execution_plan,
+    subtasks: row.subtasks ?? [],
+    executionPlan: row.execution_plan ?? null,
     controlMode: row.control_mode as ControlMode,
     status: row.status as HatTask["status"],
     createdAt: row.created_at,
