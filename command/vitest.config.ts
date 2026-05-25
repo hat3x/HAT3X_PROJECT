@@ -5,5 +5,8 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["./tests/helpers/setup.ts"],
+    // Sequential file execution — task ID generator uses a sequential counter
+    // that is not safe under concurrent inserts (single-user CLI design)
+    fileParallelism: false,
   },
 })
