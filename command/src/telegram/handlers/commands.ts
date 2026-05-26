@@ -10,6 +10,8 @@ import {
 } from "../notifications/formatters.js"
 import type { ExecutionPlan, Subtask } from "../../types.js"
 import type { HatCheckpoint } from "../../checkpoint/types.js"
+import { runLearningCycle } from "../../learning-officer/index.js"
+import type { NotificationSender } from "../notifications/sender.js"
 
 function rowToCheckpoint(row: Record<string, unknown>): HatCheckpoint {
   return {
@@ -140,8 +142,20 @@ export async function handleAyuda(ctx: Context): Promise<void> {
     "/checkpoints — Ver checkpoints pendientes",
     "/aprobar <id> [feedback] — Aprobar checkpoint",
     "/rechazar <id> <motivo> — Rechazar checkpoint",
+    "/aprender — Ejecutar ciclo de aprendizaje",
     "/ayuda — Este mensaje",
   ].join("\n")
 
   await ctx.reply(help, { parse_mode: "Markdown" })
+}
+
+export function createHandleAprender(sender: NotificationSender) {
+  return async (ctx: Context): Promise<void> => {
+    await ctx.reply("🧠 Ejecutando ciclo de aprendizaje...")
+    try {
+      await runLearningCycle(sender)
+    } catch (err) {
+      await ctx.reply(`❌ Error: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
 }

@@ -4,6 +4,9 @@ import { CommandCenter } from "../../src/command-center/index"
 
 vi.mock("../../src/database/client")
 vi.mock("../../src/command-center/index")
+vi.mock("../../src/learning-officer/index.js", () => ({
+  runLearningCycle: vi.fn().mockResolvedValue("🧠 informe"),
+}))
 
 function makeMockCtx(text: string = "") {
   return {
@@ -188,5 +191,31 @@ describe("handleAyuda", () => {
     expect(replyText).toContain("/status")
     expect(replyText).toContain("/nuevo")
     expect(replyText).toContain("/checkpoints")
+  })
+})
+
+describe("createHandleAprender", () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it("responde con mensaje de inicio y llama runLearningCycle", async () => {
+    const { runLearningCycle } = await import("../../src/learning-officer/index.js")
+    const { createHandleAprender } = await import("../../src/telegram/handlers/commands")
+    const sender = { sendEvolutionReport: vi.fn() }
+    const handler = createHandleAprender(sender as any)
+    const ctx = makeMockCtx("/aprender")
+    await handler(ctx)
+    expect(ctx.reply).toHaveBeenCalledWith("🧠 Ejecutando ciclo de aprendizaje...")
+    expect(runLearningCycle).toHaveBeenCalledWith(sender)
+  })
+
+  it("responde con error cuando runLearningCycle lanza excepción", async () => {
+    const { runLearningCycle } = await import("../../src/learning-officer/index.js")
+    vi.mocked(runLearningCycle).mockRejectedValueOnce(new Error("DB down"))
+    const { createHandleAprender } = await import("../../src/telegram/handlers/commands")
+    const handler = createHandleAprender({ sendEvolutionReport: vi.fn() } as any)
+    const ctx = makeMockCtx("/aprender")
+    await handler(ctx)
+    const allReplies = ctx.reply.mock.calls.map((c: any[]) => c[0]).join(" ")
+    expect(allReplies).toContain("Error: DB down")
   })
 })

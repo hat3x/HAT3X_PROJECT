@@ -5,6 +5,7 @@ import {
   handleCheckpoints,
   handlePlan,
   handleAyuda,
+  createHandleAprender,
 } from "./handlers/commands.js"
 import {
   handleApproveCallback,
@@ -62,4 +63,8 @@ export function createNotificationSender(bot: Bot): NotificationSender {
 export function startGlobalSubscriber(bot: Bot): ReturnType<typeof createGlobalSubscriber> {
   const sender = createNotificationSender(bot)
   return createGlobalSubscriber(sender)
+}
+
+export function wireLearnCommand(bot: Bot, sender: NotificationSender): void {
+  bot.command("aprender", createHandleAprender(sender))
 }

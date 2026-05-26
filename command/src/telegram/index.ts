@@ -1,11 +1,17 @@
 import { config } from "dotenv"
 config({ path: ".env" })
 
-import { createBot, startGlobalSubscriber } from "./bot.js"
+import { createBot, startGlobalSubscriber, wireLearnCommand } from "./bot.js"
+import { NotificationSender } from "./notifications/sender.js"
+import { startLearningScheduler } from "../scheduler/index.js"
 
 async function startBot(): Promise<void> {
   const bot = createBot()
+  const sender = new NotificationSender(bot)
   const globalSub = startGlobalSubscriber(bot)
+
+  wireLearnCommand(bot, sender)
+  startLearningScheduler(sender)
 
   await globalSub.subscribe()
   console.log("HAT3X Command — Global subscriber activo")
