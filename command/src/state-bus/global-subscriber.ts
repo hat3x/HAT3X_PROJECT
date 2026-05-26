@@ -45,6 +45,30 @@ export function createGlobalSubscriber(sender: NotificationSender): GlobalSubscr
       const agentId = (row["agent_id"] as string | null) ?? "unknown"
       const reason = (payload["reason"] as string | undefined) ?? "Razón desconocida"
       await sender.sendAgentBlocked(taskId, agentId, reason)
+      return
+    }
+
+    if (eventType === "meeting.called") {
+      const mtgRow = payload["meeting"] as Record<string, unknown> | undefined
+      if (mtgRow == null) return
+      await sender.sendMeetingCalled(
+        mtgRow["id"] as string,
+        taskId,
+        mtgRow["topic"] as string,
+        mtgRow["called_by"] as string
+      )
+      return
+    }
+
+    if (eventType === "meeting.resolved") {
+      const mtgRow = payload["meeting"] as Record<string, unknown> | undefined
+      if (mtgRow == null) return
+      await sender.sendMeetingResolved(
+        mtgRow["id"] as string,
+        taskId,
+        (mtgRow["consensus"] as string | undefined) ?? ""
+      )
+      return
     }
   }
 

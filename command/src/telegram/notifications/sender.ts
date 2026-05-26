@@ -45,4 +45,51 @@ export class NotificationSender {
     ].join("\n")
     await this.bot.api.sendMessage(chatId, text, { parse_mode: "Markdown" })
   }
+
+  async sendMeetingCalled(
+    meetingId: string,
+    taskId: string,
+    topic: string,
+    calledBy: string
+  ): Promise<void> {
+    const chatId = this.getChatId()
+    const text = [
+      `🗣️ *Reunión convocada — ${meetingId}*`,
+      `Tarea: \`${taskId}\``,
+      `Tema: ${topic}`,
+      `Convocada por: \`${calledBy}\``,
+    ].join("\n")
+    await this.bot.api.sendMessage(chatId, text, { parse_mode: "Markdown" })
+  }
+
+  async sendMeetingResolved(
+    meetingId: string,
+    taskId: string,
+    consensus: string
+  ): Promise<void> {
+    const chatId = this.getChatId()
+    const text = [
+      `✅ *Reunión resuelta — ${meetingId}*`,
+      `Tarea: \`${taskId}\``,
+      `Consenso: *${consensus}*`,
+    ].join("\n")
+    await this.bot.api.sendMessage(chatId, text, { parse_mode: "Markdown" })
+  }
+
+  async sendCheckpointReminder(checkpoint: HatCheckpoint): Promise<void> {
+    const chatId = this.getChatId()
+    const hours = Math.floor(
+      (Date.now() - new Date(checkpoint.triggeredAt).getTime()) / (1000 * 60 * 60)
+    )
+    const text = [
+      `⏰ *recordatorio — Checkpoint pendiente: ${checkpoint.id}*`,
+      `Tarea: \`${checkpoint.taskId}\``,
+      `Motivo: ${checkpoint.reason}`,
+      `Pendiente hace: ${hours}h`,
+      "",
+      `Aprueba: /aprobar ${checkpoint.id}`,
+      `Rechaza: /rechazar ${checkpoint.id} <motivo>`,
+    ].join("\n")
+    await this.bot.api.sendMessage(chatId, text, { parse_mode: "Markdown" })
+  }
 }
