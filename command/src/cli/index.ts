@@ -2,6 +2,7 @@ import { Command } from "commander"
 import { runNueva } from "./commands/nueva.js"
 import { runStatus } from "./commands/status.js"
 import { runPlan } from "./commands/plan.js"
+import { fetchProgressData, formatProgress } from "./commands/progress.js"
 
 export function buildCli(): Command {
   const program = new Command()
@@ -27,6 +28,19 @@ export function buildCli(): Command {
     .action(async (id: string) => {
       try {
         await runPlan(id)
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err))
+        process.exit(1)
+      }
+    })
+
+  program
+    .command("progress <id>")
+    .description("Muestra el progreso de una tarea: reuniones abiertas y checkpoints pendientes")
+    .action(async (id: string) => {
+      try {
+        const data = await fetchProgressData(id)
+        console.log(formatProgress(data))
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err))
         process.exit(1)
