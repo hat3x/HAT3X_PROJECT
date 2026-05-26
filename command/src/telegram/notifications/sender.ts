@@ -92,4 +92,9 @@ export class NotificationSender {
     ].join("\n")
     await this.bot.api.sendMessage(chatId, text, { parse_mode: "Markdown" })
   }
+
+  async sendEvolutionReport(report: string): Promise<void> {
+    const chatId = this.getChatId()
+    await this.bot.api.sendMessage(chatId, report, { parse_mode: "Markdown" })
+  }
 }
