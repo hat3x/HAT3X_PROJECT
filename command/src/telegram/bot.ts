@@ -60,8 +60,7 @@ export function createNotificationSender(bot: Bot): NotificationSender {
   return new NotificationSender(bot)
 }
 
-export function startGlobalSubscriber(bot: Bot): ReturnType<typeof createGlobalSubscriber> {
-  const sender = createNotificationSender(bot)
+export function startGlobalSubscriber(bot: Bot, sender: NotificationSender): ReturnType<typeof createGlobalSubscriber> {
   return createGlobalSubscriber(sender)
 }
 

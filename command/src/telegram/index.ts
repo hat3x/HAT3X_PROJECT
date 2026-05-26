@@ -8,7 +8,7 @@ import { startLearningScheduler } from "../scheduler/index.js"
 async function startBot(): Promise<void> {
   const bot = createBot()
   const sender = new NotificationSender(bot)
-  const globalSub = startGlobalSubscriber(bot)
+  const globalSub = startGlobalSubscriber(bot, sender)
 
   wireLearnCommand(bot, sender)
   startLearningScheduler(sender)

@@ -206,6 +206,8 @@ describe("createHandleAprender", () => {
     await handler(ctx)
     expect(ctx.reply).toHaveBeenCalledWith("🧠 Ejecutando ciclo de aprendizaje...")
     expect(runLearningCycle).toHaveBeenCalledWith(sender)
+    // Only the initial message — no error reply (report is sent by sendEvolutionReport inside runLearningCycle)
+    expect(ctx.reply).toHaveBeenCalledTimes(1)
   })
 
   it("responde con error cuando runLearningCycle lanza excepción", async () => {
