@@ -1,0 +1,261 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hat3x.com/schemas/onboarding_input.schema.json",
+  "title": "HAT3X Onboarding Input",
+  "description": "Schema de validación para el input del sistema de onboarding de clientes HAT3X",
+  "type": "object",
+  "required": ["cliente", "proyecto", "comercial", "legal", "portal_cliente"],
+  "additionalProperties": false,
+  "properties": {
+    "cliente": {
+      "type": "object",
+      "description": "Datos de identificación del cliente",
+      "required": ["nombre", "nombre_legal", "contacto", "email", "sector"],
+      "additionalProperties": false,
+      "properties": {
+        "nombre": {
+          "type": "string",
+          "description": "Nombre comercial del cliente",
+          "minLength": 1,
+          "examples": ["NovaMed"]
+        },
+        "nombre_legal": {
+          "type": "string",
+          "description": "Razón social completa (para contratos y facturas)",
+          "minLength": 1,
+          "examples": ["NovaMed Solutions S.L."]
+        },
+        "nombre_slug": {
+          "type": "string",
+          "description": "Identificador URL-safe para carpetas y rutas. Si no se provee, se deriva de nombre.",
+          "pattern": "^[a-z0-9-]+$",
+          "examples": ["novamed"]
+        },
+        "contacto": {
+          "type": "string",
+          "description": "Nombre completo del contacto principal",
+          "minLength": 1,
+          "examples": ["María García López"]
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email del contacto principal",
+          "examples": ["maria.garcia@novamed.es"]
+        },
+        "telefono": {
+          "type": "string",
+          "description": "Teléfono del contacto principal",
+          "examples": ["+34 91 123 45 67"]
+        },
+        "direccion": {
+          "type": "string",
+          "description": "Dirección fiscal completa",
+          "examples": ["Calle Mayor 45, 2º, 28013 Madrid, España"]
+        },
+        "sector": {
+          "type": "string",
+          "description": "Sector de actividad del cliente",
+          "examples": ["Salud", "Finanzas", "Retail", "Logística", "Industria"]
+        },
+        "tamano": {
+          "type": "string",
+          "enum": ["micropyme", "pyme", "empresa", "gran_empresa"],
+          "description": "Tamaño de la organización del cliente"
+        }
+      }
+    },
+    "proyecto": {
+      "type": "object",
+      "description": "Datos técnicos y operativos del proyecto",
+      "required": ["nombre", "tipo_servicio", "descripcion", "objetivos_negocio"],
+      "additionalProperties": false,
+      "properties": {
+        "nombre": {
+          "type": "string",
+          "description": "Nombre del proyecto",
+          "minLength": 1,
+          "examples": ["Automatización de Historiales Clínicos"]
+        },
+        "tipo_servicio": {
+          "type": "string",
+          "enum": [
+            "auditoria_roadmap_ia",
+            "automatizacion_agentes",
+            "apps_con_ia",
+            "integraciones",
+            "analitica_ml",
+            "gobernanza_ia",
+            "mixto"
+          ],
+          "description": "Tipo de servicio HAT3X contratado"
+        },
+        "descripcion": {
+          "type": "string",
+          "description": "Descripción técnica del proyecto. Sin hipérbole, orientada a hechos.",
+          "minLength": 50,
+          "examples": ["Automatización del proceso de ingesta, clasificación y recuperación de historiales clínicos mediante agentes de IA, eliminando la transcripción manual."]
+        },
+        "objetivos_negocio": {
+          "type": "string",
+          "description": "Objetivos de negocio que el proyecto debe alcanzar",
+          "examples": ["Reducir en un 70% el tiempo de gestión de historiales. Eliminar errores de transcripción manual. Cumplir con RGPD en el tratamiento de datos de pacientes."]
+        },
+        "alcance_incluido": {
+          "type": "string",
+          "description": "Lista detallada de lo que incluye el proyecto",
+          "examples": ["Diseño e implementación del pipeline de ingesta. Modelo de clasificación de documentos. API de búsqueda semántica. Formación al equipo de administración."]
+        },
+        "alcance_excluido": {
+          "type": "string",
+          "description": "Lista detallada de lo que NO incluye el proyecto",
+          "examples": ["Desarrollo del sistema de HIS existente. Soporte post-go-live más de 3 meses. Formación a personal médico."]
+        },
+        "entregables": {
+          "type": "string",
+          "description": "Lista de entregables comprometidos con formato y criterio de aceptación",
+          "examples": ["Pipeline de ingesta de documentos PDF/DICOM. API REST de búsqueda semántica. Dashboard de auditoría de accesos. Documentación técnica completa."]
+        },
+        "stack_herramientas": {
+          "type": "string",
+          "description": "Stack tecnológico y herramientas a utilizar",
+          "examples": ["Python 3.11, LangChain, OpenAI API, Supabase (pgvector), n8n, Docker"]
+        },
+        "integraciones": {
+          "type": "string",
+          "description": "Sistemas existentes del cliente con los que se integrará el proyecto",
+          "examples": ["HIS OpenMedis (REST API v2), Active Directory del cliente, Sistema de backup externo"]
+        },
+        "restricciones": {
+          "type": "string",
+          "description": "Restricciones técnicas u operativas conocidas",
+          "examples": ["Datos no pueden salir de servidores en España. Solo herramientas open source para componentes core. Ventana de mantenimiento: sábados 2-6h."]
+        },
+        "riesgos_conocidos": {
+          "type": "string",
+          "description": "Riesgos identificados antes del inicio del proyecto",
+          "examples": ["API del HIS actual puede tener cambios de versión durante el proyecto. Calidad de los historiales escaneados puede variar significativamente."]
+        },
+        "responsable_cliente": {
+          "type": "string",
+          "description": "Nombre del responsable del proyecto en el lado del cliente",
+          "examples": ["Javier Martínez Ruiz"]
+        }
+      }
+    },
+    "comercial": {
+      "type": "object",
+      "description": "Datos comerciales y económicos del proyecto",
+      "required": ["precio", "forma_pago", "fecha_inicio", "fecha_fin"],
+      "additionalProperties": false,
+      "properties": {
+        "precio": {
+          "type": "string",
+          "description": "Precio total del proyecto (incluir moneda y si es sin IVA)",
+          "examples": ["24.000 € (sin IVA)"]
+        },
+        "forma_pago": {
+          "type": "string",
+          "description": "Condiciones de pago",
+          "examples": ["Transferencia bancaria a 30 días desde la emisión de cada factura"]
+        },
+        "hitos_facturacion": {
+          "type": "string",
+          "description": "Descripción de los hitos vinculados a cada factura",
+          "examples": ["40% al inicio (kickoff). 40% al finalizar implementación (Hito H3). 20% al go-live (Hito H5)."]
+        },
+        "fecha_inicio": {
+          "type": "string",
+          "format": "date",
+          "description": "Fecha de inicio del proyecto en formato ISO 8601 (YYYY-MM-DD)",
+          "examples": ["2026-04-15"]
+        },
+        "fecha_fin": {
+          "type": "string",
+          "format": "date",
+          "description": "Fecha de fin estimada del proyecto en formato ISO 8601 (YYYY-MM-DD)",
+          "examples": ["2026-07-31"]
+        }
+      }
+    },
+    "legal": {
+      "type": "object",
+      "description": "Datos legales para el contrato",
+      "required": ["jurisdiccion"],
+      "additionalProperties": false,
+      "properties": {
+        "jurisdiccion": {
+          "type": "string",
+          "description": "Jurisdicción aplicable al contrato",
+          "examples": ["España — Madrid"]
+        },
+        "confidencialidad": {
+          "type": "string",
+          "description": "Cláusula o términos específicos de confidencialidad. Si no se provee, se usa cláusula estándar.",
+          "examples": ["Ambas partes se comprometen a no divulgar información confidencial durante y por 3 años tras la finalización del contrato."]
+        },
+        "propiedad_intelectual": {
+          "type": "string",
+          "description": "Términos de propiedad intelectual. Si no se provee, se usa cláusula estándar.",
+          "examples": ["El cliente adquiere la propiedad total del código y entregables desarrollados específicamente para este proyecto. HAT3X retiene propiedad de sus frameworks y metodologías propias."]
+        }
+      }
+    },
+    "portal_cliente": {
+      "type": "object",
+      "description": "Datos del portal del cliente",
+      "required": ["provisioned"],
+      "additionalProperties": false,
+      "properties": {
+        "provisioned": {
+          "type": "boolean",
+          "description": "true si el acceso al portal ya está provisionado, false si está pendiente",
+          "examples": [false]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL del portal del cliente",
+          "examples": ["https://portal.hat3x.com"]
+        },
+        "username": {
+          "type": "string",
+          "description": "Usuario asignado al cliente en el portal",
+          "examples": ["novamed@novamed.es"]
+        },
+        "activation_method": {
+          "type": "string",
+          "enum": ["email_link", "admin_provision", "sso", "manual"],
+          "description": "Método de activación de la cuenta en el portal"
+        },
+        "estimated_provision_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Fecha estimada de provisión del acceso si provisioned = false",
+          "examples": ["2026-04-17"]
+        }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "description": "Configuración de branding específica para este cliente (opcional)",
+      "additionalProperties": false,
+      "properties": {
+        "color_scheme": {
+          "type": "string",
+          "description": "Esquema de color si el portal o documentos se personalizan por cliente",
+          "examples": ["hat3x_default", "client_brand"]
+        },
+        "logo_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL del logo del cliente para incluir en documentos si aplica"
+        },
+        "custom_footer": {
+          "type": "string",
+          "description": "Texto personalizado para el footer de documentos"
+        }
+      }
+    }
+  }
+}

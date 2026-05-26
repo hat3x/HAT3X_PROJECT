@@ -1,0 +1,334 @@
+{
+  "name": "ClubBioSpa — Llamadas Perdidas v2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clubbiospa-llamada-perdida",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "n1-webhook-trigger",
+      "name": "Webhook — Llamada Perdida",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Recibe el payload de Retell AI al finalizar una llamada no atendida. Espera: { nombre_cliente, telefono, motivo_consulta, duracion_llamada, timestamp, fuera_de_horario }"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "nombre_cliente",   "value": "={{ $json.nombre_cliente ?? 'Cliente desconocido' }}" },
+            { "name": "telefono",         "value": "={{ $json.telefono ?? '' }}" },
+            { "name": "motivo_consulta",  "value": "={{ $json.motivo_consulta ?? 'No especificado' }}" },
+            { "name": "duracion_llamada", "value": "={{ $json.duracion_llamada ?? '0' }}" },
+            { "name": "timestamp",        "value": "={{ $json.timestamp ?? new Date().toISOString() }}" }
+          ],
+          "boolean": [
+            { "name": "fuera_de_horario", "value": "={{ $json.fuera_de_horario ?? false }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n2-normalizar-datos",
+      "name": "Set — Normalizar Datos",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [460, 300],
+      "notes": "Normaliza y asegura todos los campos del payload, estableciendo valores por defecto si faltan."
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "hora_llamada",
+              "value": "={{ parseInt($json.timestamp.split('T')[1].split(':')[0]) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n3-extraer-hora",
+      "name": "Set — Extraer Hora",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [680, 300],
+      "notes": "Extrae la hora del timestamp ISO8601. Ej: '2026-04-09T11:30:00Z' → hora_llamada = 11. Se usa para determinar el turno activo."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.hora_llamada }}",
+              "operation": "largerEqual",
+              "value2": 9
+            },
+            {
+              "value1": "={{ $json.hora_llamada }}",
+              "operation": "smaller",
+              "value2": 15
+            }
+          ]
+        },
+        "combineOperation": "all"
+      },
+      "id": "n4-if-turno",
+      "name": "IF — ¿Turno Encargado? (9-15h)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "notes": "TRUE → Hora entre 9:00 y 14:59 → turno del encargado. FALSE → Hora 15:00-21:00 o fuera de rango → turno del jefe."
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "destinatario_nombre",          "value": "Encargado" },
+            { "name": "destinatario_email",            "value": "={{ $env.EMAIL_ENCARGADO }}" },
+            { "name": "destinatario_telegram_chat_id", "value": "={{ $env.TELEGRAM_CHAT_ID_ENCARGADO }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n5-dest-encargado",
+      "name": "Set — Destinatario Encargado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 160],
+      "notes": "Turno 9:00-14:59. Asigna el encargado como destinatario de notificaciones."
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "destinatario_nombre",          "value": "Jefe" },
+            { "name": "destinatario_email",            "value": "={{ $env.EMAIL_JEFE }}" },
+            { "name": "destinatario_telegram_chat_id", "value": "={{ $env.TELEGRAM_CHAT_ID_JEFE }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n6-dest-jefe",
+      "name": "Set — Destinatario Jefe",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 440],
+      "notes": "Turno 15:00-21:00 (y fuera de horario por defecto). Asigna el jefe como destinatario de notificaciones."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.fuera_de_horario }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "n7-if-horario",
+      "name": "IF — ¿Fuera de Horario?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "notes": "TRUE → Retell AI ya atendió la llamada (fuera de horario). FALSE → Llamada perdida durante horario laboral."
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "resumen_informe",
+              "value": "=📋 *INFORME IA — Club BioSpa*\n\n👤 Cliente: {{ $json.nombre_cliente }}\n📞 Teléfono: {{ $json.telefono }}\n🕐 Hora: {{ $json.timestamp }}\n💬 Motivo: {{ $json.motivo_consulta }}\n⏱️ Duración llamada: {{ $json.duracion_llamada }}s\n👔 Notificado a: {{ $json.destinatario_nombre }}\n\nℹ️ Sofía (recepcionista IA) atendió la llamada fuera de horario y recogió los datos.\nContacta al cliente cuando sea posible."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n8-informe-ia",
+      "name": "Set — Informe Fuera de Horario",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1560, 180],
+      "notes": "Construye el mensaje de resumen para llamadas atendidas por Sofía fuera de horario."
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "resumen_informe",
+              "value": "=🚨 *LLAMADA PERDIDA EN HORARIO — Club BioSpa*\n\n👤 Cliente: {{ $json.nombre_cliente }}\n📞 Teléfono: {{ $json.telefono }}\n🕐 Hora: {{ $json.timestamp }}\n💬 Motivo: {{ $json.motivo_consulta }}\n👔 Notificado a: {{ $json.destinatario_nombre }}\n\n⚠️ El cliente llamó durante tu turno y no fue atendido.\nDevuelve la llamada lo antes posible."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n9-informe-en-horario",
+      "name": "Set — Informe En Horario",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1560, 420],
+      "notes": "Construye el mensaje de resumen para llamadas perdidas dentro del horario laboral. Tono de urgencia mayor."
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.destinatario_telegram_chat_id }}",
+        "text": "={{ $json.resumen_informe }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "n10-telegram",
+      "name": "Telegram — Alerta Turno Activo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1780, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram ClubBioSpa Bot"
+        }
+      },
+      "notes": "Notificación instantánea al responsable del turno activo (encargado o jefe) según la hora de la llamada."
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM }}",
+        "toEmail": "={{ $json.destinatario_email }}",
+        "subject": "=📞 Llamada perdida — {{ $json.nombre_cliente }} | Club BioSpa",
+        "emailType": "text",
+        "message": "=Hola {{ $json.destinatario_nombre }},\n\nHas recibido un nuevo informe de llamada perdida en Club BioSpa.\n\n{{ $json.resumen_informe }}\n\n---\nEste mensaje fue generado automáticamente por el sistema de gestión de llamadas de HAT3X.\n\nClub BioSpa"
+      },
+      "id": "n11-email",
+      "name": "Email — Notificar Turno Activo",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2000, 300],
+      "credentials": {
+        "smtp": {
+          "id": "SMTP_CREDENTIAL_ID",
+          "name": "ClubBioSpa SMTP"
+        }
+      },
+      "notes": "Envía el informe al email del responsable del turno activo."
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "operation": "send",
+        "from": "=whatsapp:{{ $env.TWILIO_WHATSAPP_FROM }}",
+        "to": "=whatsapp:{{ $json.telefono }}",
+        "message": "=Hola {{ $json.nombre_cliente }}, somos Club BioSpa.\n\nHemos recibido tu llamada perdida. Ya hemos informado a nuestro equipo especializado y contactaremos contigo lo antes posible.\n\nGracias por confiar en nosotros. 🌿\n\n— Club BioSpa"
+      },
+      "id": "n12-whatsapp",
+      "name": "Twilio — WhatsApp al Cliente",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [2000, 480],
+      "credentials": {
+        "twilioApi": {
+          "id": "TWILIO_CREDENTIAL_ID",
+          "name": "Twilio ClubBioSpa"
+        }
+      },
+      "notes": "Envía WhatsApp automático al cliente confirmando que su consulta ha sido recibida."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"ok\", \"message\": \"Llamada procesada correctamente\" }"
+      },
+      "id": "n13-response-ok",
+      "name": "Respuesta Webhook — OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 300],
+      "notes": "Responde 200 OK al webhook de Retell AI."
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM }}",
+        "toEmail": "={{ $env.EMAIL_ENCARGADO }}",
+        "subject": "❌ ERROR — Flujo llamadas perdidas Club BioSpa",
+        "emailType": "text",
+        "message": "=Se ha producido un error en el flujo de automatización de llamadas perdidas.\n\nError: {{ $json.error.message ?? 'Error desconocido' }}\nTimestamp: {{ new Date().toISOString() }}\n\nRevisa el flujo en n8n para más detalles.\n\n--- HAT3X Sistema Automático"
+      },
+      "id": "n14-error",
+      "name": "Email — Error Crítico",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2220, 500],
+      "credentials": {
+        "smtp": {
+          "id": "SMTP_CREDENTIAL_ID",
+          "name": "ClubBioSpa SMTP"
+        }
+      },
+      "notes": "RAMA DE ERROR: Si cualquier nodo falla, notifica al encargado por email."
+    }
+  ],
+  "connections": {
+    "Webhook — Llamada Perdida": {
+      "main": [[{ "node": "Set — Normalizar Datos", "type": "main", "index": 0 }]]
+    },
+    "Set — Normalizar Datos": {
+      "main": [[{ "node": "Set — Extraer Hora", "type": "main", "index": 0 }]]
+    },
+    "Set — Extraer Hora": {
+      "main": [[{ "node": "IF — ¿Turno Encargado? (9-15h)", "type": "main", "index": 0 }]]
+    },
+    "IF — ¿Turno Encargado? (9-15h)": {
+      "main": [
+        [{ "node": "Set — Destinatario Encargado", "type": "main", "index": 0 }],
+        [{ "node": "Set — Destinatario Jefe",      "type": "main", "index": 0 }]
+      ]
+    },
+    "Set — Destinatario Encargado": {
+      "main": [[{ "node": "IF — ¿Fuera de Horario?", "type": "main", "index": 0 }]]
+    },
+    "Set — Destinatario Jefe": {
+      "main": [[{ "node": "IF — ¿Fuera de Horario?", "type": "main", "index": 0 }]]
+    },
+    "IF — ¿Fuera de Horario?": {
+      "main": [
+        [{ "node": "Set — Informe Fuera de Horario", "type": "main", "index": 0 }],
+        [{ "node": "Set — Informe En Horario",       "type": "main", "index": 0 }]
+      ]
+    },
+    "Set — Informe Fuera de Horario": {
+      "main": [[{ "node": "Telegram — Alerta Turno Activo", "type": "main", "index": 0 }]]
+    },
+    "Set — Informe En Horario": {
+      "main": [[{ "node": "Telegram — Alerta Turno Activo", "type": "main", "index": 0 }]]
+    },
+    "Telegram — Alerta Turno Activo": {
+      "main": [[{ "node": "Email — Notificar Turno Activo", "type": "main", "index": 0 }]]
+    },
+    "Email — Notificar Turno Activo": {
+      "main": [[{ "node": "Twilio — WhatsApp al Cliente", "type": "main", "index": 0 }]]
+    },
+    "Twilio — WhatsApp al Cliente": {
+      "main": [[{ "node": "Respuesta Webhook — OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": false },
+  "pinData": {},
+  "versionId": "clubbiospa-v2-turnos-2026-04",
+  "triggerCount": 0,
+  "tags": [
+    { "id": "tag-clubbiospa",   "name": "clubbiospa" },
+    { "id": "tag-hat3x",        "name": "hat3x-automation" }
+  ]
+}

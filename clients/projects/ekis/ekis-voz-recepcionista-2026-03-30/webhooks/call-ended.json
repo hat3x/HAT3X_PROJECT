@@ -1,0 +1,147 @@
+{
+  "_description": "Workflow n8n para procesar eventos post-llamada del agente Ekis. Importar en n8n via File Import.",
+  "_version": "1.0",
+  "_proyecto": "Ekis — Demo Recepcionista Voz — HAT3X",
+
+  "name": "Ekis — Post-Llamada Retell AI",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Retell Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {
+        "path": "retell-ekis",
+        "method": "POST",
+        "responseMode": "onReceived",
+        "responseCode": 200
+      }
+    },
+    {
+      "id": "filter-call-ended",
+      "name": "Solo call_ended",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.event }}",
+              "operation": "equal",
+              "value2": "call_ended"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "extract-data",
+      "name": "Extraer datos llamada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "call_id",
+              "value": "={{ $json.call.call_id }}"
+            },
+            {
+              "name": "from_number",
+              "value": "={{ $json.call.from_number }}"
+            },
+            {
+              "name": "duracion_segundos",
+              "value": "={{ Math.round($json.call.duration_ms / 1000) }}"
+            },
+            {
+              "name": "transcripcion",
+              "value": "={{ $json.call.transcript }}"
+            },
+            {
+              "name": "resumen",
+              "value": "={{ $json.call.call_analysis?.call_summary ?? 'Sin resumen' }}"
+            },
+            {
+              "name": "sentimiento",
+              "value": "={{ $json.call.call_analysis?.user_sentiment ?? 'Neutro' }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "log-google-sheets",
+      "name": "Registrar en Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 2,
+      "position": [900, 200],
+      "parameters": {
+        "operation": "append",
+        "documentId": "COMPLETAR_CON_ID_SPREADSHEET",
+        "sheetName": "Llamadas",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Fecha": "={{ $json.timestamp }}",
+            "Telefono": "={{ $json.from_number }}",
+            "Duracion": "={{ $json.duracion_segundos }}s",
+            "Resumen": "={{ $json.resumen }}",
+            "Sentimiento": "={{ $json.sentimiento }}",
+            "Call_ID": "={{ $json.call_id }}"
+          }
+        }
+      },
+      "_note": "Para demo: registra cada llamada en una hoja de cálculo. En producción real sustituir o complementar con CRM."
+    },
+    {
+      "id": "notify-slack",
+      "name": "Notificar Slack (si llamada importante)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [900, 400],
+      "parameters": {
+        "channel": "#llamadas-ekis",
+        "text": "=Nueva llamada recibida en Ekis:\nTeléfono: {{ $json.from_number }}\nDuración: {{ $json.duracion_segundos }} segundos\nResumen: {{ $json.resumen }}\nSentimiento: {{ $json.sentimiento }}",
+        "_note": "Opcional. Conectar con credenciales Slack del equipo HAT3X o del cliente."
+      }
+    }
+  ],
+  "connections": {
+    "Retell Webhook": {
+      "main": [
+        [{ "node": "Solo call_ended", "type": "main", "index": 0 }]
+      ]
+    },
+    "Solo call_ended": {
+      "main": [
+        [{ "node": "Extraer datos llamada", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extraer datos llamada": {
+      "main": [
+        [
+          { "node": "Registrar en Google Sheets", "type": "main", "index": 0 },
+          { "node": "Notificar Slack (si llamada importante)", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+
+  "_instrucciones_importar": [
+    "1. Abrir n8n → Workflows → Import from file",
+    "2. Seleccionar este archivo JSON",
+    "3. Configurar credenciales: Google Sheets + Slack (opcional)",
+    "4. Sustituir COMPLETAR_CON_ID_SPREADSHEET con el ID real de la hoja",
+    "5. Activar el workflow",
+    "6. Copiar la URL del webhook generada por n8n",
+    "7. Pegar esa URL en retell-config.md → webhook_url y en la configuración del agente en Retell"
+  ]
+}

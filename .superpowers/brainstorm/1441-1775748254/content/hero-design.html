@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAT3X — Hero Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #06060e;
+    color: #e2e2e8;
+    font-family: 'Inter', system-ui, sans-serif;
+    padding: 32px;
+  }
+
+  .page-header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .page-header h1 { font-size: 1.3rem; font-weight: 800; color: #fff; letter-spacing: -0.03em; margin-bottom: 6px; }
+  .page-header p { color: #555; font-size: 0.8rem; }
+
+  .question {
+    text-align: center;
+    margin-bottom: 28px;
+    font-size: 0.85rem;
+    color: #888;
+  }
+  .question strong { color: #fff; }
+
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .option-wrap {
+    cursor: pointer;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    transition: all 0.25s ease;
+    position: relative;
+  }
+  .option-wrap:hover { border-color: rgba(124,58,237,0.5); transform: translateY(-3px); box-shadow: 0 12px 40px rgba(124,58,237,0.15); }
+  .option-wrap.selected { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed, 0 12px 40px rgba(124,58,237,0.25); }
+
+  .option-label-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: #0f0f1a;
+    border-bottom: 1px solid #1a1a28;
+  }
+  .opt-letter {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.3);
+    color: #a78bfa;
+    font-size: 0.7rem;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .opt-name { font-size: 0.75rem; color: #ccc; font-weight: 600; }
+  .opt-tag {
+    font-size: 0.55rem;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-weight: 600;
+  }
+  .tag-rec { background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3); color: #a78bfa; }
+  .tag-bold { background: rgba(234,88,12,0.1); border: 1px solid rgba(234,88,12,0.2); color: #fb923c; }
+  .tag-clean { background: rgba(255,255,255,0.04); border: 1px solid #222; color: #555; }
+
+  /* ========== HERO VARIANT A — CENTERED CINEMATIC ========== */
+  .hero-a {
+    height: 420px;
+    background: #040408;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+  .ha-bg-glow {
+    position: absolute;
+    top: -100px; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 400px;
+    background: radial-gradient(ellipse at 50% 30%, rgba(124,58,237,0.5) 0%, rgba(124,58,237,0.1) 40%, transparent 70%);
+    filter: blur(60px);
+    pointer-events: none;
+  }
+  .ha-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(124,58,237,0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.07) 1px, transparent 1px);
+    background-size: 50px 50px;
+    mask-image: radial-gradient(ellipse at 50% 0%, black 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 0%, black 20%, transparent 75%);
+  }
+  .ha-orb-orange {
+    position: absolute;
+    bottom: -60px; right: 10%;
+    width: 250px; height: 250px;
+    background: radial-gradient(circle, rgba(234,88,12,0.2) 0%, transparent 65%);
+    filter: blur(40px);
+  }
+  .ha-badge {
+    position: relative;
+    z-index: 2;
+    background: rgba(124,58,237,0.08);
+    border: 1px solid rgba(124,58,237,0.2);
+    color: #a78bfa;
+    font-size: 0.62rem;
+    font-weight: 600;
+    padding: 5px 16px;
+    border-radius: 100px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ha-badge::before {
+    content: '';
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #ea580c;
+    box-shadow: 0 0 8px #ea580c;
+  }
+  .ha-h1 {
+    position: relative;
+    z-index: 2;
+    font-size: 3.2rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.06em;
+    line-height: 0.95;
+    text-align: center;
+    max-width: 580px;
+  }
+  .ha-h1 .line2 {
+    background: linear-gradient(90deg, #7c3aed 0%, #a855f7 50%, #ea580c 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: block;
+  }
+  .ha-sub {
+    position: relative;
+    z-index: 2;
+    font-size: 0.82rem;
+    color: #555;
+    text-align: center;
+    max-width: 380px;
+    line-height: 1.7;
+    letter-spacing: 0.01em;
+  }
+  .ha-ctas {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .ha-cta-p {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    box-shadow: 0 4px 20px rgba(124,58,237,0.45), 0 0 60px rgba(124,58,237,0.1);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 10px 22px;
+    border-radius: 8px;
+    letter-spacing: 0.02em;
+  }
+  .ha-cta-s {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #777;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 10px 22px;
+    border-radius: 8px;
+  }
+  .ha-nodes {
+    position: absolute; inset: 0;
+    pointer-events: none; z-index: 1;
+  }
+  .nd {
+    position: absolute;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    border: 1px solid rgba(124,58,237,0.4);
+    background: rgba(124,58,237,0.15);
+  }
+  .nd::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 2px; height: 2px;
+    border-radius: 50%;
+    background: #a78bfa;
+  }
+  .nl {
+    position: absolute;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(124,58,237,0.2), transparent);
+    transform-origin: left center;
+  }
+
+  /* ========== HERO VARIANT B — SPLIT LAYOUT ========== */
+  .hero-b {
+    height: 420px;
+    background: #040408;
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .hb-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px 32px 40px 40px;
+    gap: 16px;
+    position: relative;
+    z-index: 2;
+  }
+  .hb-right {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hb-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 30% 50%, rgba(124,58,237,0.25) 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 80%, rgba(234,88,12,0.12) 0%, transparent 45%);
+  }
+  .hb-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(124,58,237,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .hb-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.6rem;
+    color: #ea580c;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .hb-eyebrow::before {
+    content: '';
+    width: 20px; height: 1px;
+    background: #ea580c;
+  }
+  .hb-h1 {
+    font-size: 2.6rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.06em;
+    line-height: 0.9;
+  }
+  .hb-h1 .purple { color: #a78bfa; }
+  .hb-sub {
+    font-size: 0.75rem;
+    color: #555;
+    line-height: 1.7;
+    max-width: 300px;
+  }
+  .hb-ctas { display: flex; gap: 10px; flex-direction: column; max-width: 220px; }
+  .hb-cta-p {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    box-shadow: 0 4px 20px rgba(124,58,237,0.4);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 10px 18px;
+    border-radius: 8px;
+    text-align: center;
+  }
+  .hb-cta-s {
+    border: 1px solid #1a1a2a;
+    color: #666;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 9px 18px;
+    border-radius: 8px;
+    text-align: center;
+  }
+  /* Right panel — visual element */
+  .hb-visual {
+    position: relative;
+    z-index: 2;
+    width: 200px;
+    height: 220px;
+  }
+  .hb-card {
+    position: absolute;
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .hb-card-main {
+    width: 180px; height: 120px;
+    top: 0; left: 0;
+    background: rgba(124,58,237,0.06);
+    border-color: rgba(124,58,237,0.15);
+  }
+  .hb-card-float {
+    width: 120px; height: 70px;
+    bottom: 0; right: -20px;
+    background: rgba(234,88,12,0.05);
+    border-color: rgba(234,88,12,0.12);
+  }
+  .hb-mini-stat {
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: #a78bfa;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .hb-mini-label { font-size: 0.55rem; color: #444; }
+  .hb-mini-bar {
+    width: 100%; height: 3px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 2px;
+    margin-top: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hb-mini-bar::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, #7c3aed, #a78bfa);
+    border-radius: 2px;
+  }
+  .hb-vertical-line {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, transparent, #7c3aed 30%, #ea580c 70%, transparent);
+  }
+
+  /* ========== HERO VARIANT C — STATEMENT ========== */
+  .hero-c {
+    height: 420px;
+    background: #030306;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 48px 48px;
+    gap: 20px;
+  }
+  .hc-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 0% 100%, rgba(124,58,237,0.35) 0%, transparent 50%),
+      radial-gradient(ellipse at 100% 0%, rgba(234,88,12,0.12) 0%, transparent 40%);
+  }
+  .hc-scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(124,58,237,0.6), rgba(234,88,12,0.4), transparent);
+    top: 40%;
+    opacity: 0.5;
+  }
+  .hc-dots {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(124,58,237,0.15) 1px, transparent 1px);
+    background-size: 20px 20px;
+    mask-image: radial-gradient(ellipse at 0% 100%, black 20%, transparent 60%);
+    -webkit-mask-image: radial-gradient(ellipse at 0% 100%, black 20%, transparent 60%);
+  }
+  .hc-number {
+    position: absolute;
+    top: 24px; right: 32px;
+    font-size: 8rem;
+    font-weight: 900;
+    color: rgba(124,58,237,0.06);
+    letter-spacing: -0.06em;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+  }
+  .hc-label {
+    position: relative;
+    z-index: 2;
+    font-size: 0.6rem;
+    color: #ea580c;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .hc-h1 {
+    position: relative;
+    z-index: 2;
+    font-size: 3.8rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.07em;
+    line-height: 0.85;
+    max-width: 600px;
+  }
+  .hc-h1 .ghost {
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(124,58,237,0.4);
+  }
+  .hc-h1 .solid { color: #fff; }
+  .hc-h1 .accent {
+    background: linear-gradient(90deg, #7c3aed, #ea580c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hc-bottom {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 32px;
+  }
+  .hc-sub {
+    font-size: 0.75rem;
+    color: #555;
+    line-height: 1.7;
+    max-width: 320px;
+  }
+  .hc-ctas { display: flex; gap: 10px; align-items: center; }
+  .hc-cta-p {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    box-shadow: 0 4px 24px rgba(124,58,237,0.45);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 11px 22px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+  .hc-cta-s {
+    color: #555;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 11px 16px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Details panel */
+  .details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    max-width: 1100px;
+    margin: 20px auto 0;
+  }
+  .detail-card {
+    background: #0c0c18;
+    border: 1px solid #171726;
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .detail-title { font-size: 0.65rem; font-weight: 700; color: #a78bfa; margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .detail-body { font-size: 0.7rem; color: #666; line-height: 1.6; }
+</style>
+
+<div class="page-header">
+  <h1>Hero Section — 3 variantes de composición</h1>
+  <p>Todas sobre el enfoque A (Inmersiva Dark) · Misma paleta, diferente layout · Haz clic para elegir</p>
+</div>
+
+<div class="question">
+  <strong>¿Qué composición de Hero sientes más "HAT3X"?</strong> — Mismo mensaje, misma paleta, diferente estructura
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 1100px; margin: 0 auto;">
+
+  <!-- VARIANT A -->
+  <div class="option-wrap" data-choice="a" onclick="toggleSelect(this)">
+    <div class="option-label-bar">
+      <div class="opt-letter">A</div>
+      <div class="opt-name">Centrado cinematográfico — Foco total en el mensaje</div>
+      <div class="opt-tag tag-rec">★ Más impacto</div>
+    </div>
+    <div class="hero-a">
+      <div class="ha-bg-glow"></div>
+      <div class="ha-grid"></div>
+      <div class="ha-orb-orange"></div>
+      <div class="ha-nodes">
+        <div class="nd" style="top:15%;left:8%"></div>
+        <div class="nd" style="top:72%;left:13%"></div>
+        <div class="nd" style="top:20%;right:9%"></div>
+        <div class="nd" style="top:68%;right:14%"></div>
+        <div class="nd" style="top:40%;left:22%"></div>
+        <div class="nd" style="top:55%;right:20%"></div>
+        <div class="nl" style="top:15.5%;left:8%;width:90px;transform:rotate(18deg)"></div>
+        <div class="nl" style="top:72.5%;left:13%;width:70px;transform:rotate(-22deg)"></div>
+        <div class="nl" style="top:20.5%;right:9%;width:80px;transform:rotate(12deg)"></div>
+        <div class="nl" style="top:40.5%;left:22%;width:100px;transform:rotate(-8deg)"></div>
+      </div>
+      <div class="ha-badge">Implementación IA para empresas</div>
+      <div class="ha-h1">
+        No aprendes IA.
+        <span class="line2">HAT3X la implementa.</span>
+      </div>
+      <div class="ha-sub">Soluciones reales de inteligencia artificial para tu negocio. Sin curvas de aprendizaje. Sin humo. Sin esperar.</div>
+      <div class="ha-ctas">
+        <div class="ha-cta-p">Reservar llamada gratuita →</div>
+        <div class="ha-cta-s">Ver servicios</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT B -->
+  <div class="option-wrap" data-choice="b" onclick="toggleSelect(this)">
+    <div class="option-label-bar">
+      <div class="opt-letter">B</div>
+      <div class="opt-name">Split layout — Texto + elemento visual derecho</div>
+      <div class="opt-tag tag-bold">Más corporativo</div>
+    </div>
+    <div class="hero-b">
+      <div class="hb-bg"></div>
+      <div class="hb-grid"></div>
+      <div class="hb-vertical-line"></div>
+      <div class="hb-left">
+        <div class="hb-eyebrow">Consultoría IA · B2B</div>
+        <div class="hb-h1">No aprendes<br><span class="purple">IA.</span><br>Nosotros<br>la hacemos.</div>
+        <div class="hb-sub">HAT3X implementa inteligencia artificial real en tu empresa. Sin formación interna. Sin fricción.</div>
+        <div class="hb-ctas">
+          <div class="hb-cta-p">Reservar llamada →</div>
+          <div class="hb-cta-s">Contactar</div>
+        </div>
+      </div>
+      <div class="hb-right">
+        <div class="hb-visual">
+          <div class="hb-card hb-card-main">
+            <div class="hb-mini-stat">6×</div>
+            <div class="hb-mini-label">verticales de IA implementadas</div>
+            <div class="hb-mini-bar" style=""></div>
+            <div class="hb-mini-bar" style="margin-top:4px;opacity:0.5;"></div>
+            <div class="hb-mini-bar" style="margin-top:4px;opacity:0.3;"></div>
+          </div>
+          <div class="hb-card hb-card-float">
+            <div class="hb-mini-stat" style="font-size:1rem;color:#fb923c;">100%</div>
+            <div class="hb-mini-label">implementación real</div>
+            <div class="hb-mini-bar" style=""></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT C -->
+  <div class="option-wrap" data-choice="c" onclick="toggleSelect(this)">
+    <div class="option-label-bar">
+      <div class="opt-letter">C</div>
+      <div class="opt-name">Statement grande — Tipografía como protagonista absoluta</div>
+      <div class="opt-tag tag-clean">Más atrevido</div>
+    </div>
+    <div class="hero-c">
+      <div class="hc-bg"></div>
+      <div class="hc-dots"></div>
+      <div class="hc-scan-line"></div>
+      <div class="hc-number">AI</div>
+      <div class="hc-label">HAT3X — Consultoría IA</div>
+      <div class="hc-h1">
+        <span class="ghost">No</span> <span class="solid">aprendes</span><br>
+        <span class="accent">IA. Nosotros</span><br>
+        <span class="solid">la ejecutamos.</span>
+      </div>
+      <div class="hc-bottom">
+        <div class="hc-sub">Implementación real de inteligencia artificial para empresas que necesitan resultados, no teoría.</div>
+        <div class="hc-ctas">
+          <div class="hc-cta-p">Reservar llamada →</div>
+          <div class="hc-cta-s">↓ Explorar</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- DETAILS -->
+<div class="details-grid">
+  <div class="detail-card">
+    <div class="detail-title">Sistema de motion · Todas las variantes</div>
+    <div class="detail-body">
+      · Grid: aparece con fade-in lento (1.2s) al cargar<br>
+      · Glow/orbs: animación pulsante suave (scale 1→1.05, 4s ease-in-out infinite)<br>
+      · Nodos: aparecen escalonados (stagger 0.1s cada uno)<br>
+      · Título: slide-up + fade-in (0.6s, delay 0.2s)<br>
+      · Subtítulo: fade-in (0.5s, delay 0.5s)<br>
+      · CTAs: slide-up (0.4s, delay 0.7s)<br>
+      · Scroll parallax: grid se mueve a 0.3× velocidad de scroll
+    </div>
+  </div>
+  <div class="detail-card">
+    <div class="detail-title">Tipografía propuesta</div>
+    <div class="detail-body">
+      · Titular: <strong style="color:#fff">Inter</strong> 900 (o Geist para más tech)<br>
+      · Letter-spacing: -0.06em (muy compacto, premium)<br>
+      · Tamaño desktop: 72-96px según variante<br>
+      · Tamaño mobile: 40-48px<br>
+      · Subtítulo: Inter 400, color #555, size 16px<br>
+      · Badge: Inter 600, letter-spacing 0.12em, uppercase
+    </div>
+  </div>
+</div>

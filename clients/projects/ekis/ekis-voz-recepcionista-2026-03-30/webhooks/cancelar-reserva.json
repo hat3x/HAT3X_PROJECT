@@ -1,0 +1,208 @@
+{
+  "_description": "Workflow n8n — Cancelar reserva: marca en Sheets, copia al Historial y elimina el evento de Google Calendar.",
+  "_version": "2.0",
+  "_proyecto": "Ekis — Demo Recepcionista Voz — HAT3X",
+
+  "name": "Ekis — Cancelar Reserva",
+  "nodes": [
+    {
+      "id": "webhook-input",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "parameters": {
+        "path": "cancelar-reserva",
+        "method": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "read-reservas",
+      "name": "Leer Reservas Activas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [220, 300],
+      "parameters": {
+        "operation": "read",
+        "documentId": "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8",
+        "sheetName": "Reservas_Activas",
+        "options": { "headerRow": 1, "firstDataRow": 2 }
+      }
+    },
+    {
+      "id": "buscar-reserva",
+      "name": "Buscar Reserva",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst telefono = String(body.telefono || '').trim();\nconst fecha    = String(body.fecha    || '').trim(); // yyyy-mm-dd\n\nif (!telefono || !fecha) {\n  return [{ json: { encontrado: false, resumen: 'Necesito el teléfono y la fecha de la reserva para cancelarla.' } }];\n}\n\nconst [year, month, day] = fecha.split('-');\nconst fechaFormateada = `${day}/${month}/${year}`;\n\nconst reservas = $input.all().map(item => item.json);\n\nconst reserva = reservas.find(r => {\n  const tel    = String(r['Teléfono'] || r['Telefono'] || '').replace(/\\s/g,'');\n  const fechaR = String(r['Fecha'] || '').trim();\n  const estado = String(r['Estado'] || '').toLowerCase();\n  const activo = ['confirmada','en_espera','recordatorio_enviado'].includes(estado);\n  return tel === telefono.replace(/\\s/g,'') &&\n    (fechaR === fecha || fechaR === fechaFormateada) &&\n    activo;\n});\n\nif (!reserva) {\n  return [{ json: {\n    encontrado: false,\n    resumen: `No encuentro ninguna reserva activa para ese teléfono el ${fechaFormateada}. ¿Puede que sea en otra fecha?`\n  }}];\n}\n\nconst nombre      = reserva['Nombre'] || '';\nconst apellido    = nombre.split(' ').pop() || nombre;\nconst franjaTexto = (reserva['Franja']||'') === 'almuerzo' ? 'a mediodía' : 'por la noche';\nconst diasSemana  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst diaSemana   = diasSemana[new Date(fecha).getDay()];\nconst ahora       = new Date().toISOString().replace('T',' ').substring(0,19);\n\nreturn [{ json: {\n  encontrado: true,\n  calEventId: reserva['Calendar_Event_ID'] || '',\n  idReserva:  reserva['ID_Reserva'] || '',\n  telefono,\n  historialFila: {\n    ID_Reserva:           reserva['ID_Reserva'] || '',\n    Fecha:                reserva['Fecha'] || '',\n    Franja:               reserva['Franja'] || '',\n    Nombre:               reserva['Nombre'] || '',\n    Telefono:             reserva['Teléfono'] || reserva['Telefono'] || '',\n    Personas:             reserva['Personas'] || '',\n    Estado:               'cancelada',\n    Notas:                reserva['Notas'] || '',\n    Fecha_Creacion:       reserva['Fecha_Creación'] || reserva['Fecha_Creacion'] || '',\n    Fecha_Modificacion:   ahora,\n    Call_ID:              reserva['Call_ID'] || '',\n    Origen:               reserva['Origen'] || 'telefono',\n    Recordatorio_Enviado: reserva['Recordatorio_Enviado'] || 'no',\n    Calendar_Event_ID:    reserva['Calendar_Event_ID'] || '',\n    Estado_Final:         'cancelada_cliente',\n    Motivo_Cancelacion:   'cliente llamó',\n    Fecha_Cancelacion:    ahora\n  },\n  resumen: `Reserva de ${apellido} del ${diaSemana} ${franjaTexto} cancelada correctamente`\n}}];"
+      }
+    },
+    {
+      "id": "check-encontrado",
+      "name": "¿Reserva encontrada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 300],
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.encontrado }}", "value2": true }]
+        }
+      }
+    },
+    {
+      "id": "check-tiene-calendar",
+      "name": "¿Tiene Calendar Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [880, 200],
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.calEventId }}", "operation": "isNotEmpty" }]
+        }
+      }
+    },
+    {
+      "id": "eliminar-calendar",
+      "name": "Eliminar Evento Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 2,
+      "position": [1100, 140],
+      "parameters": {
+        "operation": "delete",
+        "calendar": { "__rl": true, "mode": "id", "value": "ekis.recepcionista@gmail.com" },
+        "eventId": "={{ $('Buscar Reserva').first().json.calEventId }}"
+      }
+    },
+    {
+      "id": "copiar-historial",
+      "name": "Copiar al Historial",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1320, 200],
+      "parameters": {
+        "operation": "append",
+        "documentId": "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8",
+        "sheetName": "Historial",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID_Reserva": "={{ $('Buscar Reserva').first().json.historialFila.ID_Reserva }}",
+            "Fecha": "={{ $('Buscar Reserva').first().json.historialFila.Fecha }}",
+            "Franja": "={{ $('Buscar Reserva').first().json.historialFila.Franja }}",
+            "Nombre": "={{ $('Buscar Reserva').first().json.historialFila.Nombre }}",
+            "Teléfono": "={{ $('Buscar Reserva').first().json.historialFila.Telefono }}",
+            "Personas": "={{ $('Buscar Reserva').first().json.historialFila.Personas }}",
+            "Estado": "cancelada",
+            "Notas": "={{ $('Buscar Reserva').first().json.historialFila.Notas }}",
+            "Fecha_Creación": "={{ $('Buscar Reserva').first().json.historialFila.Fecha_Creacion }}",
+            "Fecha_Modificación": "={{ $('Buscar Reserva').first().json.historialFila.Fecha_Modificacion }}",
+            "Call_ID": "={{ $('Buscar Reserva').first().json.historialFila.Call_ID }}",
+            "Origen": "={{ $('Buscar Reserva').first().json.historialFila.Origen }}",
+            "Recordatorio_Enviado": "={{ $('Buscar Reserva').first().json.historialFila.Recordatorio_Enviado }}",
+            "Calendar_Event_ID": "={{ $('Buscar Reserva').first().json.historialFila.Calendar_Event_ID }}",
+            "Estado_Final": "cancelada_cliente",
+            "Motivo_Cancelacion": "cliente llamó",
+            "Fecha_Cancelacion": "={{ $('Buscar Reserva').first().json.historialFila.Fecha_Cancelacion }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "marcar-cancelada",
+      "name": "Marcar Cancelada en Activas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1540, 200],
+      "parameters": {
+        "operation": "update",
+        "documentId": "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8",
+        "sheetName": "Reservas_Activas",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["ID_Reserva"],
+          "value": {
+            "ID_Reserva": "={{ $('Buscar Reserva').first().json.idReserva }}",
+            "Estado": "cancelada",
+            "Fecha_Modificación": "={{ $('Buscar Reserva').first().json.historialFila.Fecha_Cancelacion }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "respuesta-ok",
+      "name": "Respuesta Cancelación OK",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1760, 200],
+      "parameters": {
+        "values": {
+          "boolean": [{ "name": "cancelado", "value": true }],
+          "string": [{ "name": "resumen", "value": "={{ $('Buscar Reserva').first().json.resumen }}" }]
+        }
+      }
+    },
+    {
+      "id": "respuesta-no-encontrado",
+      "name": "Respuesta No Encontrado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [880, 420],
+      "parameters": {
+        "values": {
+          "boolean": [{ "name": "cancelado", "value": false }],
+          "string": [{ "name": "resumen", "value": "={{ $('Buscar Reserva').first().json.resumen }}" }]
+        }
+      }
+    },
+    {
+      "id": "responder",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1980, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200, "responseHeaders": { "entries": [{ "name": "Content-Type", "value": "application/json" }] } }
+      }
+    }
+  ],
+  "connections": {
+    "Retell Tool Call":        { "main": [[{ "node": "Leer Reservas Activas",    "type": "main", "index": 0 }]] },
+    "Leer Reservas Activas":   { "main": [[{ "node": "Buscar Reserva",           "type": "main", "index": 0 }]] },
+    "Buscar Reserva":          { "main": [[{ "node": "¿Reserva encontrada?",     "type": "main", "index": 0 }]] },
+    "¿Reserva encontrada?": {
+      "main": [
+        [{ "node": "¿Tiene Calendar Event?", "type": "main", "index": 0 }],
+        [{ "node": "Respuesta No Encontrado","type": "main", "index": 0 }]
+      ]
+    },
+    "¿Tiene Calendar Event?": {
+      "main": [
+        [{ "node": "Eliminar Evento Calendar","type": "main", "index": 0 }],
+        [{ "node": "Copiar al Historial",     "type": "main", "index": 0 }]
+      ]
+    },
+    "Eliminar Evento Calendar": { "main": [[{ "node": "Copiar al Historial",         "type": "main", "index": 0 }]] },
+    "Copiar al Historial":      { "main": [[{ "node": "Marcar Cancelada en Activas", "type": "main", "index": 0 }]] },
+    "Marcar Cancelada en Activas":{ "main": [[{ "node": "Respuesta Cancelación OK",  "type": "main", "index": 0 }]] },
+    "Respuesta Cancelación OK": { "main": [[{ "node": "Responder a Retell",          "type": "main", "index": 0 }]] },
+    "Respuesta No Encontrado":  { "main": [[{ "node": "Responder a Retell",          "type": "main", "index": 0 }]] }
+  },
+
+  "_instrucciones_importar": [
+    "1. Importar en n8n",
+    "2. Configurar credenciales: Google Calendar OAuth2 + Google Sheets",
+    "3. COMPLETAR_CON_GOOGLE_CALENDAR_ID y COMPLETAR_CON_ID_SPREADSHEET (3 veces)",
+    "4. Activar y copiar URL del webhook"
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

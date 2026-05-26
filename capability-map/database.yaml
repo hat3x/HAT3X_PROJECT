@@ -1,9 +1,0 @@
-vertical: database
-agentId: pm-webs-apps
-skills:
-  - supabase-rls
-  - integrations/database
-  - api-design
-maxParallelSubtasks: 2
-typicalHoursPerSubtask: 4
-requiresClientApproval: false

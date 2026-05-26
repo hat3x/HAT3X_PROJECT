@@ -1,0 +1,12 @@
+{
+  "name": "hat3x-agent-converter",
+  "version": "1.0.0",
+  "description": "Script para convertir agentes externos a subagentes HAT3X",
+  "main": "scripts/convert-agents.js",
+  "scripts": {
+    "convert": "node scripts/convert-agents.js"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

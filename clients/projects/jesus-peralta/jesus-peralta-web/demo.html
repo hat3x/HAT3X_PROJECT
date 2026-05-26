@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jesús Peralta Peluqueros — Madrid</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    :root {
+      --bg:       #080808;
+      --surface:  #111111;
+      --s2:       #1A1A1A;
+      --border:   #2A2A2A;
+      --accent:   #7A9BAD;
+      --accent-l: #9DBDCE;
+      --muted:    #888888;
+      --text:     #F0F0F0;
+      --serif:    'Cormorant Garamond', Georgia, serif;
+      --sans:     'Inter', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-weight: 300;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    ::selection { background: var(--accent); color: #000; }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
+
+    /* NAV */
+    #nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 1.5rem 3rem;
+      border-bottom: 1px solid transparent;
+      transition: background .4s, border-color .4s;
+    }
+    #nav.scrolled {
+      background: rgba(8,8,8,0.92);
+      backdrop-filter: blur(12px);
+      border-color: var(--border);
+    }
+    .nav-logo { text-decoration: none; display: flex; align-items: center; }
+    .nav-logo .logo-banner { height: 2.5rem; width: auto; object-fit: contain; display: block; }
+    .nav-logo .logo-icon  { height: 2.5rem; width: 2.5rem; object-fit: contain; display: none; }
+    @media (max-width: 480px) {
+      .nav-logo .logo-banner { display: none; }
+      .nav-logo .logo-icon   { display: block; }
+    }
+    .nav-links { display: flex; gap: 2.5rem; list-style: none; }
+    .nav-links a {
+      font-size: .7rem; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--muted); text-decoration: none; transition: color .2s;
+    }
+    .nav-links a:hover { color: var(--accent); }
+    .nav-cta {
+      padding: .6rem 1.5rem;
+      font-size: .7rem; letter-spacing: .2em; text-transform: uppercase;
+      background: var(--accent); color: var(--bg); font-weight: 500;
+      text-decoration: none; transition: background .2s;
+      display: flex; align-items: center; min-height: 44px;
+    }
+    .nav-cta:hover { background: var(--accent-l); }
+
+    /* HERO */
+    #inicio {
+      position: relative; min-height: 100dvh;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute; inset: 0;
+      background-image: url('public/salon.jpeg');
+      background-size: cover; background-position: center 30%;
+    }
+    .hero-mask {
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom,
+        rgba(8,8,8,.78) 0%, rgba(8,8,8,.62) 45%, rgba(8,8,8,.9) 100%);
+    }
+    .hero-body {
+      position: relative; z-index: 10;
+      text-align: center; padding: 6rem 1.5rem 3rem;
+      max-width: 52rem; margin: 0 auto;
+    }
+    .hero-label {
+      font-size: .65rem; letter-spacing: .4em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 2rem;
+      opacity: 0; animation: up .8s ease .2s forwards;
+    }
+    .hero-h1 {
+      font-family: var(--serif);
+      font-size: clamp(3rem, 10vw, 7rem); font-weight: 300;
+      color: var(--text); line-height: 1; margin-bottom: .3em;
+      opacity: 0; animation: up .8s ease .4s forwards;
+    }
+    .hero-sub {
+      font-family: var(--serif);
+      font-size: clamp(1rem, 3vw, 1.75rem); font-weight: 300;
+      color: var(--accent); letter-spacing: .4em; text-transform: uppercase;
+      margin-bottom: 3.5rem;
+      opacity: 0; animation: up .8s ease .55s forwards;
+    }
+    .hero-btns {
+      display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;
+      opacity: 0; animation: up .8s ease .7s forwards;
+    }
+    .btn-p {
+      padding: 1rem 2rem; font-size: .72rem; letter-spacing: .2em;
+      text-transform: uppercase; background: var(--accent); color: var(--bg);
+      font-weight: 500; text-decoration: none; transition: background .2s;
+      min-height: 44px; display: inline-flex; align-items: center;
+    }
+    .btn-p:hover { background: var(--accent-l); }
+    .btn-s {
+      padding: 1rem 2rem; font-size: .72rem; letter-spacing: .2em;
+      text-transform: uppercase; border: 1px solid rgba(240,240,240,.3);
+      color: rgba(240,240,240,.65); text-decoration: none;
+      transition: border-color .2s, color .2s;
+      min-height: 44px; display: inline-flex; align-items: center;
+    }
+    .btn-s:hover { border-color: var(--text); color: var(--text); }
+    .hero-scroll {
+      position: absolute; bottom: 2rem;
+      left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: .5rem;
+      opacity: 0; animation: up .8s ease 1.2s forwards;
+    }
+    .hero-scroll span {
+      font-size: .6rem; letter-spacing: .2em; text-transform: uppercase;
+      color: rgba(240,240,240,.4);
+    }
+    .scroll-bar {
+      width: 1px; height: 3rem;
+      background: linear-gradient(to bottom, rgba(240,240,240,.35), transparent);
+      animation: pulse 2.5s infinite;
+    }
+
+    @keyframes up {
+      from { opacity: 0; transform: translateY(1.5rem); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%,100% { opacity: .35; transform: scaleY(1); }
+      50%      { opacity: .8;  transform: scaleY(.75); }
+    }
+
+    /* SHARED */
+    .label-sm {
+      font-size: .65rem; letter-spacing: .35em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 1rem;
+    }
+    .heading {
+      font-family: var(--serif);
+      font-size: clamp(2.25rem, 5vw, 3.5rem); font-weight: 300;
+      color: var(--text); line-height: 1.1;
+    }
+    .bar { width: 2rem; height: 1px; background: var(--accent); margin-top: 1rem; }
+    .reveal { opacity: 0; transform: translateY(1.75rem); transition: opacity .7s ease, transform .7s ease; }
+    .reveal.in { opacity: 1; transform: translateY(0); }
+
+    /* SERVICIOS */
+    #servicios { padding: 6rem 3rem; background: var(--bg); }
+    .s-header { text-align: center; margin-bottom: 4rem; }
+    .s-grid {
+      display: grid; grid-template-columns: repeat(3,1fr);
+      gap: 1.5rem; max-width: 72rem; margin: 0 auto;
+    }
+    .s-card {
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem;
+      transition: border-color .3s;
+    }
+    .s-card:hover { border-color: rgba(122,155,173,.4); }
+    .s-card h3 {
+      font-family: var(--serif); font-size: 1.5rem; font-weight: 300;
+      color: var(--text); margin-bottom: .2rem;
+    }
+    .s-desc {
+      font-size: .65rem; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--muted);
+    }
+    .s-list { list-style: none; }
+    .s-list li {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: .65rem 0; border-bottom: 1px solid rgba(42,42,42,.6);
+      font-size: .85rem;
+    }
+    .s-list li:last-child { border-bottom: none; }
+    .s-list .nm { color: rgba(240,240,240,.8); }
+    .s-list .pr { color: var(--accent); font-weight: 500; }
+    .s-list .cq {
+      font-size: .65rem; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted);
+    }
+    .s-link {
+      margin-top: auto; padding-top: .5rem;
+      font-size: .65rem; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--accent); text-decoration: none; transition: color .2s;
+      min-height: 44px; display: flex; align-items: center;
+    }
+    .s-link:hover { color: var(--accent-l); }
+    .s-note {
+      text-align: center; margin-top: 2.5rem;
+      font-size: .75rem; color: var(--muted);
+    }
+    .s-note a { color: var(--accent); text-decoration: none; }
+    .s-note a:hover { color: var(--accent-l); }
+
+    /* NOSOTROS */
+    #nosotros { padding: 6rem 3rem; background: var(--surface); }
+    .n-inner {
+      max-width: 72rem; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 5rem; align-items: center;
+    }
+    .n-text h2 { margin-bottom: 2rem; }
+    .n-text p {
+      font-size: .9rem; color: rgba(240,240,240,.65);
+      line-height: 1.8; max-width: 28rem; margin-bottom: 1rem;
+    }
+    .n-horario {
+      margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    }
+    .n-hl {
+      font-size: .65rem; letter-spacing: .25em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 1rem;
+    }
+    .n-row { display: flex; justify-content: space-between; font-size: .85rem; padding: .4rem 0; }
+    .n-row .d { color: rgba(240,240,240,.55); }
+    .n-row .h { font-family: var(--serif); font-size: 1rem; color: var(--accent); }
+    .n-img-wrap { position: relative; }
+    .n-img {
+      width: 100%; aspect-ratio: 4/5; overflow: hidden;
+      background-image: url('public/salon.jpeg');
+      background-size: cover; background-position: center;
+    }
+    .n-d1 {
+      position: absolute; bottom: -1rem; left: -1rem;
+      width: 6rem; height: 6rem;
+      border: 1px solid rgba(122,155,173,.3); pointer-events: none;
+    }
+    .n-d2 {
+      position: absolute; top: -1rem; right: -1rem;
+      width: 4rem; height: 4rem;
+      border: 1px solid rgba(122,155,173,.15); pointer-events: none;
+    }
+
+    /* CONTACTO */
+    #contacto { padding: 6rem 3rem; background: var(--bg); }
+    .c-header { text-align: center; margin-bottom: 4rem; }
+    .c-grid {
+      max-width: 72rem; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 4rem; align-items: start;
+    }
+    .c-fields { display: flex; flex-direction: column; gap: 2rem; }
+    .c-field .lbl {
+      font-size: .65rem; letter-spacing: .25em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: .3rem;
+    }
+    .c-field .val { font-size: .9rem; color: rgba(240,240,240,.8); }
+    .c-field a {
+      font-size: .9rem; color: var(--accent); text-decoration: none; transition: color .2s;
+    }
+    .c-field a:hover { color: var(--accent-l); }
+    .c-hl {
+      font-size: .65rem; letter-spacing: .25em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: .75rem;
+    }
+    .c-hrows { display: flex; flex-direction: column; gap: .5rem; }
+    .c-hrow { display: flex; justify-content: space-between; font-size: .85rem; }
+    .c-hrow .d { color: rgba(240,240,240,.55); }
+    .c-hrow .h { font-family: var(--serif); color: var(--accent); }
+    .c-cta {
+      display: flex; align-items: center; justify-content: center;
+      padding: 1rem 2rem; font-size: .72rem; letter-spacing: .2em;
+      text-transform: uppercase; background: var(--accent); color: var(--bg);
+      font-weight: 500; text-decoration: none; transition: background .2s;
+      min-height: 44px; width: 100%;
+    }
+    .c-cta:hover { background: var(--accent-l); }
+    .c-map {
+      border: 1px solid var(--border); overflow: hidden; height: 26rem;
+    }
+    .c-map iframe {
+      width: 100%; height: 100%; border: 0;
+      filter: grayscale(100%) invert(90%) contrast(90%);
+    }
+
+    /* FOOTER */
+    footer {
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 1.75rem 3rem;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: .7rem; color: var(--muted); letter-spacing: .05em;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { color: var(--accent-l); }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      #nav { padding: 1.25rem 1.5rem; }
+      .nav-links { display: none; }
+      #servicios, #nosotros, #contacto { padding: 5rem 1.5rem; }
+      .s-grid { grid-template-columns: 1fr; }
+      .n-inner { grid-template-columns: 1fr; gap: 3rem; }
+      .n-img-wrap { order: -1; }
+      .c-grid { grid-template-columns: 1fr; }
+      footer { flex-direction: column; gap: .5rem; text-align: center; padding: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav id="nav">
+    <a href="#inicio" class="nav-logo" aria-label="Jesús Peralta Peluqueros — Inicio">
+      <img src="public/banner.png" alt="Jesús Peralta Peluqueros" class="logo-banner" />
+      <img src="public/logo.png"   alt="JP" class="logo-icon" />
+    </a>
+    <ul class="nav-links">
+      <li><a href="#servicios">Servicios</a></li>
+      <li><a href="#nosotros">Nosotros</a></li>
+      <li><a href="#contacto">Contacto</a></li>
+    </ul>
+    <a href="tel:+34691570085" class="nav-cta">Reservar Cita</a>
+  </nav>
+
+  <!-- HERO -->
+  <section id="inicio">
+    <div class="hero-bg"></div>
+    <div class="hero-mask"></div>
+    <div class="hero-body">
+      <p class="hero-label">Madrid · C/ José Abascal 61</p>
+      <h1 class="hero-h1">Jesús Peralta</h1>
+      <p class="hero-sub">Peluqueros</p>
+      <div class="hero-btns">
+        <a href="tel:+34691570085" class="btn-p">Reservar Cita</a>
+        <a href="#servicios" class="btn-s">Ver Servicios</a>
+      </div>
+    </div>
+    <div class="hero-scroll" aria-hidden="true">
+      <span>Scroll</span>
+      <div class="scroll-bar"></div>
+    </div>
+  </section>
+
+  <!-- SERVICIOS -->
+  <section id="servicios">
+    <div class="s-header reveal">
+      <p class="label-sm">Lo que ofrecemos</p>
+      <h2 class="heading">Servicios</h2>
+    </div>
+    <div class="s-grid">
+
+      <div class="s-card reveal">
+        <div>
+          <h3>Peluquería</h3>
+          <p class="s-desc">Servicios para mujer</p>
+          <div class="bar"></div>
+        </div>
+        <ul class="s-list">
+          <li><span class="nm">Color</span><span class="pr">28 €</span></li>
+          <li><span class="nm">Color orgánico</span><span class="pr">36 €</span></li>
+          <li><span class="nm">Mechas</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Barros de color</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Alisados</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Hidrataciones</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Peinados</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Cortes</span><span class="cq">Consultar</span></li>
+        </ul>
+        <a href="tel:+34691570085" class="s-link">Consultar precio →</a>
+      </div>
+
+      <div class="s-card reveal">
+        <div>
+          <h3>Caballeros</h3>
+          <p class="s-desc">Servicios para hombre</p>
+          <div class="bar"></div>
+        </div>
+        <ul class="s-list">
+          <li><span class="nm">Corte de caballero</span><span class="cq">Consultar</span></li>
+        </ul>
+        <a href="tel:+34691570085" class="s-link">Consultar precio →</a>
+      </div>
+
+      <div class="s-card reveal">
+        <div>
+          <h3>Estética</h3>
+          <p class="s-desc">Belleza y tratamientos</p>
+          <div class="bar"></div>
+        </div>
+        <ul class="s-list">
+          <li><span class="nm">Manicura normal</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Manicura permanente</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Pedicura normal</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Pedicura permanente</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Limpieza facial</span><span class="cq">Consultar</span></li>
+          <li><span class="nm">Tratamientos corporales</span><span class="cq">Consultar</span></li>
+        </ul>
+        <a href="tel:+34691570085" class="s-link">Consultar precio →</a>
+      </div>
+
+    </div>
+    <p class="s-note">
+      Consulta disponibilidad llamando al
+      <a href="tel:+34691570085">+34 691 570 085</a>
+    </p>
+  </section>
+
+  <!-- NOSOTROS -->
+  <section id="nosotros">
+    <div class="n-inner">
+      <div class="n-text reveal">
+        <p class="label-sm">Nosotros</p>
+        <h2 class="heading">Más de 20 años<br />cuidando tu imagen</h2>
+        <div class="bar" style="margin-bottom:2rem"></div>
+        <p>En Jesús Peralta Peluqueros llevamos más de dos décadas ofreciendo servicios de peluquería y estética de alta calidad en el corazón de Madrid.</p>
+        <p>Nos especializamos en coloración orgánica, tratamientos capilares y servicios de estética, siempre con productos de primera calidad y un trato personalizado.</p>
+        <div class="n-horario">
+          <p class="n-hl">Horario</p>
+          <div class="n-row"><span class="d">Lunes — Viernes</span><span class="h">9:30 – 20:00</span></div>
+          <div class="n-row"><span class="d">Sábado</span><span class="h">9:30 – 18:00</span></div>
+          <div class="n-row"><span class="d">Domingo</span><span class="h" style="color:var(--muted)">Cerrado</span></div>
+        </div>
+      </div>
+      <div class="n-img-wrap reveal">
+        <div class="n-img"></div>
+        <div class="n-d1"></div>
+        <div class="n-d2"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACTO -->
+  <section id="contacto">
+    <div class="c-header reveal">
+      <p class="label-sm">Visítanos</p>
+      <h2 class="heading">Contacto</h2>
+    </div>
+    <div class="c-grid">
+      <div class="c-fields reveal">
+        <div class="c-field">
+          <p class="lbl">Dirección</p>
+          <p class="val">C/ José Abascal 61, 28003 Madrid</p>
+        </div>
+        <div class="c-field">
+          <p class="lbl">Teléfono</p>
+          <a href="tel:+34691570085">+34 691 570 085</a>
+        </div>
+        <div class="c-field">
+          <p class="lbl">Email</p>
+          <a href="mailto:jesusperaltapeluqueros@gmail.com">jesusperaltapeluqueros@gmail.com</a>
+        </div>
+        <div>
+          <p class="c-hl">Horario</p>
+          <div class="c-hrows">
+            <div class="c-hrow"><span class="d">Lunes — Viernes</span><span class="h">9:30 – 20:00</span></div>
+            <div class="c-hrow"><span class="d">Sábado</span><span class="h">9:30 – 18:00</span></div>
+            <div class="c-hrow"><span class="d">Domingo</span><span class="h" style="color:var(--muted)">Cerrado</span></div>
+          </div>
+        </div>
+        <a href="tel:+34691570085" class="c-cta">Reservar Cita</a>
+      </div>
+      <div class="c-map reveal">
+        <iframe
+          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3036.64!2d-3.6927!3d40.4372!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xd42289fc2ee20f3%3A0x5b!2sC.+de+Jos%C3%A9+Abascal%2C+61%2C+Chambert%C3%AD%2C+28003+Madrid!5e0!3m2!1ses!2ses!4v1"
+          allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+          title="Ubicación Jesús Peralta Peluqueros"
+        ></iframe>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <img src="public/logo.png" alt="Jesús Peralta Peluqueros" style="height:2.25rem;width:auto;object-fit:contain;opacity:0.45;" />
+    <span>© 2026 Jesús Peralta Peluqueros · Madrid</span>
+    <a href="tel:+34691570085">+34 691 570 085</a>
+  </footer>
+
+  <script>
+    // Nav scroll
+    const nav = document.getElementById('nav');
+    addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 60));
+
+    // Reveal on scroll
+    const els = document.querySelectorAll('.reveal');
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e, i) => {
+        if (e.isIntersecting) {
+          setTimeout(() => e.target.classList.add('in'), i * 100);
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    els.forEach(el => io.observe(el));
+  </script>
+</body>
+</html>

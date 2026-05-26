@@ -1,9 +1,0 @@
-vertical: crm
-agentId: pm-automatizaciones
-skills:
-  - integrations/crm
-  - integrations/database
-  - api-design
-maxParallelSubtasks: 2
-typicalHoursPerSubtask: 4
-requiresClientApproval: false

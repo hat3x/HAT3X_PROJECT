@@ -1,0 +1,11 @@
+vertical: chatbots
+agentId: pm-chatbots
+skills:
+  - rag-chatbots
+  - whatsapp-business
+  - voice-prompt-engineering
+  - api-design
+  - testing-qa
+maxParallelSubtasks: 3
+typicalHoursPerSubtask: 6
+requiresClientApproval: true

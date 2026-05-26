@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAT3X — Arquitectura de Página</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #08080f;
+    color: #e2e2e8;
+    font-family: 'Inter', system-ui, sans-serif;
+    padding: 32px;
+    min-height: 100vh;
+  }
+
+  .page-header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .page-header h1 {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.03em;
+    margin-bottom: 8px;
+  }
+  .page-header p {
+    color: #666;
+    font-size: 0.85rem;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 32px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* LEFT SIDEBAR — Section index */
+  .section-index {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+  }
+  .index-title {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #444;
+    margin-bottom: 12px;
+  }
+  .index-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #111;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .index-item:hover .index-name { color: #a78bfa; }
+  .index-num {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #333;
+    width: 20px;
+    flex-shrink: 0;
+  }
+  .index-name {
+    font-size: 0.75rem;
+    color: #888;
+    font-weight: 500;
+    flex: 1;
+    transition: color 0.15s;
+  }
+  .index-tag {
+    font-size: 0.55rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .tag-critical { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+  .tag-high { background: rgba(124,58,237,0.1); color: #a78bfa; border: 1px solid rgba(124,58,237,0.2); }
+  .tag-med { background: rgba(234,88,12,0.1); color: #fb923c; border: 1px solid rgba(234,88,12,0.2); }
+  .tag-std { background: rgba(255,255,255,0.04); color: #555; border: 1px solid #1a1a1a; }
+
+  /* RIGHT — Wireframe */
+  .wireframe {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .section-block {
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .section-block:hover { transform: translateX(4px); }
+
+  .section-label {
+    position: absolute;
+    top: 10px; left: 14px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    z-index: 10;
+  }
+  .section-num {
+    position: absolute;
+    top: 10px; right: 14px;
+    font-size: 0.6rem;
+    color: #333;
+    font-weight: 600;
+    z-index: 10;
+  }
+
+  /* 01 — NAV */
+  .s-nav {
+    height: 50px;
+    background: linear-gradient(to right, #0d0d18, #10101c);
+    border: 1px solid #1a1a28;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 20px;
+  }
+  .nav-logo {
+    font-size: 0.75rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.02em;
+  }
+  .nav-links {
+    display: flex;
+    gap: 16px;
+    margin-left: 24px;
+  }
+  .nav-link {
+    font-size: 0.6rem;
+    color: #555;
+  }
+  .nav-cta {
+    margin-left: auto;
+    background: #7c3aed;
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 6px;
+  }
+
+  /* 02 — HERO */
+  .s-hero {
+    height: 360px;
+    background: radial-gradient(ellipse at 50% -10%, rgba(124,58,237,0.5) 0%, transparent 60%),
+                radial-gradient(ellipse at 85% 85%, rgba(234,88,12,0.2) 0%, transparent 40%),
+                #050508;
+    border: 1px solid #1a1a28;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    overflow: hidden;
+  }
+  .hero-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(124,58,237,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .hero-glow {
+    position: absolute;
+    top: -80px; left: 50%; transform: translateX(-50%);
+    width: 400px; height: 300px;
+    background: radial-gradient(ellipse, rgba(124,58,237,0.35) 0%, transparent 70%);
+    filter: blur(40px);
+    pointer-events: none;
+  }
+  .hero-badge {
+    background: rgba(124,58,237,0.1);
+    border: 1px solid rgba(124,58,237,0.25);
+    color: #a78bfa;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 100px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    z-index: 1;
+  }
+  .hero-h1 {
+    font-size: 2.6rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    text-align: center;
+    z-index: 1;
+    max-width: 600px;
+  }
+  .hero-h1 .accent { color: #7c3aed; }
+  .hero-h1 .accent2 {
+    background: linear-gradient(90deg, #7c3aed, #ea580c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero-sub {
+    color: #666;
+    font-size: 0.85rem;
+    text-align: center;
+    z-index: 1;
+    max-width: 420px;
+    line-height: 1.6;
+  }
+  .hero-ctas {
+    display: flex;
+    gap: 12px;
+    z-index: 1;
+    margin-top: 8px;
+  }
+  .hero-cta-p {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    box-shadow: 0 4px 24px rgba(124,58,237,0.4);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 10px 24px;
+    border-radius: 8px;
+  }
+  .hero-cta-s {
+    border: 1px solid #2a2a3a;
+    color: #888;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 10px 24px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.02);
+  }
+  .hero-nodes {
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  }
+  .hnode {
+    position: absolute;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    border: 1px solid rgba(124,58,237,0.5);
+    background: rgba(124,58,237,0.2);
+  }
+  .hnode::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px; height: 2px;
+    border-radius: 50%;
+    background: #a78bfa;
+  }
+  .hline {
+    position: absolute;
+    height: 1px;
+    background: rgba(124,58,237,0.12);
+    transform-origin: left center;
+  }
+
+  /* 03 — VALUE PROP */
+  .s-value {
+    height: 130px;
+    background: #0a0a12;
+    border: 1px solid #141420;
+    display: flex;
+    align-items: center;
+    padding: 0 32px;
+    gap: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .s-value::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(124,58,237,0.4), rgba(234,88,12,0.3), transparent);
+  }
+  .value-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 16px;
+    border-right: 1px solid #1a1a28;
+  }
+  .value-item:last-child { border-right: none; }
+  .value-num {
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: #7c3aed;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+  .value-label { font-size: 0.65rem; color: #555; font-weight: 500; }
+  .value-desc { font-size: 0.7rem; color: #888; line-height: 1.4; }
+
+  /* 04 — WHAT WE DO */
+  .s-what {
+    height: 200px;
+    background: #070710;
+    border: 1px solid #111120;
+    padding: 24px 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .s-what::after {
+    content: '';
+    position: absolute;
+    right: -40px; top: -40px;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%);
+  }
+  .what-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: #ea580c;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .what-title {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+    max-width: 400px;
+    margin-bottom: 14px;
+  }
+  .what-pills {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .what-pill {
+    background: rgba(124,58,237,0.07);
+    border: 1px solid rgba(124,58,237,0.15);
+    color: #888;
+    font-size: 0.65rem;
+    padding: 4px 12px;
+    border-radius: 100px;
+  }
+
+  /* 05 — SERVICES */
+  .s-services {
+    height: 220px;
+    background: #0b0b16;
+    border: 1px solid #141422;
+    padding: 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .services-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: #a78bfa;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .services-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .service-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid #1d1d2e;
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: all 0.2s;
+  }
+  .service-card:hover { border-color: rgba(124,58,237,0.3); background: rgba(124,58,237,0.04); }
+  .service-icon {
+    width: 20px; height: 20px;
+    border-radius: 5px;
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.2);
+    margin-bottom: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.55rem;
+  }
+  .service-name { font-size: 0.65rem; color: #ccc; font-weight: 600; line-height: 1.3; }
+
+  /* 06 — HOW WE WORK */
+  .s-how {
+    height: 170px;
+    background: #06060e;
+    border: 1px solid #111118;
+    padding: 24px 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .how-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: #ea580c;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .steps {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    position: relative;
+  }
+  .steps::before {
+    content: '';
+    position: absolute;
+    top: 14px; left: 14px; right: 14px;
+    height: 1px;
+    background: linear-gradient(90deg, #7c3aed, rgba(234,88,12,0.5));
+  }
+  .step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+  }
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #0a0a16;
+    border: 1px solid #7c3aed;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: #a78bfa;
+    z-index: 1;
+    position: relative;
+  }
+  .step-name { font-size: 0.6rem; color: #666; font-weight: 500; }
+
+  /* 07 — BENEFITS */
+  .s-benefits {
+    height: 150px;
+    background: linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(234,88,12,0.03) 100%), #080810;
+    border: 1px solid #151522;
+    padding: 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .benefits-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: #a78bfa;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .benefits-list {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .benefit {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .benefit-dot {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: #7c3aed;
+    flex-shrink: 0;
+  }
+  .benefit-text { font-size: 0.65rem; color: #888; }
+
+  /* 08 — CASES */
+  .s-cases {
+    height: 190px;
+    background: #09091a;
+    border: 1px solid #14142a;
+    padding: 24px 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cases-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: #ea580c;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .cases-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .case-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid #1d1d30;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .case-sector {
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    color: #a78bfa;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .case-title { font-size: 0.65rem; color: #ccc; font-weight: 600; }
+  .case-result {
+    font-size: 0.6rem;
+    color: #555;
+    line-height: 1.4;
+  }
+  .case-metric {
+    font-size: 1rem;
+    font-weight: 900;
+    color: #7c3aed;
+    letter-spacing: -0.03em;
+  }
+
+  /* 09 — CTA */
+  .s-cta {
+    height: 160px;
+    background: radial-gradient(ellipse at 50% 100%, rgba(124,58,237,0.3) 0%, transparent 60%),
+                linear-gradient(135deg, #0a0a18, #050510);
+    border: 1px solid #1a1a30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cta-title {
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.04em;
+    text-align: center;
+  }
+  .cta-title .accent { color: #a78bfa; }
+  .cta-sub {
+    font-size: 0.75rem;
+    color: #666;
+    text-align: center;
+  }
+  .cta-btns {
+    display: flex; gap: 12px;
+  }
+  .cta-btn-p {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    box-shadow: 0 4px 24px rgba(124,58,237,0.4), 0 0 60px rgba(124,58,237,0.1);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 9px 22px;
+    border-radius: 8px;
+  }
+  .cta-btn-s {
+    border: 1px solid #2a2a40;
+    color: #888;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 9px 22px;
+    border-radius: 8px;
+  }
+
+  /* 10 — FOOTER */
+  .s-footer {
+    height: 100px;
+    background: #030308;
+    border: 1px solid #0f0f18;
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+  }
+  .footer-logo {
+    font-size: 0.9rem;
+    font-weight: 900;
+    color: #333;
+    letter-spacing: -0.02em;
+  }
+  .footer-links {
+    display: flex;
+    gap: 16px;
+    margin-left: auto;
+  }
+  .footer-link { font-size: 0.6rem; color: #333; }
+  .footer-copy { font-size: 0.6rem; color: #222; }
+
+  /* ANNOTATIONS */
+  .annotation {
+    position: absolute;
+    right: 12px;
+    bottom: 8px;
+    font-size: 0.55rem;
+    color: #333;
+    font-style: italic;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.65rem;
+    color: #555;
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+  }
+</style>
+
+<div class="page-header">
+  <h1>HAT3X — Wireframe Inmersivo Dark</h1>
+  <p>Arquitectura completa de la web · Enfoque A seleccionado</p>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR INDEX -->
+  <div class="section-index">
+    <div class="index-title">Secciones</div>
+
+    <div class="index-item">
+      <div class="index-num">00</div>
+      <div class="index-name">Navegación</div>
+      <div class="index-tag tag-std">fija</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">01</div>
+      <div class="index-name">Hero</div>
+      <div class="index-tag tag-critical">crítico</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">02</div>
+      <div class="index-name">Propuesta de valor</div>
+      <div class="index-tag tag-high">alto</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">03</div>
+      <div class="index-name">Qué hacemos</div>
+      <div class="index-tag tag-high">alto</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">04</div>
+      <div class="index-name">Servicios</div>
+      <div class="index-tag tag-high">alto</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">05</div>
+      <div class="index-name">Cómo trabajamos</div>
+      <div class="index-tag tag-med">medio</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">06</div>
+      <div class="index-name">Beneficios</div>
+      <div class="index-tag tag-med">medio</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">07</div>
+      <div class="index-name">Casos / Sectores</div>
+      <div class="index-tag tag-med">medio</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">08</div>
+      <div class="index-name">CTA final</div>
+      <div class="index-tag tag-critical">crítico</div>
+    </div>
+    <div class="index-item">
+      <div class="index-num">09</div>
+      <div class="index-name">Footer</div>
+      <div class="index-tag tag-std">std</div>
+    </div>
+
+    <div style="margin-top: 24px; padding: 16px; background: rgba(124,58,237,0.06); border: 1px solid rgba(124,58,237,0.15); border-radius: 10px;">
+      <div style="font-size: 0.6rem; color: #a78bfa; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;">Stack técnico</div>
+      <div style="font-size: 0.65rem; color: #666; line-height: 1.8;">
+        Next.js 14 App Router<br>
+        Tailwind CSS v4<br>
+        Framer Motion<br>
+        TypeScript<br>
+        Vercel Deploy
+      </div>
+    </div>
+
+    <div style="margin-top: 12px; padding: 16px; background: rgba(234,88,12,0.06); border: 1px solid rgba(234,88,12,0.15); border-radius: 10px;">
+      <div style="font-size: 0.6rem; color: #fb923c; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;">Paleta</div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 14px; height: 14px; border-radius: 3px; background: #7c3aed;"></div>
+          <span style="font-size: 0.6rem; color: #666;">#7C3AED — Violeta</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 14px; height: 14px; border-radius: 3px; background: #ea580c;"></div>
+          <span style="font-size: 0.6rem; color: #666;">#EA580C — Naranja</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 14px; height: 14px; border-radius: 3px; background: #050508;"></div>
+          <span style="font-size: 0.6rem; color: #666;">#050508 — Negro base</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 14px; height: 14px; border-radius: 3px; background: #fff; border: 1px solid #222;"></div>
+          <span style="font-size: 0.6rem; color: #666;">#FFFFFF — Blanco</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WIREFRAME -->
+  <div class="wireframe">
+
+    <!-- NAV -->
+    <div class="section-block s-nav">
+      <div class="nav-logo">HAT3X</div>
+      <div class="nav-links">
+        <div class="nav-link">Servicios</div>
+        <div class="nav-link">Proceso</div>
+        <div class="nav-link">Casos</div>
+        <div class="nav-link">Nosotros</div>
+      </div>
+      <div class="nav-cta">Reservar llamada →</div>
+      <div class="annotation">glassmorphism · sticky · scroll-aware</div>
+    </div>
+
+    <!-- HERO -->
+    <div class="section-block s-hero">
+      <div class="hero-grid"></div>
+      <div class="hero-glow"></div>
+      <div class="hero-nodes">
+        <div class="hnode" style="top:15%;left:8%"></div>
+        <div class="hnode" style="top:70%;left:12%"></div>
+        <div class="hnode" style="top:25%;right:10%"></div>
+        <div class="hnode" style="top:75%;right:15%"></div>
+        <div class="hnode" style="top:45%;left:20%"></div>
+        <div class="hline" style="top:15.5%;left:8%;width:100px;transform:rotate(20deg)"></div>
+        <div class="hline" style="top:70.5%;left:12%;width:80px;transform:rotate(-15deg)"></div>
+        <div class="hline" style="top:25.5%;right:10%;width:90px;transform:rotate(10deg)"></div>
+      </div>
+      <div class="hero-badge">Consultoría IA · Implementación Real</div>
+      <div class="hero-h1">
+        No tienes que<br>aprender <span class="accent2">IA.</span>
+      </div>
+      <div class="hero-sub">HAT3X implementa soluciones reales de inteligencia artificial para tu negocio. Sin curvas de aprendizaje. Sin relleno.</div>
+      <div class="hero-ctas">
+        <div class="hero-cta-p">Reservar llamada gratuita →</div>
+        <div class="hero-cta-s">Ver servicios</div>
+      </div>
+      <div class="annotation">background animado · glow pulsante · nodos conectados · scroll parallax</div>
+    </div>
+
+    <!-- VALUE PROP -->
+    <div class="section-block s-value">
+      <div class="value-item">
+        <div class="value-num">6</div>
+        <div class="value-label">Verticales de IA</div>
+        <div class="value-desc">Automatización, voz, chatbots, apps, analytics, gobernanza</div>
+      </div>
+      <div class="value-item">
+        <div class="value-num">100%</div>
+        <div class="value-label">Implementación real</div>
+        <div class="value-desc">No consultoría vacía. Entregamos sistemas funcionales</div>
+      </div>
+      <div class="value-item">
+        <div class="value-num">B2B</div>
+        <div class="value-label">Enfoque empresarial</div>
+        <div class="value-desc">Para pymes y empresas que necesitan resultados medibles</div>
+      </div>
+      <div class="value-item">
+        <div class="value-num">0</div>
+        <div class="value-label">Curva de aprendizaje</div>
+        <div class="value-desc">Tu equipo no necesita saber IA. Nosotros la operamos</div>
+      </div>
+      <div class="annotation">counter animation on scroll · separadores con gradientes</div>
+    </div>
+
+    <!-- WHAT WE DO -->
+    <div class="section-block s-what">
+      <div class="what-label">Qué hacemos</div>
+      <div class="what-title">Implementamos IA que funciona en tu negocio hoy.</div>
+      <div class="what-pills">
+        <div class="what-pill">Automatización de procesos</div>
+        <div class="what-pill">Agentes de voz</div>
+        <div class="what-pill">Chatbots inteligentes</div>
+        <div class="what-pill">Apps con IA</div>
+        <div class="what-pill">Análisis de datos</div>
+        <div class="what-pill">Integraciones</div>
+      </div>
+      <div class="annotation">fade-in staggered · copy directo y contundente</div>
+    </div>
+
+    <!-- SERVICES -->
+    <div class="section-block s-services">
+      <div class="services-label">Servicios</div>
+      <div class="services-grid">
+        <div class="service-card">
+          <div class="service-icon">🔍</div>
+          <div class="service-name">Auditoría y roadmap de IA</div>
+        </div>
+        <div class="service-card">
+          <div class="service-icon">⚡</div>
+          <div class="service-name">Automatización y agentes</div>
+        </div>
+        <div class="service-card">
+          <div class="service-icon">📱</div>
+          <div class="service-name">Apps y productos con IA</div>
+        </div>
+        <div class="service-card">
+          <div class="service-icon">🔗</div>
+          <div class="service-name">Integraciones</div>
+        </div>
+        <div class="service-card">
+          <div class="service-icon">📊</div>
+          <div class="service-name">Analítica y ML</div>
+        </div>
+        <div class="service-card">
+          <div class="service-icon">🛡️</div>
+          <div class="service-name">Gobernanza y adopción</div>
+        </div>
+      </div>
+      <div class="annotation">hover: glow violeta · cards con depth · expand on click</div>
+    </div>
+
+    <!-- HOW WE WORK -->
+    <div class="section-block s-how">
+      <div class="how-label">Cómo trabajamos</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">01</div><div class="step-name">Diagnóstico</div></div>
+        <div class="step"><div class="step-num">02</div><div class="step-name">Roadmap</div></div>
+        <div class="step"><div class="step-num">03</div><div class="step-name">Implementación</div></div>
+        <div class="step"><div class="step-num">04</div><div class="step-name">Integración</div></div>
+        <div class="step"><div class="step-num">05</div><div class="step-name">Optimización</div></div>
+      </div>
+      <div class="annotation">línea animada izq → der on scroll · step-by-step reveal</div>
+    </div>
+
+    <!-- BENEFITS -->
+    <div class="section-block s-benefits">
+      <div class="benefits-label">Por qué HAT3X</div>
+      <div class="benefits-list">
+        <div class="benefit"><div class="benefit-dot"></div><div class="benefit-text">Resultados medibles desde el día 1</div></div>
+        <div class="benefit"><div class="benefit-dot"></div><div class="benefit-text">Sin dependencias de tu equipo</div></div>
+        <div class="benefit"><div class="benefit-dot"></div><div class="benefit-text">Tecnología real, no demos</div></div>
+        <div class="benefit"><div class="benefit-dot"></div><div class="benefit-text">Escalable con tu negocio</div></div>
+        <div class="benefit"><div class="benefit-dot"></div><div class="benefit-text">Sin curva de aprendizaje</div></div>
+        <div class="benefit"><div class="benefit-dot"></div><div class="benefit-text">Stack moderno y seguro</div></div>
+        <div class="benefit"><div class="benefit-dot"></div><div class="benefit-text">Soporte y mantenimiento</div></div>
+        <div class="benefit"><div class="benefit-dot"></div><div class="benefit-text">Transparencia total</div></div>
+      </div>
+    </div>
+
+    <!-- CASES -->
+    <div class="section-block s-cases">
+      <div class="cases-label">Sectores que transformamos</div>
+      <div class="cases-grid">
+        <div class="case-card">
+          <div class="case-sector">Hostelería</div>
+          <div class="case-metric">-70%</div>
+          <div class="case-title">Gestión de reservas automatizada</div>
+          <div class="case-result">Agente de voz 24/7 con integración CRM</div>
+        </div>
+        <div class="case-card">
+          <div class="case-sector">Retail / E-commerce</div>
+          <div class="case-metric">3× ROI</div>
+          <div class="case-title">Atención al cliente con IA</div>
+          <div class="case-result">Chatbot multicanal con respuesta instantánea</div>
+        </div>
+        <div class="case-card">
+          <div class="case-sector">Servicios B2B</div>
+          <div class="case-metric">+40%</div>
+          <div class="case-title">Pipeline de ventas inteligente</div>
+          <div class="case-result">Automatización de leads y seguimiento</div>
+        </div>
+      </div>
+      <div class="annotation">métricas ficticias reemplazables · hover: card elevation</div>
+    </div>
+
+    <!-- CTA FINAL -->
+    <div class="section-block s-cta">
+      <div class="cta-title">¿Listo para implementar <span class="accent">IA real</span>?</div>
+      <div class="cta-sub">Primera llamada gratuita · Sin compromiso · Resultados en semanas</div>
+      <div class="cta-btns">
+        <div class="cta-btn-p">Reservar llamada →</div>
+        <div class="cta-btn-s">Contactar por email</div>
+      </div>
+      <div class="annotation">glow pulsante · fondo con partículas · máxima conversión</div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="section-block s-footer">
+      <div class="footer-logo">HAT3X</div>
+      <div class="footer-links">
+        <div class="footer-link">Privacidad</div>
+        <div class="footer-link">Términos</div>
+        <div class="footer-link">Contacto</div>
+      </div>
+      <div class="footer-copy" style="margin-left: auto;">© 2025 HAT3X · Consultoría de IA</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div>Crítico para conversión</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7c3aed;"></div>Alto impacto visual</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ea580c;"></div>Medio — soporte narrativo</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#333;"></div>Estándar</div>
+</div>

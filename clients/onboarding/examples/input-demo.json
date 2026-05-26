@@ -1,0 +1,49 @@
+{
+  "cliente": {
+    "nombre": "NovaMed",
+    "nombre_legal": "NovaMed Solutions S.L.",
+    "nombre_slug": "novamed",
+    "contacto": "María García López",
+    "email": "maria.garcia@novamed.es",
+    "telefono": "+34 91 123 45 67",
+    "direccion": "Calle Mayor 45, 2º, 28013 Madrid, España",
+    "sector": "Salud",
+    "tamano": "pyme"
+  },
+  "proyecto": {
+    "nombre": "Automatización de Historiales Clínicos",
+    "tipo_servicio": "automatizacion_agentes",
+    "descripcion": "Automatización del proceso de ingesta, clasificación y recuperación de historiales clínicos mediante agentes de IA. El proceso actual es completamente manual: el personal administrativo recibe documentos en papel y PDF, los transcribe a un sistema heredado y los archiva manualmente. El objetivo es eliminar la transcripción manual y reducir los errores de clasificación mediante un pipeline automatizado con validación humana en los casos de baja confianza.",
+    "objetivos_negocio": "1. Reducir en un 70% el tiempo de gestión de historiales clínicos. 2. Eliminar los errores de transcripción manual (tasa actual estimada en 8%). 3. Cumplir con los requisitos del RGPD en el tratamiento y trazabilidad de datos de pacientes. 4. Reducir la carga administrativa del personal para liberar tiempo clínico.",
+    "alcance_incluido": "- Pipeline de ingesta de documentos (PDF y documentos escaneados via OCR). - Modelo de clasificación automática de tipos de historial. - API REST de búsqueda semántica de historiales. - Dashboard de auditoría de accesos y trazabilidad RGPD. - Integración con el HIS OpenMedis existente via REST API. - Documentación técnica completa. - Formación al equipo de administración (hasta 10 personas, 4h de sesión presencial o remota).",
+    "alcance_excluido": "- Desarrollo o modificación del sistema HIS OpenMedis existente. - Soporte post-go-live más allá de las 2 semanas incluidas en Fase 5. - Formación a personal médico o clínico (distinto del personal administrativo). - Migración de historiales anteriores a 2020 (alcance a acordar en proyecto separado). - Infraestructura de servidores en cloud (cliente provee servidores propios).",
+    "entregables": "1. Pipeline de ingesta: servicio Python dockerizado con soporte PDF y OCR. 2. API de clasificación: endpoint REST con confianza mínima configurable. 3. API de búsqueda semántica: búsqueda por texto libre sobre historiales indexados. 4. Dashboard de auditoría: panel web con filtros por fecha, usuario y tipo de acceso. 5. Integración HIS: conector validado con OpenMedis REST API v2. 6. Documentación técnica: arquitectura, APIs, guía de despliegue y troubleshooting. 7. Material de formación: guía de usuario y presentación de sesión de formación.",
+    "stack_herramientas": "Python 3.11, LangChain, OpenAI API (gpt-4o para clasificación), pgvector sobre PostgreSQL, Tesseract OCR, FastAPI, Docker, n8n (flujos de orquestación), Supabase (base de datos y autenticación).",
+    "integraciones": "HIS OpenMedis v2 (REST API — credenciales y documentación provistas por NovaMed), Active Directory de NovaMed (para autenticación de usuarios del dashboard), Sistema de backup NovaMed (integración de archivado automático).",
+    "restricciones": "1. Todos los datos de pacientes deben permanecer en servidores ubicados físicamente en España. 2. No se puede usar ningún modelo de IA en cloud que procese datos de pacientes sin garantía de RGPD (Data Processing Agreement firmado). 3. Ventana de mantenimiento de sistemas: sábados de 02:00 a 06:00 CET. 4. El sistema debe funcionar en la red local de NovaMed sin dependencia de internet para las funciones core.",
+    "riesgos_conocidos": "1. Calidad de historiales escaneados puede variar (algunos documentos históricos tienen baja resolución). 2. La API del HIS OpenMedis puede tener rate limiting no documentado. 3. El equipo de TI de NovaMed tiene disponibilidad limitada durante junio (vacaciones parciales).",
+    "responsable_cliente": "Javier Martínez Ruiz"
+  },
+  "comercial": {
+    "precio": "24.000 € (sin IVA)",
+    "forma_pago": "Transferencia bancaria a 30 días naturales desde la emisión de cada factura. IBAN a proveer por HAT3X en cada factura.",
+    "hitos_facturacion": "Factura 1: 40% (9.600 €) al inicio del proyecto (kickoff firmado). Factura 2: 40% (9.600 €) al finalizar la Fase 3 — Implementación (demo en staging aprobada por cliente). Factura 3: 20% (4.800 €) al go-live y aceptación final.",
+    "fecha_inicio": "2026-04-15",
+    "fecha_fin": "2026-07-31"
+  },
+  "legal": {
+    "jurisdiccion": "España — Madrid",
+    "confidencialidad": "Ambas partes se comprometen a no divulgar, reproducir ni utilizar para fines distintos a los de este contrato ninguna información de carácter confidencial, técnico, clínico o comercial que conozcan con motivo de la ejecución del mismo. Esta obligación se extiende durante la vigencia del contrato y por un período de 3 años tras su terminación.",
+    "propiedad_intelectual": "Los entregables desarrollados específicamente para NovaMed Solutions S.L. en el marco de este contrato (código, modelos entrenados con datos de NovaMed, documentación específica) serán propiedad de NovaMed Solutions S.L. una vez satisfecho el importe total del contrato. HAT3X retiene la propiedad de sus frameworks, metodologías propias y herramientas de carácter genérico no desarrolladas específicamente para este proyecto."
+  },
+  "portal_cliente": {
+    "provisioned": false,
+    "url": "https://portal.hat3x.com",
+    "username": "novamed@novamed.es",
+    "activation_method": "email_link",
+    "estimated_provision_date": "2026-04-17"
+  },
+  "branding": {
+    "color_scheme": "hat3x_default"
+  }
+}

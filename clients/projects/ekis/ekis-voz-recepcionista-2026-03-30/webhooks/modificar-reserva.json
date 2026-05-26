@@ -1,0 +1,187 @@
+{
+  "_description": "Workflow n8n — Modificar reserva en Google Sheets + actualizar evento de Google Calendar.",
+  "_version": "2.0",
+  "_proyecto": "Ekis — Demo Recepcionista Voz — HAT3X",
+
+  "name": "Ekis — Modificar Reserva",
+  "nodes": [
+    {
+      "id": "webhook-input",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "parameters": {
+        "path": "modificar-reserva",
+        "method": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "read-reservas",
+      "name": "Leer Reservas Activas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [220, 300],
+      "parameters": {
+        "operation": "read",
+        "documentId": "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8",
+        "sheetName": "Reservas_Activas",
+        "options": { "headerRow": 1, "firstDataRow": 2 }
+      }
+    },
+    {
+      "id": "buscar-y-preparar",
+      "name": "Buscar y Preparar Modificación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst telefono   = String(body.telefono    || '').trim();\nconst fechaActual = String(body.fecha_actual || '').trim();\nconst nuevaFecha  = body.nueva_fecha   ? String(body.nueva_fecha).trim()  : null;\nconst nuevaFranja = body.nueva_franja  ? String(body.nueva_franja).trim() : null;\nconst nuevasPersonas = body.nuevas_personas ? parseInt(body.nuevas_personas) : null;\n\nif (!telefono || !fechaActual) {\n  return [{ json: { encontrado: false, resumen_nuevo: 'Necesito el teléfono y la fecha actual de la reserva.' } }];\n}\n\nconst [ya, ma, da] = fechaActual.split('-');\nconst fechaFormateadaBusqueda = `${da}/${ma}/${ya}`;\n\nconst reservas = $input.all().map(item => item.json);\n\nconst reserva = reservas.find(r => {\n  const tel = String(r['Teléfono'] || r['Telefono'] || '').replace(/\\s/g, '');\n  const fechaR = String(r['Fecha'] || '').trim();\n  const estado = String(r['Estado'] || '').toLowerCase();\n  const activo = ['confirmada','en_espera','recordatorio_enviado'].includes(estado);\n  const telOk  = tel === telefono.replace(/\\s/g, '');\n  const fechaOk = fechaR === fechaActual || fechaR === fechaFormateadaBusqueda;\n  return telOk && fechaOk && activo;\n});\n\nif (!reserva) {\n  return [{ json: {\n    encontrado: false,\n    resumen_nuevo: `No encuentro ninguna reserva activa para ese teléfono el ${fechaFormateadaBusqueda}. ¿Puede que sea en otra fecha?`\n  }}];\n}\n\n// Valores finales tras la modificación\nconst fechaFinal    = nuevaFecha   || fechaActual;\nconst franjaFinal   = nuevaFranja  || String(reserva['Franja'] || '');\nconst personasFinal = nuevasPersonas || parseInt(reserva['Personas']) || 0;\nconst calEventId    = reserva['Calendar_Event_ID'] || '';\nconst nombre        = reserva['Nombre'] || '';\nconst apellido      = nombre.split(' ').pop() || nombre;\n\n// Fecha formateada para Sheets\nlet fechaFinalFormateada;\nif (nuevaFecha) {\n  const [ny, nm, nd] = nuevaFecha.split('-');\n  fechaFinalFormateada = `${nd}/${nm}/${ny}`;\n} else {\n  fechaFinalFormateada = reserva['Fecha'];\n}\n\n// Fechas-hora para Calendar\nconst horaInicio = franjaFinal === 'almuerzo' ? '13:30:00' : '20:30:00';\nconst horaFin    = franjaFinal === 'almuerzo' ? '16:00:00' : '23:59:00';\nconst fechaHoraInicio = `${fechaFinal}T${horaInicio}`;\nconst fechaHoraFin    = `${fechaFinal}T${horaFin}`;\nconst tituloEvento    = `Ekis — ${apellido} (${personasFinal} pers.) — ${franjaFinal} [MODIFICADA]`;\n\n// Mensaje para Carmen\nconst diasSemana  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst diaSemana   = diasSemana[new Date(fechaFinal).getDay()];\nconst franjaTexto = franjaFinal === 'almuerzo' ? 'a mediodía' : 'por la noche';\nconst ahora = new Date().toISOString().replace('T',' ').substring(0,19);\n\nreturn [{ json: {\n  encontrado:    true,\n  calEventId,\n  fechaFinal, fechaFinalFormateada, franjaFinal, personasFinal,\n  fechaHoraInicio, fechaHoraFin, tituloEvento,\n  telefono,\n  idReserva:  reserva['ID_Reserva'] || '',\n  ahora,\n  resumen_nuevo: `Reserva de ${apellido} actualizada: ${diaSemana} ${franjaTexto}, ${personasFinal} personas`\n}}];"
+      }
+    },
+    {
+      "id": "check-encontrado",
+      "name": "¿Reserva encontrada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [660, 300],
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.encontrado }}", "value2": true }]
+        }
+      }
+    },
+    {
+      "id": "check-tiene-calendar",
+      "name": "¿Tiene Calendar Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [880, 200],
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.calEventId }}", "operation": "isNotEmpty" }]
+        }
+      }
+    },
+    {
+      "id": "actualizar-calendar",
+      "name": "Actualizar Evento Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 2,
+      "position": [1100, 160],
+      "parameters": {
+        "operation": "update",
+        "calendar": { "__rl": true, "mode": "id", "value": "ekis.recepcionista@gmail.com" },
+        "eventId": "={{ $('Buscar y Preparar Modificación').first().json.calEventId }}",
+        "updateFields": {
+          "start": "={{ $('Buscar y Preparar Modificación').first().json.fechaHoraInicio }}",
+          "end": "={{ $('Buscar y Preparar Modificación').first().json.fechaHoraFin }}",
+          "summary": "={{ $('Buscar y Preparar Modificación').first().json.tituloEvento }}",
+          "timezone": "Europe/Madrid"
+        }
+      }
+    },
+    {
+      "id": "actualizar-sheets",
+      "name": "Actualizar en Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [1320, 200],
+      "parameters": {
+        "operation": "update",
+        "documentId": "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8",
+        "sheetName": "Reservas_Activas",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Teléfono"],
+          "value": {
+            "Teléfono": "={{ $('Buscar y Preparar Modificación').first().json.telefono }}",
+            "Fecha": "={{ $('Buscar y Preparar Modificación').first().json.fechaFinalFormateada }}",
+            "Franja": "={{ $('Buscar y Preparar Modificación').first().json.franjaFinal }}",
+            "Personas": "={{ $('Buscar y Preparar Modificación').first().json.personasFinal }}",
+            "Fecha_Modificación": "={{ $('Buscar y Preparar Modificación').first().json.ahora }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "respuesta-ok",
+      "name": "Respuesta Modificación OK",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1540, 200],
+      "parameters": {
+        "values": {
+          "boolean": [{ "name": "modificado", "value": true }],
+          "string": [
+            { "name": "id_reserva",    "value": "={{ $('Buscar y Preparar Modificación').first().json.idReserva }}" },
+            { "name": "resumen_nuevo", "value": "={{ $('Buscar y Preparar Modificación').first().json.resumen_nuevo }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "respuesta-no-encontrado",
+      "name": "Respuesta No Encontrado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [880, 400],
+      "parameters": {
+        "values": {
+          "boolean": [{ "name": "modificado", "value": false }],
+          "string": [
+            { "name": "id_reserva",    "value": "" },
+            { "name": "resumen_nuevo", "value": "={{ $('Buscar y Preparar Modificación').first().json.resumen_nuevo }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "responder",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1760, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200, "responseHeaders": { "entries": [{ "name": "Content-Type", "value": "application/json" }] } }
+      }
+    }
+  ],
+  "connections": {
+    "Retell Tool Call":             { "main": [[{ "node": "Leer Reservas Activas",         "type": "main", "index": 0 }]] },
+    "Leer Reservas Activas":        { "main": [[{ "node": "Buscar y Preparar Modificación","type": "main", "index": 0 }]] },
+    "Buscar y Preparar Modificación":{ "main": [[{ "node": "¿Reserva encontrada?",         "type": "main", "index": 0 }]] },
+    "¿Reserva encontrada?": {
+      "main": [
+        [{ "node": "¿Tiene Calendar Event?", "type": "main", "index": 0 }],
+        [{ "node": "Respuesta No Encontrado", "type": "main", "index": 0 }]
+      ]
+    },
+    "¿Tiene Calendar Event?": {
+      "main": [
+        [{ "node": "Actualizar Evento Calendar", "type": "main", "index": 0 }],
+        [{ "node": "Actualizar en Sheets",        "type": "main", "index": 0 }]
+      ]
+    },
+    "Actualizar Evento Calendar":   { "main": [[{ "node": "Actualizar en Sheets",          "type": "main", "index": 0 }]] },
+    "Actualizar en Sheets":         { "main": [[{ "node": "Respuesta Modificación OK",     "type": "main", "index": 0 }]] },
+    "Respuesta Modificación OK":    { "main": [[{ "node": "Responder a Retell",            "type": "main", "index": 0 }]] },
+    "Respuesta No Encontrado":      { "main": [[{ "node": "Responder a Retell",            "type": "main", "index": 0 }]] }
+  },
+
+  "_instrucciones_importar": [
+    "1. Importar en n8n",
+    "2. Configurar credenciales: Google Calendar OAuth2 + Google Sheets",
+    "3. Sustituir COMPLETAR_CON_GOOGLE_CALENDAR_ID (2 veces si hay Calendar) y COMPLETAR_CON_ID_SPREADSHEET (2 veces)",
+    "4. Activar y copiar URL del webhook"
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

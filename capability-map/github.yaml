@@ -1,9 +1,0 @@
-vertical: github
-agentId: pm-webs-apps
-skills:
-  - github
-  - testing-qa
-  - agile-workflow
-maxParallelSubtasks: 2
-typicalHoursPerSubtask: 3
-requiresClientApproval: false

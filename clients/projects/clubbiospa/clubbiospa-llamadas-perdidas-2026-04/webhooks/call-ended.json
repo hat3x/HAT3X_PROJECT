@@ -1,0 +1,88 @@
+{
+  "_comment": "Estructura del payload que Retell AI envía al webhook de n8n al finalizar cada llamada. El evento es 'call_ended'. n8n debe escuchar POST en la URL configurada en Retell.",
+
+  "event": "call_ended",
+
+  "call": {
+    "call_id": "call_abc123xyz",
+    "agent_id": "agent_clubbiospa_recepcionista",
+    "call_status": "ended",
+    "call_type": "phone_call",
+    "direction": "inbound",
+
+    "from_number": "+34611222333",
+    "to_number": "+34900000000",
+
+    "start_timestamp": 1744200000000,
+    "end_timestamp": 1744200180000,
+    "duration_ms": 180000,
+
+    "transcript": "Agente: Gracias por llamar a Club BioSpa. En este momento no podemos atenderte personalmente, pero no te preocupes, estoy aquí para ayudarte a dejar tus datos y que nuestro equipo te llame lo antes posible.\nUsuario: Hola, quería pedir información sobre masajes.\nAgente: Claro. ¿Me puedes decir tu nombre, por favor?\nUsuario: Soy Ana García.\nAgente: Perfecto, Ana. ¿Es correcto el número desde el que estás llamando para que te contactemos?\nUsuario: Sí, es correcto.\nAgente: Gracias. ¿En qué podemos ayudarte? Puedes contarme brevemente el motivo de tu llamada.\nUsuario: Quería saber los precios y disponibilidad para un masaje relajante.\nAgente: Para eso te puede ayudar mejor nuestro equipo directamente. He registrado tu consulta y nuestro equipo se pondrá en contacto contigo cuanto antes. ¡Que tengas un buen día, Ana!\nUsuario: Gracias, adiós.",
+
+    "call_analysis": {
+      "call_summary": "La clienta Ana García llamó interesada en precios y disponibilidad para masaje relajante. Se recogieron sus datos y se informó de que el equipo le contactará.",
+      "user_sentiment": "neutral",
+      "call_successful": true,
+      "custom_analysis_data": {
+        "nombre_cliente": "Ana García",
+        "telefono": "+34611222333",
+        "motivo_consulta": "Información sobre precios y disponibilidad para masaje relajante"
+      }
+    }
+  },
+
+  "_webhook_contract": {
+    "_description": "Este es el contrato exacto que el agente de n8n debe esperar recibir. Los campos del contrato se extraen del objeto call de Retell y se normalizan en el nodo Set de n8n.",
+    "_nota_coordinacion": "ATENCIÓN: El PM Automatizaciones ha definido en su workflow el campo 'duracion_llamada' (string) y 'fuera_de_horario' (boolean). El contrato original del brief usaba 'duracion_llamada_segundos' (number). El agente Retell debe enviar ambos campos para máxima compatibilidad. Ver _payload_normalizado_para_n8n abajo.",
+
+    "nombre_cliente": "string — extraído de call.call_analysis.custom_analysis_data.nombre_cliente — null si el cliente no lo dio",
+    "telefono": "string — extraído de call.call_analysis.custom_analysis_data.telefono — fallback: call.from_number",
+    "motivo_consulta": "string — extraído de call.call_analysis.custom_analysis_data.motivo_consulta — null si el cliente no lo dio",
+    "duracion_llamada": "string — calculado: String(Math.round(call.duration_ms / 1000)) — compatible con workflow PM Automatizaciones",
+    "duracion_llamada_segundos": "number — calculado: call.duration_ms / 1000 — campo adicional para compatibilidad",
+    "timestamp": "ISO8601 string — convertido desde call.end_timestamp (epoch ms)",
+    "call_id": "string — extraído de call.call_id",
+    "negocio": "string — fijo: Club BioSpa",
+    "fuera_de_horario": "boolean — true si la llamada entró fuera del horario de atención (campo requerido por workflow n8n de PM Automatizaciones)"
+  },
+
+  "_payload_normalizado_para_n8n": {
+    "_nota": "Este es el JSON exacto que debe construir el nodo Set de n8n a partir del payload raw de Retell. El agente Retell NO envía este formato directamente — lo transforma n8n.",
+    "nombre_cliente": "Ana García",
+    "telefono": "+34611222333",
+    "motivo_consulta": "Información sobre precios y disponibilidad para masaje relajante",
+    "duracion_llamada": "180",
+    "duracion_llamada_segundos": 180,
+    "timestamp": "2026-04-09T10:00:00.000Z",
+    "call_id": "call_abc123xyz",
+    "negocio": "Club BioSpa",
+    "fuera_de_horario": true
+  },
+
+  "_casos_especiales": {
+    "cliente_cuelga_sin_datos": {
+      "nombre_cliente": null,
+      "telefono": "+34611222333",
+      "motivo_consulta": null,
+      "duracion_llamada": "12",
+      "duracion_llamada_segundos": 12,
+      "timestamp": "2026-04-09T10:00:12.000Z",
+      "call_id": "call_def456uvw",
+      "negocio": "Club BioSpa",
+      "fuera_de_horario": true,
+      "_nota": "Cuando el cliente cuelga sin dejar datos, el teléfono de origen siempre está disponible vía call.from_number. n8n debe manejar campos null sin romper el flujo."
+    },
+    "datos_parciales": {
+      "nombre_cliente": "Ana",
+      "telefono": "+34611222333",
+      "motivo_consulta": null,
+      "duracion_llamada": "45",
+      "duracion_llamada_segundos": 45,
+      "timestamp": "2026-04-09T10:00:45.000Z",
+      "call_id": "call_ghi789rst",
+      "negocio": "Club BioSpa",
+      "fuera_de_horario": true,
+      "_nota": "El cliente dio nombre pero colgó antes de dar el motivo. n8n procesa igualmente y notifica al encargado con los datos disponibles."
+    }
+  }
+}

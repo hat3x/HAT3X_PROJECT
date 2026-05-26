@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAT3X — Services Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #06060e;
+    color: #e2e2e8;
+    font-family: 'Inter', system-ui, sans-serif;
+    padding: 32px;
+  }
+  .page-header { text-align: center; margin-bottom: 28px; }
+  .page-header h1 { font-size: 1.3rem; font-weight: 800; color: #fff; letter-spacing: -0.03em; margin-bottom: 6px; }
+  .page-header p { color: #555; font-size: 0.8rem; }
+
+  .question { text-align: center; margin-bottom: 28px; font-size: 0.85rem; color: #888; }
+  .question strong { color: #fff; }
+
+  .options-wrap { display: flex; flex-direction: column; gap: 20px; max-width: 1100px; margin: 0 auto; }
+
+  .option-wrap {
+    cursor: pointer;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    transition: all 0.25s ease;
+  }
+  .option-wrap:hover { border-color: rgba(124,58,237,0.4); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(124,58,237,0.12); }
+  .option-wrap.selected { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed, 0 8px 32px rgba(124,58,237,0.2); }
+
+  .opt-bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    background: #0f0f1a;
+    border-bottom: 1px solid #1a1a28;
+  }
+  .opt-letter {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3);
+    color: #a78bfa; font-size: 0.7rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .opt-name { font-size: 0.75rem; color: #ccc; font-weight: 600; flex: 1; }
+  .opt-tag { font-size: 0.55rem; padding: 2px 8px; border-radius: 100px; font-weight: 600; }
+  .tag-rec { background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3); color: #a78bfa; }
+  .tag-alt { background: rgba(234,88,12,0.1); border: 1px solid rgba(234,88,12,0.2); color: #fb923c; }
+
+  /* === SECTION WRAPPER === */
+  .section-preview {
+    background: #07070f;
+    padding: 48px 48px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .section-eyebrow {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 2rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .section-sub {
+    font-size: 0.75rem;
+    color: #555;
+    margin-bottom: 40px;
+    line-height: 1.6;
+    max-width: 420px;
+  }
+
+  /* === VARIANT A — Bento Grid === */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto auto;
+    gap: 12px;
+  }
+
+  .bento-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid #161626;
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.25s ease;
+  }
+  .bento-card:hover {
+    border-color: rgba(124,58,237,0.3);
+    background: rgba(124,58,237,0.04);
+  }
+  .bento-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(124,58,237,0.3), transparent);
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .bento-card:hover::before { opacity: 1; }
+
+  .bento-card.featured {
+    grid-column: span 2;
+    background: rgba(124,58,237,0.04);
+    border-color: rgba(124,58,237,0.15);
+  }
+  .bento-card.featured::before { opacity: 0.5; }
+
+  .card-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    margin-bottom: 14px;
+  }
+  .icon-purple { background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.2); }
+  .icon-orange { background: rgba(234,88,12,0.1); border: 1px solid rgba(234,88,12,0.15); }
+
+  .card-number {
+    position: absolute;
+    top: 16px; right: 18px;
+    font-size: 0.55rem;
+    color: #222;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+  .card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #e2e2e8;
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  .card-desc {
+    font-size: 0.68rem;
+    color: #555;
+    line-height: 1.6;
+  }
+  .card-tag {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 0.55rem;
+    color: #a78bfa;
+    background: rgba(124,58,237,0.06);
+    border: 1px solid rgba(124,58,237,0.12);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .card-tag.orange { color: #fb923c; background: rgba(234,88,12,0.06); border-color: rgba(234,88,12,0.12); }
+
+  /* Featured card extras */
+  .featured-meta {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .meta-pill {
+    font-size: 0.6rem;
+    color: #666;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid #1d1d2e;
+    padding: 3px 10px;
+    border-radius: 100px;
+  }
+
+  .bento-glow {
+    position: absolute;
+    right: -60px; bottom: -60px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* === VARIANT B — List with details === */
+  .services-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: #111120;
+    border: 1px solid #161626;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .service-row {
+    display: grid;
+    grid-template-columns: 48px 1fr auto;
+    align-items: center;
+    padding: 18px 24px;
+    background: #08080f;
+    gap: 20px;
+    transition: all 0.2s;
+    cursor: pointer;
+    border-bottom: 1px solid #111120;
+  }
+  .service-row:last-child { border-bottom: none; }
+  .service-row:hover {
+    background: rgba(124,58,237,0.04);
+  }
+  .service-row-icon {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    background: rgba(124,58,237,0.08);
+    border: 1px solid rgba(124,58,237,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+  .service-row-content { display: flex; flex-direction: column; gap: 3px; }
+  .service-row-title { font-size: 0.8rem; font-weight: 600; color: #d0d0e0; }
+  .service-row-desc { font-size: 0.65rem; color: #444; }
+  .service-row-arrow {
+    font-size: 0.75rem;
+    color: #333;
+    transition: all 0.2s;
+  }
+  .service-row:hover .service-row-arrow { color: #a78bfa; transform: translateX(4px); }
+
+  /* === BG decorations === */
+  .bg-orb-tl {
+    position: absolute;
+    top: -80px; left: -80px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(124,58,237,0.08) 0%, transparent 70%);
+    filter: blur(40px);
+    pointer-events: none;
+  }
+  .bg-orb-br {
+    position: absolute;
+    bottom: -60px; right: -60px;
+    width: 250px; height: 250px;
+    background: radial-gradient(circle, rgba(234,88,12,0.06) 0%, transparent 70%);
+    filter: blur(30px);
+    pointer-events: none;
+  }
+</style>
+
+<div class="page-header">
+  <h1>Sección Servicios — 2 layouts</h1>
+  <p>El corazón de la conversión · Misma paleta · Haz clic para elegir</p>
+</div>
+
+<div class="question">
+  <strong>¿Cómo quieres presentar los 6 servicios de HAT3X?</strong>
+</div>
+
+<div class="options-wrap">
+
+  <!-- VARIANT A — BENTO GRID -->
+  <div class="option-wrap" data-choice="a" onclick="toggleSelect(this)">
+    <div class="opt-bar">
+      <div class="opt-letter">A</div>
+      <div class="opt-name">Bento Grid — Cards con jerarquía visual, card featured para el servicio principal</div>
+      <div class="opt-tag tag-rec">★ Recomendado</div>
+    </div>
+    <div class="section-preview">
+      <div class="bg-orb-tl"></div>
+      <div class="bg-orb-br"></div>
+      <div class="section-eyebrow" style="color:#a78bfa">Servicios</div>
+      <div class="section-title">Lo que implementamos.</div>
+      <div class="section-sub">Seis verticales de IA. Cada una diseñada para entregar resultados medibles desde el primer mes.</div>
+
+      <div class="bento">
+        <!-- Featured -->
+        <div class="bento-card featured">
+          <div class="bento-glow"></div>
+          <div class="card-number">01</div>
+          <div class="card-icon icon-purple">🔍</div>
+          <div class="card-title">Auditoría y Roadmap de IA</div>
+          <div class="card-desc">Analizamos tu negocio, identificamos los procesos con mayor ROI potencial y diseñamos un plan de implementación realista y priorizado. El primer paso antes de cualquier solución.</div>
+          <div class="featured-meta">
+            <div class="meta-pill">Diagnóstico completo</div>
+            <div class="meta-pill">2-4 semanas</div>
+            <div class="meta-pill">Entregable PDF</div>
+          </div>
+        </div>
+        <!-- Standard -->
+        <div class="bento-card">
+          <div class="card-number">02</div>
+          <div class="card-icon icon-purple">⚡</div>
+          <div class="card-title">Automatización y Agentes</div>
+          <div class="card-desc">Workflows inteligentes que eliminan tareas repetitivas. Agentes que actúan por tu equipo 24/7.</div>
+          <div class="card-tag">n8n · Make · Custom</div>
+        </div>
+        <!-- Standard -->
+        <div class="bento-card">
+          <div class="card-number">03</div>
+          <div class="card-icon icon-orange">📱</div>
+          <div class="card-title">Apps y Productos con IA</div>
+          <div class="card-desc">Desarrollamos productos digitales con IA integrada. Desde MVPs hasta plataformas completas.</div>
+          <div class="card-tag orange">Next.js · Supabase</div>
+        </div>
+        <!-- Standard -->
+        <div class="bento-card">
+          <div class="card-number">04</div>
+          <div class="card-icon icon-purple">🔗</div>
+          <div class="card-title">Integraciones</div>
+          <div class="card-desc">Conectamos tus sistemas existentes: CRM, ERP, ecommerce, BBDD — con capa de IA encima.</div>
+          <div class="card-tag">APIs · Webhooks · CRM</div>
+        </div>
+        <!-- Standard -->
+        <div class="bento-card">
+          <div class="card-number">05</div>
+          <div class="card-icon icon-purple">📊</div>
+          <div class="card-title">Analítica y ML</div>
+          <div class="card-desc">Modelos predictivos, dashboards inteligentes y análisis de datos para decisiones basadas en evidencia.</div>
+          <div class="card-tag">Python · SQL · BI</div>
+        </div>
+        <!-- Standard -->
+        <div class="bento-card">
+          <div class="card-number">06</div>
+          <div class="card-icon icon-orange">🛡️</div>
+          <div class="card-title">Gobernanza y Adopción</div>
+          <div class="card-desc">Implementamos IA de forma responsable y aseguramos que tu equipo la adopte con éxito.</div>
+          <div class="card-tag orange">Estrategia · Change Mgmt</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANT B — LIST -->
+  <div class="option-wrap" data-choice="b" onclick="toggleSelect(this)">
+    <div class="opt-bar">
+      <div class="opt-letter">B</div>
+      <div class="opt-name">Lista expandible — Formato tabla premium, más copy por servicio, hover con flecha</div>
+      <div class="opt-tag tag-alt">Más detalle</div>
+    </div>
+    <div class="section-preview">
+      <div class="bg-orb-tl"></div>
+      <div class="section-eyebrow" style="color:#ea580c">Servicios</div>
+      <div class="section-title">Lo que implementamos.</div>
+      <div class="section-sub">Seis verticales. Resultados medibles. Sin rodeos.</div>
+
+      <div class="services-list">
+        <div class="service-row">
+          <div class="service-row-icon">🔍</div>
+          <div class="service-row-content">
+            <div class="service-row-title">Auditoría y Roadmap de IA</div>
+            <div class="service-row-desc">Diagnóstico completo de tu negocio · Plan de implementación priorizado por ROI</div>
+          </div>
+          <div class="service-row-arrow">→</div>
+        </div>
+        <div class="service-row">
+          <div class="service-row-icon">⚡</div>
+          <div class="service-row-content">
+            <div class="service-row-title">Automatización y Agentes</div>
+            <div class="service-row-desc">Workflows inteligentes 24/7 · Eliminación de tareas repetitivas · Agentes autónomos</div>
+          </div>
+          <div class="service-row-arrow">→</div>
+        </div>
+        <div class="service-row">
+          <div class="service-row-icon">📱</div>
+          <div class="service-row-content">
+            <div class="service-row-title">Apps y Productos con IA</div>
+            <div class="service-row-desc">Productos digitales con IA integrada · MVPs a plataformas completas · Stack moderno</div>
+          </div>
+          <div class="service-row-arrow">→</div>
+        </div>
+        <div class="service-row">
+          <div class="service-row-icon">🔗</div>
+          <div class="service-row-content">
+            <div class="service-row-title">Integraciones</div>
+            <div class="service-row-desc">CRM · ERP · E-commerce · APIs · Capa de IA sobre tus sistemas actuales</div>
+          </div>
+          <div class="service-row-arrow">→</div>
+        </div>
+        <div class="service-row">
+          <div class="service-row-icon">📊</div>
+          <div class="service-row-content">
+            <div class="service-row-title">Analítica y ML</div>
+            <div class="service-row-desc">Modelos predictivos · Dashboards inteligentes · Decisiones basadas en datos reales</div>
+          </div>
+          <div class="service-row-arrow">→</div>
+        </div>
+        <div class="service-row">
+          <div class="service-row-icon">🛡️</div>
+          <div class="service-row-content">
+            <div class="service-row-title">Gobernanza y Adopción</div>
+            <div class="service-row-desc">Implementación responsable · Gestión del cambio · Adopción real por tu equipo</div>
+          </div>
+          <div class="service-row-arrow">→</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

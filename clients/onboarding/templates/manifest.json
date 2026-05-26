@@ -1,0 +1,181 @@
+{
+  "version": "1.0",
+  "description": "Manifest de plantillas del sistema de onboarding HAT3X",
+  "templates": [
+    {
+      "id": "01_carta_bienvenida",
+      "filename": "01_carta_bienvenida.template.md",
+      "title": "Carta de Bienvenida",
+      "description": "Primera comunicación formal con el cliente. Confirma el inicio del proyecto y presenta el paquete de onboarding.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{CLIENTE_CONTACTO}}",
+        "{{PROYECTO_NOMBRE}}",
+        "{{FECHA_INICIO}}",
+        "{{RESPONSABLE_HAT3X}}",
+        "{{SOPORTE_CONTACTO}}"
+      ],
+      "is_client_facing": true,
+      "order": 1
+    },
+    {
+      "id": "02_resumen_ejecutivo",
+      "filename": "02_resumen_ejecutivo.template.md",
+      "title": "Resumen Ejecutivo",
+      "description": "Visión de alto nivel del proyecto para stakeholders. Legible en 2 minutos.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{CLIENTE_SECTOR}}",
+        "{{PROYECTO_NOMBRE}}",
+        "{{PROYECTO_TIPO_SERVICIO}}",
+        "{{PROYECTO_DESCRIPCION}}",
+        "{{OBJETIVOS_NEGOCIO}}",
+        "{{ENTREGABLES}}",
+        "{{FECHA_INICIO}}",
+        "{{FECHA_FIN}}",
+        "{{RESPONSABLE_HAT3X}}",
+        "{{RESPONSABLE_CLIENTE}}"
+      ],
+      "is_client_facing": true,
+      "order": 2
+    },
+    {
+      "id": "03_roadmap_proyecto",
+      "filename": "03_roadmap_proyecto.template.md",
+      "title": "Roadmap del Proyecto",
+      "description": "Plan de ejecución por fases con responsables, entregables, hitos y riesgos.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{PROYECTO_NOMBRE}}",
+        "{{FECHA_INICIO}}",
+        "{{FECHA_FIN}}",
+        "{{ENTREGABLES}}",
+        "{{STACK_HERRAMIENTAS}}",
+        "{{INTEGRACIONES}}",
+        "{{RESTRICCIONES}}",
+        "{{RIESGOS_CONOCIDOS}}",
+        "{{RESPONSABLE_HAT3X}}",
+        "{{RESPONSABLE_CLIENTE}}"
+      ],
+      "is_client_facing": true,
+      "order": 3
+    },
+    {
+      "id": "04_propuesta_presupuesto",
+      "filename": "04_propuesta_presupuesto.template.md",
+      "title": "Propuesta y Presupuesto",
+      "description": "Documento comercial con alcance, entregables, precio y forma de pago.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{CLIENTE_NOMBRE_LEGAL}}",
+        "{{PROYECTO_NOMBRE}}",
+        "{{ALCANCE_INCLUIDO}}",
+        "{{ALCANCE_EXCLUIDO}}",
+        "{{ENTREGABLES}}",
+        "{{PRECIO}}",
+        "{{FORMA_PAGO}}",
+        "{{HITOS_FACTURACION}}",
+        "{{FECHA_INICIO}}",
+        "{{FECHA_FIN}}",
+        "{{RESPONSABLE_HAT3X}}"
+      ],
+      "is_client_facing": true,
+      "order": 4
+    },
+    {
+      "id": "05_contrato_base",
+      "filename": "05_contrato_base.template.md",
+      "title": "Contrato Base (Borrador)",
+      "description": "Borrador de contrato de prestación de servicios. Siempre sujeto a revisión legal final.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{CLIENTE_NOMBRE_LEGAL}}",
+        "{{CLIENTE_CONTACTO}}",
+        "{{CLIENTE_EMAIL}}",
+        "{{CLIENTE_TELEFONO}}",
+        "{{CLIENTE_DIRECCION}}",
+        "{{PROYECTO_NOMBRE}}",
+        "{{PROYECTO_DESCRIPCION}}",
+        "{{ALCANCE_INCLUIDO}}",
+        "{{ALCANCE_EXCLUIDO}}",
+        "{{ENTREGABLES}}",
+        "{{FECHA_INICIO}}",
+        "{{FECHA_FIN}}",
+        "{{PRECIO}}",
+        "{{FORMA_PAGO}}",
+        "{{HITOS_FACTURACION}}",
+        "{{JURISDICCION}}",
+        "{{CONFIDENCIALIDAD}}",
+        "{{PROPIEDAD_INTELECTUAL}}",
+        "{{RESPONSABLE_HAT3X}}"
+      ],
+      "is_client_facing": true,
+      "legal_warning": "BORRADOR — sujeto a revisión legal final. No constituye contrato válido hasta firma de ambas partes.",
+      "order": 5
+    },
+    {
+      "id": "06_guia_portal_cliente",
+      "filename": "06_guia_portal_cliente.template.md",
+      "title": "Guía del Portal del Cliente",
+      "description": "Manual de uso del portal: acceso, navegación, entregables, feedback y soporte.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{PORTAL_URL}}",
+        "{{PORTAL_USERNAME}}",
+        "{{PORTAL_ACTIVATION_METHOD}}",
+        "{{SOPORTE_CONTACTO}}",
+        "{{RESPONSABLE_HAT3X}}"
+      ],
+      "is_client_facing": true,
+      "order": 6
+    },
+    {
+      "id": "07_acceso_portal_cliente",
+      "filename": "07_acceso_portal_cliente.template.md",
+      "title": "Acceso al Portal del Cliente",
+      "description": "Credenciales y método de activación del portal. Contraseñas NUNCA en texto plano.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{PORTAL_URL}}",
+        "{{PORTAL_USERNAME}}",
+        "{{PORTAL_ACTIVATION_METHOD}}",
+        "{{TEMP_PASSWORD_PLACEHOLDER}}",
+        "{{SOPORTE_CONTACTO}}"
+      ],
+      "is_client_facing": true,
+      "security_note": "TEMP_PASSWORD_PLACEHOLDER nunca debe ser una contraseña real. Si portal no está provisionado, incluir nota de pendiente.",
+      "order": 7
+    },
+    {
+      "id": "08_checklist_arranque_interno",
+      "filename": "08_checklist_arranque_interno.template.md",
+      "title": "Checklist de Arranque Interno",
+      "description": "Lista de control interna para el equipo HAT3X. No se envía al cliente.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{PROYECTO_NOMBRE}}",
+        "{{FECHA_INICIO}}",
+        "{{RESPONSABLE_HAT3X}}",
+        "{{RESPONSABLE_CLIENTE}}",
+        "{{PORTAL_URL}}"
+      ],
+      "is_client_facing": false,
+      "order": 8
+    },
+    {
+      "id": "09_indice_paquete_onboarding",
+      "filename": "09_indice_paquete_onboarding.template.md",
+      "title": "Índice del Paquete de Onboarding",
+      "description": "Primer documento que lee el cliente. Lista todos los documentos del paquete y el orden de lectura.",
+      "required_placeholders": [
+        "{{CLIENTE_NOMBRE}}",
+        "{{PROYECTO_NOMBRE}}",
+        "{{FECHA_INICIO}}",
+        "{{SOPORTE_CONTACTO}}",
+        "{{RESPONSABLE_HAT3X}}"
+      ],
+      "is_client_facing": true,
+      "order": 9
+    }
+  ]
+}

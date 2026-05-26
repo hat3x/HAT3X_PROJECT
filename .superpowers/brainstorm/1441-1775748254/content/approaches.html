@@ -1,0 +1,449 @@
+<style>
+  body { background: #0a0a0f; color: #e2e2e8; font-family: 'Inter', system-ui, sans-serif; }
+  h2 { color: #fff; font-size: 1.4rem; font-weight: 700; margin-bottom: 0.3rem; letter-spacing: -0.02em; }
+  .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 2rem; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+
+  .card {
+    background: #111118;
+    border: 1px solid #222230;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+  }
+  .card:hover { border-color: #7c3aed; transform: translateY(-2px); }
+  .card.selected { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed, 0 0 32px rgba(124,58,237,0.2); }
+
+  .card-preview {
+    height: 200px;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid #1a1a28;
+  }
+
+  /* APPROACH A — Immersive Dark */
+  .preview-a {
+    background: #050508;
+  }
+  .preview-a .hero-bg {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.4) 0%, transparent 65%),
+                radial-gradient(ellipse at 80% 80%, rgba(234,88,12,0.15) 0%, transparent 50%);
+  }
+  .preview-a .grid-lines {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(124,58,237,0.08) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(124,58,237,0.08) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+  .preview-a .content {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px;
+  }
+  .preview-a .badge {
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.3);
+    color: #a78bfa;
+    font-size: 0.6rem;
+    padding: 3px 10px;
+    border-radius: 100px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .preview-a .title {
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+  }
+  .preview-a .title span { color: #7c3aed; }
+  .preview-a .glow-orb {
+    position: absolute;
+    width: 120px; height: 120px;
+    background: radial-gradient(circle, rgba(124,58,237,0.5) 0%, transparent 70%);
+    top: -20px; left: 50%; transform: translateX(-50%);
+    filter: blur(20px);
+  }
+  .preview-a .cta {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 6px;
+    letter-spacing: 0.05em;
+  }
+  .preview-a .nodes {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .node { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: rgba(124,58,237,0.6); }
+  .node-line { position: absolute; background: rgba(124,58,237,0.15); height: 1px; transform-origin: left center; }
+
+  /* APPROACH B — Editorial Authority */
+  .preview-b {
+    background: #0d0d12;
+  }
+  .preview-b .left-bar {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(to bottom, #7c3aed, #ea580c);
+  }
+  .preview-b .content {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center;
+    padding: 0 20px 0 28px;
+    gap: 6px;
+  }
+  .preview-b .eyebrow {
+    color: #ea580c;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .preview-b .headline {
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -0.04em;
+  }
+  .preview-b .headline em { color: #a78bfa; font-style: normal; }
+  .preview-b .sub {
+    color: #666;
+    font-size: 0.6rem;
+    line-height: 1.5;
+    max-width: 90%;
+  }
+  .preview-b .ctas {
+    display: flex; gap: 8px; margin-top: 4px;
+  }
+  .preview-b .cta-primary {
+    background: #7c3aed;
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 4px;
+  }
+  .preview-b .cta-ghost {
+    border: 1px solid #333;
+    color: #999;
+    font-size: 0.55rem;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 4px;
+  }
+  .preview-b .right-element {
+    position: absolute;
+    right: 16px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .preview-b .stat {
+    background: rgba(124,58,237,0.06);
+    border: 1px solid rgba(124,58,237,0.15);
+    border-radius: 8px;
+    padding: 6px 10px;
+    text-align: center;
+  }
+  .preview-b .stat-num { color: #a78bfa; font-size: 0.8rem; font-weight: 800; }
+  .preview-b .stat-label { color: #555; font-size: 0.45rem; }
+
+  /* APPROACH C — Hybrid Premium */
+  .preview-c {
+    background: #07070e;
+  }
+  .preview-c .bg-mesh {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(124,58,237,0.12) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(234,88,12,0.08) 0%, transparent 40%);
+  }
+  .preview-c .content {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .preview-c .left {
+    display: flex; flex-direction: column;
+    justify-content: center;
+    padding: 16px 12px 16px 16px;
+    gap: 6px;
+  }
+  .preview-c .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #a78bfa;
+    font-size: 0.5rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .preview-c .tag::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: #ea580c;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #ea580c;
+  }
+  .preview-c .headline {
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+  }
+  .preview-c .headline .accent {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .preview-c .sub {
+    color: #555;
+    font-size: 0.55rem;
+    line-height: 1.5;
+  }
+  .preview-c .cta {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    box-shadow: 0 4px 20px rgba(124,58,237,0.35);
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 6px;
+    width: fit-content;
+    letter-spacing: 0.03em;
+  }
+  .preview-c .right {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .preview-c .card-stack {
+    position: relative;
+    width: 90px; height: 110px;
+  }
+  .preview-c .glass-card {
+    position: absolute;
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 8px;
+  }
+  .preview-c .glass-card:nth-child(1) {
+    width: 80px; height: 50px;
+    bottom: 0; right: 0;
+    background: rgba(124,58,237,0.08);
+    border-color: rgba(124,58,237,0.2);
+  }
+  .preview-c .glass-card:nth-child(2) {
+    width: 72px; height: 45px;
+    top: 0; left: 0;
+    background: rgba(234,88,12,0.06);
+    border-color: rgba(234,88,12,0.15);
+  }
+  .preview-c .glass-card:nth-child(3) {
+    width: 65px; height: 40px;
+    top: 30px; right: 5px;
+    background: rgba(255,255,255,0.02);
+  }
+  .preview-c .dot {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: rgba(124,58,237,0.8);
+    margin-bottom: 3px;
+  }
+  .preview-c .mini-bar {
+    width: 100%;
+    height: 3px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    margin-bottom: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .preview-c .mini-bar::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 60%;
+    background: linear-gradient(90deg, #7c3aed, #a78bfa);
+    border-radius: 2px;
+  }
+
+  /* Card body */
+  .card-body { padding: 1.2rem; }
+  .card-body h3 {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  .card-body p { color: #666; font-size: 0.8rem; line-height: 1.5; margin-bottom: 0.8rem; }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag-pill {
+    background: #1a1a28;
+    border: 1px solid #2a2a40;
+    color: #888;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-weight: 500;
+  }
+  .tag-pill.accent { border-color: rgba(124,58,237,0.3); color: #a78bfa; background: rgba(124,58,237,0.06); }
+  .tag-pill.warn { border-color: rgba(234,88,12,0.3); color: #fb923c; background: rgba(234,88,12,0.06); }
+
+  .rec-badge {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: linear-gradient(135deg, #7c3aed, #ea580c);
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 100px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tradeoffs { display: flex; flex-direction: column; gap: 4px; margin-top: 0.6rem; }
+  .tradeoff { display: flex; align-items: flex-start; gap: 6px; font-size: 0.72rem; color: #666; }
+  .tradeoff .icon { flex-shrink: 0; margin-top: 1px; }
+  .pro { color: #4ade80; }
+  .con { color: #f87171; }
+</style>
+
+<h2>Elige la dirección visual de HAT3X</h2>
+<p class="subtitle">Tres enfoques distintos para un resultado premium. Haz clic para seleccionar.</p>
+
+<div class="cards">
+
+  <!-- APPROACH A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-preview preview-a">
+      <div class="hero-bg"></div>
+      <div class="grid-lines"></div>
+      <div class="glow-orb"></div>
+      <div class="nodes">
+        <div class="node" style="top:20%;left:15%"></div>
+        <div class="node" style="top:60%;left:80%"></div>
+        <div class="node" style="top:75%;left:30%"></div>
+        <div class="node-line" style="top:21%;left:15%;width:45px;transform:rotate(25deg)"></div>
+        <div class="node-line" style="top:61%;left:40%;width:55px;transform:rotate(-15deg)"></div>
+      </div>
+      <div class="content">
+        <div class="badge">Consultoría IA</div>
+        <div class="title">La IA que <span>transforma</span><br>tu negocio</div>
+        <div class="cta">Reservar llamada →</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Inmersiva Dark</h3>
+      <p>Hero cinematográfico con gradients profundos, grid tecnológico animado y efectos de profundidad. Máximo impacto visual desde el primer scroll.</p>
+      <div class="tag-row">
+        <span class="tag-pill accent">Máximo impacto</span>
+        <span class="tag-pill">Animaciones avanzadas</span>
+        <span class="tag-pill warn">Más pesada</span>
+      </div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><span class="icon pro">✓</span> Impacta más a primera vista</div>
+        <div class="tradeoff"><span class="icon pro">✓</span> Sensación de firma tech de lujo</div>
+        <div class="tradeoff"><span class="icon con">−</span> Requiere optimización de rendimiento</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPROACH B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-preview preview-b">
+      <div class="left-bar"></div>
+      <div class="content">
+        <div class="eyebrow">IA para empresas</div>
+        <div class="headline">No aprendes IA.<br><em>Nosotros la</em><br>implementamos.</div>
+        <div class="sub">Soluciones reales. Sin relleno. Sin humo.</div>
+        <div class="ctas">
+          <div class="cta-primary">Reservar demo</div>
+          <div class="cta-ghost">Ver servicios</div>
+        </div>
+      </div>
+      <div class="right-element">
+        <div class="stat"><div class="stat-num">6</div><div class="stat-label">verticales</div></div>
+        <div class="stat"><div class="stat-num">B2B</div><div class="stat-label">enfoque</div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Autoridad Editorial</h3>
+      <p>Tipografía dominante como protagonista. Jerarquía clara, espacios amplios, copy contundente. La elegancia viene del control, no del efecto.</p>
+      <div class="tag-row">
+        <span class="tag-pill accent">Máxima conversión</span>
+        <span class="tag-pill">Copy primero</span>
+        <span class="tag-pill">Rápida</span>
+      </div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><span class="icon pro">✓</span> Mensaje más claro y directo</div>
+        <div class="tradeoff"><span class="icon pro">✓</span> Mejor conversión B2B</div>
+        <div class="tradeoff"><span class="icon con">−</span> Menos espectacular visualmente</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPROACH C — RECOMMENDED -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="rec-badge">★ Recomendado</div>
+    <div class="card-preview preview-c">
+      <div class="bg-mesh"></div>
+      <div class="content">
+        <div class="left">
+          <div class="tag">Firma tecnológica premium</div>
+          <div class="headline">HAT3X<br><span class="accent">implementa</span><br>la IA por ti.</div>
+          <div class="sub">Automatización real. Resultados medibles. Sin curvas de aprendizaje.</div>
+          <div class="cta">Hablar con el equipo →</div>
+        </div>
+        <div class="right">
+          <div class="card-stack">
+            <div class="glass-card">
+              <div class="dot"></div>
+              <div class="mini-bar"></div>
+              <div class="mini-bar" style="width:40%;opacity:0.5"></div>
+            </div>
+            <div class="glass-card">
+              <div class="dot" style="background:#ea580c;box-shadow:0 0 6px #ea580c"></div>
+              <div class="mini-bar" style=""></div>
+            </div>
+            <div class="glass-card">
+              <div class="mini-bar" style=""></div>
+              <div class="mini-bar" style="width:80%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Hybrid Premium</h3>
+      <p>Hero inmersivo + estructura editorial limpia. El impacto visual existe donde importa (hero, secciones clave) y la conversión guía el resto. Lo mejor de ambos mundos.</p>
+      <div class="tag-row">
+        <span class="tag-pill accent">Impacto + conversión</span>
+        <span class="tag-pill">Escalable</span>
+        <span class="tag-pill">Equilibrado</span>
+      </div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><span class="icon pro">✓</span> Impacta visualmente Y convierte</div>
+        <div class="tradeoff"><span class="icon pro">✓</span> Animaciones donde elevan, no distraen</div>
+        <div class="tradeoff"><span class="icon pro">✓</span> Arquitectura limpia y escalable</div>
+      </div>
+    </div>
+  </div>
+
+</div>

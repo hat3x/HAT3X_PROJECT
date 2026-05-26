@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-04-02T00:00:00Z",
+  "generated_by": "HAT3X Onboarding Coordinator",
+  "client": {
+    "nombre": "Jesus Peralta Peluqueros",
+    "nombre_legal": "NNJBARBERS S.L.",
+    "cif": "B19334382",
+    "nombre_slug": "jesus-peralta-peluqueros",
+    "contacto": "Jesus Peralta Baquet",
+    "dni": "45809674E",
+    "sector": "Peluquería",
+    "tamano": "pyme",
+    "direccion": "Calle de José Abascal, 61, Chamberí, 28003, Madrid, España"
+  },
+  "proyecto": {
+    "nombre": "Página Web + Instagram",
+    "tipo_servicio": "Creación y mantenimiento de web y redes sociales",
+    "fecha_inicio": "2026-01-04",
+    "fecha_fin": "Servicio de duración indefinida con facturación mensual recurrente"
+  },
+  "comercial": {
+    "precio_implementacion": "290 € con descuento del 100% — coste 0 € para el cliente",
+    "precio_mantenimiento": "300 €/mes (sin IVA)",
+    "forma_pago": "Transferencia bancaria a 30 días naturales",
+    "iban": "ES85 1583 0001 1390 1174 0336"
+  },
+  "portal": {
+    "provisioned": false,
+    "url": "https://hat3x.com/login",
+    "username": "CLI-001",
+    "estimated_provision_date": "2026-04-04"
+  },
+  "output": {
+    "destination": "onboarding/clients/jesus-peralta-peluqueros/2026-01/",
+    "documents_generated": [
+      "01_carta_bienvenida.md",
+      "02_resumen_ejecutivo.md",
+      "03_roadmap_proyecto.md",
+      "04_propuesta_presupuesto.md",
+      "05_contrato_base.md",
+      "06_guia_portal_cliente.md",
+      "07_acceso_portal_cliente.md",
+      "08_checklist_arranque_interno.md",
+      "09_indice_paquete_onboarding.md",
+      "00_metadata.json"
+    ],
+    "bootstrap_mode": false
+  },
+  "assumptions": [
+    "Se asume que Jesus Peralta Peluqueros no dispone actualmente de página web ni perfil de Instagram activo. Si existe una cuenta o web previa, las tareas de Fase 1 y 3 deben revisarse en kickoff.",
+    "Se asume que el cliente proveerá fotografías del local y los servicios en la Fase 1. Si no dispone de material fotográfico, HAT3X usará imágenes de stock apropiadas.",
+    "Se asume que el dominio debe registrarse como nuevo. Si el cliente ya tiene un dominio, debe informarlo en el kickoff.",
+    "Las fechas de fases del roadmap son estimadas desde el 4 de enero de 2026 y pueden ajustarse según el ritmo de aprobaciones del cliente.",
+    "La fecha de fin indicada ('Servicio de duración indefinida con facturación mensual recurrente') se ha mantenido tal como se recibió en el input. La Fase 4 (go-live) se estima en la semana del 1-7 de febrero de 2026.",
+    "El plazo de confidencialidad aplicado en el contrato es de 3 años (según el input del cliente), que prevalece sobre los 2 años de la plantilla base.",
+    "Se ha mantenido {{PENDIENTE_CONFIRMAR}} en todos los campos de RESPONSABLE_HAT3X y SOPORTE_CONTACTO, ya que no se han provisto en el input."
+  ],
+  "missing_data": [
+    {
+      "campo": "cliente.email",
+      "impacto": "Alto — necesario para el contrato y para el envío del paquete",
+      "accion": "Solicitar a Jesus Peralta Baquet antes del kickoff"
+    },
+    {
+      "campo": "cliente.telefono",
+      "impacto": "Medio — necesario para el contrato",
+      "accion": "Solicitar a Jesus Peralta Baquet antes del kickoff"
+    },
+    {
+      "campo": "RESPONSABLE_HAT3X",
+      "impacto": "Alto — aparece en todos los documentos de cliente y en las firmas del contrato",
+      "accion": "Asignar internamente en HAT3X antes del envío del paquete al cliente"
+    },
+    {
+      "campo": "SOPORTE_CONTACTO",
+      "impacto": "Medio — referenciado en guía del portal, documento de acceso e índice",
+      "accion": "Definir canal de soporte para este cliente (email o teléfono del responsable HAT3X)"
+    },
+    {
+      "campo": "proyecto.alcance_excluido",
+      "impacto": "Medio — requerido en propuesta y contrato para evitar ambigüedades",
+      "accion": "Definir con el cliente en kickoff e incorporar al contrato antes de la firma"
+    },
+    {
+      "campo": "proyecto.riesgos_conocidos",
+      "impacto": "Bajo — el roadmap incluye riesgos estándar del tipo de proyecto, pero los específicos del cliente están pendientes",
+      "accion": "Completar en la reunión de kickoff con el cliente"
+    },
+    {
+      "campo": "contrato.cargo_representante_cliente",
+      "impacto": "Bajo — necesario para el bloque de firmas del contrato",
+      "accion": "Confirmar cargo de Jesus Peralta Baquet en NNJBARBERS S.L. antes de la firma"
+    }
+  ],
+  "warnings": [
+    "El portal del cliente NO está provisionado. Las credenciales no deben enviarse hasta que el acceso esté activo. Fecha estimada de provisión: 4 de abril de 2026.",
+    "El contrato incluye la leyenda de borrador obligatoria en cabecera y pie. No eliminar ni modificar esta leyenda.",
+    "El campo ALCANCE_EXCLUIDO está como {{PENDIENTE_CONFIRMAR}} en la propuesta y el contrato. Definirlo antes de la firma es prioritario para evitar litigios por interpretación del alcance.",
+    "La fecha de fin del proyecto es 'indefinida' (servicio recurrente). El contrato y la propuesta lo reflejan correctamente, pero la cláusula de resolución (30 días de preaviso) es especialmente relevante en este tipo de contrato de duración indefinida."
+  ],
+  "quality_checks": {
+    "tono_hat3x_aplicado": true,
+    "leyenda_borrador_contrato": true,
+    "placeholders_sin_resolver_registrados": true,
+    "indice_lista_todos_documentos": true,
+    "checklist_refleja_estado_real": true,
+    "metadata_json_valido": true,
+    "password_real_simulada": false,
+    "plantillas_base_modificadas": false
+  }
+}

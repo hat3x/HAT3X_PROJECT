@@ -1,9 +1,0 @@
-vertical: documentation
-agentId: pm-webs-apps
-skills:
-  - documentation
-  - api-design
-  - agile-workflow
-maxParallelSubtasks: 3
-typicalHoursPerSubtask: 3
-requiresClientApproval: false

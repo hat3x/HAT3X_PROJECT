@@ -1,0 +1,153 @@
+[
+  {
+    "name": "check_availability",
+    "description": "Comprueba los huecos disponibles para reservar cita en una fecha concreta. Úsalo cuando el cliente quiera saber si hay disponibilidad antes de confirmar.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Fecha en formato YYYY-MM-DD (ej: 2026-04-10)"
+        },
+        "section": {
+          "type": "string",
+          "enum": ["CABALLEROS", "SENORAS", "ESTETICA"],
+          "description": "Sección del salón"
+        },
+        "duration_minutes": {
+          "type": "number",
+          "description": "Duración total estimada en minutos (suma de los servicios solicitados)"
+        }
+      },
+      "required": ["date", "section", "duration_minutes"]
+    },
+    "url": "https://cpocwvedqlxtwazwoyfn.supabase.co/functions/v1/retell-webhook",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "x-retell-action": "check_availability"
+    }
+  },
+  {
+    "name": "get_customer_by_phone",
+    "description": "Busca un cliente registrado por su número de teléfono. Úsalo para identificar al cliente al inicio de la llamada o antes de consultar citas/puntos.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "phone": {
+          "type": "string",
+          "description": "Número de teléfono del cliente, puede incluir prefijo +34 o sin él"
+        }
+      },
+      "required": ["phone"]
+    },
+    "url": "https://cpocwvedqlxtwazwoyfn.supabase.co/functions/v1/retell-webhook",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "x-retell-action": "get_customer_by_phone"
+    }
+  },
+  {
+    "name": "get_appointment",
+    "description": "Obtiene la cita activa (confirmada o reprogramada) de un cliente. Úsalo cuando el cliente pregunte por su cita pendiente.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "customer_id": {
+          "type": "string",
+          "description": "ID del cliente obtenido con get_customer_by_phone"
+        }
+      },
+      "required": ["customer_id"]
+    },
+    "url": "https://cpocwvedqlxtwazwoyfn.supabase.co/functions/v1/retell-webhook",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "x-retell-action": "get_appointment"
+    }
+  },
+  {
+    "name": "create_appointment",
+    "description": "Crea una nueva cita para el cliente. Solo usar después de confirmar verbalmente todos los datos con el cliente y verificar disponibilidad.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "customer_id": {
+          "type": "string",
+          "description": "ID del cliente"
+        },
+        "section": {
+          "type": "string",
+          "enum": ["CABALLEROS", "SENORAS", "ESTETICA"],
+          "description": "Sección del salón"
+        },
+        "service_names": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Lista de nombres de servicios solicitados (ej: ['Corte Caballero', 'Lavado'])"
+        },
+        "start_datetime": {
+          "type": "string",
+          "description": "Fecha y hora de inicio en formato ISO 8601 (ej: 2026-04-10T10:00:00)"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Notas opcionales del cliente (preferencias, indicaciones especiales)"
+        }
+      },
+      "required": ["customer_id", "section", "service_names", "start_datetime"]
+    },
+    "url": "https://cpocwvedqlxtwazwoyfn.supabase.co/functions/v1/retell-webhook",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "x-retell-action": "create_appointment"
+    }
+  },
+  {
+    "name": "cancel_appointment",
+    "description": "Cancela la cita activa del cliente. Solo usar después de que el cliente confirme explícitamente que quiere cancelar.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "appointment_id": {
+          "type": "string",
+          "description": "ID de la cita a cancelar"
+        },
+        "customer_id": {
+          "type": "string",
+          "description": "ID del cliente (para verificación)"
+        }
+      },
+      "required": ["appointment_id", "customer_id"]
+    },
+    "url": "https://cpocwvedqlxtwazwoyfn.supabase.co/functions/v1/retell-webhook",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "x-retell-action": "cancel_appointment"
+    }
+  },
+  {
+    "name": "get_loyalty",
+    "description": "Consulta el saldo de puntos y número de visitas del programa de fidelización del cliente.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "customer_id": {
+          "type": "string",
+          "description": "ID del cliente"
+        }
+      },
+      "required": ["customer_id"]
+    },
+    "url": "https://cpocwvedqlxtwazwoyfn.supabase.co/functions/v1/retell-webhook",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "x-retell-action": "get_loyalty"
+    }
+  }
+]

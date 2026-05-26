@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Restaurante Ekis</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --card:      #161b22;
+      --card2:     #1c2128;
+      --border:    #30363d;
+      --amber:     #f59e0b;
+      --amber-dim: #78350f;
+      --green:     #10b981;
+      --red:       #ef4444;
+      --blue:      #3b82f6;
+      --text:      #e6edf3;
+      --text-dim:  #8b949e;
+      --radius:    12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── TOP BAR ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo span { font-size: 22px; }
+    .logo h1 { font-size: 18px; font-weight: 700; color: var(--amber); letter-spacing: .3px; }
+    .logo small { font-size: 12px; color: var(--text-dim); display: block; font-weight: 400; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    #clock { font-size: 15px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    #last-refresh { font-size: 12px; color: var(--text-dim); }
+    #refresh-btn {
+      background: var(--amber); color: #000; border: none; border-radius: 8px;
+      padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: opacity .15s;
+    }
+    #refresh-btn:hover { opacity: .85; }
+    #refresh-btn:disabled { opacity: .4; cursor: default; }
+    #settings-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+      border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+    }
+    #settings-btn:hover { border-color: var(--amber); color: var(--amber); }
+
+    /* ── SETTINGS PANEL ── */
+    #settings-panel {
+      display: none;
+      background: var(--card2);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 28px;
+      gap: 16px;
+    }
+    #settings-panel.open { display: flex; flex-wrap: wrap; align-items: flex-end; }
+    .settings-field { display: flex; flex-direction: column; gap: 6px; min-width: 280px; flex: 1; }
+    .settings-field label { font-size: 12px; color: var(--text-dim); font-weight: 600; letter-spacing: .5px; }
+    .settings-field input {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 8px 12px; font-size: 13px; font-family: monospace;
+      width: 100%;
+    }
+    .settings-field input:focus { outline: none; border-color: var(--amber); }
+    #save-settings {
+      background: var(--green); color: #fff; border: none; border-radius: 8px;
+      padding: 8px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+      white-space: nowrap;
+    }
+    .settings-help {
+      font-size: 11px; color: var(--text-dim); line-height: 1.5;
+      background: var(--bg); border-radius: 8px; padding: 10px 14px;
+      border: 1px solid var(--border); width: 100%;
+    }
+    .settings-help code { color: var(--amber); background: rgba(245,158,11,.1); padding: 1px 4px; border-radius: 3px; }
+
+    /* ── ERROR / LOADING ── */
+    #state-banner {
+      display: none;
+      padding: 14px 28px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #state-banner.error { background: rgba(239,68,68,.12); color: #fca5a5; border-bottom: 1px solid rgba(239,68,68,.3); display: block; }
+    #state-banner.loading { background: rgba(59,130,246,.1); color: #93c5fd; border-bottom: 1px solid rgba(59,130,246,.3); display: block; }
+
+    /* ── MAIN ── */
+    main { padding: 28px; max-width: 1400px; margin: 0 auto; }
+
+    /* ── SECTION TITLE ── */
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
+      color: var(--text-dim); text-transform: uppercase; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ── CARDS ── */
+    .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .card.amber::before  { background: var(--amber); }
+    .card.green::before  { background: var(--green); }
+    .card.blue::before   { background: var(--blue); }
+    .card.red::before    { background: var(--red); }
+    .card-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px; }
+    .card-value { font-size: 36px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+    .card.amber  .card-value { color: var(--amber); }
+    .card.green  .card-value { color: var(--green); }
+    .card.blue   .card-value { color: var(--blue); }
+    .card.red    .card-value { color: var(--red); }
+    .card-sub { font-size: 12px; color: var(--text-dim); }
+    .card-badge {
+      position: absolute; top: 14px; right: 14px;
+      font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 20px;
+      letter-spacing: .5px;
+    }
+    .card-badge.ok    { background: rgba(16,185,129,.15); color: var(--green); }
+    .card-badge.warn  { background: rgba(245,158,11,.15); color: var(--amber); }
+    .card-badge.full  { background: rgba(239,68,68,.15); color: var(--red); }
+
+    /* Barra de ocupación */
+    .ocup-bar { margin-top: 12px; }
+    .ocup-bar-track { background: var(--border); border-radius: 4px; height: 6px; overflow: hidden; }
+    .ocup-bar-fill  { height: 100%; border-radius: 4px; transition: width .5s ease; }
+    .ocup-pct { font-size: 11px; color: var(--text-dim); margin-top: 4px; text-align: right; }
+
+    /* ── TWO COLUMNS ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 32px; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── PANEL ── */
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .panel-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .panel-title span { font-size: 11px; color: var(--text-dim); font-weight: 400; }
+
+    /* ── TABLE ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left; padding: 8px 10px;
+      font-size: 11px; font-weight: 700; letter-spacing: .8px; color: var(--text-dim);
+      text-transform: uppercase; border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid rgba(48,54,61,.5); transition: background .1s; }
+    tbody tr:hover { background: var(--card2); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 10px; vertical-align: middle; }
+    .badge {
+      display: inline-block; padding: 3px 8px; border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge.almuerzo { background: rgba(59,130,246,.15); color: #93c5fd; }
+    .badge.cena     { background: rgba(139,92,246,.15); color: #c4b5fd; }
+    .badge.confirmada { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .badge.en_espera  { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .tag-hoy { background: var(--amber); color: #000; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+    .notas-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 12px; }
+    .no-data { text-align: center; color: var(--text-dim); padding: 32px; font-size: 14px; }
+
+    /* ── CHART CONTAINER ── */
+    .chart-container { position: relative; height: 220px; }
+
+    /* ── CALL STATS ── */
+    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row-label { font-size: 13px; color: var(--text-dim); }
+    .stat-row-value { font-size: 15px; font-weight: 700; }
+    .stat-row-value.green { color: var(--green); }
+    .stat-row-value.amber { color: var(--amber); }
+    .stat-row-value.red   { color: var(--red); }
+
+    /* ── ESPERA LIST ── */
+    .espera-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .espera-item:last-child { border-bottom: none; }
+    .espera-name { font-weight: 600; }
+    .espera-meta { color: var(--text-dim); font-size: 12px; }
+    .espera-tel  { color: var(--text-dim); font-size: 12px; font-family: monospace; }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center; padding: 24px; color: var(--text-dim);
+      font-size: 12px; border-top: 1px solid var(--border); margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <span>🍽️</span>
+    <div>
+      <h1>Restaurante Ekis</h1>
+      <small>Dashboard de Reservas</small>
+    </div>
+  </div>
+  <div class="header-right">
+    <div>
+      <div id="clock">--:--</div>
+      <div id="last-refresh">Sin datos</div>
+    </div>
+    <button id="settings-btn" onclick="toggleSettings()">⚙️ Configurar</button>
+    <button id="refresh-btn" onclick="loadAll()">↻ Actualizar</button>
+  </div>
+</header>
+
+<!-- SETTINGS PANEL -->
+<div id="settings-panel">
+  <div class="settings-field">
+    <label>ID del Google Sheet</label>
+    <input type="text" id="input-sheet-id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms">
+  </div>
+  <div class="settings-field">
+    <label>Google Sheets API Key (solo lectura)</label>
+    <input type="text" id="input-api-key" placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX">
+  </div>
+  <button id="save-settings" onclick="saveSettings()">Guardar y cargar</button>
+  <div class="settings-help">
+    <strong>Cómo obtener las credenciales:</strong><br>
+    • <code>ID del Sheet</code>: la parte del URL entre <code>/d/</code> y <code>/edit</code><br>
+    • <code>API Key</code>: Google Cloud Console → APIs &amp; Services → Credentials → Create API Key (restringir a Sheets API)<br>
+    • El Google Sheet debe estar compartido como <strong>"Cualquier persona con el enlace puede ver"</strong>
+  </div>
+</div>
+
+<!-- ESTADO -->
+<div id="state-banner"></div>
+
+<!-- MAIN -->
+<main>
+
+  <!-- SECCIÓN HOY -->
+  <div class="section-title" id="date-label">Hoy</div>
+  <div class="cards-grid" id="cards-hoy">
+    <div class="card amber">
+      <div class="card-label">Almuerzo</div>
+      <div class="card-value" id="val-alm-reservas">—</div>
+      <div class="card-sub" id="sub-alm">mesas · — personas</div>
+      <div class="ocup-bar"><div class="ocup-bar-track"><div class="ocup-bar-fill" id="bar-alm" style="width:0%;background:var(--amber)"></div></div><div class="ocup-pct" id="pct-alm">—%</div></div>
+    </div>
+    <div class="card blue">
+      <div class="card-label">Cena</div>
+      <div class="card-value" id="val-cena-reservas">—</div>
+      <div class="card-sub" id="sub-cena">mesas · — personas</div>
+      <div class="ocup-bar"><div class="ocup-bar-track"><div class="ocup-bar-fill" id="bar-cena" style="width:0%;background:var(--blue)"></div></div><div class="ocup-pct" id="pct-cena">—%</div></div>
+    </div>
+    <div class="card green">
+      <div class="card-label">Total hoy</div>
+      <div class="card-value" id="val-total-pers">—</div>
+      <div class="card-sub">personas reservadas hoy</div>
+    </div>
+    <div class="card amber">
+      <div class="card-label">Llamadas hoy</div>
+      <div class="card-value" id="val-llamadas-hoy">—</div>
+      <div class="card-sub" id="sub-llamadas">— resueltas · — transferidas</div>
+    </div>
+  </div>
+
+  <!-- PRÓXIMAS RESERVAS + LISTA ESPERA -->
+  <div class="section-title">Próximas reservas</div>
+  <div class="panel" style="margin-bottom: 32px;">
+    <div class="panel-title">
+      Reservas confirmadas próximas
+      <span id="reservas-count"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="tabla-reservas">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>Franja</th>
+            <th>Nombre</th>
+            <th>Teléfono</th>
+            <th>Pers.</th>
+            <th>Estado</th>
+            <th>Notas</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-reservas">
+          <tr><td colspan="8" class="no-data">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- GRÁFICO SEMANA + STATS LLAMADAS -->
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-title">Ocupación esta semana <span>(personas por día)</span></div>
+      <div class="chart-container">
+        <canvas id="chart-week"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Estadísticas del mes <span id="mes-label"></span></div>
+      <div id="stats-mes">
+        <div class="stat-row"><div class="stat-row-label">Reservas confirmadas</div><div class="stat-row-value green" id="m-confirmadas">—</div></div>
+        <div class="stat-row"><div class="stat-row-label">Personas este mes</div><div class="stat-row-value" id="m-personas">—</div></div>
+        <div class="stat-row"><div class="stat-row-label">Cancelaciones</div><div class="stat-row-value red" id="m-cancelaciones">—</div></div>
+        <div class="stat-row"><div class="stat-row-label">Llamadas atendidas</div><div class="stat-row-value amber" id="m-llamadas">—</div></div>
+        <div class="stat-row"><div class="stat-row-label">Tasa resolución</div><div class="stat-row-value green" id="m-tasa">—</div></div>
+        <div class="stat-row"><div class="stat-row-label">En lista de espera</div><div class="stat-row-value amber" id="m-espera">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LISTA DE ESPERA -->
+  <div id="seccion-espera" style="display:none; margin-bottom: 32px;">
+    <div class="section-title">Lista de espera activa</div>
+    <div class="panel">
+      <div class="panel-title">Clientes esperando disponibilidad</div>
+      <div id="lista-espera-items"></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Dashboard Reservas · Restaurante Ekis · Desarrollado por <strong style="color:var(--amber)">HAT3X</strong>
+</footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  CONFIGURACIÓN
+// ══════════════════════════════════════════════════════════════
+let SPREADSHEET_ID = localStorage.getItem('ekis_sheet_id') || '';
+let API_KEY        = localStorage.getItem('ekis_api_key')  || '';
+const CAPACIDAD    = 45;  // capacidad máxima del restaurante
+let weekChart      = null;
+let autoRefreshTimer = null;
+
+// ══════════════════════════════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════════════════════════════
+function toggleSettings() {
+  const panel = document.getElementById('settings-panel');
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) {
+    document.getElementById('input-sheet-id').value = SPREADSHEET_ID;
+    document.getElementById('input-api-key').value  = API_KEY;
+  }
+}
+
+function saveSettings() {
+  SPREADSHEET_ID = document.getElementById('input-sheet-id').value.trim();
+  API_KEY        = document.getElementById('input-api-key').value.trim();
+  localStorage.setItem('ekis_sheet_id', SPREADSHEET_ID);
+  localStorage.setItem('ekis_api_key',  API_KEY);
+  document.getElementById('settings-panel').classList.remove('open');
+  loadAll();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RELOJ
+// ══════════════════════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ══════════════════════════════════════════════════════════════
+//  FETCH SHEETS
+// ══════════════════════════════════════════════════════════════
+async function fetchRange(range) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(range)}?key=${API_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Sheets API error ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.values || [];
+}
+
+function sheetToObjects(rows) {
+  if (!rows || rows.length < 2) return [];
+  const headers = rows[0];
+  return rows.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = row[i] || '');
+    return obj;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  LOAD ALL DATA
+// ══════════════════════════════════════════════════════════════
+async function loadAll() {
+  if (!SPREADSHEET_ID || !API_KEY) {
+    setBanner('error', '⚠️ Configura el ID del Google Sheet y la API Key con el botón ⚙️ Configurar');
+    return;
+  }
+
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Cargando...';
+  setBanner('loading', 'Cargando datos desde Google Sheets...');
+
+  try {
+    const [reservasRaw, historialRaw, llamadasRaw, esperaRaw] = await Promise.all([
+      fetchRange('Reservas_Activas!A:N'),
+      fetchRange('Historial!A:Q'),
+      fetchRange('Llamadas!A:J'),
+      fetchRange('Lista_Espera!A:J'),
+    ]);
+
+    const reservas  = sheetToObjects(reservasRaw);
+    const historial = sheetToObjects(historialRaw);
+    const llamadas  = sheetToObjects(llamadasRaw);
+    const espera    = sheetToObjects(esperaRaw);
+
+    renderAll(reservas, historial, llamadas, espera);
+    setBanner(null);
+
+    const now = new Date();
+    document.getElementById('last-refresh').textContent =
+      'Actualizado: ' + now.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
+
+  } catch (e) {
+    console.error(e);
+    setBanner('error', `❌ Error al cargar datos: ${e.message}. Verifica el ID del Sheet, la API Key y que la hoja esté compartida.`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ Actualizar';
+  }
+
+  // Auto-refresh cada 5 minutos
+  clearTimeout(autoRefreshTimer);
+  autoRefreshTimer = setTimeout(loadAll, 5 * 60 * 1000);
+}
+
+function setBanner(type, msg) {
+  const el = document.getElementById('state-banner');
+  el.className = type || '';
+  el.textContent = msg || '';
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════════════════
+function renderAll(reservas, historial, llamadas, espera) {
+  const hoy = todayStr();
+  updateDateLabel();
+
+  console.log('=== DEBUG DASHBOARD ===');
+  console.log('Hoy (fecha sistema):', hoy);
+  console.log('Total filas cargadas:', reservas.length);
+  console.log('Primeras 3 reservas:', reservas.slice(0, 3).map(r => ({
+    raw: r['Fecha'],
+    parsed: parseDate(r['Fecha']),
+    estado: r['Estado'],
+    franja: r['Franja']
+  })));
+
+  // ── Reservas de hoy ──
+  // Solo contar reservas con estado válido (confirmada, en_espera, recordatorio_enviado)
+  const activas = reservas.filter(r => {
+    const estado = (r['Estado']||'').toLowerCase().trim();
+    return ['confirmada', 'en_espera', 'recordatorio_enviado'].includes(estado);
+  });
+  console.log('Reservas activas (estado válido):', activas.length);
+
+  const hoyActivas = activas.filter(r => parseDate(r['Fecha']) === hoy);
+  console.log('Reservas de hoy (coinciden fecha):', hoyActivas.length);
+
+  const almHoy = hoyActivas.filter(r => (r['Franja']||'').toLowerCase() === 'almuerzo');
+  const cenaHoy = hoyActivas.filter(r => (r['Franja']||'').toLowerCase() === 'cena');
+  const persAlm  = sum(almHoy,  'Personas');
+  const persCena = sum(cenaHoy, 'Personas');
+  const totalPers = persAlm + persCena;
+
+  const pctAlm  = Math.min(Math.round(persAlm  / CAPACIDAD * 100), 100);
+  const pctCena = Math.min(Math.round(persCena / CAPACIDAD * 100), 100);
+
+  setText('val-alm-reservas',  almHoy.length);
+  setText('sub-alm',           `mesas · ${persAlm} personas`);
+  setText('pct-alm',           `${pctAlm}% ocupación`);
+  setBar('bar-alm',  pctAlm,  '#f59e0b');
+
+  setText('val-cena-reservas', cenaHoy.length);
+  setText('sub-cena',          `mesas · ${persCena} personas`);
+  setText('pct-cena',          `${pctCena}% ocupación`);
+  setBar('bar-cena', pctCena, '#3b82f6');
+
+  setText('val-total-pers', totalPers);
+
+  // ── Llamadas de hoy ──
+  const llamadasHoy = llamadas.filter(l => {
+    const f = l['Fecha'] || '';
+    return f.startsWith(hoy) || f.startsWith(hoy.split('-').reverse().join('/'));
+  });
+  const resueltas    = llamadasHoy.filter(l => (l['Resultado']||'').toLowerCase() === 'éxito').length;
+  const transferidas = llamadasHoy.filter(l => (l['Transferido_A_Humano']||'').toLowerCase() === 'sí' || l['Transferido_A_Humano'] === 'si').length;
+  setText('val-llamadas-hoy', llamadasHoy.length);
+  setText('sub-llamadas',     `${resueltas} resueltas · ${transferidas} transferidas`);
+
+  // ── Tabla próximas reservas ──
+  renderTablaReservas(activas, hoy);
+
+  // ── Gráfico semanal ──
+  renderWeekChart(activas);
+
+  // ── Stats del mes ──
+  renderStatsMes(activas, historial, llamadas);
+
+  // ── Lista de espera ──
+  renderListaEspera(espera);
+}
+
+function updateDateLabel() {
+  const hoy = new Date();
+  const dias  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  document.getElementById('date-label').textContent =
+    `Hoy — ${dias[hoy.getDay()]} ${hoy.getDate()} de ${meses[hoy.getMonth()]}`;
+  document.getElementById('mes-label').textContent =
+    `(${meses[hoy.getMonth()]} ${hoy.getFullYear()})`;
+}
+
+// ── Tabla de reservas ──
+function renderTablaReservas(reservas, hoy) {
+  // Solo mostrar reservas con estado válido
+  const futuras = reservas
+    .filter(r => {
+      const estado = (r['Estado']||'').toLowerCase().trim();
+      return ['confirmada', 'en_espera', 'recordatorio_enviado'].includes(estado) && parseDate(r['Fecha']) >= hoy;
+    })
+    .sort((a,b) => {
+      const da = parseDate(a['Fecha']), db = parseDate(b['Fecha']);
+      if (da !== db) return da.localeCompare(db);
+      const fa = (a['Franja']||'').toLowerCase() === 'almuerzo' ? 0 : 1;
+      const fb = (b['Franja']||'').toLowerCase() === 'almuerzo' ? 0 : 1;
+      return fa - fb;
+    })
+    .slice(0, 30);
+
+  document.getElementById('reservas-count').textContent =
+    `${futuras.length} próximas`;
+
+  const tbody = document.getElementById('tbody-reservas');
+  if (!futuras.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="no-data">Sin reservas próximas</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = futuras.map(r => {
+    const fecha = r['Fecha'] || '';
+    const esHoy = parseDate(fecha) === hoy;
+    const franja  = (r['Franja']||'').toLowerCase();
+    const estado  = (r['Estado']||'').toLowerCase();
+    const nombre  = r['Nombre'] || '—';
+    const tel     = r['Teléfono'] || r['Telefono'] || '—';
+    const pers    = r['Personas'] || '—';
+    const notas   = r['Notas'] || '';
+    const idRes   = r['ID_Reserva'] || '—';
+
+    return `<tr>
+      <td style="font-family:monospace;font-size:12px;color:var(--text-dim)">${idRes}</td>
+      <td>${formatFecha(fecha)}${esHoy ? '<span class="tag-hoy">HOY</span>' : ''}</td>
+      <td><span class="badge ${franja}">${franja || '—'}</span></td>
+      <td style="font-weight:600">${nombre}</td>
+      <td style="font-family:monospace;font-size:12px;color:var(--text-dim)">${tel}</td>
+      <td style="text-align:center;font-weight:700">${pers}</td>
+      <td><span class="badge ${estado}">${estado || '—'}</span></td>
+      <td class="notas-cell" title="${notas}">${notas || ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Gráfico semanal ──
+function renderWeekChart(reservas) {
+  const hoy = new Date();
+  // Lunes de esta semana
+  const dow = hoy.getDay() === 0 ? 6 : hoy.getDay() - 1;
+  const lunes = new Date(hoy);
+  lunes.setDate(hoy.getDate() - dow);
+  lunes.setHours(0,0,0,0);
+
+  const labels = [];
+  const dataAlm  = [];
+  const dataCena = [];
+  const diaCorto = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(lunes);
+    d.setDate(lunes.getDate() + i);
+    const dStr = toYMD(d);
+    labels.push(diaCorto[i]);
+
+    const diasFiltrados = reservas.filter(r => {
+      const f = parseDate(r['Fecha']);
+      const estado = (r['Estado']||'').toLowerCase().trim();
+      return f === dStr && ['confirmada', 'en_espera', 'recordatorio_enviado'].includes(estado);
+    });
+    dataAlm.push(sum(diasFiltrados.filter(r => (r['Franja']||'').toLowerCase() === 'almuerzo'), 'Personas'));
+    dataCena.push(sum(diasFiltrados.filter(r => (r['Franja']||'').toLowerCase() === 'cena'),    'Personas'));
+  }
+
+  if (weekChart) weekChart.destroy();
+  const ctx = document.getElementById('chart-week').getContext('2d');
+  weekChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Almuerzo', data: dataAlm,  backgroundColor: 'rgba(245,158,11,.75)', borderRadius: 4 },
+        { label: 'Cena',     data: dataCena, backgroundColor: 'rgba(139,92,246,.75)', borderRadius: 4 },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#8b949e', font: { size: 12 } } },
+        tooltip: { backgroundColor: '#1c2128', titleColor: '#e6edf3', bodyColor: '#8b949e' }
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: 'rgba(48,54,61,.5)' } },
+        y: {
+          stacked: true,
+          ticks: { color: '#8b949e', stepSize: 5 },
+          grid: { color: 'rgba(48,54,61,.5)' },
+          max: CAPACIDAD
+        }
+      }
+    }
+  });
+}
+
+// ── Stats del mes ──
+function renderStatsMes(activas, historial, llamadas) {
+  const hoy = new Date();
+  const primeroDeMes = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`;
+
+  // activas ya viene filtrada con estados válidos desde renderAll
+  const confirmadas = activas.filter(r => parseDate(r['Fecha']) >= primeroDeMes);
+
+  const personas = sum(confirmadas, 'Personas');
+
+  const cancelaciones = [...activas, ...historial].filter(r => {
+    const e = (r['Estado']||'').toLowerCase();
+    const ef = (r['Estado_Final']||'').toLowerCase();
+    return (e === 'cancelada' || ef.includes('cancelada')) &&
+      parseDate(r['Fecha'] || r['Fecha_Cancelacion']) >= primeroDeMes;
+  });
+
+  const llamadasMes = llamadas.filter(l => {
+    const f = l['Fecha'] || '';
+    return f >= primeroDeMes || f >= primeroDeMes.split('-').reverse().join('/');
+  });
+
+  const exitosas = llamadasMes.filter(l => (l['Resultado']||'').toLowerCase() === 'éxito');
+  const tasa = llamadasMes.length > 0 ? Math.round(exitosas.length / llamadasMes.length * 100) : 0;
+
+  setText('m-confirmadas',   confirmadas.length);
+  setText('m-personas',      personas);
+  setText('m-cancelaciones', cancelaciones.length);
+  setText('m-llamadas',      llamadasMes.length);
+  setText('m-tasa',          tasa + '%');
+  setText('m-espera',        '—');  // se actualiza en renderListaEspera
+}
+
+// ── Lista de espera ──
+function renderListaEspera(espera) {
+  const activa = espera.filter(e => (e['Estado']||'').toLowerCase() === 'en_espera');
+  setText('m-espera', activa.length);
+
+  const section = document.getElementById('seccion-espera');
+  const cont    = document.getElementById('lista-espera-items');
+
+  if (!activa.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  cont.innerHTML = activa.slice(0, 10).map(e => `
+    <div class="espera-item">
+      <div>
+        <div class="espera-name">${e['Nombre']||'—'}</div>
+        <div class="espera-meta">${formatFecha(e['Fecha_Deseada']||'')} · ${e['Franja']||''} · ${e['Personas']||''} pers.</div>
+      </div>
+      <div class="espera-tel">${e['Teléfono']||e['Telefono']||'—'}</div>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════════════════
+function todayStr() { return toYMD(new Date()); }
+
+function toYMD(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// Normaliza fecha a yyyy-mm-dd (acepta dd/mm/yyyy y yyyy-mm-dd)
+function parseDate(raw) {
+  if (!raw) return '';
+  raw = String(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.substring(0, 10);
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(raw)) {
+    const [d, m, y] = raw.split('/');
+    return `${y}-${m}-${d}`;
+  }
+  // Puede ser un número serial de Sheets
+  if (/^\d+$/.test(raw)) {
+    const serial = parseInt(raw);
+    const fecha = new Date((serial - 25569) * 86400 * 1000);
+    return toYMD(fecha);
+  }
+  return raw.substring(0, 10);
+}
+
+function formatFecha(raw) {
+  const ymd = parseDate(raw);
+  if (!ymd) return raw;
+  const [y, m, d] = ymd.split('-');
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${parseInt(d)} ${meses[parseInt(m)-1]}`;
+}
+
+function sum(arr, campo) {
+  return arr.reduce((s, r) => s + (parseInt(r[campo]) || 0), 0);
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function setBar(id, pct, color) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.width   = pct + '%';
+  el.style.background = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : color;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  if (SPREADSHEET_ID && API_KEY) {
+    loadAll();
+  } else {
+    setBanner('error', '⚠️ Configura el ID del Google Sheet y la API Key con el botón ⚙️ Configurar');
+    document.getElementById('settings-panel').classList.add('open');
+  }
+});
+</script>
+</body>
+</html>

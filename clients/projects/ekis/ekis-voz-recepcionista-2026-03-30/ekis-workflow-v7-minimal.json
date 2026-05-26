@@ -1,0 +1,2099 @@
+﻿{
+    "name":  "Ekis - Agendar Reservas de Mesas",
+    "connections":  {
+                        "Retell Webhook":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Solo call_ended",
+                                                                    "type":  "main"
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Solo call_ended":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Extraer datos llamada",
+                                                                     "type":  "main"
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Extraer datos llamada":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Registrar en Google Sheets",
+                                                                           "type":  "main"
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Retell Tool Call":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Leer Reservas Activas",
+                                                                      "type":  "main"
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Leer Reservas Activas":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Buscar Reserva",
+                                                                           "type":  "main"
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Buscar Reserva":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "ï¿½Reserva encontrada?",
+                                                                    "type":  "main"
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "ï¿½Reserva encontrada?":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "ï¿½Tiene Calendar Event?",
+                                                                            "type":  "main"
+                                                                        }
+                                                                    ],
+                                                                    [
+                                                                        {
+                                                                            "node":  "Respuesta No Encontrado",
+                                                                            "type":  "main"
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "ï¿½Tiene Calendar Event?":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Delete an event",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ],
+                                                                      [
+                                                                          {
+                                                                              "node":  "Copiar al Historial",
+                                                                              "type":  "main"
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Copiar al Historial":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Marcar Cancelada en Activas",
+                                                                         "type":  "main"
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Marcar Cancelada en Activas":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Respuesta Cancelaciï¿½n OK",
+                                                                                 "type":  "main"
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Respuesta Cancelaciï¿½n OK":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Responder a Retell",
+                                                                                "type":  "main"
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Respuesta No Encontrado":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Responder a Retell",
+                                                                             "type":  "main"
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "Preparar Datos":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Create an event",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Guardar en Reservas_Activas":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Construir Respuesta",
+                                                                                 "type":  "main"
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Construir Respuesta":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Responder a Retell1",
+                                                                         "type":  "main"
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Respuesta Error":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Responder a Retell1",
+                                                                     "type":  "main"
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Retell Tool Call1":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Preparar Datos",
+                                                                       "type":  "main"
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Buscar y Preparar Modificaciï¿½n":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "ï¿½Reserva encontrada?1",
+                                                                                      "type":  "main"
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "Actualizar en Sheets":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Respuesta Modificaciï¿½n OK",
+                                                                          "type":  "main"
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Respuesta Modificaciï¿½n OK":  {
+                                                            "main":  [
+                                                                         [
+                                                                             {
+                                                                                 "node":  "Responder a Retell2",
+                                                                                 "type":  "main"
+                                                                             }
+                                                                         ]
+                                                                     ]
+                                                        },
+                        "Retell Tool Call2":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Leer Reservas Activas1",
+                                                                       "type":  "main"
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Leer Reservas Activas1":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Buscar y Preparar Modificaciï¿½n",
+                                                                            "type":  "main"
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "ï¿½Reserva encontrada?1":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "ï¿½Tiene Calendar Event?1",
+                                                                             "type":  "main"
+                                                                         }
+                                                                     ],
+                                                                     [
+                                                                         {
+                                                                             "node":  "Respuesta No Encontrado1",
+                                                                             "type":  "main"
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "ï¿½Tiene Calendar Event?1":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Update an event",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ],
+                                                                       [
+                                                                           {
+                                                                               "node":  "Actualizar en Sheets",
+                                                                               "type":  "main"
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Respuesta No Encontrado1":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Responder a Retell2",
+                                                                              "type":  "main"
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Calcular Disponibilidad":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "Responder a Retell3",
+                                                                             "type":  "main"
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "Retell Tool Call3":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Leer Reservas Activas2",
+                                                                       "type":  "main"
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Leer Reservas Activas2":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Calcular Disponibilidad",
+                                                                            "type":  "main"
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "Registrar en Google Sheets":  {
+                                                           "main":  [
+                                                                        [
+
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Update an event":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Actualizar en Sheets",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Create an event":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Guardar en Reservas_Activas",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Delete an event":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Copiar al Historial",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            }
+                    },
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "content":  "## ?? Verificar Disponibilidad\n\n**Propï¿½sito:** Consultar si hay mesas disponibles para una fecha/franja especï¿½fica\n\n**Flujo:**\n1. Webhook recibe solicitud (fecha, franja, personas)\n2. Lee todas las reservas activas de Google Sheets\n3. Calcula disponibilidad considerando capacidad mï¿½xima (45 personas)\n4. Si no hay disponibilidad, busca prï¿½xima fecha disponible\n5. Responde con disponibilidad y mensaje en lenguaje natural\n\n**Entrada:** `fecha`, `franja`, `personas`\n**Salida:** `disponible`, `personas_disponibles`, `proxima_disponible`, `mensaje`",
+                                         "height":  356,
+                                         "width":  1660,
+                                         "color":  4
+                                     },
+                      "id":  "3e3973a3-fefd-482c-b1e7-3ff5b6b6cfb1",
+                      "name":  "?? Flujo 1: Verificar Disponibilidad",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -1376,
+                                       -624
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## ?? Modificar Reserva\n\n**Propï¿½sito:** Actualizar una reserva existente (fecha, franja o nï¿½mero de personas)\n\n**Flujo:**\n1. Webhook recibe datos de modificaciï¿½n\n2. Lee reservas activas de Google Sheets\n3. Busca reserva por telï¿½fono + fecha actual\n4. **SI ENCONTRADA:** Actualiza en Sheets y confirma\n5. **SI NO ENCONTRADA:** Responde con mensaje de error\n6. Devuelve confirmaciï¿½n o error a Retell\n\n**Entrada:** `telefono`, `fecha_actual`, `nueva_fecha`, `nueva_franja`, `nuevas_personas`\n**Salida:** `modificado`, `id_reserva`, `resumen_nuevo`",
+                                         "height":  428,
+                                         "width":  2756,
+                                         "color":  5
+                                     },
+                      "id":  "61d10c52-fb04-4a1d-be0c-118d3e7b9ef0",
+                      "name":  "?? Flujo 2: Modificar Reserva",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -1376,
+                                       -192
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## ? Crear Reserva\n\n**Propï¿½sito:** Registrar una nueva reserva en el sistema\n\n**Flujo:**\n1. Webhook recibe datos de la nueva reserva\n2. Prepara datos: genera ID ï¿½nico, formatea fecha, valida campos\n3. Guarda en Google Sheets (hoja Reservas_Activas)\n4. Construye respuesta de confirmaciï¿½n\n5. Devuelve confirmaciï¿½n con ID y mensaje a Retell\n\n**Entrada:** `nombre`, `telefono`, `personas`, `fecha`, `franja`, `notas`\n**Salida:** `confirmado`, `id_reserva`, `mensaje_confirmacion`\n\n**ID Format:** `YYYYMMDD[A|C]-XXXX` (fecha + franja + aleatorio)",
+                                         "height":  480,
+                                         "width":  1868,
+                                         "color":  6
+                                     },
+                      "id":  "4c0aad96-76a9-4eb5-be08-e297fa8e77e0",
+                      "name":  "? Flujo 3: Crear Reserva",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -1360,
+                                       304
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## ? Cancelar Reserva\n\n**Propï¿½sito:** Cancelar una reserva activa y moverla al historial\n\n**Flujo:**\n1. Webhook recibe solicitud de cancelaciï¿½n\n2. Lee reservas activas de Google Sheets\n3. Busca reserva por telï¿½fono + fecha\n4. **SI ENCONTRADA:**\n   - Copia al historial con estado \u0027cancelada\u0027\n   - Marca como cancelada en hoja activas\n   - Confirma cancelaciï¿½n\n5. **SI NO ENCONTRADA:** Responde con error\n6. Devuelve resultado a Retell\n\n**Entrada:** `telefono`, `fecha`\n**Salida:** `cancelado`, `resumen`",
+                                         "height":  468,
+                                         "width":  2636,
+                                         "color":  2
+                                     },
+                      "id":  "69f6fae6-4c79-45de-9f62-c2b8292fdedf",
+                      "name":  "? Flujo 4: Cancelar Reserva",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -1344,
+                                       864
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## ?? Post-Llamada Retell\n\n**Propï¿½sito:** Registrar y notificar llamadas finalizadas desde Retell AI\n\n**Flujo:**\n1. Webhook recibe eventos de Retell\n2. Filtra solo eventos `call_ended`\n3. Extrae datos clave: call_id, telï¿½fono, duraciï¿½n, transcripciï¿½n, resumen, sentimiento\n4. **Registro:** Guarda en Google Sheets para historial\n5. **Notificaciï¿½n:** Envï¿½a alerta a Slack con resumen de llamada\n\n**Entrada:** Evento Retell con `call` object\n**Salida:** Registro en Sheets + notificaciï¿½n Slack\n\n**Datos capturados:** ID, telï¿½fono, duraciï¿½n, transcripciï¿½n, resumen IA, sentimiento",
+                                         "height":  500,
+                                         "width":  1868,
+                                         "color":  3
+                                     },
+                      "id":  "5014d1ae-bf0b-448e-aa9e-23cdf7a29af0",
+                      "name":  "?? Flujo 5: Post-Llamada Retell",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -1344,
+                                       1392
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "retell-ekis",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "7bae1a36-d3cc-4941-9eb6-959d36063bcb",
+                      "name":  "Retell Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -576,
+                                       1568
+                                   ],
+                      "webhookId":  "5950f5b7-fc2c-4bd0-8d51-95b23a9b432b"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "string":  [
+                                                                           {
+                                                                               "value1":  "{{ $json.event }}",
+                                                                               "value2":  "call_ended"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "5d0673ed-f194-4e5a-bda1-ebd20111f754",
+                      "name":  "Solo call_ended",
+                      "type":  "n8n-nodes-base.filter",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -368,
+                                       1568
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "call_id",
+                                                                           "value":  "{{ $json.call.call_id }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "from_number",
+                                                                           "value":  "{{ $json.call.from_number }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "duracion_segundos",
+                                                                           "value":  "={{ Math.round($json.call.duration_ms / 1000) }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "transcripcion",
+                                                                           "value":  "{{ $json.call.transcript }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "resumen",
+                                                                           "value":  "{{ $json.call.call_analysis?.call_summary ?? \u0027Sin resumen\u0027 }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "sentimiento",
+                                                                           "value":  "{{ $json.call.call_analysis?.user_sentiment ?? \u0027Neutro\u0027 }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "timestamp",
+                                                                           "value":  "={{ new Date().toISOString() }}"
+                                                                       }
+                                                                   ]
+                                                    },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "6be74a8e-94c5-455c-9c1a-0b1c7e8adb88",
+                      "name":  "Extraer datos llamada",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -144,
+                                       1568
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "append",
+                                         "documentId":  {
+                                                            "mode":  "id",
+                                                            "__rl":  true,
+                                                            "value":  "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "value":  726024193,
+                                                           "mode":  "list",
+                                                           "cachedResultName":  "Llamadas",
+                                                           "cachedResultUrl":  "https://docs.google.com/spreadsheets/d/1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8/edit#gid=726024193"
+                                                       },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+
+                                                                   },
+                                                         "matchingColumns":  [
+
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "Call_ID",
+                                                                            "displayName":  "Call_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha",
+                                                                            "displayName":  "Fecha",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Telefono",
+                                                                            "displayName":  "Telefono",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Duracion_Segundos",
+                                                                            "displayName":  "Duracion_Segundos",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Accion_Principal",
+                                                                            "displayName":  "Accion_Principal",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Resultado",
+                                                                            "displayName":  "Resultado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Sentimiento",
+                                                                            "displayName":  "Sentimiento",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Resumen",
+                                                                            "displayName":  "Resumen",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Transferido_A_Humano",
+                                                                            "displayName":  "Transferido_A_Humano",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "ID_Reserva_Asociada",
+                                                                            "displayName":  "ID_Reserva_Asociada",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "def4b4b1-0112-4bec-8885-2e8c51422b01",
+                      "name":  "Registrar en Google Sheets",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4.6,
+                      "position":  [
+                                       96,
+                                       1568
+                                   ],
+                      "credentials":  {
+                                          "googleSheetsOAuth2Api":  {
+                                                                        "id":  "EJ0DSUb87ZX7u8RL",
+                                                                        "name":  "Google Sheets OAuth2 API"
+                                                                    }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "cancelar-reserva",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "278ccf64-b62a-430b-95a1-34370a3d3569",
+                      "name":  "Retell Tool Call",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -912,
+                                       1056
+                                   ],
+                      "webhookId":  "fc933ccf-324c-40c0-8947-e77e346c1bbf"
+                  },
+                  {
+                      "parameters":  {
+                                         "documentId":  {
+                                                            "mode":  "id",
+                                                            "__rl":  true,
+                                                            "value":  "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8"
+                                                        },
+                                         "sheetName":  {
+                                                           "mode":  "name",
+                                                           "__rl":  true,
+                                                           "value":  "Hoja 1"
+                                                       },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "07c8e6e1-14b7-4f40-92e8-71187cfef9e3",
+                      "name":  "Leer Reservas Activas",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4.6,
+                      "position":  [
+                                       -688,
+                                       1056
+                                   ],
+                      "credentials":  {
+                                          "googleSheetsOAuth2Api":  {
+                                                                        "id":  "EJ0DSUb87ZX7u8RL",
+                                                                        "name":  "Google Sheets OAuth2 API"
+                                                                    }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const webhookRaw = $(\u0027Retell Tool Call\u0027).first().json.body || $(\u0027Retell Tool Call\u0027).first().json;\nlet body;\nif (webhookRaw.arguments !== undefined) {\n  body = typeof webhookRaw.arguments === \u0027string\u0027 ? JSON.parse(webhookRaw.arguments) : webhookRaw.arguments;\n} else {\n  body = webhookRaw;\n}\n\nconst telefono = String(body.telefono || \u0027\u0027).trim();\nconst fecha    = String(body.fecha    || \u0027\u0027).trim(); // yyyy-mm-dd\n\nif (!telefono || !fecha) {\n  return [{ json: { encontrado: false, resumen: \u0027Necesito el telï¿½fono y la fecha de la reserva para cancelarla.\u0027 } }];\n}\n\nconst [year, month, day] = fecha.split(\u0027-\u0027);\nconst fechaFormateada = `${day}/${month}/${year}`;\n\nconst reservas = $input.all().map(item =\u003e item.json);\n\nconst reserva = reservas.find(r =\u003e {\n  const tel    = String(r[\u0027Telï¿½fono\u0027] || r[\u0027Telefono\u0027] || \u0027\u0027).replace(/\\s/g,\u0027\u0027);\n  const fechaR = String(r[\u0027Fecha\u0027] || \u0027\u0027).trim();\n  const estado = String(r[\u0027Estado\u0027] || \u0027\u0027).toLowerCase();\n  const activo = [\u0027confirmada\u0027,\u0027en_espera\u0027,\u0027recordatorio_enviado\u0027].includes(estado);\n  return tel === telefono.replace(/\\s/g,\u0027\u0027) \u0026\u0026\n    (fechaR === fecha || fechaR === fechaFormateada) \u0026\u0026\n    activo;\n});\n\nif (!reserva) {\n  return [{ json: {\n    encontrado: false,\n    resumen: `No encuentro ninguna reserva activa para ese telï¿½fono el ${fechaFormateada}. ï¿½Puede que sea en otra fecha?`\n  }}];\n}\n\nconst nombre      = reserva[\u0027Nombre\u0027] || \u0027\u0027;\nconst apellido    = nombre.split(\u0027 \u0027).pop() || nombre;\nconst franjaTexto = (reserva[\u0027Franja\u0027]||\u0027\u0027) === \u0027almuerzo\u0027 ? \u0027a mediodï¿½a\u0027 : \u0027por la noche\u0027;\nconst diasSemana  = [\u0027domingo\u0027,\u0027lunes\u0027,\u0027martes\u0027,\u0027miï¿½rcoles\u0027,\u0027jueves\u0027,\u0027viernes\u0027,\u0027sï¿½bado\u0027];\nconst diaSemana   = diasSemana[new Date(fecha).getDay()];\nconst ahora       = new Date().toISOString().replace(\u0027T\u0027,\u0027 \u0027).substring(0,19);\n\nreturn [{ json: {\n  encontrado: true,\n  calEventId: reserva[\u0027Calendar_Event_ID\u0027] || \u0027\u0027,\n  idReserva:  reserva[\u0027ID_Reserva\u0027] || \u0027\u0027,\n  telefono,\n  historialFila: {\n    ID_Reserva:           reserva[\u0027ID_Reserva\u0027] || \u0027\u0027,\n    Fecha:                reserva[\u0027Fecha\u0027] || \u0027\u0027,\n    Franja:               reserva[\u0027Franja\u0027] || \u0027\u0027,\n    Nombre:               reserva[\u0027Nombre\u0027] || \u0027\u0027,\n    Telefono:             reserva[\u0027Telï¿½fono\u0027] || reserva[\u0027Telefono\u0027] || \u0027\u0027,\n    Personas:             reserva[\u0027Personas\u0027] || \u0027\u0027,\n    Estado:               \u0027cancelada\u0027,\n    Notas:                reserva[\u0027Notas\u0027] || \u0027\u0027,\n    Fecha_Creacion:       reserva[\u0027Fecha_Creaciï¿½n\u0027] || reserva[\u0027Fecha_Creacion\u0027] || \u0027\u0027,\n    Fecha_Modificacion:   ahora,\n    Call_ID:              reserva[\u0027Call_ID\u0027] || \u0027\u0027,\n    Origen:               reserva[\u0027Origen\u0027] || \u0027telefono\u0027,\n    Recordatorio_Enviado: reserva[\u0027Recordatorio_Enviado\u0027] || \u0027no\u0027,\n    Calendar_Event_ID:    reserva[\u0027Calendar_Event_ID\u0027] || \u0027\u0027,\n    Estado_Final:         \u0027cancelada_cliente\u0027,\n    Motivo_Cancelacion:   \u0027cliente llamï¿½\u0027,\n    Fecha_Cancelacion:    ahora\n  },\n  resumen: `Reserva de ${apellido} del ${diaSemana} ${franjaTexto} cancelada correctamente`\n}}];"
+                                     },
+                      "id":  "d84fcc15-7f2e-4c0c-9c50-c822d7c6cde4",
+                      "name":  "Buscar Reserva",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -464,
+                                       1056
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "boolean":  [
+                                                                            {
+                                                                                "value1":  "{{ $json.encontrado }}",
+                                                                                "value2":  true
+                                                                            }
+                                                                        ]
+                                                        }
+                                     },
+                      "id":  "7f862a31-c017-47a5-aaf7-9290ddf2b3f5",
+                      "name":  "ï¿½Reserva encontrada?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -256,
+                                       1056
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "string":  [
+                                                                           {
+                                                                               "value1":  "{{ $json.calEventId }}",
+                                                                               "operation":  "isNotEmpty"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "12b8a200-36a1-413b-9e25-9d26c8e85195",
+                      "name":  "ï¿½Tiene Calendar Event?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -32,
+                                       960
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "append",
+                                         "documentId":  {
+                                                            "mode":  "id",
+                                                            "__rl":  true,
+                                                            "value":  "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "value":  1757404871,
+                                                           "mode":  "list",
+                                                           "cachedResultName":  "Historial",
+                                                           "cachedResultUrl":  "https://docs.google.com/spreadsheets/d/1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8/edit#gid=1757404871"
+                                                       },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+                                                                       "ID_Reserva":  "{{ $json.idReserva }}",
+                                                                       "Fecha":  "{{ $json.fechaFormateada }}",
+                                                                       "Franja":  "{{ $json.franja }}",
+                                                                       "Nombre":  "{{ $json.nombre }}",
+                                                                       "Telefono":  "{{ $json.telefono }}",
+                                                                       "Personas":  "{{ $json.personas }}",
+                                                                       "Estado":  "confirmada",
+                                                                       "Notas":  "{{ $json.notas }}",
+                                                                       "Fecha_Creacion":  "{{ $json.ahora }}",
+                                                                       "Fecha_Modificacion":  "{{ $json.ahora }}",
+                                                                       "Call_ID":  "{{ $json.call_id }}",
+                                                                       "Origen":  "{{ $json.origen }}",
+                                                                       "Calendar_Event_ID":  "{{ $json.tituloEvento }}"
+                                                                   },
+                                                         "matchingColumns":  [
+
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "ID_Reserva",
+                                                                            "displayName":  "ID_Reserva",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha",
+                                                                            "displayName":  "Fecha",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Franja",
+                                                                            "displayName":  "Franja",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Nombre",
+                                                                            "displayName":  "Nombre",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Telefono",
+                                                                            "displayName":  "Telefono",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Personas",
+                                                                            "displayName":  "Personas",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Estado",
+                                                                            "displayName":  "Estado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Notas",
+                                                                            "displayName":  "Notas",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Creacion",
+                                                                            "displayName":  "Fecha_Creacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Modificacion",
+                                                                            "displayName":  "Fecha_Modificacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Call_ID",
+                                                                            "displayName":  "Call_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Origen",
+                                                                            "displayName":  "Origen",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Recordatorio_Enviado",
+                                                                            "displayName":  "Recordatorio_Enviado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Calendar_Event_ID",
+                                                                            "displayName":  "Calendar_Event_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Estado_Final",
+                                                                            "displayName":  "Estado_Final",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Motivo_Cancelacion",
+                                                                            "displayName":  "Motivo_Cancelacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Cancelacion",
+                                                                            "displayName":  "Fecha_Cancelacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "a0bddb97-deb6-45e2-8aa2-b47531e088c9",
+                      "name":  "Copiar al Historial",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4.6,
+                      "position":  [
+                                       384,
+                                       976
+                                   ],
+                      "credentials":  {
+                                          "googleSheetsOAuth2Api":  {
+                                                                        "id":  "EJ0DSUb87ZX7u8RL",
+                                                                        "name":  "Google Sheets OAuth2 API"
+                                                                    }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "update",
+                                         "documentId":  {
+                                                            "mode":  "id",
+                                                            "__rl":  true,
+                                                            "value":  "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "value":  1271518194,
+                                                           "mode":  "list",
+                                                           "cachedResultName":  "Reservas_Activas",
+                                                           "cachedResultUrl":  "https://docs.google.com/spreadsheets/d/1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8/edit#gid=1271518194"
+                                                       },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+                                                                       "ID_Reserva":  "{{ $json.idReserva }}",
+                                                                       "Fecha":  "{{ $json.fechaFormateada }}",
+                                                                       "Franja":  "{{ $json.franja }}",
+                                                                       "Nombre":  "{{ $json.nombre }}",
+                                                                       "Telefono":  "{{ $json.telefono }}",
+                                                                       "Personas":  "{{ $json.personas }}",
+                                                                       "Estado":  "confirmada",
+                                                                       "Notas":  "{{ $json.notas }}",
+                                                                       "Fecha_Creacion":  "{{ $json.ahora }}",
+                                                                       "Fecha_Modificacion":  "{{ $json.ahora }}",
+                                                                       "Call_ID":  "{{ $json.call_id }}",
+                                                                       "Origen":  "{{ $json.origen }}",
+                                                                       "Calendar_Event_ID":  "{{ $json.tituloEvento }}"
+                                                                   },
+                                                         "matchingColumns":  [
+
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "ID_Reserva",
+                                                                            "displayName":  "ID_Reserva",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha",
+                                                                            "displayName":  "Fecha",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Franja",
+                                                                            "displayName":  "Franja",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Nombre",
+                                                                            "displayName":  "Nombre",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Telefono",
+                                                                            "displayName":  "Telefono",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Personas",
+                                                                            "displayName":  "Personas",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Estado",
+                                                                            "displayName":  "Estado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Notas",
+                                                                            "displayName":  "Notas",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Creacion",
+                                                                            "displayName":  "Fecha_Creacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Modificacion",
+                                                                            "displayName":  "Fecha_Modificacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Call_ID",
+                                                                            "displayName":  "Call_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Origen",
+                                                                            "displayName":  "Origen",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Recordatorio_Enviado",
+                                                                            "displayName":  "Recordatorio_Enviado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Calendar_Event_ID",
+                                                                            "displayName":  "Calendar_Event_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "row_number",
+                                                                            "displayName":  "row_number",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "number",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "readOnly":  true,
+                                                                            "removed":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "8cf63e44-6955-41e7-9fb3-ce02103e0306",
+                      "name":  "Marcar Cancelada en Activas",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4.6,
+                      "position":  [
+                                       608,
+                                       976
+                                   ],
+                      "credentials":  {
+                                          "googleSheetsOAuth2Api":  {
+                                                                        "id":  "EJ0DSUb87ZX7u8RL",
+                                                                        "name":  "Google Sheets OAuth2 API"
+                                                                    }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "boolean":  [
+                                                                        {
+                                                                            "name":  "cancelado",
+                                                                            "value":  true
+                                                                        }
+                                                                    ],
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "resumen",
+                                                                           "value":  "{{ $(\u0027Buscar Reserva\u0027).first().json.resumen }}"
+                                                                       }
+                                                                   ]
+                                                    },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "f810b48d-9675-4ce8-aef2-8516ab7d4f60",
+                      "name":  "Respuesta Cancelaciï¿½n OK",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  1,
+                      "position":  [
+                                       832,
+                                       976
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "boolean":  [
+                                                                        {
+                                                                            "name":  "cancelado"
+                                                                        }
+                                                                    ],
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "resumen",
+                                                                           "value":  "{{ $(\u0027Buscar Reserva\u0027).first().json.resumen }}"
+                                                                       }
+                                                                   ]
+                                                    },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "c2483d99-5fc8-4be5-aea8-34e9260e336d",
+                      "name":  "Respuesta No Encontrado",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  1,
+                      "position":  [
+                                       192,
+                                       1200
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ JSON.stringify($json) }}",
+                                         "options":  {
+                                                         "responseCode":  200,
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Content-Type",
+                                                                                                     "value":  "application/json"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "c2a5fd8c-25b3-464b-86e8-83d4a7db5afd",
+                      "name":  "Responder a Retell",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1072,
+                                       1056
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const raw = $input.first().json.body || $input.first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === \u0027string\u0027 ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst nombre   = String(body.nombre   || \u0027\u0027).trim();\nconst telefono = String(body.telefono || \u0027\u0027).trim();\nconst personas = parseInt(body.personas) || 0;\nconst fecha    = String(body.fecha    || \u0027\u0027).trim(); // yyyy-mm-dd\nconst franja   = String(body.franja   || \u0027\u0027).trim(); // almuerzo | cena\nconst notas    = String(body.notas    || \u0027\u0027).trim();\n\nif (!nombre || !telefono || !personas || !fecha || !franja) {\n  return [{ json: { error: true, mensaje: \u0027Faltan datos para crear la reserva.\u0027 } }];\n}\n\n// ID de reserva\nconst fechaCompacta = fecha.replace(/-/g, \u0027\u0027);\nconst inicialFranja = franja === \u0027almuerzo\u0027 ? \u0027A\u0027 : \u0027C\u0027;\nconst aleatorio     = Math.random().toString(36).toUpperCase().substring(2, 6);\nconst idReserva     = `${fechaCompacta}${inicialFranja}-${aleatorio}`;\n\n// Fecha formateada para Sheets (dd/mm/yyyy)\nconst [year, month, day] = fecha.split(\u0027-\u0027);\nconst fechaFormateada = `${day}/${month}/${year}`;\n\n// Fechas-hora para Google Calendar (formato ISO 8601 con zona horaria)\n// Almuerzo: 13:30 - 16:00 | Cena: 20:30 - 23:59\nconst horaInicio = franja === \u0027almuerzo\u0027 ? \u002713:30:00\u0027 : \u002720:30:00\u0027;\nconst horaFin    = franja === \u0027almuerzo\u0027 ? \u002716:00:00\u0027 : \u002723:59:00\u0027;\nconst fechaHoraInicio = `${fecha}T${horaInicio}`;\nconst fechaHoraFin    = `${fecha}T${horaFin}`;\n\n// Tï¿½tulo y descripciï¿½n del evento de calendario\nconst apellido  = nombre.split(\u0027 \u0027).pop();\nconst tituloEvento = `Ekis - ${apellido} (${personas} pers.) - ${franja}`;\nconst descripcion  = `Reserva ID: ${idReserva}\\nNombre: ${nombre}\\nTelï¿½fono: ${telefono}\\nPersonas: ${personas}\\nFranja: ${franja}${notas ? \u0027\\nNotas: \u0027 + notas : \u0027\u0027}`;\n\n// Texto natural para confirmar a Carmen\nconst diasSemana = [\u0027domingo\u0027,\u0027lunes\u0027,\u0027martes\u0027,\u0027miï¿½rcoles\u0027,\u0027jueves\u0027,\u0027viernes\u0027,\u0027sï¿½bado\u0027];\nconst diaSemana  = diasSemana[new Date(fecha).getDay()];\nconst franjaTexto = franja === \u0027almuerzo\u0027 ? \u0027a mediodï¿½a\u0027 : \u0027por la noche\u0027;\nconst mensajeConfirmacion = `Reserva confirmada a nombre de ${apellido}, para ${personas} ${personas === 1 ? \u0027persona\u0027 : \u0027personas\u0027}, el ${diaSemana} ${franjaTexto}. Te esperamos.`;\n\nconst ahora = new Date().toISOString().replace(\u0027T\u0027, \u0027 \u0027).substring(0, 19);\n\nreturn [{ json: {\n  error: false,\n  idReserva, nombre, apellido, telefono, personas, fecha, franja, notas,\n  fechaFormateada,\n  fechaHoraInicio, fechaHoraFin,\n  tituloEvento, descripcion,\n  mensajeConfirmacion,\n  ahora\n}}];"
+                                     },
+                      "id":  "cff69640-3fd4-45c9-b0a5-fb1fef8af70b",
+                      "name":  "Preparar Datos",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -576,
+                                       480
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "append",
+                                         "documentId":  {
+                                                            "mode":  "id",
+                                                            "__rl":  true,
+                                                            "value":  "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "value":  1271518194,
+                                                           "mode":  "list",
+                                                           "cachedResultName":  "Reservas_Activas",
+                                                           "cachedResultUrl":  "https://docs.google.com/spreadsheets/d/1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8/edit#gid=1271518194"
+                                                       },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+                                                                       "ID_Reserva":  "{{ $json.idReserva }}",
+                                                                       "Fecha":  "{{ $json.fechaFormateada }}",
+                                                                       "Franja":  "{{ $json.franja }}",
+                                                                       "Nombre":  "{{ $json.nombre }}",
+                                                                       "Telefono":  "{{ $json.telefono }}",
+                                                                       "Personas":  "{{ $json.personas }}",
+                                                                       "Estado":  "confirmada",
+                                                                       "Notas":  "{{ $json.notas }}",
+                                                                       "Fecha_Creacion":  "{{ $json.ahora }}",
+                                                                       "Fecha_Modificacion":  "{{ $json.ahora }}",
+                                                                       "Call_ID":  "{{ $json.call_id }}",
+                                                                       "Origen":  "{{ $json.origen }}",
+                                                                       "Calendar_Event_ID":  "{{ $json.tituloEvento }}"
+                                                                   },
+                                                         "matchingColumns":  [
+
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "ID_Reserva",
+                                                                            "displayName":  "ID_Reserva",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha",
+                                                                            "displayName":  "Fecha",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Franja",
+                                                                            "displayName":  "Franja",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Nombre",
+                                                                            "displayName":  "Nombre",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Telefono",
+                                                                            "displayName":  "Telefono",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Personas",
+                                                                            "displayName":  "Personas",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Estado",
+                                                                            "displayName":  "Estado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Notas",
+                                                                            "displayName":  "Notas",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Creacion",
+                                                                            "displayName":  "Fecha_Creacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Modificacion",
+                                                                            "displayName":  "Fecha_Modificacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Call_ID",
+                                                                            "displayName":  "Call_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Origen",
+                                                                            "displayName":  "Origen",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Recordatorio_Enviado",
+                                                                            "displayName":  "Recordatorio_Enviado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Calendar_Event_ID",
+                                                                            "displayName":  "Calendar_Event_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "5a8d92da-b4fa-4b12-a6ce-b2984b56313e",
+                      "name":  "Guardar en Reservas_Activas",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4.6,
+                      "position":  [
+                                       -144,
+                                       368
+                                   ],
+                      "credentials":  {
+                                          "googleSheetsOAuth2Api":  {
+                                                                        "id":  "EJ0DSUb87ZX7u8RL",
+                                                                        "name":  "Google Sheets OAuth2 API"
+                                                                    }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "boolean":  [
+                                                                        {
+                                                                            "name":  "confirmado",
+                                                                            "value":  true
+                                                                        }
+                                                                    ],
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "id_reserva",
+                                                                           "value":  "{{ $(\u0027Preparar Datos\u0027).first().json.idReserva }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "resumen",
+                                                                           "value":  "{{ $(\u0027Preparar Datos\u0027).first().json.tituloEvento }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "mensaje_confirmacion",
+                                                                           "value":  "{{ $(\u0027Preparar Datos\u0027).first().json.mensajeConfirmacion }}"
+                                                                       }
+                                                                   ]
+                                                    },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "5bfeb837-88b4-4eea-aaca-72d11121db81",
+                      "name":  "Construir Respuesta",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  1,
+                      "position":  [
+                                       80,
+                                       368
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "boolean":  [
+                                                                        {
+                                                                            "name":  "confirmado"
+                                                                        }
+                                                                    ],
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "mensaje_confirmacion",
+                                                                           "value":  "Ha habido un problema tï¿½cnico al registrar la reserva. Por favor, llama en unos minutos."
+                                                                       }
+                                                                   ]
+                                                    },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "4d9a9937-bb8c-49a5-98e1-949ba31a9f51",
+                      "name":  "Respuesta Error",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -128,
+                                       592
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "crear-reserva",
+                                         "responseMode":  "lastNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "a242fca6-b242-4a4f-9b17-c13a6c948ed1",
+                      "name":  "Retell Tool Call1",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -800,
+                                       480
+                                   ],
+                      "webhookId":  "1f080e28-cd1f-432b-9543-dd11a3764cf5"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ JSON.stringify($json) }}",
+                                         "options":  {
+                                                         "responseCode":  200,
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Content-Type",
+                                                                                                     "value":  "application/json"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "3558ec4b-328d-408d-b90a-0832dfa4250a",
+                      "name":  "Responder a Retell1",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       304,
+                                       480
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const webhookRaw = $(\u0027Retell Tool Call2\u0027).first().json.body || $(\u0027Retell Tool Call2\u0027).first().json;\nlet body;\nif (webhookRaw.arguments !== undefined) {\n  body = typeof webhookRaw.arguments === \u0027string\u0027 ? JSON.parse(webhookRaw.arguments) : webhookRaw.arguments;\n} else {\n  body = webhookRaw;\n}\n\nconst telefono   = String(body.telefono    || \u0027\u0027).trim();\nconst fechaActual = String(body.fecha_actual || \u0027\u0027).trim();\nconst nuevaFecha  = body.nueva_fecha   ? String(body.nueva_fecha).trim()  : null;\nconst nuevaFranja = body.nueva_franja  ? String(body.nueva_franja).trim() : null;\nconst nuevasPersonas = body.nuevas_personas ? parseInt(body.nuevas_personas) : null;\n\nif (!telefono || !fechaActual) {\n  return [{ json: { encontrado: false, resumen_nuevo: \u0027Necesito el telï¿½fono y la fecha actual de la reserva.\u0027 } }];\n}\n\nconst [ya, ma, da] = fechaActual.split(\u0027-\u0027);\nconst fechaFormateadaBusqueda = `${da}/${ma}/${ya}`;\n\nconst reservas = $input.all().map(item =\u003e item.json);\n\nconst reserva = reservas.find(r =\u003e {\n  const tel = String(r[\u0027Telï¿½fono\u0027] || r[\u0027Telefono\u0027] || \u0027\u0027).replace(/\\s/g, \u0027\u0027);\n  const fechaR = String(r[\u0027Fecha\u0027] || \u0027\u0027).trim();\n  const estado = String(r[\u0027Estado\u0027] || \u0027\u0027).toLowerCase();\n  const activo = [\u0027confirmada\u0027,\u0027en_espera\u0027,\u0027recordatorio_enviado\u0027].includes(estado);\n  const telOk  = tel === telefono.replace(/\\s/g, \u0027\u0027);\n  const fechaOk = fechaR === fechaActual || fechaR === fechaFormateadaBusqueda;\n  return telOk \u0026\u0026 fechaOk \u0026\u0026 activo;\n});\n\nif (!reserva) {\n  return [{ json: {\n    encontrado: false,\n    resumen_nuevo: `No encuentro ninguna reserva activa para ese telï¿½fono el ${fechaFormateadaBusqueda}. ï¿½Puede que sea en otra fecha?`\n  }}];\n}\n\n// Valores finales tras la modificaciï¿½n\nconst fechaFinal    = nuevaFecha   || fechaActual;\nconst franjaFinal   = nuevaFranja  || String(reserva[\u0027Franja\u0027] || \u0027\u0027);\nconst personasFinal = nuevasPersonas || parseInt(reserva[\u0027Personas\u0027]) || 0;\nconst calEventId    = reserva[\u0027Calendar_Event_ID\u0027] || \u0027\u0027;\nconst nombre        = reserva[\u0027Nombre\u0027] || \u0027\u0027;\nconst apellido      = nombre.split(\u0027 \u0027).pop() || nombre;\n\n// Fecha formateada para Sheets\nlet fechaFinalFormateada;\nif (nuevaFecha) {\n  const [ny, nm, nd] = nuevaFecha.split(\u0027-\u0027);\n  fechaFinalFormateada = `${nd}/${nm}/${ny}`;\n} else {\n  fechaFinalFormateada = reserva[\u0027Fecha\u0027];\n}\n\n// Fechas-hora para Calendar\nconst horaInicio = franjaFinal === \u0027almuerzo\u0027 ? \u002713:30:00\u0027 : \u002720:30:00\u0027;\nconst horaFin    = franjaFinal === \u0027almuerzo\u0027 ? \u002716:00:00\u0027 : \u002723:59:00\u0027;\nconst fechaHoraInicio = `${fechaFinal}T${horaInicio}`;\nconst fechaHoraFin    = `${fechaFinal}T${horaFin}`;\nconst tituloEvento    = `Ekis - ${apellido} (${personasFinal} pers.) - ${franjaFinal} [MODIFICADA]`;\n\n// Mensaje para Carmen\nconst diasSemana  = [\u0027domingo\u0027,\u0027lunes\u0027,\u0027martes\u0027,\u0027miï¿½rcoles\u0027,\u0027jueves\u0027,\u0027viernes\u0027,\u0027sï¿½bado\u0027];\nconst diaSemana   = diasSemana[new Date(fechaFinal).getDay()];\nconst franjaTexto = franjaFinal === \u0027almuerzo\u0027 ? \u0027a mediodï¿½a\u0027 : \u0027por la noche\u0027;\nconst ahora = new Date().toISOString().replace(\u0027T\u0027,\u0027 \u0027).substring(0,19);\n\nreturn [{ json: {\n  encontrado:    true,\n  calEventId,\n  fechaFinal, fechaFinalFormateada, franjaFinal, personasFinal,\n  fechaHoraInicio, fechaHoraFin, tituloEvento,\n  telefono,\n  idReserva:  reserva[\u0027ID_Reserva\u0027] || \u0027\u0027,\n  ahora,\n  resumen_nuevo: `Reserva de ${apellido} actualizada: ${diaSemana} ${franjaTexto}, ${personasFinal} personas`\n}}];"
+                                     },
+                      "id":  "41e2e910-4a62-4dbd-955a-62a75b69cfaf",
+                      "name":  "Buscar y Preparar Modificaciï¿½n",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -272,
+                                       -16
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "append",
+                                         "documentId":  {
+                                                            "mode":  "id",
+                                                            "__rl":  true,
+                                                            "value":  "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "value":  1271518194,
+                                                           "mode":  "list",
+                                                           "cachedResultName":  "Reservas_Activas",
+                                                           "cachedResultUrl":  "https://docs.google.com/spreadsheets/d/1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8/edit#gid=1271518194"
+                                                       },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+
+                                                                   },
+                                                         "matchingColumns":  [
+                                                                                 "id"
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "ID_Reserva",
+                                                                            "displayName":  "ID_Reserva",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha",
+                                                                            "displayName":  "Fecha",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Franja",
+                                                                            "displayName":  "Franja",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Nombre",
+                                                                            "displayName":  "Nombre",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Telefono",
+                                                                            "displayName":  "Telefono",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Personas",
+                                                                            "displayName":  "Personas",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Estado",
+                                                                            "displayName":  "Estado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Notas",
+                                                                            "displayName":  "Notas",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Creacion",
+                                                                            "displayName":  "Fecha_Creacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Fecha_Modificacion",
+                                                                            "displayName":  "Fecha_Modificacion",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Call_ID",
+                                                                            "displayName":  "Call_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Origen",
+                                                                            "displayName":  "Origen",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Recordatorio_Enviado",
+                                                                            "displayName":  "Recordatorio_Enviado",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "Calendar_Event_ID",
+                                                                            "displayName":  "Calendar_Event_ID",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "88280c44-b107-42ef-958c-797df85fab16",
+                      "name":  "Actualizar en Sheets",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4.6,
+                      "position":  [
+                                       768,
+                                       -96
+                                   ],
+                      "credentials":  {
+                                          "googleSheetsOAuth2Api":  {
+                                                                        "id":  "EJ0DSUb87ZX7u8RL",
+                                                                        "name":  "Google Sheets OAuth2 API"
+                                                                    }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "boolean":  [
+                                                                        {
+                                                                            "name":  "modificado",
+                                                                            "value":  true
+                                                                        }
+                                                                    ],
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "id_reserva",
+                                                                           "value":  "{{ $(\u0027Buscar y Preparar Modificaciï¿½n\u0027).first().json.idReserva }}"
+                                                                       },
+                                                                       {
+                                                                           "name":  "resumen_nuevo",
+                                                                           "value":  "{{ $(\u0027Buscar y Preparar Modificaciï¿½n\u0027).first().json.resumen_nuevo }}"
+                                                                       }
+                                                                   ]
+                                                    },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "fd21eabc-06bd-4518-a2ad-1939d2404f5d",
+                      "name":  "Respuesta Modificaciï¿½n OK",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  1,
+                      "position":  [
+                                       960,
+                                       -96
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "modificar-reserva",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "541608d9-649a-4e4b-969c-5cf10f5afb3d",
+                      "name":  "Retell Tool Call2",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -704,
+                                       -16
+                                   ],
+                      "webhookId":  "33f4f01a-c2a6-418e-b1ec-cfdb88d472bd"
+                  },
+                  {
+                      "parameters":  {
+                                         "documentId":  {
+                                                            "mode":  "id",
+                                                            "__rl":  true,
+                                                            "value":  "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "value":  1271518194,
+                                                           "mode":  "list",
+                                                           "cachedResultName":  "Reservas_Activas",
+                                                           "cachedResultUrl":  "https://docs.google.com/spreadsheets/d/1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8/edit#gid=1271518194"
+                                                       },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "ba734468-eeb2-48d3-91c8-c7dc99ee2490",
+                      "name":  "Leer Reservas Activas1",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4.6,
+                      "position":  [
+                                       -496,
+                                       -16
+                                   ],
+                      "credentials":  {
+                                          "googleSheetsOAuth2Api":  {
+                                                                        "id":  "EJ0DSUb87ZX7u8RL",
+                                                                        "name":  "Google Sheets OAuth2 API"
+                                                                    }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "boolean":  [
+                                                                            {
+                                                                                "value1":  "{{ $json.encontrado }}",
+                                                                                "value2":  true
+                                                                            }
+                                                                        ]
+                                                        }
+                                     },
+                      "id":  "37b49819-14a6-4168-8532-d0e1926ebac2",
+                      "name":  "ï¿½Reserva encontrada?1",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -48,
+                                       -16
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "string":  [
+                                                                           {
+                                                                               "value1":  "{{ $json.calEventId }}",
+                                                                               "operation":  "isNotEmpty"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "57123ef4-fcd9-483a-ae2f-289d42a6ae80",
+                      "name":  "ï¿½Tiene Calendar Event?1",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [
+                                       176,
+                                       -112
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "boolean":  [
+                                                                        {
+                                                                            "name":  "modificado"
+                                                                        }
+                                                                    ],
+                                                        "string":  [
+                                                                       {
+                                                                           "name":  "id_reserva"
+                                                                       },
+                                                                       {
+                                                                           "name":  "resumen_nuevo",
+                                                                           "value":  "{{ $(\u0027Buscar y Preparar Modificaciï¿½n\u0027).first().json.resumen_nuevo }}"
+                                                                       }
+                                                                   ]
+                                                    },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "983f04d7-6544-4245-b957-d81e42feed1f",
+                      "name":  "Respuesta No Encontrado1",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  1,
+                      "position":  [
+                                       464,
+                                       96
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ JSON.stringify($json) }}",
+                                         "options":  {
+                                                         "responseCode":  200,
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Content-Type",
+                                                                                                     "value":  "application/json"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "0c151b30-ea01-4ed1-8057-61c2bfde802c",
+                      "name":  "Responder a Retell2",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1200,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "// Obtener parï¿½metros del webhook original\nconst nombreNodoWebhook = \u0027Retell Tool Call3\u0027; // sustituir con el nombre real\nconst webhookJson = .first().json;\nconst webhookRaw = webhookJson.body || webhookJson;\nlet body;\nif (webhookRaw.arguments !== undefined) {\n  body = typeof webhookRaw.arguments === \u0027string\u0027 ? JSON.parse(webhookRaw.arguments) : webhookRaw.arguments;\n} else {\n  body = webhookRaw;\n}\n\nconst fechaSolicitada = String(body.fecha || \u0027\u0027).trim();\nconst franjaSolicitada = String(body.franja || \u0027\u0027).trim();\nconst personasSolicitadas = parseInt(body.personas) || 1;\n\nif (!fechaSolicitada || !franjaSolicitada) {\n  return [{ json: {\n    disponible: false,\n    personas_disponibles: 0,\n    proxima_disponible: null,\n    mensaje: \u0027No recibï¿½ la fecha o la franja para comprobar disponibilidad.\u0027\n  }}];\n}\n\nconst CAPACIDAD_MAXIMA = 45;\n\nconst todasLasReservas = .all().map(item =\u003e item.json);\n\nconst estadosActivos = [\u0027confirmada\u0027, \u0027en_espera\u0027, \u0027recordatorio_enviado\u0027];\nconst reservasDelSlot = todasLasReservas.filter(r =\u003e {\n  const fechaReserva = String(r[\u0027Fecha\u0027] || \u0027\u0027).trim();\n  const franjaReserva = String(r[\u0027Franja\u0027] || \u0027\u0027).toLowerCase().trim();\n  const estadoReserva = String(r[\u0027Estado\u0027] || \u0027\u0027).toLowerCase().trim();\n  const fechaMatch = fechaReserva === fechaSolicitada ||\n    fechaReserva === fechaSolicitada.split(\u0027-\u0027).reverse().join(\u0027/\u0027);\n  return fechaMatch \u0026\u0026 franjaReserva === franjaSolicitada \u0026\u0026 estadosActivos.includes(estadoReserva);\n});\n\nconst personasOcupadas = reservasDelSlot.reduce((sum, r) =\u003e sum + (parseInt(r[\u0027Personas\u0027]) || 0), 0);\nconst personasDisponibles = CAPACIDAD_MAXIMA - personasOcupadas;\nconst disponible = personasDisponibles \u003e= personasSolicitadas;\n\nlet proximaDisponible = null;\nif (!disponible) {\n  const fechaBase = new Date(fechaSolicitada);\n  for (let d = 1; d \u003c= 7; d++) {\n    const fecha = new Date(fechaBase);\n    fecha.setDate(fecha.getDate() + d);\n    const diaSemana = fecha.getDay();\n    if (diaSemana === 1) continue;\n    const fechaStr = fecha.toISOString().split(\u0027T\u0027)[0];\n    const reservasProximo = todasLasReservas.filter(r =\u003e {\n      const fechaR = String(r[\u0027Fecha\u0027] || \u0027\u0027).trim();\n      const franjaR = String(r[\u0027Franja\u0027] || \u0027\u0027).toLowerCase().trim();\n      const estadoR = String(r[\u0027Estado\u0027] || \u0027\u0027).toLowerCase().trim();\n      const fechaMatch = fechaR === fechaStr || fechaR === fechaStr.split(\u0027-\u0027).reverse().join(\u0027/\u0027);\n      return fechaMatch \u0026\u0026 franjaR === franjaSolicitada \u0026\u0026 estadosActivos.includes(estadoR);\n    });\n    const personasProximo = reservasProximo.reduce((s, r) =\u003e s + (parseInt(r[\u0027Personas\u0027]) || 0), 0);\n    const disponiblesProximo = CAPACIDAD_MAXIMA - personasProximo;\n    if (disponiblesProximo \u003e= personasSolicitadas) {\n      const diasSemana = [\u0027domingo\u0027,\u0027lunes\u0027,\u0027martes\u0027,\u0027miï¿½rcoles\u0027,\u0027jueves\u0027,\u0027viernes\u0027,\u0027sï¿½bado\u0027];\n      proximaDisponible = {\n        fecha: fechaStr,\n        franja: franjaSolicitada,\n        personas_disponibles: disponiblesProximo,\n        dia_semana: diasSemana[diaSemana]\n      };\n      break;\n    }\n  }\n}\n\nconst franjaTexto = franjaSolicitada === \u0027almuerzo\u0027 ? \u0027al mediodï¿½a\u0027 : \u0027por la noche\u0027;\nlet mensaje;\nif (disponible) {\n  mensaje = ;\n} else if (proximaDisponible) {\n  const { dia_semana, franja } = proximaDisponible;\n  const franjaProxTexto = franja === \u0027almuerzo\u0027 ? \u0027a mediodï¿½a\u0027 : \u0027por la noche\u0027;\n  mensaje = ;\n} else {\n  mensaje = ;\n}\n\nreturn [{ json: {\n  disponible,\n  personas_disponibles: personasDisponibles \u003e 0 ? personasDisponibles : 0,\n  proxima_disponible: proximaDisponible,\n  mensaje\n}}];"
+                                     },
+                      "id":  "7be151df-a89f-48e3-b2a5-b94eacdf72b3",
+                      "name":  "Calcular Disponibilidad",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -208,
+                                       -512
+                                   ],
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "verificar-disponibilidad",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "582b2917-3263-42c0-bece-74e494ee5fef",
+                      "name":  "Retell Tool Call3",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -656,
+                                       -512
+                                   ],
+                      "webhookId":  "51d9aecf-a8da-45a3-b385-3ab43960ff54"
+                  },
+                  {
+                      "parameters":  {
+                                         "documentId":  {
+                                                            "mode":  "id",
+                                                            "__rl":  true,
+                                                            "value":  "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "value":  1271518194,
+                                                           "mode":  "list",
+                                                           "cachedResultName":  "Reservas_Activas",
+                                                           "cachedResultUrl":  "https://docs.google.com/spreadsheets/d/1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8/edit#gid=1271518194"
+                                                       },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "d08de675-4311-4caa-8dd9-353171de9e63",
+                      "name":  "Leer Reservas Activas2",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4.6,
+                      "position":  [
+                                       -432,
+                                       -512
+                                   ],
+                      "credentials":  {
+                                          "googleSheetsOAuth2Api":  {
+                                                                        "id":  "EJ0DSUb87ZX7u8RL",
+                                                                        "name":  "Google Sheets OAuth2 API"
+                                                                    }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ JSON.stringify($json) }}",
+                                         "options":  {
+                                                         "responseCode":  200,
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Content-Type",
+                                                                                                     "value":  "application/json"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "1096c7d1-87c8-476f-92cd-d87c54dbe6e1",
+                      "name":  "Responder a Retell3",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       16,
+                                       -512
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "update",
+                                         "calendar":  {
+                                                          "__rl":  true,
+                                                          "value":  "ekis.recepcionista@gmail.com",
+                                                          "mode":  "list",
+                                                          "cachedResultName":  "ekis.recepcionista@gmail.com"
+                                                      },
+                                         "eventId":  "={{ $json.calEventId }}",
+                                         "updateFields":  {
+
+                                                          }
+                                     },
+                      "type":  "n8n-nodes-base.googleCalendar",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       464,
+                                       -176
+                                   ],
+                      "id":  "f54c819a-43e2-4863-8327-f039ea3e2060",
+                      "name":  "Update an event",
+                      "credentials":  {
+                                          "googleCalendarOAuth2Api":  {
+                                                                          "id":  "Y5RF1G0HEnX3tnhR",
+                                                                          "name":  "Google Calendar account 2"
+                                                                      }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "calendar":  {
+                                                          "__rl":  true,
+                                                          "value":  "ekis.recepcionista@gmail.com",
+                                                          "mode":  "list",
+                                                          "cachedResultName":  "ekis.recepcionista@gmail.com"
+                                                      },
+                                         "additionalFields":  {
+
+                                                              }
+                                     },
+                      "type":  "n8n-nodes-base.googleCalendar",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       -352,
+                                       480
+                                   ],
+                      "id":  "c3598995-fc7d-40bf-a0db-c6f275472991",
+                      "name":  "Create an event",
+                      "credentials":  {
+                                          "googleCalendarOAuth2Api":  {
+                                                                          "id":  "Y5RF1G0HEnX3tnhR",
+                                                                          "name":  "Google Calendar account 2"
+                                                                      }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "delete",
+                                         "calendar":  {
+                                                          "__rl":  true,
+                                                          "value":  "ekis.recepcionista@gmail.com",
+                                                          "mode":  "list",
+                                                          "cachedResultName":  "ekis.recepcionista@gmail.com"
+                                                      },
+                                         "eventId":  "={{ $json.calEventId }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.googleCalendar",
+                      "typeVersion":  1.3,
+                      "position":  [
+                                       176,
+                                       880
+                                   ],
+                      "id":  "5020c372-67c8-42dd-a0e8-cf380792bbae",
+                      "name":  "Delete an event",
+                      "credentials":  {
+                                          "googleCalendarOAuth2Api":  {
+                                                                          "id":  "Y5RF1G0HEnX3tnhR",
+                                                                          "name":  "Google Calendar account 2"
+                                                                      }
+                                      }
+                  }
+              ]
+}

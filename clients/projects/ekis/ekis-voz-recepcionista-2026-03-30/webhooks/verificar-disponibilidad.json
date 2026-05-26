@@ -1,0 +1,99 @@
+{
+  "_description": "Workflow n8n — Verificar disponibilidad para una fecha, franja y número de personas.",
+  "_version": "1.0",
+  "_proyecto": "Ekis — Demo Recepcionista Voz — HAT3X",
+  "_retell_tool": "verificar_disponibilidad",
+  "_retell_url": "POST /webhook/verificar-disponibilidad",
+  "_response_schema": {
+    "disponible": "boolean",
+    "personas_disponibles": "integer",
+    "proxima_disponible": "null | {fecha, franja, personas_disponibles}",
+    "mensaje": "string (lo que Carmen lee en voz alta)"
+  },
+
+  "name": "Ekis — Verificar Disponibilidad",
+  "nodes": [
+    {
+      "id": "webhook-input",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "parameters": {
+        "path": "verificar-disponibilidad",
+        "method": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "read-reservas",
+      "name": "Leer Reservas Activas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [220, 300],
+      "parameters": {
+        "operation": "read",
+        "documentId": "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8",
+        "sheetName": "Reservas_Activas",
+        "options": {
+          "headerRow": 1,
+          "firstDataRow": 2
+        }
+      }
+    },
+    {
+      "id": "calcular-disponibilidad",
+      "name": "Calcular Disponibilidad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "// Parámetros recibidos de Retell\nconst raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\nconst fechaSolicitada = body.fecha;   // '2026-04-15'\nconst franjaSolicitada = body.franja; // 'almuerzo' | 'cena'\nconst personasSolicitadas = parseInt(body.personas) || 1;\n\n// Capacidad máxima del restaurante (45 en sala)\nconst CAPACIDAD_MAXIMA = 45;\n\n// Leer todas las reservas activas\nconst todasLasReservas = $input.all().map(item => item.json);\n\n// Filtrar por fecha + franja + estado activo\nconst estadosActivos = ['confirmada', 'en_espera', 'recordatorio_enviado'];\nconst reservasDelSlot = todasLasReservas.filter(r => {\n  const fechaReserva = String(r['Fecha'] || '').trim();\n  const franjaReserva = String(r['Franja'] || '').toLowerCase().trim();\n  const estadoReserva = String(r['Estado'] || '').toLowerCase().trim();\n  \n  // La fecha en Sheets puede ser 'dd/mm/yyyy' o 'yyyy-mm-dd'\n  // Comparamos directamente contra ambos formatos\n  const fechaMatch = fechaReserva === fechaSolicitada || \n    fechaReserva === fechaSolicitada.split('-').reverse().join('/');\n  \n  return fechaMatch && franjaReserva === franjaSolicitada && estadosActivos.includes(estadoReserva);\n});\n\n// Sumar personas ya reservadas en ese slot\nconst personasOcupadas = reservasDelSlot.reduce((sum, r) => {\n  return sum + (parseInt(r['Personas']) || 0);\n}, 0);\n\nconst personasDisponibles = CAPACIDAD_MAXIMA - personasOcupadas;\nconst disponible = personasDisponibles >= personasSolicitadas;\n\n// Buscar próximo slot disponible si no hay para el solicitado\nlet proximaDisponible = null;\nif (!disponible) {\n  // Buscar en los próximos 7 días, mismo franja\n  const fechaBase = new Date(fechaSolicitada);\n  for (let d = 1; d <= 7; d++) {\n    const fecha = new Date(fechaBase);\n    fecha.setDate(fecha.getDate() + d);\n    \n    // Saltar lunes (día 1 = lunes en getDay, 0 = domingo)\n    const diaSemana = fecha.getDay();\n    if (diaSemana === 1) continue; // Lunes: cerrado\n    \n    const fechaStr = fecha.toISOString().split('T')[0]; // 'yyyy-mm-dd'\n    \n    const reservasProximo = todasLasReservas.filter(r => {\n      const fechaR = String(r['Fecha'] || '').trim();\n      const franjaR = String(r['Franja'] || '').toLowerCase().trim();\n      const estadoR = String(r['Estado'] || '').toLowerCase().trim();\n      const fechaMatch = fechaR === fechaStr || \n        fechaR === fechaStr.split('-').reverse().join('/');\n      return fechaMatch && franjaR === franjaSolicitada && estadosActivos.includes(estadoR);\n    });\n    \n    const personasProximo = reservasProximo.reduce((s, r) => s + (parseInt(r['Personas']) || 0), 0);\n    const disponiblesProximo = CAPACIDAD_MAXIMA - personasProximo;\n    \n    if (disponiblesProximo >= personasSolicitadas) {\n      const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\n      proximaDisponible = {\n        fecha: fechaStr,\n        franja: franjaSolicitada,\n        personas_disponibles: disponiblesProximo,\n        dia_semana: diasSemana[diaSemana]\n      };\n      break;\n    }\n  }\n}\n\n// Construir mensaje en lenguaje natural para Carmen\nconst franjaTexto = franjaSolicitada === 'almuerzo' ? 'al mediodía' : 'por la noche';\nlet mensaje;\nif (disponible) {\n  mensaje = `Disponibilidad confirmada para ${personasSolicitadas} personas`;\n} else if (proximaDisponible) {\n  const { dia_semana, fecha, franja } = proximaDisponible;\n  const franjaProxTexto = franja === 'almuerzo' ? 'a mediodía' : 'por la noche';\n  mensaje = `Sin disponibilidad para esa fecha. El siguiente hueco disponible es el ${dia_semana} ${franjaProxTexto}`;\n} else {\n  mensaje = `No hay disponibilidad en los próximos días para esa franja. Prueba con otra franja u otro momento.`;\n}\n\nreturn [{\n  json: {\n    disponible,\n    personas_disponibles: personasDisponibles > 0 ? personasDisponibles : 0,\n    proxima_disponible: proximaDisponible,\n    mensaje\n  }\n}];"
+      }
+    },
+    {
+      "id": "responder",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": {
+      "main": [[{ "node": "Leer Reservas Activas", "type": "main", "index": 0 }]]
+    },
+    "Leer Reservas Activas": {
+      "main": [[{ "node": "Calcular Disponibilidad", "type": "main", "index": 0 }]]
+    },
+    "Calcular Disponibilidad": {
+      "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "_instrucciones_importar": [
+    "1. n8n → Workflows → Import from file → seleccionar este JSON",
+    "2. Configurar credenciales Google Sheets (Google OAuth2 con cuenta de servicio)",
+    "3. Sustituir COMPLETAR_CON_ID_SPREADSHEET con el ID real de la hoja",
+    "4. Activar el workflow",
+    "5. Copiar la URL del webhook y pegarla en retell-config.md → tool verificar_disponibilidad → url"
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

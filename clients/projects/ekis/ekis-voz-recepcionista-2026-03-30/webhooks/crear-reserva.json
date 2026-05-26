@@ -1,0 +1,152 @@
+{
+  "_description": "Workflow n8n — Crear reserva nueva en Google Sheets + evento en Google Calendar.",
+  "_version": "2.0",
+  "_proyecto": "Ekis — Demo Recepcionista Voz — HAT3X",
+  "_cambios_v2": "Añadido nodo Google Calendar. El Calendar_Event_ID se guarda en columna N de Reservas_Activas.",
+
+  "name": "Ekis — Crear Reserva",
+  "nodes": [
+    {
+      "id": "webhook-input",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "parameters": {
+        "path": "crear-reserva",
+        "method": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "preparar-datos",
+      "name": "Preparar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst nombre   = String(body.nombre   || '').trim();\nconst telefono = String(body.telefono || '').trim();\nconst personas = parseInt(body.personas) || 0;\nconst fecha    = String(body.fecha    || '').trim(); // yyyy-mm-dd\nconst franja   = String(body.franja   || '').trim(); // almuerzo | cena\nconst notas    = String(body.notas    || '').trim();\n\nif (!nombre || !telefono || !personas || !fecha || !franja) {\n  return [{ json: { error: true, mensaje: 'Faltan datos para crear la reserva.' } }];\n}\n\n// ID de reserva\nconst fechaCompacta = fecha.replace(/-/g, '');\nconst inicialFranja = franja === 'almuerzo' ? 'A' : 'C';\nconst aleatorio     = Math.random().toString(36).toUpperCase().substring(2, 6);\nconst idReserva     = `${fechaCompacta}${inicialFranja}-${aleatorio}`;\n\n// Fecha formateada para Sheets (dd/mm/yyyy)\nconst [year, month, day] = fecha.split('-');\nconst fechaFormateada = `${day}/${month}/${year}`;\n\n// Fechas-hora para Google Calendar (formato ISO 8601 con zona horaria)\n// Almuerzo: 13:30 - 16:00 | Cena: 20:30 - 23:59\nconst horaInicio = franja === 'almuerzo' ? '13:30:00' : '20:30:00';\nconst horaFin    = franja === 'almuerzo' ? '16:00:00' : '23:59:00';\nconst fechaHoraInicio = `${fecha}T${horaInicio}`;\nconst fechaHoraFin    = `${fecha}T${horaFin}`;\n\n// Título y descripción del evento de calendario\nconst apellido  = nombre.split(' ').pop();\nconst tituloEvento = `Ekis — ${apellido} (${personas} pers.) — ${franja}`;\nconst descripcion  = `Reserva ID: ${idReserva}\\nNombre: ${nombre}\\nTeléfono: ${telefono}\\nPersonas: ${personas}\\nFranja: ${franja}${notas ? '\\nNotas: ' + notas : ''}`;\n\n// Texto natural para confirmar a Carmen\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst diaSemana  = diasSemana[new Date(fecha).getDay()];\nconst franjaTexto = franja === 'almuerzo' ? 'a mediodía' : 'por la noche';\nconst mensajeConfirmacion = `Reserva confirmada a nombre de ${apellido}, para ${personas} ${personas === 1 ? 'persona' : 'personas'}, el ${diaSemana} ${franjaTexto}. Te esperamos.`;\n\nconst ahora = new Date().toISOString().replace('T', ' ').substring(0, 19);\n\nreturn [{ json: {\n  error: false,\n  idReserva, nombre, apellido, telefono, personas, fecha, franja, notas,\n  fechaFormateada,\n  fechaHoraInicio, fechaHoraFin,\n  tituloEvento, descripcion,\n  mensajeConfirmacion,\n  ahora\n}}];"
+      }
+    },
+    {
+      "id": "crear-evento-calendar",
+      "name": "Crear Evento Google Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 2,
+      "position": [440, 200],
+      "parameters": {
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ekis.recepcionista@gmail.com"
+        },
+        "start": "={{ $json.fechaHoraInicio }}",
+        "end": "={{ $json.fechaHoraFin }}",
+        "additionalFields": {
+          "summary": "={{ $json.tituloEvento }}",
+          "description": "={{ $json.descripcion }}",
+          "location": "Restaurante Ekis, Calle de Serrano, 78, Madrid",
+          "colorId": "2",
+          "timezone": "Europe/Madrid"
+        }
+      }
+    },
+    {
+      "id": "guardar-en-sheets",
+      "name": "Guardar en Reservas_Activas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [660, 200],
+      "parameters": {
+        "operation": "append",
+        "documentId": "1MIKvRUbl47Q8hctGrOuV4e_c3t0Ei9hSPldkxQo48Q8",
+        "sheetName": "Reservas_Activas",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID_Reserva": "={{ $('Preparar Datos').first().json.idReserva }}",
+            "Fecha": "={{ $('Preparar Datos').first().json.fechaFormateada }}",
+            "Franja": "={{ $('Preparar Datos').first().json.franja }}",
+            "Nombre": "={{ $('Preparar Datos').first().json.nombre }}",
+            "Teléfono": "={{ $('Preparar Datos').first().json.telefono }}",
+            "Personas": "={{ $('Preparar Datos').first().json.personas }}",
+            "Estado": "confirmada",
+            "Notas": "={{ $('Preparar Datos').first().json.notas }}",
+            "Fecha_Creación": "={{ $('Preparar Datos').first().json.ahora }}",
+            "Fecha_Modificación": "",
+            "Call_ID": "",
+            "Origen": "telefono",
+            "Recordatorio_Enviado": "no",
+            "Calendar_Event_ID": "={{ $json.id }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "construir-respuesta",
+      "name": "Construir Respuesta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [880, 200],
+      "parameters": {
+        "values": {
+          "boolean": [{ "name": "confirmado", "value": true }],
+          "string": [
+            { "name": "id_reserva",            "value": "={{ $('Preparar Datos').first().json.idReserva }}" },
+            { "name": "resumen",               "value": "={{ $('Preparar Datos').first().json.tituloEvento }}" },
+            { "name": "mensaje_confirmacion",  "value": "={{ $('Preparar Datos').first().json.mensajeConfirmacion }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "responder",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1100, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200, "responseHeaders": { "entries": [{ "name": "Content-Type", "value": "application/json" }] } }
+      }
+    },
+    {
+      "id": "respuesta-error",
+      "name": "Respuesta Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [440, 400],
+      "parameters": {
+        "values": {
+          "boolean": [{ "name": "confirmado", "value": false }],
+          "string": [{ "name": "mensaje_confirmacion", "value": "Ha habido un problema técnico al registrar la reserva. Por favor, llama en unos minutos." }]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Retell Tool Call":            { "main": [[{ "node": "Preparar Datos",                  "type": "main", "index": 0 }]] },
+    "Preparar Datos":              { "main": [[{ "node": "Crear Evento Google Calendar",    "type": "main", "index": 0 }],
+                                             [{ "node": "Respuesta Error",                  "type": "main", "index": 0 }]] },
+    "Crear Evento Google Calendar":{ "main": [[{ "node": "Guardar en Reservas_Activas",     "type": "main", "index": 0 }]] },
+    "Guardar en Reservas_Activas": { "main": [[{ "node": "Construir Respuesta",             "type": "main", "index": 0 }]] },
+    "Construir Respuesta":         { "main": [[{ "node": "Responder a Retell",              "type": "main", "index": 0 }]] },
+    "Respuesta Error":             { "main": [[{ "node": "Responder a Retell",              "type": "main", "index": 0 }]] }
+  },
+
+  "_instrucciones_importar": [
+    "1. Importar en n8n",
+    "2. Configurar credenciales: Google Calendar OAuth2 + Google Sheets",
+    "3. Sustituir COMPLETAR_CON_GOOGLE_CALENDAR_ID con el ID del calendario (ej: primary o email@gmail.com)",
+    "4. Sustituir COMPLETAR_CON_ID_SPREADSHEET",
+    "5. Activar y copiar URL del webhook"
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

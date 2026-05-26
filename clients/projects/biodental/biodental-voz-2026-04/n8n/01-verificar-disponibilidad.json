@@ -1,0 +1,81 @@
+{
+  "name": "Biodental — Verificar Disponibilidad",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biodental-verificar-disponibilidad",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  args = raw;\n}\n\nconst servicio = String(args.servicio || '').trim();\nconst fecha = String(args.fecha || '').trim();\nconst hora = String(args.hora || '').trim();\n\nconst DURACIONES = {\n  'Revision': 30, 'Limpieza dental': 45, 'Empaste': 45,\n  'Extraccion': 30, 'Blanqueamiento dental': 60,\n  'Consulta ortodoncia': 30, 'Consulta implantes': 30, 'Endodoncia': 60\n};\nconst duracion = DURACIONES[servicio] || 30;\n\nconst fechaInicio = new Date(`${fecha}T${hora}:00`);\nconst fechaFin = new Date(fechaInicio.getTime() + duracion * 60000);\n\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\n\nreturn [{ json: {\n  servicio, fecha, hora, duracion,\n  fechaInicio: fechaInicio.toISOString(),\n  fechaFin: fechaFin.toISOString(),\n  fechaTexto: `${diasSemana[fechaInicio.getDay()]} ${fechaInicio.getDate()} de ${meses[fechaInicio.getMonth()]}`\n}}];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendarId": "={{ $env.BIODENTAL_CALENDAR_ID }}",
+        "options": {
+          "timeMin": "={{ $json.fechaInicio }}",
+          "timeMax": "={{ $json.fechaFin }}",
+          "singleEvents": true
+        }
+      },
+      "id": "gcal-node",
+      "name": "Google Calendar - Consultar Hueco",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [440, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Parsear Argumentos').first().json;\nconst eventos = $('Google Calendar - Consultar Hueco').all();\n\nconst newStart = new Date(input.fechaInicio);\nconst newEnd = new Date(input.fechaFin);\n\nconst eventosActivos = eventos\n  .map(e => e.json)\n  .filter(e => e.status !== 'cancelled' && (e.start?.dateTime || e.start?.date));\n\nconst hayConflicto = eventosActivos.some(ev => {\n  const evStart = new Date(ev.start.dateTime || ev.start.date + 'T00:00:00');\n  const evEnd = new Date(ev.end.dateTime || ev.end.date + 'T00:00:00');\n  return newStart < evEnd && newEnd > evStart;\n});\n\nif (!hayConflicto) {\n  return [{ json: {\n    disponible: true,\n    fecha: input.fecha,\n    hora: input.hora,\n    servicio: input.servicio,\n    mensaje: `Hay disponibilidad el ${input.fechaTexto} a las ${input.hora}`\n  }}];\n}\n\nconst siguiente = new Date(newStart.getTime() + 60 * 60000);\nconst sigFecha = siguiente.toISOString().split('T')[0];\nconst sigHora = `${String(siguiente.getHours()).padStart(2,'0')}:${String(siguiente.getMinutes()).padStart(2,'0')}`;\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\nconst sigTexto = `${diasSemana[siguiente.getDay()]} ${siguiente.getDate()} de ${meses[siguiente.getMonth()]}`;\n\nreturn [{ json: {\n  disponible: false,\n  mensaje: `No hay disponibilidad a esa hora. El siguiente hueco libre es el ${sigTexto} a las ${sigHora}`,\n  siguiente_disponible: { fecha: sigFecha, hora: sigHora }\n}}];"
+      },
+      "id": "check-node",
+      "name": "Verificar Conflictos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [880, 300]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
+    "Parsear Argumentos": { "main": [[{ "node": "Google Calendar - Consultar Hueco", "type": "main", "index": 0 }]] },
+    "Google Calendar - Consultar Hueco": { "main": [[{ "node": "Verificar Conflictos", "type": "main", "index": 0 }]] },
+    "Verificar Conflictos": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -1,0 +1,135 @@
+{
+  "name": "Biodental — Cancelar Cita",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biodental-cancelar-cita",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  args = raw;\n}\nreturn [{ json: {\n  telefono: String(args.telefono || '').trim(),\n  fecha: String(args.fecha || '').trim(),\n  hora: String(args.hora || '').trim()\n}}];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "={{ $env.BIODENTAL_SHEETS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Citas", "mode": "name" },
+        "options": {}
+      },
+      "id": "sheets-read-node",
+      "name": "Google Sheets - Leer Citas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [440, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Sheets OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const { telefono, fecha, hora } = $('Parsear Argumentos').first().json;\nconst filas = $('Google Sheets - Leer Citas').all();\n\nconst fila = filas.find(f => {\n  const d = f.json;\n  const telMatch = String(d['Teléfono'] || '').trim() === telefono;\n  const fechaMatch = String(d['Fecha'] || '').trim() === fecha;\n  const activa = d['Estado'] === 'CONFIRMADA';\n  const horaMatch = !hora || String(d['Hora'] || '').trim() === hora;\n  return telMatch && fechaMatch && activa && horaMatch;\n});\n\nif (!fila) {\n  return [{ json: { encontrado: false, calendarEventId: null, telefono, fecha, hora, mensaje: 'No encontré ninguna cita activa para ese teléfono y fecha.' }}];\n}\n\nconst d = new Date(fecha + 'T00:00:00');\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\n\nreturn [{ json: {\n  encontrado: true,\n  calendarEventId: fila.json['Calendar_Event_ID'],\n  nombre: fila.json['Nombre'],\n  servicio: fila.json['Servicio'],\n  telefono, fecha, hora: fila.json['Hora'],\n  fechaTexto: `${diasSemana[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]}`\n}}];"
+      },
+      "id": "find-node",
+      "name": "Encontrar Cita en Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "delete",
+        "calendarId": "={{ $env.BIODENTAL_CALENDAR_ID }}",
+        "eventId": "={{ $json.calendarEventId }}"
+      },
+      "id": "gcal-delete-node",
+      "name": "Google Calendar - Eliminar Evento",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [880, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.BIODENTAL_SHEETS_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Citas", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "Estado": "CANCELADA" },
+          "matchingColumns": ["Calendar_Event_ID"]
+        },
+        "options": {}
+      },
+      "id": "sheets-update-node",
+      "name": "Google Sheets - Actualizar Estado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1100, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $('Encontrar Cita en Sheets').first().json;\nif (!datos.encontrado) {\n  return [{ json: { cancelado: false, mensaje: datos.mensaje }}];\n}\nreturn [{ json: { cancelado: true, mensaje: `Tu cita del ${datos.fechaTexto} ha quedado cancelada. Cuando quieras volver, aquí estaremos.` }}];"
+      },
+      "id": "response-node",
+      "name": "Construir Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 300]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
+    "Parsear Argumentos": { "main": [[{ "node": "Google Sheets - Leer Citas", "type": "main", "index": 0 }]] },
+    "Google Sheets - Leer Citas": { "main": [[{ "node": "Encontrar Cita en Sheets", "type": "main", "index": 0 }]] },
+    "Encontrar Cita en Sheets": { "main": [[{ "node": "Google Calendar - Eliminar Evento", "type": "main", "index": 0 }]] },
+    "Google Calendar - Eliminar Evento": { "main": [[{ "node": "Google Sheets - Actualizar Estado", "type": "main", "index": 0 }]] },
+    "Google Sheets - Actualizar Estado": { "main": [[{ "node": "Construir Respuesta", "type": "main", "index": 0 }]] },
+    "Construir Respuesta": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -1,0 +1,51 @@
+{
+  "cliente": {
+    "nombre": "Jesus Peralta Peluqueros",
+    "nombre_legal": "NNJBARBERS S.L.",
+    "cif": "B19334382",
+    "nombre_slug": "jesus peralta peluqueros",
+    "contacto": "Jesus Peralta Baquet",
+    "dni": "45809674E",
+    "email": "",
+    "telefono": "",
+    "direccion": "Calle de José Abascal, 61, Chamberí, 28003, Madrid, España",
+    "sector": "Peluqieria",
+    "tamano": "pyme"
+  },
+  "proyecto": {
+    "nombre": "Pagina Web + Instagram",
+    "tipo_servicio": "Creacion y mantenimiento de Web y redes sociales",
+    "descripcion": "Creación de una página web para peluquería y gestión de redes sociales.",
+    "objetivos_negocio": "1. Aumentar la visibilidad de la peluquería. 2. Atraer nuevos clientes. 3. Mejorar la comunicación con los clientes. 4. Aumentar las reservas.",
+    "alcance_incluido": "- Creación de página web. - Configuración de hosting y dominio. - Diseño personalizado con tema premium. - Formulario de contacto y reservas. - Integración con redes sociales. - Configuración de Google Analytics. - Formación al cliente sobre el uso de la web.",
+    "alcance_excluido": "",
+    "entregables": "- Página web lista para usar. - Manual de usuario. - Sesión de formación.",
+    "stack_herramientas": "Herramientas basadas en IA",
+    "integraciones": "- Instagram",
+    "restricciones": "-",
+    "riesgos_conocidos": "",
+    "responsable_cliente": "Jesus Peralta Baquet"
+  },
+  "comercial": {
+    "precio": "300€/mes (sin IVA)",
+    "forma_pago": "- Transferencia bancaria a 30 días naturales desde la emisión de cada factura. IBAN ES85 1583 0001 1390 1174 0336",
+    "hitos_facturacion": "",
+    "fecha_inicio": "2026-01-04",
+    "fecha_fin": ""
+  },
+  "legal": {
+    "jurisdiccion": "España — Madrid",
+    "confidencialidad": "Ambas partes se comprometen a no divulgar, reproducir ni utilizar para fines distintos a los de este contrato ninguna información de carácter confidencial, técnico, clínico o comercial que conozcan con motivo de la ejecución del mismo. Esta obligación se extiende durante la vigencia del contrato y por un período de 3 años tras su terminación.",
+    "propiedad_intelectual": "Los entregables desarrollados específicamente para NNJBARBERS S.L. en el marco de este contrato (código, modelos entrenados con datos de NovaMed, documentación específica) serán propiedad de NNJBARBERS S.L. una vez satisfecho el importe total del contrato. HAT3X retiene la propiedad de sus frameworks, metodologías propias y herramientas de carácter genérico no desarrolladas específicamente para este proyecto."
+  },
+  "portal_cliente": {
+    "provisioned": false,
+    "url": "https://hat3x.com/login",
+    "username": "CLI-001",
+    "activation_method": "email_link",
+    "estimated_provision_date": "2026-04-04"
+  },
+  "branding": {
+    "color_scheme": "hat3x_default"
+  }
+}
