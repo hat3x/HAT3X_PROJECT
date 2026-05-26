@@ -48,4 +48,22 @@ describe("startLearningScheduler", () => {
     const [, callback] = (cron.schedule as ReturnType<typeof vi.fn>).mock.calls[0] as [string, () => Promise<void>]
     await expect(callback()).resolves.toBeUndefined()
   })
+
+  it("falls back to default schedule when LEARNING_SCHEDULE expression is invalid", () => {
+    const cronModule = cron as { schedule: ReturnType<typeof vi.fn> }
+    // First call throws (invalid expression), second call succeeds (fallback)
+    cronModule.schedule
+      .mockImplementationOnce(() => { throw new Error("Invalid cron expression") })
+      .mockImplementationOnce(() => { /* success */ })
+
+    process.env["LEARNING_SCHEDULE"] = "bad-expression"
+    startLearningScheduler(makeSender())
+
+    // Should have been called twice: once with bad expression, once with default
+    expect(cron.schedule).toHaveBeenCalledTimes(2)
+    const calls = cronModule.schedule.mock.calls as [string, unknown][]
+    expect(calls[0]![0]).toBe("bad-expression")
+    expect(calls[1]![0]).toBe("0 9 * * 1")
+    delete process.env["LEARNING_SCHEDULE"]
+  })
 })
