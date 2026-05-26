@@ -63,11 +63,12 @@ export function createGlobalSubscriber(sender: NotificationSender): GlobalSubscr
     if (eventType === "meeting.resolved") {
       const mtgRow = payload["meeting"] as Record<string, unknown> | undefined
       if (mtgRow == null) return
-      await sender.sendMeetingResolved(
-        mtgRow["id"] as string,
-        taskId,
-        (mtgRow["consensus"] as string | undefined) ?? ""
-      )
+      const consensus = mtgRow["consensus"] as string | undefined
+      if (consensus == null || consensus === "") {
+        console.warn(`meeting.resolved event for ${taskId} has no consensus value`)
+        return
+      }
+      await sender.sendMeetingResolved(mtgRow["id"] as string, taskId, consensus)
       return
     }
   }
@@ -81,7 +82,9 @@ export function createGlobalSubscriber(sender: NotificationSender): GlobalSubscr
             "postgres_changes",
             { event: "INSERT", schema: "public", table: "bus_events" },
             (payload) => {
-              void handleEvent(payload.new as Record<string, unknown>)
+              void handleEvent(payload.new as Record<string, unknown>).catch((err) =>
+                console.error("handleEvent failed:", err)
+              )
             }
           )
           .subscribe((status, err) => {

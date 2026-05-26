@@ -31,6 +31,10 @@ export async function checkTimeouts(sender: NotificationSender): Promise<void> {
 
   for (const row of data ?? []) {
     const checkpoint = rowToCheckpoint(row as Record<string, unknown>)
-    await sender.sendCheckpointReminder(checkpoint)
+    try {
+      await sender.sendCheckpointReminder(checkpoint)
+    } catch (err) {
+      console.error(`Failed to remind checkpoint ${checkpoint.id}:`, err)
+    }
   }
 }

@@ -78,11 +78,11 @@ export class NotificationSender {
 
   async sendCheckpointReminder(checkpoint: HatCheckpoint): Promise<void> {
     const chatId = this.getChatId()
-    const hours = Math.floor(
+    const hours = Math.max(0, Math.floor(
       (Date.now() - new Date(checkpoint.triggeredAt).getTime()) / (1000 * 60 * 60)
-    )
+    ))
     const text = [
-      `⏰ *recordatorio — Checkpoint pendiente: ${checkpoint.id}*`,
+      `⏰ *Recordatorio — Checkpoint pendiente: ${checkpoint.id}*`,
       `Tarea: \`${checkpoint.taskId}\``,
       `Motivo: ${checkpoint.reason}`,
       `Pendiente hace: ${hours}h`,

@@ -44,6 +44,6 @@ describe("sendCheckpointReminder", () => {
     expect(MOCK_BOT.api.sendMessage).toHaveBeenCalledOnce()
     const [, text] = MOCK_BOT.api.sendMessage.mock.calls[0]
     expect(text).toContain("CHK-001")
-    expect(text).toContain("recordatorio")
+    expect(text.toLowerCase()).toContain("recordatorio")
   })
 })

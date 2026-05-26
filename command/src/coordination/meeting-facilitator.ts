@@ -47,6 +47,12 @@ export async function maybeEscalate(
 
   if (consensus.reached && consensus.position != null) {
     await closeMeeting(meeting.id, consensus.position)
+    await publishEvent({
+      taskId: meeting.taskId,
+      eventType: EVENT_TYPES.MEETING_RESOLVED,
+      agentId: null,
+      payload: { meeting: { id: meeting.id, consensus: consensus.position } },
+    })
     return null
   }
 
