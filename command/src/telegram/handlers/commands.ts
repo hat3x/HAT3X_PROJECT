@@ -26,11 +26,16 @@ function rowToCheckpoint(row: Record<string, unknown>): HatCheckpoint {
 }
 
 export async function handleStatus(ctx: Context): Promise<void> {
-  const { data } = await getSupabaseClient()
+  const { data, error } = await getSupabaseClient()
     .from("hat3x_tasks")
     .select("id, order_raw, status, control_mode, created_at")
     .order("created_at", { ascending: false })
     .limit(5)
+
+  if (error != null) {
+    await ctx.reply("❌ Error al conectar con base de datos.")
+    return
+  }
 
   await ctx.reply(formatTaskList(data ?? []), { parse_mode: "Markdown" })
 }
@@ -46,23 +51,32 @@ export async function handleNuevo(ctx: Context): Promise<void> {
 
   await ctx.reply("⏳ Creando tarea...")
 
-  const task = await new CommandCenter().processOrder({
-    orderRaw: orden,
-    skipAnalysis: true,
-  })
+  try {
+    const task = await new CommandCenter().processOrder({
+      orderRaw: orden,
+      skipAnalysis: true,
+    })
 
-  await ctx.reply(
-    `✅ Tarea creada: *${task.id}*\n📋 ${task.orderRaw}\n\nUsa /plan ${task.id} para ver el plan cuando esté listo.`,
-    { parse_mode: "Markdown" }
-  )
+    await ctx.reply(
+      `✅ Tarea creada: *${task.id}*\n📋 ${task.orderRaw}\n\nUsa /plan ${task.id} para ver el plan cuando esté listo.`,
+      { parse_mode: "Markdown" }
+    )
+  } catch {
+    await ctx.reply("❌ Error al crear tarea. Por favor, intenta de nuevo.")
+  }
 }
 
 export async function handleCheckpoints(ctx: Context): Promise<void> {
-  const { data } = await getSupabaseClient()
+  const { data, error } = await getSupabaseClient()
     .from("hat3x_checkpoints")
     .select("*")
     .eq("status", "pending")
     .order("triggered_at", { ascending: true })
+
+  if (error != null) {
+    await ctx.reply("❌ Error al conectar con base de datos.")
+    return
+  }
 
   const checkpoints = (data ?? []).map((row) => rowToCheckpoint(row as Record<string, unknown>))
 
