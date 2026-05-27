@@ -12,7 +12,7 @@ const VERTICALS: Vertical[] = [
 ]
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const MAP_DIR = join(__dirname, "../../../../capability-map")
+const MAP_DIR = join(__dirname, "../../../capability-map")
 
 let _cache: CapabilityMap | null = null
 
