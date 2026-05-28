@@ -5,7 +5,7 @@ export async function transcribeAudio(audioBuffer: Buffer, filename: string): Pr
   if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
 
   const client = new OpenAI({ apiKey });
-  const file = new File([audioBuffer], filename, { type: 'audio/webm' });
+  const file = new File([new Uint8Array(audioBuffer)], filename, { type: 'audio/webm' });
 
   const response = await client.audio.transcriptions.create({
     file,
