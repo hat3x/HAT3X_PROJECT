@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "cli": "tsx src/index.ts",
-    "telegram": "tsx src/telegram/index.ts"
+    "telegram": "tsx src/telegram/index.ts",
+    "server": "tsx src/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

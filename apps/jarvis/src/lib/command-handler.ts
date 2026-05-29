@@ -8,6 +8,20 @@ import type {
   TransactionCategory,
 } from '@/types/jarvis';
 
+const COMMAND_SERVER_URL = process.env['COMMAND_SERVER_URL'] ?? 'http://localhost:3002'
+
+async function triggerIntelligencePipeline(taskId: string): Promise<void> {
+  try {
+    await fetch(`${COMMAND_SERVER_URL}/api/process`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId }),
+    })
+  } catch {
+    // Command server may not be running — task stays pending and can be processed later
+  }
+}
+
 const BASE_SYSTEM_PROMPT = `Eres Jarvis, el asistente de voz ejecutivo de HAT3X.
 Actúas como el Master Orchestrator de la empresa: tienes el conocimiento completo del negocio,
 los PMs especializados y los precios. Cuando el usuario hable contigo, eres la voz de HAT3X.
@@ -149,11 +163,13 @@ Checkpoints pendientes: ${JSON.stringify(checkpoints.slice(0, 3))}`;
         const orderRaw = `[@${input.pm.toUpperCase()}] ${input.task}${input.brief ? ` | BRIEF: ${input.brief}` : ''}${input.coordinacion ? ` | COORD: ${input.coordinacion}` : ''}`;
         const task = await createTask(input.client_id ?? null, orderRaw);
         action = { type: 'task_created', task };
+        void triggerIntelligencePipeline(task.id);
         toolResult = JSON.stringify(task);
       } else if (toolBlock.name === 'create_task') {
         const input = toolBlock.input as { description: string; client_id?: string | null };
         const task = await createTask(input.client_id ?? null, input.description);
         action = { type: 'task_created', task };
+        void triggerIntelligencePipeline(task.id);
         toolResult = JSON.stringify(task);
       } else if (toolBlock.name === 'update_client_notes') {
         const input = toolBlock.input as { client_id: string; note: string };

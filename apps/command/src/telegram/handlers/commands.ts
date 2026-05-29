@@ -54,13 +54,17 @@ export async function handleNuevo(ctx: Context): Promise<void> {
   await ctx.reply("⏳ Creando tarea...")
 
   try {
-    const task = await new CommandCenter().processOrder({
-      orderRaw: orden,
-      skipAnalysis: true,
-    })
+    const task = await new CommandCenter().processOrder({ orderRaw: orden })
+
+    const serverUrl = process.env["COMMAND_SERVER_URL"] ?? "http://localhost:3002"
+    void fetch(`${serverUrl}/api/process`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: task.id }),
+    }).catch(() => { /* server may not be running */ })
 
     await ctx.reply(
-      `✅ Tarea creada: *${task.id}*\n📋 ${task.orderRaw}\n\nUsa /plan ${task.id} para ver el plan cuando esté listo.`,
+      `✅ Tarea creada: *${task.id}*\n📋 ${task.orderRaw}\n\nEl equipo está analizando el plan. Usa /plan ${task.id} en unos segundos.`,
       { parse_mode: "Markdown" }
     )
   } catch {
