@@ -1,5 +1,13 @@
 export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 
+export type TransactionCategory =
+  | 'cliente'
+  | 'otro'
+  | 'herramientas_saas'
+  | 'personal'
+  | 'marketing'
+  | 'infraestructura';
+
 export interface CommandEntry {
   id: string;
   userText: string;
@@ -7,15 +15,6 @@ export interface CommandEntry {
   timestamp: Date;
 }
 
-export interface TranscribeResponse {
-  text: string;
-}
-
-export interface CommandResponse {
-  response: string;
-}
-
-// Refleja el esquema de Supabase hat3x_tasks (solo lectura)
 export interface DbTask {
   id: string;
   client_id: string | null;
@@ -24,7 +23,6 @@ export interface DbTask {
   created_at: string;
 }
 
-// Refleja hat3x_clients
 export interface DbClient {
   id: string;
   name: string;
@@ -33,11 +31,62 @@ export interface DbClient {
   previous_projects: string[];
 }
 
-// Refleja hat3x_checkpoints
 export interface DbCheckpoint {
   id: string;
   task_id: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   triggered_at: string;
+}
+
+export interface DbTransaction {
+  id: string;
+  type: 'income' | 'expense';
+  amount: number;
+  description: string;
+  category: TransactionCategory;
+  client_id: string | null;
+  date: string;
+  created_at: string;
+}
+
+export interface RecordTransactionInput {
+  type: 'income' | 'expense';
+  amount: number;
+  description: string;
+  category: TransactionCategory;
+  client_id?: string | null;
+  date?: string;
+}
+
+export interface FinancialSummary {
+  month: number;
+  year: number;
+  totalIncome: number;
+  totalExpense: number;
+  margin: number;
+  byCategory: {
+    category: string;
+    type: 'income' | 'expense';
+    total: number;
+    count: number;
+  }[];
+  recentTransactions: DbTransaction[];
+}
+
+export interface TransactionAction {
+  type: 'transaction_recorded';
+  transaction: DbTransaction;
+}
+
+export interface SummaryAction {
+  type: 'financial_summary';
+  summary: FinancialSummary;
+}
+
+export type CommandAction = TransactionAction | SummaryAction;
+
+export interface CommandResult {
+  response: string;
+  action?: CommandAction;
 }
