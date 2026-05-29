@@ -21,8 +21,8 @@ export function createSubscriber(options: SubscriberOptions): Subscriber {
   let channel: RealtimeChannel | null = null
 
   return {
-    async subscribe() {
-      await new Promise<void>((resolve, reject) => {
+    subscribe() {
+      return new Promise<void>((resolve, reject) => {
         channel = client
           .channel(`bus:${options.taskId}`)
           .on("postgres_changes", {
@@ -38,26 +38,22 @@ export function createSubscriber(options: SubscriberOptions): Subscriber {
                 id: r["id"] as string,
                 taskId: r["task_id"] as string,
                 eventType,
-                agentId: (r["agent_id"] as string | null) ?? null,
+                agentId: r["agent_id"] as string | null,
                 payload: r["payload"] as Record<string, unknown>,
                 createdAt: r["created_at"] as string,
               })
             }
           })
-          .subscribe((status, err) => {
-            if (status === "SUBSCRIBED") {
-              resolve()
-            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-              reject(new Error(`Realtime subscription failed: ${status}${err ? ` — ${String(err)}` : ""}`))
+          .subscribe((status) => {
+            if (status === "SUBSCRIBED") resolve()
+            else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+              reject(new Error(`Subscription failed: ${status}`))
             }
           })
       })
     },
     async unsubscribe() {
-      if (channel != null) {
-        await client.removeChannel(channel)
-        channel = null
-      }
+      if (channel) { await client.removeChannel(channel); channel = null }
     },
   }
 }

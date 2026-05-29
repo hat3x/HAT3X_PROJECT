@@ -5,10 +5,10 @@ import type { HatTask } from "../../types.js"
 function toHatTask(d: Record<string, unknown>): HatTask {
   return {
     id: d["id"] as string,
-    clientId: (d["client_id"] as string | null) ?? null,
+    clientId: d["client_id"] as string | null,
     orderRaw: d["order_raw"] as string,
-    subtasks: (d["subtasks"] as HatTask["subtasks"]) ?? [],
-    executionPlan: (d["execution_plan"] as HatTask["executionPlan"]) ?? null,
+    subtasks: d["subtasks"],
+    executionPlan: d["execution_plan"],
     controlMode: d["control_mode"] as HatTask["controlMode"],
     status: d["status"] as HatTask["status"],
     createdAt: d["created_at"] as string,
@@ -18,9 +18,9 @@ function toHatTask(d: Record<string, unknown>): HatTask {
 export async function runStatus(options: { id?: string }): Promise<string> {
   const client = getSupabaseClient()
 
-  if (options.id != null) {
+  if (options.id) {
     const { data, error } = await client.from("hat3x_tasks").select("*").eq("id", options.id).single()
-    if (error != null || data == null) return `Proyecto ${options.id} no encontrado.`
+    if (error || !data) return `Proyecto ${options.id} no encontrado.`
     return formatTask(toHatTask(data as Record<string, unknown>))
   }
 

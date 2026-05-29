@@ -15,5 +15,5 @@ export async function publishEvent(input: PublishEventInput): Promise<void> {
     agent_id: input.agentId,
     payload: input.payload,
   })
-  if (error != null) throw new Error(`Failed to publish event: ${error.message}`)
+  if (error) throw new Error(`Failed to publish event: ${error.message}`)
 }

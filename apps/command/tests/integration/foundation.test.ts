@@ -8,7 +8,7 @@ describe("Foundation integration", () => {
   afterEach(async () => { for (const id of ids) await cleanTestData(id); ids.length = 0 })
 
   it("create task → publish event → receive via subscriber", async () => {
-    const task = await new CommandCenter().processOrder({ orderRaw: "Integration test", skipAnalysis: true })
+    const task = await new CommandCenter().processOrder({ orderRaw: "Integration test" })
     ids.push(task.id)
     expect(task.status).toBe("pending")
 

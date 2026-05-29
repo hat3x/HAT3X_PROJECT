@@ -12,7 +12,7 @@ describe("runStatus", () => {
   })
 
   it("returns task details for valid ID", async () => {
-    const task = await new CommandCenter().processOrder({ orderRaw: "Status test", skipAnalysis: true })
+    const task = await new CommandCenter().processOrder({ orderRaw: "Status test" })
     ids.push(task.id)
     const output = await runStatus({ id: task.id })
     expect(output).toContain(task.id)

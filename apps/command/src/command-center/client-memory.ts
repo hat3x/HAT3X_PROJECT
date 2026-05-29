@@ -8,27 +8,17 @@ export async function loadClientMemory(clientId: string): Promise<ClientMemory |
     .eq("id", clientId)
     .single()
 
-  if (error != null) {
+  if (error) {
     if (error.code === "PGRST116") return null
     throw new Error(`Failed to load client memory: ${error.message}`)
   }
 
-  if (data == null) return null
-
-  const row = data as Record<string, unknown>
-
-  if (typeof row["id"] !== "string" || typeof row["name"] !== "string") {
-    throw new Error(`Invalid client record from DB: missing id or name`)
-  }
-
   return {
-    id: row["id"],
-    name: row["name"],
-    sector: typeof row["sector"] === "string" ? row["sector"] : null,
-    previousProjects: Array.isArray(row["previous_projects"])
-      ? (row["previous_projects"] as string[])
-      : [],
-    notes: typeof row["notes"] === "string" ? row["notes"] : null,
+    id: data.id,
+    name: data.name,
+    sector: data.sector,
+    previousProjects: data.previous_projects ?? [],
+    notes: data.notes,
   }
 }
 
@@ -49,5 +39,5 @@ export async function upsertClient(input: UpsertClientInput): Promise<void> {
     notes: input.notes,
     updated_at: new Date().toISOString(),
   })
-  if (error != null) throw new Error(`Failed to upsert client: ${error.message}`)
+  if (error) throw new Error(`Failed to upsert client: ${error.message}`)
 }
