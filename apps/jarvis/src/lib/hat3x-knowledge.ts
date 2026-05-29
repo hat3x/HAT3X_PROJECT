@@ -86,4 +86,32 @@ Datos mínimos para empezar: ¿Inbound u outbound? ¿Objetivo principal?
 ## Flujo interno
 Lead entra → Jarvis registra → PM Operaciones cualifica → Discovery call →
 PM técnico crea propuesta → cierre → tareas en Supabase → Jarvis supervisa
+
+---
+
+## Proyectos activos ahora mismo
+
+### 100 Montaditos — App de gestión interna
+- **Cliente**: 100 Montaditos (franquicia de restaurantes)
+- **Tipo**: aplicación web interna (Next.js + Supabase)
+- **PM asignado**: PM Webs y Apps
+- **Estado**: en desarrollo activo
+- **Descripción**: sistema de gestión para franquiciados con autenticación, pedidos y control operativo
+- **Stack**: Next.js, Supabase (Postgres + Auth), TypeScript
+
+### Biodental — Recepcionista IA telefónica
+- **Cliente**: Clínica dental Biodental
+- **Tipo**: agente de voz telefónico inbound
+- **PM asignado**: PM Voz
+- **Estado**: en desarrollo activo
+- **Descripción**: recepcionista IA que gestiona citas automáticamente, consulta disponibilidad en Google Calendar, envía confirmación por WhatsApp vía Twilio
+- **Stack**: Retell AI, n8n (hat3xia.app.n8n.cloud), Google Calendar, Twilio WhatsApp
+
+### Jesús Peralta Peluqueros — Web + gestión Instagram
+- **Cliente**: Jesús Peralta Peluqueros (peluquería)
+- **Tipo**: web corporativa + automatización Instagram básica
+- **PM asignado**: PM Webs y Apps + PM Automatizaciones
+- **Estado**: en desarrollo activo
+- **Descripción**: web de presentación del salón con galería y reservas, más flujo de automatización para publicar y responder en Instagram vía n8n
+- **Stack**: Next.js (web), n8n (Instagram)
 `;

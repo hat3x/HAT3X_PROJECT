@@ -10,25 +10,37 @@ export function Transcript({ userText, jarvisResponse, isLoading }: TranscriptPr
   if (!userText && !jarvisResponse && !isLoading) return null;
 
   return (
-    <div className="w-full max-w-lg space-y-3">
+    <div className="w-full max-w-lg space-y-2">
       {userText && (
         <div className="flex justify-end">
-          <div className="bg-jarvis-surface border border-jarvis-border rounded-2xl rounded-tr-sm px-4 py-2 max-w-xs">
-            <p className="text-jarvis-text text-sm">{userText}</p>
+          <div
+            className="holo-panel px-4 py-2.5 max-w-xs"
+            style={{ borderColor: 'rgba(99, 102, 241, 0.3)' }}
+          >
+            <p className="text-xs font-mono mb-1 holo-text-muted uppercase tracking-widest">tú</p>
+            <p className="holo-text-user text-sm font-mono leading-relaxed">{userText}</p>
           </div>
         </div>
       )}
       {(jarvisResponse || isLoading) && (
         <div className="flex justify-start">
-          <div className="bg-violet-950/50 border border-violet-800/30 rounded-2xl rounded-tl-sm px-4 py-2 max-w-sm">
+          <div
+            className="holo-panel px-4 py-2.5 max-w-sm"
+            style={{ borderColor: 'rgba(124, 58, 237, 0.3)' }}
+          >
+            <p className="text-xs font-mono mb-1 holo-text-muted uppercase tracking-widest">jarvis</p>
             {isLoading ? (
-              <div className="flex gap-1 items-center py-1">
-                {[0, 150, 300].map((d) => (
-                  <span key={d} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+              <div className="flex gap-1.5 items-center py-1">
+                {([0, 150, 300] as const).map((d) => (
+                  <span
+                    key={d}
+                    className="w-1.5 h-1.5 rounded-full animate-bounce"
+                    style={{ background: 'rgba(134, 239, 172, 0.7)', animationDelay: `${d}ms` }}
+                  />
                 ))}
               </div>
             ) : (
-              <p className="text-jarvis-text text-sm">{jarvisResponse}</p>
+              <p className="holo-text-jarvis text-sm font-mono leading-relaxed">{jarvisResponse}</p>
             )}
           </div>
         </div>

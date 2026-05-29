@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleCommand } from '@/lib/command-handler';
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json() as { text?: string };

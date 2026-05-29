@@ -15,3 +15,73 @@ html, body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #0a1020; }
 ::-webkit-scrollbar-thumb { background: #1a2540; border-radius: 2px; }
+
+/* ── Deep-space radial background ────────────────────────────────────── */
+.jarvis-bg-space {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, #0d0820 0%, transparent 65%),
+    radial-gradient(ellipse 60% 40% at 80% 90%, #060c1c 0%, transparent 55%),
+    radial-gradient(ellipse 50% 60% at 20% 80%, #060816 0%, transparent 50%),
+    #040810;
+}
+
+/* ── Floating micro-particles ─────────────────────────────────────────── */
+@keyframes particle-float-1 {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.15; }
+  33%      { transform: translateY(-18px) translateX(8px); opacity: 0.35; }
+  66%      { transform: translateY(-8px)  translateX(-6px); opacity: 0.2;  }
+}
+@keyframes particle-float-2 {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.1; }
+  50%      { transform: translateY(-24px) translateX(-10px); opacity: 0.3; }
+}
+@keyframes particle-float-3 {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.2;  }
+  40%      { transform: translateY(12px)  translateX(14px); opacity: 0.05; }
+  80%      { transform: translateY(-14px) translateX(6px);  opacity: 0.25; }
+}
+@keyframes particle-float-4 {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.08; }
+  60%      { transform: translateY(-30px) translateX(5px); opacity: 0.22; }
+}
+
+.particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.particle-1 { top: 20%; left: 15%; background: #a855f7; animation: particle-float-1 7s ease-in-out infinite; }
+.particle-2 { top: 65%; left: 78%; background: #a855f7; animation: particle-float-2 9s ease-in-out 1.5s infinite; }
+.particle-3 { top: 40%; left: 88%; background: #818cf8; animation: particle-float-3 11s ease-in-out 3s infinite; }
+.particle-4 { top: 75%; left: 12%; background: #c084fc; animation: particle-float-4 8s ease-in-out 0.8s infinite; }
+.particle-5 { top: 12%; left: 60%; width: 1px; height: 1px; background: #818cf8; animation: particle-float-1 13s ease-in-out 2s infinite; }
+.particle-6 { top: 85%; left: 45%; width: 1px; height: 1px; background: #c084fc; animation: particle-float-3 10s ease-in-out 4s infinite; }
+
+/* ── Terminal / holographic readout ──────────────────────────────────── */
+.holo-panel {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  background: rgba(4, 8, 16, 0.88);
+  border: 1px solid rgba(124, 58, 237, 0.22);
+  border-radius: 0.5rem;
+  box-shadow:
+    0 0 0 1px rgba(124, 58, 237, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 4px 24px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.holo-text-user   { color: #a5b4fc; }
+.holo-text-jarvis { color: #86efac; }
+.holo-text-muted  { color: rgba(100, 116, 139, 0.7); }
+
+/* ── Speaking state — wave glow rings ────────────────────────────────── */
+@keyframes speak-glow {
+  0%, 100% { opacity: 0.25; transform: scale(1);    }
+  50%      { opacity: 0.65; transform: scale(1.12); }
+}
+.speak-wave-1 { animation: speak-glow 0.55s ease-in-out infinite; }
+.speak-wave-2 { animation: speak-glow 0.55s ease-in-out 0.18s infinite; }
+.speak-wave-3 { animation: speak-glow 0.55s ease-in-out 0.36s infinite; }

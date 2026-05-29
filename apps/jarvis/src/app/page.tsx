@@ -11,8 +11,8 @@ import { useVoiceOutput } from '@/hooks/use-voice-output';
 import type { CommandEntry, CommandAction, VoiceState } from '@/types/jarvis';
 
 const VAD_THRESHOLD = 15;   // volume % above which = speech detected
-const VAD_SILENCE_MS = 1500; // ms of silence after speech to trigger processing
-const VAD_MIN_SPEECH_MS = 400; // minimum speech duration to avoid noise triggers
+const VAD_SILENCE_MS = 2500; // ms of silence after speech to trigger processing
+const VAD_MIN_SPEECH_MS = 600; // minimum speech duration to avoid noise triggers
 
 export default function JarvisPage() {
   const idPrefix = useId();
@@ -46,14 +46,18 @@ export default function JarvisPage() {
       const transcribeRes = await fetch('/api/transcribe', { method: 'POST', body: formData });
       const transcribeData = await transcribeRes.json() as { text?: string; error?: string };
       if (!transcribeRes.ok || !transcribeData.text) {
-        setCurrentResponse(transcribeData.error ?? 'No te he entendido. Habla más cerca del micrófono e inténtalo de nuevo.');
+        const msg = 'No te he entendido, Jota. Habla más cerca del micrófono e inténtalo de nuevo.';
+        setCurrentResponse(msg);
         setIsLoading(false);
+        void speak(msg);
         return;
       }
       const text = transcribeData.text.trim();
       if (!text) {
-        setCurrentResponse('No te he entendido. Habla más cerca del micrófono e inténtalo de nuevo.');
+        const msg = 'No te he entendido, Jota. Habla más cerca del micrófono e inténtalo de nuevo.';
+        setCurrentResponse(msg);
         setIsLoading(false);
+        void speak(msg);
         return;
       }
       setCurrentUserText(text);
@@ -65,8 +69,10 @@ export default function JarvisPage() {
       });
       const commandData = await commandRes.json() as { response?: string; action?: CommandAction; error?: string };
       if (!commandRes.ok || !commandData.response) {
-        setCurrentResponse(commandData.error ?? 'Error al procesar el comando.');
+        const msg = commandData.error ?? 'Ha habido un error procesando tu petición, Jota. Inténtalo de nuevo.';
+        setCurrentResponse(msg);
         setIsLoading(false);
+        void speak(msg);
         return;
       }
       setCurrentResponse(commandData.response);
@@ -163,7 +169,14 @@ export default function JarvisPage() {
   }, [isAutoMode, voiceState, stopRecording, resetVoiceState]);
 
   return (
-    <main className="min-h-dvh flex flex-col items-center justify-between px-6 py-12 bg-jarvis-bg">
+    <main className="relative min-h-dvh flex flex-col items-center justify-between px-6 py-12 bg-jarvis-bg jarvis-bg-space overflow-hidden">
+      {/* Floating micro-particles */}
+      <div className="particle particle-1" />
+      <div className="particle particle-2" />
+      <div className="particle particle-3" />
+      <div className="particle particle-4" />
+      <div className="particle particle-5" />
+      <div className="particle particle-6" />
       <div className="w-full max-w-lg flex items-center justify-between">
         <span className="text-jarvis-muted text-xs font-mono uppercase tracking-widest">HAT3X</span>
         <span className="text-jarvis-muted text-xs font-mono">
