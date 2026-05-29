@@ -8,6 +8,10 @@ function getClient() {
   return createClient(url, key);
 }
 
+export function getSupabaseClient() {
+  return getClient();
+}
+
 export async function readTasks(): Promise<DbTask[]> {
   const { data, error } = await getClient()
     .from('hat3x_tasks')
