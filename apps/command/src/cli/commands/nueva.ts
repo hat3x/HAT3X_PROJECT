@@ -7,8 +7,8 @@ interface NuevaOptions { order: string; mode: string | undefined; clientId: stri
 export async function runNueva(options: NuevaOptions): Promise<string> {
   const task = await new CommandCenter().processOrder({
     orderRaw: options.order,
-    controlMode: options.mode as ControlMode | undefined,
-    clientId: options.clientId,
+    ...(options.mode !== undefined ? { controlMode: options.mode as ControlMode } : {}),
+    ...(options.clientId !== undefined ? { clientId: options.clientId } : {}),
   })
   return formatTask(task)
 }

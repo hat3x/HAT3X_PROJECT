@@ -21,7 +21,7 @@ export function buildCli(): Command {
   program
     .command("status [id]")
     .description("Ver estado de proyectos")
-    .action(async (id?: string) => { console.log(await runStatus({ id })) })
+    .action(async (id?: string) => { console.log(await runStatus(id !== undefined ? { id } : {})) })
 
   program
     .command("plan <id>")
@@ -58,7 +58,10 @@ export function buildCli(): Command {
         const consoleSender = {
           sendEvolutionReport: async (text: string) => { console.log("\n" + text) },
         }
-        await runLearningCycle(consoleSender, { taskId: opts.task, dryRun: opts.dryRun })
+        await runLearningCycle(consoleSender, {
+          ...(opts.task !== undefined ? { taskId: opts.task } : {}),
+          ...(opts.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
+        })
         if (opts.dryRun === true) {
           console.log("\n[DRY RUN — no changes applied]")
         }

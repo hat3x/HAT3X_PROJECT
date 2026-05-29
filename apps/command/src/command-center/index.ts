@@ -19,6 +19,10 @@ export class CommandCenter {
       orderRaw: input.orderRaw,
     })
 
-    return createTask({ orderRaw: input.orderRaw, controlMode, clientId: input.clientId })
+    return createTask({
+      orderRaw: input.orderRaw,
+      controlMode,
+      ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
+    })
   }
 }
