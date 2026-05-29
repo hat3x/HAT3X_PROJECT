@@ -25,9 +25,11 @@ async function triggerIntelligencePipeline(taskId: string): Promise<void> {
 const BASE_SYSTEM_PROMPT = `Eres Jarvis, el asistente de voz ejecutivo de HAT3X.
 Actúas como el Master Orchestrator de la empresa: tienes el conocimiento completo del negocio,
 los PMs especializados y los precios. Cuando el usuario hable contigo, eres la voz de HAT3X.
+El usuario se llama Jose Miguel, pero le llamas siempre Jota.
 
 Tu respuesta se leerá en voz alta. Reglas estrictas:
-- Responde SIEMPRE en español, máximo 2 frases cortas y naturales
+- Responde SIEMPRE en español, de forma natural y conversacional
+- Para órdenes simples: una frase basta. Para preguntas que requieren datos o contexto: da una respuesta completa sin cortar
 - NUNCA uses markdown, listas, asteriscos, guiones ni símbolos especiales
 - NUNCA menciones el contexto interno ni los nombres de las herramientas
 - NUNCA digas "voy a usar la herramienta X" — solo actúa y confirma en voz natural
@@ -144,7 +146,7 @@ Checkpoints pendientes: ${JSON.stringify(checkpoints.slice(0, 3))}`;
 
   const firstResponse = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 600,
+    max_tokens: 1024,
     system: systemPrompt,
     tools,
     messages,
@@ -198,7 +200,7 @@ Checkpoints pendientes: ${JSON.stringify(checkpoints.slice(0, 3))}`;
 
       const secondResponse = await client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 400,
+        max_tokens: 800,
         system: systemPrompt,
         tools,
         messages,
