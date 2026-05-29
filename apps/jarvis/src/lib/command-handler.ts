@@ -7,11 +7,19 @@ import type {
   TransactionCategory,
 } from '@/types/jarvis';
 
-const SYSTEM_PROMPT = `Eres Jarvis, el asistente ejecutivo de voz de HAT3X.
-HAT3X es una consultoría de IA española que construye agentes, chatbots y webs.
-Responde siempre en español, de forma concisa (máximo 2 frases).
-Cuando el usuario mencione cobros, pagos, ingresos o gastos, usa la herramienta record_transaction.
-Cuando pida resúmenes financieros, informes o preguntas sobre dinero, usa query_finances.`;
+const BASE_SYSTEM_PROMPT = `Eres Jarvis, el asistente de voz ejecutivo de HAT3X, una consultoría de IA española.
+
+Tu respuesta se leerá en voz alta. Reglas estrictas:
+- Responde SIEMPRE en español, máximo 2 frases cortas y naturales
+- NUNCA uses markdown, listas, asteriscos, guiones ni símbolos especiales
+- NUNCA menciones ni resumas el contexto interno que recibes (tareas, clientes, checkpoints)
+- NUNCA digas el nombre de las herramientas ni que usaste alguna
+- Responde directamente a lo que el usuario pidió, como si fuera una conversación natural
+- Si no hay información relevante, di algo breve y útil
+
+Herramientas disponibles (úsalas silenciosamente):
+- record_transaction: cuando el usuario mencione cobros, pagos, ingresos o gastos
+- query_finances: cuando pida resúmenes económicos, ingresos o gastos del mes`;
 
 const tools: Anthropic.Tool[] = [
   {
@@ -70,15 +78,17 @@ export async function handleCommand(text: string): Promise<CommandResult> {
     readPendingCheckpoints().catch(() => []),
   ]);
 
-  const context = `
+  // Context goes in system prompt — never in user message — so Claude won't repeat it aloud
+  const systemPrompt = `${BASE_SYSTEM_PROMPT}
+
+CONTEXTO INTERNO (NO mencionar al usuario bajo ningún concepto):
 Tareas activas: ${JSON.stringify(tasks.slice(0, 5))}
 Clientes: ${JSON.stringify(clients.slice(0, 5))}
-Checkpoints pendientes: ${JSON.stringify(checkpoints.slice(0, 3))}
-  `.trim();
+Checkpoints pendientes: ${JSON.stringify(checkpoints.slice(0, 3))}`;
 
   const client = new Anthropic({ apiKey });
   const messages: Anthropic.MessageParam[] = [
-    { role: 'user', content: `${context}\n\nUsuario: ${text}` },
+    { role: 'user', content: text },
   ];
 
   let finalResponse = '';
@@ -87,7 +97,7 @@ Checkpoints pendientes: ${JSON.stringify(checkpoints.slice(0, 3))}
   const firstResponse = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 600,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     tools,
     messages,
   });
@@ -123,7 +133,7 @@ Checkpoints pendientes: ${JSON.stringify(checkpoints.slice(0, 3))}
       const secondResponse = await client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 400,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         tools,
         messages,
       });
