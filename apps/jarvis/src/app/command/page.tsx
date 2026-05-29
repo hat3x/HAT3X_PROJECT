@@ -1,7 +1,8 @@
 'use client'
+export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase, fetchTasks, fetchRecentEvents, fetchCheckpoints } from '@/lib/supabase-command'
+import { getSupabase, fetchTasks, fetchRecentEvents, fetchCheckpoints } from '@/lib/supabase-command'
 import type { HatTask, BusEvent, HatCheckpoint } from '@/lib/supabase-command'
 
 const STATUS_COLOR: Record<string, string> = {
@@ -50,9 +51,9 @@ export default function CommandOverview() {
       setLoading(false)
     })
 
-    const channel = supabase
+    const channel = getSupabase()
       .channel('command-overview')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bus_events' }, (p) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bus_events' }, (p: { new: unknown }) => {
         setEvents((prev) => [p.new as BusEvent, ...prev.slice(0, 29)])
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hat3x_tasks' }, () => {
@@ -60,7 +61,7 @@ export default function CommandOverview() {
       })
       .subscribe()
 
-    return () => { void supabase.removeChannel(channel) }
+    return () => { void getSupabase().removeChannel(channel) }
   }, [])
 
   const running = tasks.filter(t => t.status === 'running')

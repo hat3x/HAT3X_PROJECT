@@ -1,6 +1,7 @@
 'use client'
+export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
-import { supabase, fetchRecentEvents } from '@/lib/supabase-command'
+import { getSupabase, fetchRecentEvents } from '@/lib/supabase-command'
 import type { BusEvent } from '@/lib/supabase-command'
 
 const AGENT_POOL = [
@@ -79,9 +80,9 @@ export default function EquipoPage() {
       })
     })
 
-    const channel = supabase
+    const channel = getSupabase()
       .channel('equipo-watch')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bus_events' }, (p) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bus_events' }, (p: { new: unknown }) => {
         const ev = p.new as BusEvent
         if (!ev.agent_id) return
         setAgentStatus(prev => ({ ...prev, [ev.agent_id!]: 'working' }))
@@ -91,7 +92,7 @@ export default function EquipoPage() {
       })
       .subscribe()
 
-    return () => { void supabase.removeChannel(channel) }
+    return () => { void getSupabase().removeChannel(channel) }
   }, [])
 
   const STATUS_DOT: Record<AgentStatus, { color: string; label: string }> = {

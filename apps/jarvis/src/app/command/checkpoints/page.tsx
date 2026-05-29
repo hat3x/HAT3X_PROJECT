@@ -1,6 +1,7 @@
 'use client'
+export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
-import { supabase, fetchCheckpoints, resolveCheckpoint } from '@/lib/supabase-command'
+import { getSupabase, fetchCheckpoints, resolveCheckpoint } from '@/lib/supabase-command'
 import type { HatCheckpoint } from '@/lib/supabase-command'
 
 const APPROVAL_LABEL: Record<string, string> = {
@@ -22,14 +23,14 @@ export default function CheckpointsPage() {
     setLoading(true)
     fetchCheckpoints(filter === 'all' ? undefined : filter).then(c => { setCheckpoints(c); setLoading(false) })
 
-    const channel = supabase
+    const channel = getSupabase()
       .channel('checkpoints-watch')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hat3x_checkpoints' }, () => {
         fetchCheckpoints(filter === 'all' ? undefined : filter).then(setCheckpoints)
       })
       .subscribe()
 
-    return () => { void supabase.removeChannel(channel) }
+    return () => { void getSupabase().removeChannel(channel) }
   }, [filter])
 
   async function handleResolve(id: string, status: 'approved' | 'rejected') {

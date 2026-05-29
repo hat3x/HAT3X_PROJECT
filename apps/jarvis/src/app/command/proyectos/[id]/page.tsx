@@ -1,8 +1,9 @@
 'use client'
+export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { supabase, fetchTask, fetchTaskEvents } from '@/lib/supabase-command'
+import { getSupabase, fetchTask, fetchTaskEvents } from '@/lib/supabase-command'
 import type { HatTask, BusEvent } from '@/lib/supabase-command'
 
 const STATUS_COLOR: Record<string, string> = {
@@ -39,17 +40,17 @@ export default function ProjectDetailPage() {
       setLoading(false)
     })
 
-    const channel = supabase
+    const channel = getSupabase()
       .channel(`project-${id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bus_events', filter: `task_id=eq.${id}` }, (p) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bus_events', filter: `task_id=eq.${id}` }, (p: { new: unknown }) => {
         setEvents(prev => [p.new as BusEvent, ...prev])
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hat3x_tasks', filter: `id=eq.${id}` }, (p) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hat3x_tasks', filter: `id=eq.${id}` }, (p: { new: unknown }) => {
         setTask(p.new as HatTask)
       })
       .subscribe()
 
-    return () => { void supabase.removeChannel(channel) }
+    return () => { void getSupabase().removeChannel(channel) }
   }, [id])
 
   if (loading) return <div style={{ padding: 32, color: '#475569', fontFamily: 'monospace', fontSize: 13 }}>Cargando...</div>

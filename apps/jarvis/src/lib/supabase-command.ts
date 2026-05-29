@@ -1,9 +1,15 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+let _client: SupabaseClient | null = null
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export function getSupabase(): SupabaseClient {
+  if (!_client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    _client = createClient(url, key)
+  }
+  return _client
+}
 
 export interface HatTask {
   id: string
@@ -52,7 +58,7 @@ export interface EvolutionProposal {
 }
 
 export async function fetchTasks(): Promise<HatTask[]> {
-  const { data } = await supabase
+  const { data } = await getSupabase()
     .from('hat3x_tasks')
     .select('*')
     .order('created_at', { ascending: false })
@@ -61,7 +67,7 @@ export async function fetchTasks(): Promise<HatTask[]> {
 }
 
 export async function fetchTask(id: string): Promise<HatTask | null> {
-  const { data } = await supabase
+  const { data } = await getSupabase()
     .from('hat3x_tasks')
     .select('*')
     .eq('id', id)
@@ -70,14 +76,14 @@ export async function fetchTask(id: string): Promise<HatTask | null> {
 }
 
 export async function fetchCheckpoints(statusFilter?: string): Promise<HatCheckpoint[]> {
-  let q = supabase.from('hat3x_checkpoints').select('*').order('triggered_at', { ascending: false })
+  let q = getSupabase().from('hat3x_checkpoints').select('*').order('triggered_at', { ascending: false })
   if (statusFilter) q = q.eq('status', statusFilter)
   const { data } = await q.limit(50)
   return (data ?? []) as HatCheckpoint[]
 }
 
 export async function fetchRecentEvents(limit = 30): Promise<BusEvent[]> {
-  const { data } = await supabase
+  const { data } = await getSupabase()
     .from('bus_events')
     .select('*')
     .order('created_at', { ascending: false })
@@ -86,7 +92,7 @@ export async function fetchRecentEvents(limit = 30): Promise<BusEvent[]> {
 }
 
 export async function fetchTaskEvents(taskId: string): Promise<BusEvent[]> {
-  const { data } = await supabase
+  const { data } = await getSupabase()
     .from('bus_events')
     .select('*')
     .eq('task_id', taskId)
@@ -96,7 +102,7 @@ export async function fetchTaskEvents(taskId: string): Promise<BusEvent[]> {
 }
 
 export async function fetchProposals(): Promise<EvolutionProposal[]> {
-  const { data } = await supabase
+  const { data } = await getSupabase()
     .from('evolution_proposals')
     .select('*')
     .order('created_at', { ascending: false })
@@ -109,7 +115,7 @@ export async function resolveCheckpoint(
   status: 'approved' | 'rejected',
   feedback?: string
 ): Promise<void> {
-  await supabase
+  await getSupabase()
     .from('hat3x_checkpoints')
     .update({ status, feedback: feedback ?? null, resolved_at: new Date().toISOString() })
     .eq('id', id)
