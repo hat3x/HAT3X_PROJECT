@@ -4,15 +4,17 @@ import { JarvisOrb } from '@/components/jarvis-orb';
 import { VoiceButton } from '@/components/voice-button';
 import { Transcript } from '@/components/transcript';
 import { CommandLog } from '@/components/command-log';
+import { FinanceBadge } from '@/components/finance-badge';
 import { useVoiceInput } from '@/hooks/use-voice-input';
 import { useVoiceOutput } from '@/hooks/use-voice-output';
-import type { CommandEntry, VoiceState } from '@/types/jarvis';
+import type { CommandEntry, CommandAction, VoiceState } from '@/types/jarvis';
 
 export default function JarvisPage() {
   const idPrefix = useId();
   const [commandLog, setCommandLog] = useState<CommandEntry[]>([]);
   const [currentUserText, setCurrentUserText] = useState('');
   const [currentResponse, setCurrentResponse] = useState('');
+  const [currentAction, setCurrentAction] = useState<CommandAction | undefined>();
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeakingOverride, setIsSpeakingOverride] = useState(false);
 
@@ -24,6 +26,7 @@ export default function JarvisPage() {
   const handlePressStart = useCallback(async () => {
     setCurrentUserText('');
     setCurrentResponse('');
+    setCurrentAction(undefined);
     await startRecording();
   }, [startRecording]);
 
@@ -44,8 +47,9 @@ export default function JarvisPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
-      const { response } = await commandRes.json() as { response: string };
+      const { response, action } = await commandRes.json() as { response: string; action?: CommandAction };
       setCurrentResponse(response);
+      setCurrentAction(action);
       setIsLoading(false);
 
       await speak(response);
@@ -73,6 +77,7 @@ export default function JarvisPage() {
       <div className="flex flex-col items-center gap-8">
         <JarvisOrb state={effectiveState} />
         <Transcript userText={currentUserText} jarvisResponse={currentResponse} isLoading={isLoading} />
+        {currentAction && <FinanceBadge action={currentAction} />}
         {error && <p className="text-red-400 text-xs text-center max-w-xs">{error}</p>}
         <VoiceButton
           voiceState={effectiveState}
