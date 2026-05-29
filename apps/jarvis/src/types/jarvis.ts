@@ -84,7 +84,17 @@ export interface SummaryAction {
   summary: FinancialSummary;
 }
 
-export type CommandAction = TransactionAction | SummaryAction;
+export interface CreateTaskAction {
+  type: 'task_created';
+  task: DbTask;
+}
+
+export interface UpdateClientAction {
+  type: 'client_updated';
+  client: DbClient;
+}
+
+export type CommandAction = TransactionAction | SummaryAction | CreateTaskAction | UpdateClientAction;
 
 export interface CommandResult {
   response: string;

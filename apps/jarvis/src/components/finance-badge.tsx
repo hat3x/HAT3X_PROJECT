@@ -1,5 +1,5 @@
 'use client';
-import type { CommandAction, FinancialSummary } from '@/types/jarvis';
+import type { CommandAction, FinancialSummary, DbTask, DbClient } from '@/types/jarvis';
 
 interface Props {
   action: CommandAction;
@@ -68,12 +68,34 @@ function SummaryBadge({ summary }: { summary: FinancialSummary }) {
   );
 }
 
+function TaskBadge({ task }: { task: DbTask }) {
+  return (
+    <div className="rounded-lg border border-jarvis-border bg-jarvis-surface px-4 py-3 text-sm w-full max-w-xs">
+      <p className="text-jarvis-muted text-xs uppercase tracking-wide font-mono mb-1">Tarea creada</p>
+      <p className="text-jarvis-text">{task.order_raw}</p>
+      {task.client_id && (
+        <p className="text-jarvis-muted text-xs mt-0.5">Cliente: {task.client_id}</p>
+      )}
+    </div>
+  );
+}
+
+function ClientBadge({ client }: { client: DbClient }) {
+  return (
+    <div className="rounded-lg border border-jarvis-border bg-jarvis-surface px-4 py-3 text-sm w-full max-w-xs">
+      <p className="text-jarvis-muted text-xs uppercase tracking-wide font-mono mb-1">Nota guardada</p>
+      <p className="text-jarvis-text">{client.name}</p>
+      {client.notes && (
+        <p className="text-jarvis-muted text-xs mt-0.5 line-clamp-2">{client.notes.split('\n').pop()}</p>
+      )}
+    </div>
+  );
+}
+
 export function FinanceBadge({ action }: Props) {
-  if (action.type === 'transaction_recorded') {
-    return <TransactionBadge transaction={action.transaction} />;
-  }
-  if (action.type === 'financial_summary') {
-    return <SummaryBadge summary={action.summary} />;
-  }
+  if (action.type === 'transaction_recorded') return <TransactionBadge transaction={action.transaction} />;
+  if (action.type === 'financial_summary') return <SummaryBadge summary={action.summary} />;
+  if (action.type === 'task_created') return <TaskBadge task={action.task} />;
+  if (action.type === 'client_updated') return <ClientBadge client={action.client} />;
   return null;
 }
