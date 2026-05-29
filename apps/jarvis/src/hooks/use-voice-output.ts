@@ -7,6 +7,17 @@ interface UseVoiceOutputReturn {
   stop: () => void;
 }
 
+function browserSpeak(text: string, onDone: () => void): void {
+  if (!('speechSynthesis' in window)) { onDone(); return; }
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'es-ES';
+  u.rate = 1.05;
+  u.onend = onDone;
+  u.onerror = onDone;
+  window.speechSynthesis.speak(u);
+}
+
 export function useVoiceOutput(
   onSpeakingChange?: (speaking: boolean) => void,
 ): UseVoiceOutputReturn {
@@ -18,22 +29,28 @@ export function useVoiceOutput(
     audioRef.current?.pause();
     if (audioRef.current) { audioRef.current.src = ''; audioRef.current = null; }
     if (objectUrlRef.current) { URL.revokeObjectURL(objectUrlRef.current); objectUrlRef.current = null; }
+    window.speechSynthesis?.cancel();
     setIsSpeaking(false);
     onSpeakingChange?.(false);
   }, [onSpeakingChange]);
 
   const speak = useCallback(async (text: string) => {
     stop();
-    try {
-      setIsSpeaking(true);
-      onSpeakingChange?.(true);
+    setIsSpeaking(true);
+    onSpeakingChange?.(true);
 
+    try {
       const response = await fetch('/api/speak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
-      if (!response.ok) throw new Error(`speak API error ${response.status}`);
+
+      if (!response.ok) {
+        // ElevenLabs unavailable (402 free plan, 500 error) → browser TTS fallback
+        browserSpeak(text, () => { setIsSpeaking(false); onSpeakingChange?.(false); });
+        return;
+      }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -48,12 +65,12 @@ export function useVoiceOutput(
         setIsSpeaking(false);
         onSpeakingChange?.(false);
       };
-      audio.onerror = () => { setIsSpeaking(false); onSpeakingChange?.(false); };
+      audio.onerror = () => {
+        browserSpeak(text, () => { setIsSpeaking(false); onSpeakingChange?.(false); });
+      };
       await audio.play();
-    } catch (err) {
-      console.error('[useVoiceOutput]', err);
-      setIsSpeaking(false);
-      onSpeakingChange?.(false);
+    } catch {
+      browserSpeak(text, () => { setIsSpeaking(false); onSpeakingChange?.(false); });
     }
   }, [stop, onSpeakingChange]);
 

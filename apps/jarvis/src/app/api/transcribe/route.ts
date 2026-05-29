@@ -8,8 +8,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!audio || !(audio instanceof Blob)) {
       return NextResponse.json({ error: 'No audio provided' }, { status: 400 });
     }
-    const buffer = Buffer.from(await audio.arrayBuffer());
-    const text = await transcribeAudio(buffer, 'recording.webm');
+    console.log('[/api/transcribe] audio size:', audio.size, 'bytes, type:', audio.type);
+    const text = await transcribeAudio(audio, 'recording.webm');
+    console.log('[/api/transcribe] transcribed:', JSON.stringify(text));
     return NextResponse.json({ text });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

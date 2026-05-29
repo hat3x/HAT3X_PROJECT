@@ -65,9 +65,9 @@ export async function handleCommand(text: string): Promise<CommandResult> {
   if (!apiKey) throw new Error('Missing ANTHROPIC_API_KEY');
 
   const [tasks, clients, checkpoints] = await Promise.all([
-    readTasks(),
-    readClients(),
-    readPendingCheckpoints(),
+    readTasks().catch(() => []),
+    readClients().catch(() => []),
+    readPendingCheckpoints().catch(() => []),
   ]);
 
   const context = `
