@@ -1,0 +1,11 @@
+vertical: github
+agentId: pm-github
+skills:
+  - github
+  - ci-cd-automation
+  - code-review
+  - testing-qa
+  - documentation
+maxParallelSubtasks: 3
+typicalHoursPerSubtask: 4
+requiresClientApproval: false

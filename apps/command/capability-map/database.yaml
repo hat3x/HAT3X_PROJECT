@@ -1,0 +1,11 @@
+vertical: database
+agentId: pm-database
+skills:
+  - supabase-rls
+  - integrations-database
+  - database-patterns
+  - testing-qa
+  - documentation
+maxParallelSubtasks: 3
+typicalHoursPerSubtask: 6
+requiresClientApproval: false

@@ -1,0 +1,11 @@
+vertical: calendar
+agentId: pm-calendar
+skills:
+  - integrations-calendar
+  - api-design
+  - webhook-patterns
+  - testing-qa
+  - documentation
+maxParallelSubtasks: 2
+typicalHoursPerSubtask: 5
+requiresClientApproval: false

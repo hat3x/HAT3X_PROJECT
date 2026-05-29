@@ -1,0 +1,11 @@
+vertical: testing
+agentId: pm-testing
+skills:
+  - testing-vitest
+  - testing-qa
+  - playwright-e2e
+  - code-review
+  - documentation
+maxParallelSubtasks: 3
+typicalHoursPerSubtask: 5
+requiresClientApproval: false

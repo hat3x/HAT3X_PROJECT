@@ -1,0 +1,12 @@
+vertical: webs-apps
+agentId: pm-webs-apps
+skills:
+  - nextjs-shadcn
+  - react-query-patterns
+  - typescript-strict
+  - ui-ux-patterns
+  - performance-web
+  - accessibility-wcag
+maxParallelSubtasks: 4
+typicalHoursPerSubtask: 5
+requiresClientApproval: true

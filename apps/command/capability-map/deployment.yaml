@@ -1,0 +1,11 @@
+vertical: deployment
+agentId: pm-deployment
+skills:
+  - deploy-vercel
+  - ci-cd-automation
+  - github
+  - testing-qa
+  - documentation
+maxParallelSubtasks: 2
+typicalHoursPerSubtask: 4
+requiresClientApproval: true

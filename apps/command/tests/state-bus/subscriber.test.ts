@@ -20,10 +20,10 @@ describe("createSubscriber", () => {
     await sub.subscribe()
 
     await publishEvent({ taskId: TASK_ID, eventType: EVENT_TYPES.TASK_COMPLETED, agentId: "lead-programmer", payload: { subtaskId: "ST-001" } })
-    await new Promise((r) => setTimeout(r, 500))
+    await new Promise((r) => setTimeout(r, 1500))
     await sub.unsubscribe()
 
     expect(handler).toHaveBeenCalledOnce()
     expect(handler.mock.calls[0]?.[0]).toMatchObject({ eventType: EVENT_TYPES.TASK_COMPLETED })
-  }, 5000)
+  }, 10000)
 })

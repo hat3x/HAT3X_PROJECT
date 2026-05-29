@@ -1,0 +1,11 @@
+vertical: documentation
+agentId: pm-documentation
+skills:
+  - documentation
+  - technical-writing
+  - code-review
+  - api-documentation
+  - testing-qa
+maxParallelSubtasks: 4
+typicalHoursPerSubtask: 3
+requiresClientApproval: false

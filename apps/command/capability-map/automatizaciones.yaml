@@ -1,0 +1,11 @@
+vertical: automatizaciones
+agentId: pm-automatizaciones
+skills:
+  - n8n-advanced
+  - api-design
+  - webhook-patterns
+  - error-handling
+  - documentation
+maxParallelSubtasks: 3
+typicalHoursPerSubtask: 4
+requiresClientApproval: false
