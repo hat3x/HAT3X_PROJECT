@@ -1,0 +1,24 @@
+name: Deploy Command Server
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - apps/command/**
+
+jobs:
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        run: railway up --service hat3x-command
+        working-directory: apps/command
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

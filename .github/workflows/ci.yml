@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, feat/**]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test-command:
+    name: Test apps/command
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/command
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/command/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+      - run: npx tsc --noEmit
