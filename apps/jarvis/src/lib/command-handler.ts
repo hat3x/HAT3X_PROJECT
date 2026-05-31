@@ -171,27 +171,42 @@ REGLAS DE RESPUESTA (la respuesta se lee en voz alta):
 
 PROJECT_ROOT = ${PROJECT_ROOT}
 
-HERRAMIENTAS DE FICHEROS (úsalas proactivamente para consultas):
-- read_file(path): lee cualquier archivo. Rutas relativas al PROJECT_ROOT. Ej: "clients/projects/biodental", "CLAUDE.md"
-- list_directory(path): lista contenido de una carpeta
+ACCESO TOTAL A SUPABASE (úsalo para cualquier dato de la empresa):
+- supabase_query(table, select?, filters?, order_by?, limit?): leer cualquier tabla
+- supabase_insert(table, data): insertar en cualquier tabla
+- supabase_update(table, data, filters): actualizar en cualquier tabla
+- supabase_delete(table, filters): eliminar de cualquier tabla
+Tablas principales: hat3x_tasks, hat3x_clients, hat3x_checkpoints, hat3x_transactions, bus_events, hat3x_meetings
+
+ACCESO TOTAL A APIS EXTERNAS (via http_request):
+- http_request(url, method, headers?, body?): llama a CUALQUIER API
+- Retell AI: https://api.retellai.com — usa header Authorization: Bearer RETELL_API_KEY
+- ElevenLabs: https://api.elevenlabs.io/v1 — usa header xi-api-key: ELEVENLABS_API_KEY
+- n8n: ${process.env['N8N_BASE_URL'] ?? 'https://hat3xia.app.n8n.cloud'} — usa header X-N8N-API-KEY: N8N_API_KEY
+- Twilio WhatsApp: https://api.twilio.com — usa header Authorization: Basic TWILIO_ACCOUNT_SID:TWILIO_AUTH_TOKEN
+Las claves se inyectan automáticamente al usar los placeholders de arriba en los headers.
+
+ACCESO TOTAL AL SISTEMA DE FICHEROS:
+- read_file(path): lee cualquier archivo del proyecto
+- list_directory(path): lista una carpeta
 - search_files(query, directory?, file_pattern?): busca texto en archivos
 - write_file(path, content): crea o modifica archivos
-- run_command(command, cwd?): ejecuta git, npm, etc.
+- run_command(command, cwd?): ejecuta git, npm, scripts, etc.
 
-HERRAMIENTAS DE NEGOCIO:
-- find_clients(query): busca clientes por nombre
-- create_client(name, sector?, notes?): da de alta cliente
-- delegate_to_pm(pm, task, ...): delega a PM especializado
-- create_task(description): crea tarea interna
-- update_client_notes(client_id, note): añade nota a cliente
-- record_transaction / query_finances: finanzas
-- record_recurring_expense / record_project_revenue / record_project_cost: contabilidad
-- add_company_memory(title, content): guarda decisión o regla importante
+HERRAMIENTAS DE CONVENIENCIA (atajos para operaciones comunes):
+- find_clients / create_client: buscar o crear clientes
+- delegate_to_pm: delegar trabajo a un PM
+- create_task: crear tarea interna
+- update_client_notes: anotar info sobre cliente
+- record_transaction / query_finances: finanzas rápidas
+- add_company_memory: guardar decisión importante
 
-REGLAS OPERATIVAS:
-- Para saber el estado de proyectos: usa list_directory("clients/projects") y luego read_file por cliente
-- No inventes client_id — usa find_clients primero
-- Para crear documentos: usa write_file en la carpeta del cliente correspondiente
+REGLAS:
+- Para consultas de datos: usa supabase_query antes de responder
+- Para crear documentos o propuestas: usa write_file
+- Para disparar automatizaciones: usa http_request a n8n
+- Para crear agentes de voz: usa http_request a Retell AI
+- Puedes combinar herramientas: leer de Supabase, escribir un archivo, llamar a una API — todo en una sola conversación
 
 ${HAT3X_KNOWLEDGE}
 
@@ -202,6 +217,76 @@ ${projectMemory}`;
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
 const TOOLS: Anthropic.Tool[] = [
+  // ── Supabase admin (acceso total a la BD) ────────────────────────────────
+  {
+    name: 'supabase_query',
+    description: 'Lee datos de CUALQUIER tabla de Supabase. Úsalo para consultar clientes, tareas, transacciones, checkpoints, eventos, o cualquier otra tabla.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        table: { type: 'string', description: 'Nombre de la tabla, ej: "hat3x_clients", "hat3x_tasks", "hat3x_transactions"' },
+        select: { type: 'string', description: 'Campos a devolver. Por defecto "*"' },
+        filters: { type: 'object', description: 'Filtros de igualdad: {"campo": "valor"}' },
+        order_by: { type: 'string', description: 'Campo por el que ordenar' },
+        order_asc: { type: 'boolean', description: 'true = ascendente, false = descendente' },
+        limit: { type: 'number', description: 'Máximo de filas a devolver' },
+      },
+      required: ['table'],
+    },
+  },
+  {
+    name: 'supabase_insert',
+    description: 'Inserta uno o varios registros en CUALQUIER tabla de Supabase.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        table: { type: 'string', description: 'Nombre de la tabla' },
+        data: { description: 'Objeto o array de objetos a insertar' },
+      },
+      required: ['table', 'data'],
+    },
+  },
+  {
+    name: 'supabase_update',
+    description: 'Actualiza registros en CUALQUIER tabla de Supabase.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        table: { type: 'string', description: 'Nombre de la tabla' },
+        data: { type: 'object', description: 'Campos a actualizar' },
+        filters: { type: 'object', description: 'Filtros para identificar qué filas actualizar: {"campo": "valor"}' },
+      },
+      required: ['table', 'data', 'filters'],
+    },
+  },
+  {
+    name: 'supabase_delete',
+    description: 'Elimina registros de CUALQUIER tabla de Supabase.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        table: { type: 'string', description: 'Nombre de la tabla' },
+        filters: { type: 'object', description: 'Filtros para identificar qué filas eliminar: {"campo": "valor"}' },
+      },
+      required: ['table', 'filters'],
+    },
+  },
+  // ── HTTP genérico (Retell, Twilio, n8n, ElevenLabs, cualquier API) ────────
+  {
+    name: 'http_request',
+    description: 'Hace una petición HTTP a cualquier API externa: Retell AI, Twilio, n8n, ElevenLabs, o cualquier otra URL. Úsalo para crear agentes de voz, enviar WhatsApp, disparar flujos de n8n, etc.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'URL completa del endpoint' },
+        method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], description: 'Método HTTP' },
+        headers: { type: 'object', description: 'Headers adicionales. Las claves de API de Retell, Twilio y n8n están disponibles como: RETELL_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, N8N_API_KEY, ELEVENLABS_API_KEY' },
+        body: { description: 'Cuerpo de la petición (se serializa a JSON automáticamente)' },
+      },
+      required: ['url', 'method'],
+    },
+  },
+  // ── File system ───────────────────────────────────────────────────────────
   {
     name: 'read_file',
     description: 'Lee el contenido de cualquier archivo del proyecto HAT3X.',
@@ -427,6 +512,93 @@ async function executeTool(
   input: Record<string, unknown>,
   actionRef: { value: CommandResult['action'] }
 ): Promise<string> {
+  // ── Supabase admin ────────────────────────────────────────────────────────
+  if (name === 'supabase_query') {
+    const { table, select = '*', filters, order_by, order_asc = false, limit } = input as {
+      table: string; select?: string; filters?: Record<string, unknown>;
+      order_by?: string; order_asc?: boolean; limit?: number;
+    };
+    const { getSupabaseClient } = await import('@/lib/supabase');
+    let q = getSupabaseClient().from(table).select(select);
+    if (filters) {
+      for (const [col, val] of Object.entries(filters)) {
+        q = q.eq(col, val as string);
+      }
+    }
+    if (order_by) q = q.order(order_by, { ascending: order_asc });
+    if (limit) q = q.limit(limit);
+    const { data, error } = await q;
+    if (error) return `[Supabase error: ${error.message}]`;
+    return JSON.stringify(data ?? []);
+  }
+
+  if (name === 'supabase_insert') {
+    const { table, data } = input as { table: string; data: unknown };
+    const { getSupabaseClient } = await import('@/lib/supabase');
+    const { data: result, error } = await getSupabaseClient().from(table).insert(data as never).select();
+    if (error) return `[Supabase error: ${error.message}]`;
+    return JSON.stringify(result ?? []);
+  }
+
+  if (name === 'supabase_update') {
+    const { table, data, filters } = input as {
+      table: string; data: Record<string, unknown>; filters: Record<string, unknown>;
+    };
+    const { getSupabaseClient } = await import('@/lib/supabase');
+    let q = getSupabaseClient().from(table).update(data as never);
+    for (const [col, val] of Object.entries(filters)) {
+      q = q.eq(col, val as string);
+    }
+    const { data: result, error } = await q.select();
+    if (error) return `[Supabase error: ${error.message}]`;
+    return JSON.stringify(result ?? []);
+  }
+
+  if (name === 'supabase_delete') {
+    const { table, filters } = input as { table: string; filters: Record<string, unknown> };
+    const { getSupabaseClient } = await import('@/lib/supabase');
+    let q = getSupabaseClient().from(table).delete();
+    for (const [col, val] of Object.entries(filters)) {
+      q = q.eq(col, val as string);
+    }
+    const { data: result, error } = await q.select();
+    if (error) return `[Supabase error: ${error.message}]`;
+    return JSON.stringify(result ?? []);
+  }
+
+  // ── HTTP genérico ─────────────────────────────────────────────────────────
+  if (name === 'http_request') {
+    const { url, method, headers: extraHeaders = {}, body } = input as {
+      url: string; method: string; headers?: Record<string, string>; body?: unknown;
+    };
+
+    // Inject API keys by placeholder name so Claude doesn't need to know the actual values
+    const resolvedHeaders: Record<string, string> = {};
+    for (const [k, v] of Object.entries(extraHeaders)) {
+      const resolved = String(v)
+        .replace('RETELL_API_KEY', process.env['RETELL_API_KEY'] ?? '')
+        .replace('ELEVENLABS_API_KEY', process.env['ELEVENLABS_API_KEY'] ?? '')
+        .replace('N8N_API_KEY', process.env['N8N_API_KEY'] ?? '')
+        .replace('TWILIO_ACCOUNT_SID', process.env['TWILIO_ACCOUNT_SID'] ?? '')
+        .replace('TWILIO_AUTH_TOKEN', process.env['TWILIO_AUTH_TOKEN'] ?? '');
+      resolvedHeaders[k] = resolved;
+    }
+
+    const fetchInit: RequestInit = {
+      method,
+      headers: { 'Content-Type': 'application/json', ...resolvedHeaders },
+    };
+    if (body !== undefined && method !== 'GET') {
+      fetchInit.body = JSON.stringify(body);
+    }
+
+    const res = await fetch(url, fetchInit);
+    const text = await res.text();
+    const preview = text.length > 3000 ? text.slice(0, 3000) + '...[truncado]' : text;
+    return `HTTP ${res.status}\n${preview}`;
+  }
+
+  // ── File system ───────────────────────────────────────────────────────────
   if (name === 'read_file') {
     const fullPath = resolvePath(String(input['path'] ?? ''));
     const content = safeRead(fullPath, 12000);
