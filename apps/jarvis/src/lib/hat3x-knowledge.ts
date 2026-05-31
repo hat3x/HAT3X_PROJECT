@@ -114,4 +114,32 @@ PM técnico crea propuesta → cierre → tareas en Supabase → Jarvis supervis
 - **Estado**: en desarrollo activo
 - **Descripción**: web de presentación del salón con galería y reservas, más flujo de automatización para publicar y responder en Instagram vía n8n
 - **Stack**: Next.js (web), n8n (Instagram)
+
+---
+
+## Base de datos CRM — tablas disponibles via supabase_query/insert/update/delete
+
+### hat3x_projects
+id TEXT PK | client_id TEXT → hat3x_clients.id | name TEXT | description TEXT
+status: proposal | active | delivered | invoiced | paid | cancelled
+phase: discovery | design | development | review | launch
+pm_vertical: voz | chatbots | webs-apps | automatizaciones | operaciones
+budget NUMERIC | start_date DATE | end_date DATE | created_at TIMESTAMPTZ
+
+### hat3x_project_financials
+id UUID PK | project_id TEXT → hat3x_projects.id | client_id TEXT
+type: income | expense | concept TEXT | amount NUMERIC | date DATE
+status: pending | invoiced | paid | cancelled | invoice_ref TEXT | notes TEXT
+
+### hat3x_project_notes
+id UUID PK | project_id TEXT → hat3x_projects.id | client_id TEXT
+content TEXT | source: jarvis | manual | telegram | created_at TIMESTAMPTZ
+
+## Dashboard CRM en /crm
+/crm              → Pipeline visual de proyectos por estado con KPIs
+/crm/projects     → Lista de todos los proyectos con filtros por estado
+/crm/projects/[id] → Detalle de proyecto: fases, finanzas, tareas vinculadas, notas
+/crm/clients      → Lista de clientes
+/crm/clients/[id] → Ficha de cliente: proyectos, P&L, notas
+/crm/finanzas     → P&L global y por proyecto, gráfico mensual
 `;
