@@ -74,6 +74,55 @@ export interface FinancialSummary {
   recentTransactions: DbTransaction[];
 }
 
+export interface BrainWriteResult {
+  table: string;
+  id: string;
+  summary: string;
+}
+
+export interface PlanSubtask {
+  id: string;
+  description: string;
+  vertical: string;
+  skills: string[];
+  estimatedHours: number;
+  dependencies: string[];
+}
+
+export interface PlanAgentSelection {
+  subtaskId: string;
+  agentId: string;
+  score: number;
+  rationale: string;
+}
+
+export interface PlanCheckpoint {
+  afterPhase: number;
+  reason: string;
+  requiredApproval: 'jose' | 'client' | 'both';
+}
+
+export interface PlanPhase {
+  phaseNumber: number;
+  subtasks: {
+    subtaskId: string;
+    agentId: string;
+  }[];
+}
+
+export interface ExecutivePlan {
+  orderRaw: string;
+  clientId: string | null;
+  subtasks: PlanSubtask[];
+  selections: PlanAgentSelection[];
+  executionPlan: {
+    phases: PlanPhase[];
+    checkpoints: PlanCheckpoint[];
+    totalEstimatedHours: number;
+    riskLevel: 'low' | 'medium' | 'high';
+  };
+}
+
 export interface TransactionAction {
   type: 'transaction_recorded';
   transaction: DbTransaction;
@@ -94,7 +143,23 @@ export interface UpdateClientAction {
   client: DbClient;
 }
 
-export type CommandAction = TransactionAction | SummaryAction | CreateTaskAction | UpdateClientAction;
+export interface PlanProposedAction {
+  type: 'plan_proposed';
+  plan: ExecutivePlan;
+}
+
+export interface BrainUpdatedAction {
+  type: 'brain_updated';
+  result: BrainWriteResult;
+}
+
+export type CommandAction =
+  | TransactionAction
+  | SummaryAction
+  | CreateTaskAction
+  | UpdateClientAction
+  | PlanProposedAction
+  | BrainUpdatedAction;
 
 export interface CommandResult {
   response: string;

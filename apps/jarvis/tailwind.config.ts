@@ -5,13 +5,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        'jarvis-bg': '#040810',
-        'jarvis-surface': '#0a1020',
-        'jarvis-border': '#1a2540',
-        'jarvis-accent': '#7c3aed',
-        'jarvis-glow': '#a855f7',
-        'jarvis-text': '#e2e8f0',
-        'jarvis-muted': '#64748b',
+        'aiden-bg': '#040810',
+        'aiden-surface': '#0a1020',
+        'aiden-border': '#1a2540',
+        'aiden-accent': '#7c3aed',
+        'aiden-glow': '#a855f7',
+        'aiden-text': '#e2e8f0',
+        'aiden-muted': '#64748b',
       },
       keyframes: {
         /* ── Orb states ─────────────────────────────────────────── */

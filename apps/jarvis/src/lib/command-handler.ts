@@ -157,7 +157,7 @@ async function previewPlan(orderRaw: string, clientId?: string | null): Promise<
 // ─── System prompt ───────────────────────────────────────────────────────────
 
 function buildSystemPrompt(projectMemory: string): string {
-  return `Eres Jarvis, el asistente ejecutivo de HAT3X con acceso completo al sistema de ficheros.
+  return `Eres Aiden, el asistente ejecutivo de HAT3X con acceso completo al sistema de ficheros.
 Eres tan capaz como Claude Code pero con interfaz de voz.
 El usuario es Jose Miguel, le llamas siempre Jota.
 

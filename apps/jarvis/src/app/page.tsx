@@ -275,7 +275,7 @@ export default function JarvisPage() {
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #0f2040', paddingBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#7c3aed', letterSpacing: '0.25em' }}>HAT3X</span>
-          <span style={{ fontSize: 18, fontWeight: 600, color: '#e2e8f0' }}>Jarvis</span>
+          <span style={{ fontSize: 18, fontWeight: 600, color: '#e2e8f0' }}>Aiden</span>
         </div>
         <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#334155' }}>
           {new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}

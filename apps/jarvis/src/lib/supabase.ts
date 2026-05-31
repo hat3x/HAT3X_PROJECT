@@ -30,6 +30,58 @@ export async function readClients(): Promise<DbClient[]> {
   return (data ?? []) as DbClient[];
 }
 
+function slugifyClientName(name: string): string {
+  const slug = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return slug || `client-${Date.now()}`;
+}
+
+export async function findClients(query: string): Promise<DbClient[]> {
+  const search = query.trim();
+  if (!search) return [];
+
+  const { data, error } = await getClient()
+    .from('hat3x_clients')
+    .select('id, name, sector, notes, previous_projects')
+    .order('name')
+    .ilike('name', `%${search}%`);
+
+  if (error) { console.error('[supabase] findClients:', error.message); return []; }
+  return (data ?? []) as DbClient[];
+}
+
+export interface CreateClientRecordInput {
+  name: string;
+  sector?: string | null;
+  notes?: string | null;
+  id?: string | null;
+}
+
+export async function createClientRecord(input: CreateClientRecordInput): Promise<DbClient> {
+  const name = input.name.trim();
+  if (!name) throw new Error('Client name is required');
+
+  const { data, error } = await getClient()
+    .from('hat3x_clients')
+    .insert({
+      id: input.id?.trim() || slugifyClientName(name),
+      name,
+      sector: input.sector?.trim() || null,
+      notes: input.notes?.trim() || null,
+      previous_projects: [],
+    })
+    .select('id, name, sector, notes, previous_projects')
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data as DbClient;
+}
+
 export async function readPendingCheckpoints(): Promise<DbCheckpoint[]> {
   const { data, error } = await getClient()
     .from('hat3x_checkpoints')

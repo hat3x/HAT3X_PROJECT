@@ -10,37 +10,32 @@ export function Transcript({ userText, jarvisResponse, isLoading }: TranscriptPr
   if (!userText && !jarvisResponse && !isLoading) return null;
 
   return (
-    <div className="w-full max-w-lg space-y-2">
+    <div className="w-full max-w-2xl space-y-3">
       {userText && (
         <div className="flex justify-end">
-          <div
-            className="holo-panel px-4 py-2.5 max-w-xs"
-            style={{ borderColor: 'rgba(99, 102, 241, 0.3)' }}
-          >
-            <p className="text-xs font-mono mb-1 holo-text-muted uppercase tracking-widest">tú</p>
-            <p className="holo-text-user text-sm font-mono leading-relaxed">{userText}</p>
+          <div className="holo-panel max-w-md border-cyan-300/25 px-4 py-3">
+            <p className="mb-1 text-xs font-mono uppercase tracking-widest text-slate-500">Jota</p>
+            <p className="text-sm leading-relaxed text-cyan-100">{userText}</p>
           </div>
         </div>
       )}
+
       {(jarvisResponse || isLoading) && (
         <div className="flex justify-start">
-          <div
-            className="holo-panel px-4 py-2.5 max-w-sm"
-            style={{ borderColor: 'rgba(124, 58, 237, 0.3)' }}
-          >
-            <p className="text-xs font-mono mb-1 holo-text-muted uppercase tracking-widest">jarvis</p>
+          <div className="holo-panel max-w-xl border-emerald-300/25 px-4 py-3">
+            <p className="mb-1 text-xs font-mono uppercase tracking-widest text-slate-500">Jarvis</p>
             {isLoading ? (
-              <div className="flex gap-1.5 items-center py-1">
-                {([0, 150, 300] as const).map((d) => (
+              <div className="flex items-center gap-1.5 py-1">
+                {([0, 150, 300] as const).map((delay) => (
                   <span
-                    key={d}
-                    className="w-1.5 h-1.5 rounded-full animate-bounce"
-                    style={{ background: 'rgba(134, 239, 172, 0.7)', animationDelay: `${d}ms` }}
+                    key={delay}
+                    className="h-1.5 w-1.5 animate-bounce rounded-full bg-emerald-300/80"
+                    style={{ animationDelay: `${delay}ms` }}
                   />
                 ))}
               </div>
             ) : (
-              <p className="holo-text-jarvis text-sm font-mono leading-relaxed">{jarvisResponse}</p>
+              <p className="text-sm leading-relaxed text-emerald-100">{jarvisResponse}</p>
             )}
           </div>
         </div>

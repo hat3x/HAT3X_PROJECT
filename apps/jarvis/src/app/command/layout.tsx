@@ -53,7 +53,7 @@ export default function CommandLayout({ children }: { children: React.ReactNode 
             href="/"
             style={{ fontSize: 11, fontFamily: 'monospace', color: '#475569', textDecoration: 'none', letterSpacing: '0.1em' }}
           >
-            ← Jarvis
+            ← Aiden
           </Link>
         </div>
       </aside>

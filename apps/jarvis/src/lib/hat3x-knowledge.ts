@@ -1,4 +1,4 @@
-// Esencia del sistema orquestador HAT3X embebida en Jarvis.
+// Esencia del sistema orquestador HAT3X embebida en Aiden.
 // Cuando los agentes o skills cambien, actualizar aquí también.
 
 export const HAT3X_KNOWLEDGE = `
@@ -84,8 +84,8 @@ Datos mínimos para empezar: ¿Inbound u outbound? ¿Objetivo principal?
 ---
 
 ## Flujo interno
-Lead entra → Jarvis registra → PM Operaciones cualifica → Discovery call →
-PM técnico crea propuesta → cierre → tareas en Supabase → Jarvis supervisa
+Lead entra → Aiden registra → PM Operaciones cualifica → Discovery call →
+PM técnico crea propuesta → cierre → tareas en Supabase → Aiden supervisa
 
 ---
 

@@ -2,10 +2,10 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Jarvis — HAT3X',
+  title: 'Aiden — HAT3X',
   description: 'Asistente ejecutivo de voz',
   manifest: '/manifest.json',
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Jarvis' },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Aiden' },
 };
 
 export const viewport: Viewport = {
