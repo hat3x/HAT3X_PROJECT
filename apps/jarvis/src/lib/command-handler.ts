@@ -947,7 +947,10 @@ async function executeTool(
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
-export async function handleCommand(text: string): Promise<CommandResult> {
+export async function handleCommand(
+  text: string,
+  history: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+): Promise<CommandResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('Missing ANTHROPIC_API_KEY');
 
@@ -970,7 +973,17 @@ Cerebro empresa: ${JSON.stringify(companyBrain)}`;
 
   const anthropic = new Anthropic({ apiKey });
   const actionRef: { value: CommandResult['action'] } = { value: undefined };
-  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: text }];
+
+  // Build messages: prior conversation history + current user message
+  // Limit history to last 20 messages (10 exchanges) to control context size
+  const historyMessages: Anthropic.MessageParam[] = history
+    .slice(-20)
+    .map((h) => ({ role: h.role, content: h.content }));
+
+  const messages: Anthropic.MessageParam[] = [
+    ...historyMessages,
+    { role: 'user', content: text },
+  ];
   let lastText = '';
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {

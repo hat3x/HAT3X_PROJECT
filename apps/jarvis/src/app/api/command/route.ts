@@ -5,11 +5,11 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const body = await req.json() as { text?: string };
+    const body = await req.json() as { text?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> };
     if (!body.text || typeof body.text !== 'string') {
       return NextResponse.json({ error: 'No text provided' }, { status: 400 });
     }
-    const result = await handleCommand(body.text);
+    const result = await handleCommand(body.text, body.history ?? []);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

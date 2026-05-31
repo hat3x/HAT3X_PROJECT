@@ -120,6 +120,20 @@ function LiveFeed({ tasks, events, checkpoints }: { tasks: HatTask[]; events: Bu
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+const HISTORY_KEY = 'aiden-conversation-history';
+const MAX_HISTORY = 30; // últimos 30 intercambios = 60 mensajes
+
+type HistoryMessage = { role: 'user' | 'assistant'; content: string };
+
+function loadHistory(): HistoryMessage[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as HistoryMessage[]; } catch { return []; }
+}
+
+function saveHistory(h: HistoryMessage[]): void {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-(MAX_HISTORY * 2))));
+}
+
 export default function JarvisPage() {
   const idPrefix = useId();
 
@@ -131,6 +145,10 @@ export default function JarvisPage() {
   const [isSpeakingOverride, setIsSpeakingOverride] = useState(false);
   const [selectedMicId, setSelectedMicId] = useState<string | undefined>();
   const [isAutoMode, setIsAutoMode]       = useState(false);
+
+  // Historial persistente en localStorage — sobrevive refrescos y cierres
+  const conversationRef = useRef<HistoryMessage[]>([]);
+  useEffect(() => { conversationRef.current = loadHistory(); }, []);
 
   const [kpis, setKpis]             = useState<CRMKPIs | null>(null);
   const [tasks, setTasks]           = useState<HatTask[]>([]);
@@ -171,7 +189,7 @@ export default function JarvisPage() {
       const res = await fetch('/api/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, history: conversationRef.current }),
       });
       const data = await res.json() as { response?: string; action?: CommandAction; error?: string };
       if (!res.ok || !data.response) {
@@ -182,6 +200,16 @@ export default function JarvisPage() {
       setCurrentAction(data.action);
       setIsLoading(false);
       await speak(data.response);
+
+      // Persistir historial: guarda usuario + respuesta de Aiden
+      const updated: HistoryMessage[] = [
+        ...conversationRef.current,
+        { role: 'user' as const, content: text },
+        { role: 'assistant' as const, content: data.response },
+      ];
+      conversationRef.current = updated;
+      saveHistory(updated);
+
       setCommandLog(prev => [...prev, { id: `${idPrefix}-${Date.now()}`, userText: text, jarvisResponse: data.response!, timestamp: new Date() }]);
       if (data.action) refreshData();
     } catch (err) {
