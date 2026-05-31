@@ -135,6 +135,31 @@ status: pending | invoiced | paid | cancelled | invoice_ref TEXT | notes TEXT
 id UUID PK | project_id TEXT → hat3x_projects.id | client_id TEXT
 content TEXT | source: jarvis | manual | telegram | created_at TIMESTAMPTZ
 
+## Prospección de clientes potenciales
+
+Flujo completo para encontrar y contactar clientes potenciales en una zona:
+
+1. **Buscar**: search_local_businesses(query, location) → Google Places via Serper.dev
+   - Devuelve: nombre, dirección, teléfono, web, categoría, valoración
+   - Ej: query="clínicas dentales", location="Madrid"
+
+2. **Enriquecer emails**: Para cada web encontrada, usa http_request(url, "GET") y extrae emails de contacto del HTML
+
+3. **Guardar**: save_leads_file(leads, filename) → clients/leads/YYYY-MM-DD-nombre.json
+   - Campos: nombre, email, telefono, web, direccion, sector, notas
+
+4. **Email individual**: send_outreach_email(to_email, to_name, subject, body_html)
+   - Envía desde info@hat3x.com via Resend
+
+5. **Campaña masiva**: send_bulk_outreach(leads_file, subject, body_html)
+   - Lee el JSON de leads, envía a todos los que tienen email
+   - Placeholders: {nombre}, {empresa}, {sector}
+   - Delay 3s entre envíos
+
+APIs necesarias: SERPER_API_KEY (serper.dev gratuito) y RESEND_API_KEY (resend.com gratuito).
+
+Tono de outreach: Presentar HAT3X como consultora de IA especializada en el sector del cliente (voz para clínicas, chatbots para restaurantes, webs para peluquerías). Siempre personalizar con el nombre de la empresa.
+
 ## Dashboard CRM en /crm
 /crm              → Pipeline visual de proyectos por estado con KPIs
 /crm/projects     → Lista de todos los proyectos con filtros por estado

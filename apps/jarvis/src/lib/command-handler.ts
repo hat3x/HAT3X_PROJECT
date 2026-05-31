@@ -503,6 +503,62 @@ const TOOLS: Anthropic.Tool[] = [
       required: ['title', 'content'],
     },
   },
+  // ── Prospección de clientes ──────────────────────────────────────────────
+  {
+    name: 'search_local_businesses',
+    description: 'Busca negocios locales como clientes potenciales (clínicas, peluquerías, restaurantes, etc.) usando Google Places via Serper. Devuelve nombre, dirección, teléfono, web, categoría y valoración.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query:    { type: 'string', description: 'Tipo de negocio. Ej: "clínicas dentales", "peluquerías", "restaurantes"' },
+        location: { type: 'string', description: 'Ciudad o zona. Ej: "Madrid", "Barcelona", "Sevilla"' },
+        limit:    { type: 'number', description: 'Máximo de resultados (default 10, max 20)' },
+      },
+      required: ['query', 'location'],
+    },
+  },
+  {
+    name: 'save_leads_file',
+    description: 'Guarda una lista de leads en un archivo JSON en clients/leads/. Úsalo después de search_local_businesses.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        leads:    { description: 'Array de leads con: nombre, email?, telefono?, web?, direccion?, sector?, notas?' },
+        filename: { type: 'string', description: 'Nombre del archivo sin extensión. Default: YYYY-MM-DD-query-location' },
+      },
+      required: ['leads'],
+    },
+  },
+  {
+    name: 'send_outreach_email',
+    description: 'Envía un email de prospección individual desde info@hat3x.com a un lead usando Resend. Personaliza el mensaje con el nombre y sector del cliente.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        to_email:  { type: 'string', description: 'Email del destinatario' },
+        to_name:   { type: 'string', description: 'Nombre del contacto o empresa' },
+        subject:   { type: 'string', description: 'Asunto del email' },
+        body_html: { type: 'string', description: 'Cuerpo HTML. Usa <p>, <br>, <b>, <a>' },
+        body_text: { type: 'string', description: 'Texto plano (opcional)' },
+      },
+      required: ['to_email', 'subject', 'body_html'],
+    },
+  },
+  {
+    name: 'send_bulk_outreach',
+    description: 'Envía emails de prospección a todos los leads de un archivo JSON. Respeta delay entre envíos.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        leads_file:      { type: 'string', description: 'Ruta al archivo JSON de leads' },
+        subject:         { type: 'string', description: 'Asunto. Puede usar {nombre} y {empresa}' },
+        body_html:       { type: 'string', description: 'HTML del email. Puede usar {nombre}, {empresa}, {sector}' },
+        delay_seconds:   { type: 'number', description: 'Segundos entre emails (default 3)' },
+        only_with_email: { type: 'boolean', description: 'Solo enviar a leads con email conocido (default true)' },
+      },
+      required: ['leads_file', 'subject', 'body_html'],
+    },
+  },
 ];
 
 // ─── Tool executor ────────────────────────────────────────────────────────────
@@ -772,6 +828,118 @@ async function executeTool(
     );
     actionRef.value = { type: 'brain_updated', result };
     return JSON.stringify(result);
+  }
+
+  // ── Prospección de clientes ──────────────────────────────────────────────
+
+  if (name === 'search_local_businesses') {
+    const { query, location, limit = 10 } = input as { query: string; location: string; limit?: number };
+    const serperKey = process.env['SERPER_API_KEY'];
+    if (!serperKey) return '[Error: SERPER_API_KEY no configurada. Ve a serper.dev, crea una cuenta gratuita y añade SERPER_API_KEY al .env.local]';
+
+    const res = await fetch('https://google.serper.dev/places', {
+      method: 'POST',
+      headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: `${query} en ${location}`, location: `${location}, Spain`, gl: 'es', hl: 'es', num: Math.min(limit, 20) }),
+    });
+    const data = await res.json() as { places?: unknown[] };
+    const places = data.places ?? [];
+    return JSON.stringify({ total: (places as unknown[]).length, results: places });
+  }
+
+  if (name === 'save_leads_file') {
+    const { leads, filename } = input as { leads: unknown[]; filename?: string };
+    const date = new Date().toISOString().slice(0, 10);
+    const safeName = (filename ?? `${date}-leads`).replace(/[^a-z0-9_-]/gi, '-');
+    const leadsDir = join(PROJECT_ROOT, 'clients', 'leads');
+    mkdirSync(leadsDir, { recursive: true });
+    const filepath = join(leadsDir, `${safeName}.json`);
+    writeFileSync(filepath, JSON.stringify(leads, null, 2), 'utf-8');
+    return `Leads guardados: ${filepath}\nTotal: ${(leads as unknown[]).length} contactos`;
+  }
+
+  if (name === 'send_outreach_email') {
+    const { to_email, to_name, subject, body_html, body_text } = input as {
+      to_email: string; to_name?: string; subject: string; body_html: string; body_text?: string;
+    };
+    const resendKey = process.env['RESEND_API_KEY'];
+    if (!resendKey) return '[Error: RESEND_API_KEY no configurada. Ve a resend.com, crea cuenta gratuita y añade RESEND_API_KEY al .env.local]';
+
+    const toField = to_name ? `${to_name} <${to_email}>` : to_email;
+    const plainText = body_text ?? body_html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'HAT3X <info@hat3x.com>',
+        to: [toField],
+        subject,
+        html: body_html,
+        text: plainText,
+      }),
+    });
+    const result = await res.json() as { id?: string; statusCode?: number; message?: string };
+    if (!res.ok) return `[Error Resend ${res.status}: ${result.message ?? JSON.stringify(result)}]`;
+    return `Email enviado a ${toField} ✓ (ID: ${result.id ?? 'ok'})`;
+  }
+
+  if (name === 'send_bulk_outreach') {
+    const { leads_file, subject, body_html, delay_seconds = 3, only_with_email = true } = input as {
+      leads_file: string; subject: string; body_html: string; delay_seconds?: number; only_with_email?: boolean;
+    };
+    const resendKey = process.env['RESEND_API_KEY'];
+    if (!resendKey) return '[Error: RESEND_API_KEY no configurada]';
+
+    const fullPath = resolvePath(leads_file);
+    const raw = safeRead(fullPath, 200000);
+    if (!raw) return `[Error: No se encontró el archivo ${fullPath}]`;
+
+    let leads: Array<Record<string, string>>;
+    try { leads = JSON.parse(raw) as Array<Record<string, string>>; } catch { return '[Error: Archivo de leads no es JSON válido]'; }
+
+    const targets = only_with_email ? leads.filter(l => l['email'] || l['Email']) : leads;
+    if (targets.length === 0) return '[Sin leads con email. Añade emails al archivo primero.]';
+
+    const delayMs = Math.max(delay_seconds, 2) * 1000;
+    const sent: string[] = [];
+    const failed: string[] = [];
+
+    for (const lead of targets) {
+      const email  = (lead['email'] ?? lead['Email'] ?? '').trim();
+      const nombre = lead['nombre'] ?? lead['name'] ?? lead['empresa'] ?? lead['company'] ?? 'equipo';
+      const empresa = lead['empresa'] ?? lead['company'] ?? lead['nombre'] ?? lead['name'] ?? '';
+      const sector = lead['sector'] ?? lead['category'] ?? '';
+
+      if (!email) { failed.push(`${nombre} (sin email)`); continue; }
+
+      const personalSubject = subject.replace(/\{nombre\}/g, nombre).replace(/\{empresa\}/g, empresa);
+      const personalBody    = body_html
+        .replace(/\{nombre\}/g, nombre)
+        .replace(/\{empresa\}/g, empresa)
+        .replace(/\{sector\}/g, sector);
+
+      try {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'HAT3X <info@hat3x.com>',
+            to: [`${empresa || nombre} <${email}>`],
+            subject: personalSubject,
+            html: personalBody,
+            text: personalBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+          }),
+        });
+        if (res.ok) { sent.push(email); } else { failed.push(`${email} (error ${res.status})`); }
+      } catch (e) { failed.push(`${email} (${String(e)})`); }
+
+      if (targets.indexOf(lead) < targets.length - 1) {
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    }
+
+    return `Campaña finalizada.\n✓ Enviados: ${sent.length}\n✗ Fallidos: ${failed.length}${failed.length > 0 ? '\nFallidos: ' + failed.join(', ') : ''}`;
   }
 
   return '{}';
