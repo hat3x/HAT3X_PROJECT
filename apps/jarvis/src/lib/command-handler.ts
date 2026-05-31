@@ -50,6 +50,46 @@ function resolvePath(p: string): string {
   return join(PROJECT_ROOT, p);
 }
 
+// ─── Cached project memory (reads once per process, not per request) ──────────
+
+let _cachedMemory: string | null = null;
+
+function getProjectMemory(): string {
+  if (_cachedMemory !== null) return _cachedMemory;
+
+  const parts: string[] = [];
+
+  // CLAUDE.md
+  const claudeMd = safeRead(join(PROJECT_ROOT, 'CLAUDE.md'), 3000);
+  if (claudeMd) parts.push(`=== CLAUDE.md ===\n${claudeMd}`);
+
+  // Memory files
+  if (existsSync(MEMORY_DIR)) {
+    const files = readdirSync(MEMORY_DIR).filter(
+      (f) => f.endsWith('.md') && f !== 'MEMORY.md'
+    );
+    for (const f of files) {
+      const content = safeRead(join(MEMORY_DIR, f), 1500);
+      if (content) parts.push(`=== Memoria: ${f} ===\n${content}`);
+    }
+  }
+
+  // Client directory listing (names only — Claude uses read_file for detail)
+  const clientsDir = join(PROJECT_ROOT, 'clients', 'projects');
+  if (existsSync(clientsDir)) {
+    try {
+      const names = readdirSync(clientsDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
+        .join(', ');
+      parts.push(`=== Clientes con carpeta en clients/projects/ ===\n${names}`);
+    } catch { /* skip */ }
+  }
+
+  _cachedMemory = parts.join('\n\n---\n\n');
+  return _cachedMemory;
+}
+
 // ─── Project memory loader ───────────────────────────────────────────────────
 
 function loadProjectMemory(): string {
@@ -117,36 +157,45 @@ async function previewPlan(orderRaw: string, clientId?: string | null): Promise<
 // ─── System prompt ───────────────────────────────────────────────────────────
 
 function buildSystemPrompt(projectMemory: string): string {
-  return `Eres Jarvis, el asistente ejecutivo con acceso completo al proyecto HAT3X.
-Actúas como Claude Code con interfaz de voz: lees, escribes y buscas en cualquier archivo del proyecto.
-El usuario se llama Jose Miguel, le llamas siempre Jota.
+  return `Eres Jarvis, el asistente ejecutivo de HAT3X con acceso completo al sistema de ficheros.
+Eres tan capaz como Claude Code pero con interfaz de voz.
+El usuario es Jose Miguel, le llamas siempre Jota.
 
-Tu respuesta se leerá en voz alta:
-- Responde en español, de forma natural y conversacional
-- Para acciones: una frase confirmando lo que hiciste
-- Para consultas: resume los datos clave sin listas ni símbolos especiales
-- NUNCA uses markdown, asteriscos, guiones ni símbolos en la respuesta hablada
-- Usa las herramientas silenciosamente y confirma el resultado en voz natural
-
-Herramientas de sistema de ficheros:
-- read_file: lee cualquier archivo del proyecto (usa rutas relativas a PROJECT_ROOT o absolutas)
-- list_directory: ve qué hay en una carpeta
-- search_files: busca texto en archivos del proyecto
-- write_file: crea o modifica archivos (propuestas, contratos, notas, etc.)
-- run_command: ejecuta comandos (git, npm, etc.)
+REGLAS DE RESPUESTA (la respuesta se lee en voz alta):
+- Responde SIEMPRE en español, de forma natural y conversacional
+- NUNCA uses markdown, asteriscos, guiones, listas ni símbolos
+- NUNCA respondas solo "Hecho" o "Listo" sin dar información real
+- Para CONSULTAS ("dime", "muéstrame", "qué", "cómo está", "estado"): usa las herramientas para obtener datos reales y luego responde con un resumen claro
+- Para ÓRDENES ("crea", "delega", "registra", "anota"): ejecuta y confirma brevemente
+- Si no tienes los datos en el contexto, USA read_file o list_directory antes de responder
 
 PROJECT_ROOT = ${PROJECT_ROOT}
 
-Herramientas de negocio: find_clients, create_client, delegate_to_pm, create_task,
-update_client_notes, record_transaction, query_finances, record_recurring_expense,
-record_project_revenue, record_project_cost, add_company_memory.
+HERRAMIENTAS DE FICHEROS (úsalas proactivamente para consultas):
+- read_file(path): lee cualquier archivo. Rutas relativas al PROJECT_ROOT. Ej: "clients/projects/biodental", "CLAUDE.md"
+- list_directory(path): lista contenido de una carpeta
+- search_files(query, directory?, file_pattern?): busca texto en archivos
+- write_file(path, content): crea o modifica archivos
+- run_command(command, cwd?): ejecuta git, npm, etc.
 
-Reglas: usa read_file antes de responder sobre clientes o proyectos para dar datos reales.
-No inventes client_id — usa find_clients si no tienes el ID.
+HERRAMIENTAS DE NEGOCIO:
+- find_clients(query): busca clientes por nombre
+- create_client(name, sector?, notes?): da de alta cliente
+- delegate_to_pm(pm, task, ...): delega a PM especializado
+- create_task(description): crea tarea interna
+- update_client_notes(client_id, note): añade nota a cliente
+- record_transaction / query_finances: finanzas
+- record_recurring_expense / record_project_revenue / record_project_cost: contabilidad
+- add_company_memory(title, content): guarda decisión o regla importante
+
+REGLAS OPERATIVAS:
+- Para saber el estado de proyectos: usa list_directory("clients/projects") y luego read_file por cliente
+- No inventes client_id — usa find_clients primero
+- Para crear documentos: usa write_file en la carpeta del cliente correspondiente
 
 ${HAT3X_KNOWLEDGE}
 
-━━━ MEMORIA DEL PROYECTO ━━━
+━━━ MEMORIA Y ESTRUCTURA DEL PROYECTO ━━━
 ${projectMemory}`;
 }
 
@@ -569,7 +618,7 @@ export async function handleCommand(text: string): Promise<CommandResult> {
     readCompanyBrainContext().catch(() => null),
   ]);
 
-  const projectMemory = loadProjectMemory();
+  const projectMemory = getProjectMemory();
 
   const systemPrompt = `${buildSystemPrompt(projectMemory)}
 
@@ -579,12 +628,13 @@ Clientes: ${JSON.stringify(clients.slice(0, 15))}
 Checkpoints pendientes: ${JSON.stringify(checkpoints.slice(0, 3))}
 Cerebro empresa: ${JSON.stringify(companyBrain)}`;
 
-  const client = new Anthropic({ apiKey });
+  const anthropic = new Anthropic({ apiKey });
   const actionRef: { value: CommandResult['action'] } = { value: undefined };
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: text }];
+  let lastText = '';
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const response = await client.messages.create({
+    const response = await anthropic.messages.create({
       model: JARVIS_MODEL,
       max_tokens: 1500,
       system: systemPrompt,
@@ -599,10 +649,14 @@ Cerebro empresa: ${JSON.stringify(companyBrain)}`;
       (b) => b.type === 'tool_use'
     ) as Anthropic.ToolUseBlock[];
 
+    if (textBlock?.text) lastText = textBlock.text;
+
+    // No more tools to run — return final text
     if (response.stop_reason === 'end_turn' || toolUses.length === 0) {
-      return { response: textBlock?.text ?? 'Hecho.', action: actionRef.value };
+      return { response: lastText || 'Sin respuesta.', action: actionRef.value };
     }
 
+    // Execute tools in parallel
     const toolResults = await Promise.all(
       toolUses.map(async (tu) => ({
         type: 'tool_result' as const,
@@ -615,5 +669,5 @@ Cerebro empresa: ${JSON.stringify(companyBrain)}`;
     messages.push({ role: 'user', content: toolResults });
   }
 
-  return { response: 'Hecho.', action: actionRef.value };
+  return { response: lastText || 'Sin respuesta.', action: actionRef.value };
 }
