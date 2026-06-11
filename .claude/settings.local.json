@@ -56,7 +56,19 @@
       "WebFetch(domain:hat3x.com)",
       "Bash(npx supabase:*)",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_74fc41a042a42c9a181afea716905361bdd89661 npx supabase functions list --project-ref cpocwvedqlxtwazwoyfn)",
-      "Bash(SUPABASE_ACCESS_TOKEN=sbp_74fc41a042a42c9a181afea716905361bdd89661 npx supabase functions deploy retell-webhook --project-ref cpocwvedqlxtwazwoyfn --no-verify-jwt)"
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_74fc41a042a42c9a181afea716905361bdd89661 npx supabase functions deploy retell-webhook --project-ref cpocwvedqlxtwazwoyfn --no-verify-jwt)",
+      "Bash(npx tsc *)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force; Write-Host \"Killed PID $_\" })",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"C:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X\\\\supabase\\\\migrations\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git -C \"c:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X\" log --oneline -10)",
+      "Bash(git -C \"c:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X\" add apps/jarvis/src/lib/crm.ts apps/jarvis/src/app/crm/ apps/jarvis/src/lib/hat3x-knowledge.ts)",
+      "Bash(git -C 'c:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X' commit -m ' *)",
+      "Bash(git -C \"c:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X\" add apps/jarvis/src/app/page.tsx)",
+      "Bash(git -C \"c:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X\" grep -rn \"Jarvis\\\\|jarvis\" apps/jarvis/src/ --include=\"*.ts\" --include=\"*.tsx\" -l)",
+      "Bash(git -C \"c:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X\" add apps/jarvis/src/ apps/jarvis/public/manifest.json apps/jarvis/tailwind.config.ts)",
+      "Bash(git -C \"c:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X\" add apps/jarvis/src/components/jarvis-orb.tsx)"
     ]
   }
 }

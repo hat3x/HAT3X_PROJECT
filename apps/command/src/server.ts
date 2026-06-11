@@ -1,10 +1,45 @@
 import "dotenv/config"
 import { createServer } from "node:http"
 import { runIntelligencePipeline } from "./intelligence/pipeline.js"
+import { previewExecutionPlan } from "./intelligence/preview.js"
 
 const PORT = parseInt(process.env["COMMAND_SERVER_PORT"] ?? "3002", 10)
 
 createServer((req, res) => {
+  if (req.method === "POST" && req.url === "/api/preview") {
+    let body = ""
+    req.on("data", (chunk: Buffer) => { body += chunk.toString() })
+    req.on("end", () => {
+      let parsed: { orderRaw?: string; clientId?: string | null }
+      try {
+        parsed = JSON.parse(body) as { orderRaw?: string; clientId?: string | null }
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "Invalid JSON" }))
+        return
+      }
+
+      if (!parsed.orderRaw) {
+        res.writeHead(400, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "orderRaw is required" }))
+        return
+      }
+
+      previewExecutionPlan({ orderRaw: parsed.orderRaw, clientId: parsed.clientId ?? null })
+        .then((result) => {
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ ok: true, ...result }))
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err)
+          console.error(`[preview] ${message}`)
+          res.writeHead(500, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: message }))
+        })
+    })
+    return
+  }
+
   if (req.method === "POST" && req.url === "/api/process") {
     let body = ""
     req.on("data", (chunk: Buffer) => { body += chunk.toString() })

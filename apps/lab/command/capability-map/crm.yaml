@@ -1,0 +1,11 @@
+vertical: crm
+agentId: pm-crm
+skills:
+  - integrations-crm
+  - api-design
+  - database-patterns
+  - webhook-patterns
+  - documentation
+maxParallelSubtasks: 2
+typicalHoursPerSubtask: 6
+requiresClientApproval: true

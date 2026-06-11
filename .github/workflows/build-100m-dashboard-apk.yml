@@ -1,0 +1,92 @@
+name: Build 100M Dashboard APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: "clients/projects/100-montaditos/100M Dashboard"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: "clients/projects/100-montaditos/100M Dashboard/package-lock.json"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create .env file
+        run: |
+          echo 'VITE_SUPABASE_URL=${{ secrets.DASHBOARD_SUPABASE_URL }}' > .env
+          echo 'VITE_SUPABASE_ANON_KEY=${{ secrets.DASHBOARD_SUPABASE_ANON_KEY }}' >> .env
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '11076708'
+          accept-android-sdk-licenses: true
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build debug APK
+        if: ${{ github.event.inputs.build_type == 'debug' }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Build release APK (unsigned)
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Upload debug APK
+        if: ${{ github.event.inputs.build_type == 'debug' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: 100M-Dashboard-debug-${{ github.run_number }}
+          path: "clients/projects/100-montaditos/100M Dashboard/android/app/build/outputs/apk/debug/app-debug.apk"
+          retention-days: 30
+
+      - name: Upload release APK
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: 100M-Dashboard-release-${{ github.run_number }}
+          path: "clients/projects/100-montaditos/100M Dashboard/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          retention-days: 30

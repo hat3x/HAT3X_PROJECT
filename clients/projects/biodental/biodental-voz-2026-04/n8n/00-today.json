@@ -1,0 +1,46 @@
+{
+  "name": "Biodental — toDay",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biodental-today",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ahora = new Date();\n// Fecha/hora en zona horaria Europe/Madrid\nconst madridDate = new Date(ahora.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\n\nconst anio = madridDate.getFullYear();\nconst mes = String(madridDate.getMonth() + 1).padStart(2, '0');\nconst dia = String(madridDate.getDate()).padStart(2, '0');\nconst horas = String(madridDate.getHours()).padStart(2, '0');\nconst minutos = String(madridDate.getMinutes()).padStart(2, '0');\n\nconst fecha = `${anio}-${mes}-${dia}`;\nconst hora = `${horas}:${minutos}`;\n\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\nconst diaSemana = diasSemana[madridDate.getDay()];\nconst mesTexto = meses[madridDate.getMonth()];\nconst fechaTexto = `${diaSemana} ${madridDate.getDate()} de ${mesTexto} de ${anio}`;\n\nreturn [{ json: {\n  fecha,\n  hora,\n  diaSemana,\n  fechaTexto,\n  timestamp: ahora.toISOString()\n}}];"
+      },
+      "id": "today-node",
+      "name": "Calcular Fecha Madrid",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [440, 300]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": { "main": [[{ "node": "Calcular Fecha Madrid", "type": "main", "index": 0 }]] },
+    "Calcular Fecha Madrid": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

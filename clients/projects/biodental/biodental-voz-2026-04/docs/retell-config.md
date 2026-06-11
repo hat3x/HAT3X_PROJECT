@@ -17,6 +17,14 @@ Content-Type: application/json
   "general_tools": [
     {
       "type": "custom",
+      "name": "toDay",
+      "description": "Devuelve la fecha y hora actuales en España (Madrid). Llamar al inicio de cada llamada y siempre que se necesite saber qué día es hoy para calcular fechas relativas. Nunca asumir la fecha — siempre consultarla.",
+      "speak_during_execution": false,
+      "url": "{{N8N_TODAY_URL}}",
+      "parameters": { "type": "object", "properties": {} }
+    },
+    {
+      "type": "custom",
       "name": "verificar_disponibilidad",
       "description": "Verifica si hay un hueco disponible en el calendario para el servicio, fecha y hora indicados. Llamar SIEMPRE antes de crear o modificar una cita.",
       "speak_during_execution": true,
@@ -92,12 +100,9 @@ Content-Type: application/json
       }
     },
     {
-      "type": "transfer_call",
-      "name": "transferir_a_clinica",
-      "description": "Transferir cuando el paciente lo pida, tenga urgencia dental, quiera presupuesto, o la consulta esté fuera del alcance de Sara.",
-      "number": "{{CLINICA_PHONE_TRANSFER}}",
-      "speak_during_execution": true,
-      "speak_during_execution_message": "Voy a pasarte con la clínica ahora mismo, un momento por favor."
+      "type": "end_call",
+      "name": "end_call",
+      "description": "Terminar la llamada. Usar siempre después de la despedida final, una vez resuelta la consulta del paciente y tras preguntar si necesita algo más."
     }
   ]
 }
@@ -166,11 +171,13 @@ modificar_cita OK:
 ## Checklist final
 - [ ] LLM creado y LLM_ID guardado en .env
 - [ ] Agente creado y AGENT_ID guardado en .env
-- [ ] URLs de 4 webhooks n8n en las tools del LLM
-- [ ] Número de transferencia configurado en transfer_call tool
+- [ ] Workflows 00-04 importados y activos en n8n cloud
+- [ ] N8N_TODAY_URL en .env → ejecutar `node add-today-tool.js` para añadir tool toDay a Retell
+- [ ] URLs de los 4 webhooks n8n en las tools del LLM (verificar, crear, cancelar, modificar)
 - [ ] Voz ElevenLabs femenina española configurada
 - [ ] Número de teléfono asignado al agente
 - [ ] Webhook post-llamada apuntando a n8n
-- [ ] Test: pedir cita, verificar WhatsApp y Sheets
+- [ ] Test: pedir cita, verificar WhatsApp y Google Sheets
+- [ ] Test: solicitar cita fuera de horario → Sara rechaza correctamente
 - [ ] Test: cancelar cita, verificar Sheets actualizado
-- [ ] Test: transfer call funciona
+- [ ] Test: modificar cita a slot ocupado → Sara avisa y sugiere otro horario

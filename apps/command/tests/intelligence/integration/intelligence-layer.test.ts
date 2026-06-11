@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest"
 import { runIntelligenceLayer } from "../../../src/intelligence/index"
 
-const SKIP = process.env["ANTHROPIC_API_KEY"] == null
+const OPENAI_API_KEY = process.env["OPENAI_API_KEY"]
+const SKIP =
+  OPENAI_API_KEY == null ||
+  OPENAI_API_KEY === "sk-..." ||
+  OPENAI_API_KEY === "test-key"
 
 describe.skipIf(SKIP)("Intelligence Layer — real LLM integration", () => {
   it(

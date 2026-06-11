@@ -12,17 +12,72 @@
       "name": "Retell Tool Call",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst nombre = String(body.nombre || '').trim();\nconst telefono = String(body.telefono || '').trim();\nconst servicio = String(body.servicio || '').trim();\nconst fecha = String(body.fecha || '').trim();\nconst hora = String(body.hora || '').trim();\nconst notas = String(body.notas || '').trim();\n\nconst DURACIONES = {\n  'Revision': 30, 'Limpieza dental': 45, 'Empaste': 45,\n  'Extraccion': 30, 'Blanqueamiento dental': 60,\n  'Consulta ortodoncia': 30, 'Consulta implantes': 30, 'Endodoncia': 60\n};\nconst duracion = DURACIONES[servicio] || 30;\n\nconst fechaInicio = new Date(`${fecha}T${hora}:00`);\nconst fechaFin = new Date(fechaInicio.getTime() + duracion * 60000);\n\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\nconst diaSemana = diasSemana[fechaInicio.getDay()];\nconst diaMes = fechaInicio.getDate();\nconst mes = meses[fechaInicio.getMonth()];\n\nconst descripcion = `Paciente: ${nombre}\\nTeléfono: ${telefono}\\nServicio: ${servicio}\\nDuración: ${duracion} min${notas ? '\\nNotas: ' + notas : ''}\\nCreado por: Recepcionista IA Sara`;\n\nreturn [{ json: {\n  nombre, telefono, servicio, fecha, hora, notas, duracion,\n  fechaInicio: fechaInicio.toISOString(),\n  fechaFin: fechaFin.toISOString(),\n  tituloEvento: `${nombre} - ${servicio}`,\n  descripcion, diaSemana, diaMes, mes\n}}];"
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else if (raw.args !== undefined) {\n  body = typeof raw.args === 'string' ? JSON.parse(raw.args) : raw.args;\n} else {\n  body = raw;\n}\n\nconst nombre = String(body.nombre || '').trim();\nconst telefonoRaw = String(body.telefono || '').trim();\nconst telefono = telefonoRaw.replace(/\\D/g, ''); // normalizar: solo dígitos\nconst servicio = String(body.servicio || '').trim();\nconst fecha = String(body.fecha || '').trim();\nconst hora = String(body.hora || '').trim();\nconst notas = String(body.notas || '').trim();\n\n// Validar teléfono: exactamente 9 dígitos\nif (!/^\\d{9}$/.test(telefono)) {\n  return [{ json: {\n    error: 'telefono_invalido',\n    confirmado: false,\n    mensaje: 'El teléfono que me has dado no parece correcto. ¿Me puedes repetir los nueve dígitos?'\n  }}];\n}\n\n// Duración según servicio — tolera nombres con/sin acentos y variantes\nfunction durFor(servicio) {\n  const s = String(servicio || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');\n  const TABLA = [\n    [/blanqueamiento/, 60],\n    [/endodoncia/, 60],\n    [/implante|cirugia/, 60],\n    [/limpieza/, 45],\n    [/empaste/, 45],\n    [/prostodoncia|protesis|corona|puente/, 45],\n    [/periodoncia|encia/, 45],\n    [/extracc/, 30],\n    [/ortodoncia/, 30],\n    [/revis|general|consulta/, 30],\n  ];\n  for (const [re, min] of TABLA) if (re.test(s)) return min;\n  return 30;\n}\nconst duracion = durFor(servicio);\n\n// Convierte hora local España a UTC correcto (servidor n8n es UTC)\nfunction spainToUTC(dateStr, timeStr) {\n  const asZ = new Date(dateStr + 'T' + timeStr + ':00Z');\n  const inMadrid = new Date(asZ.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\n  return new Date(asZ.getTime() + (asZ - inMadrid));\n}\n\nconst fechaInicio = spainToUTC(fecha, hora);\nconst fechaFin = new Date(fechaInicio.getTime() + duracion * 60000);\n\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\nconst localInicio = new Date(fechaInicio.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\nconst diaSemana = diasSemana[localInicio.getDay()];\nconst diaMes = localInicio.getDate();\nconst mes = meses[localInicio.getMonth()];\n\nconst descripcion = 'Paciente: ' + nombre + '\\nTeléfono: ' + telefono + '\\nServicio: ' + servicio + '\\nDuración: ' + duracion + ' min' + (notas ? '\\nNotas: ' + notas : '') + '\\nCreado por: Recepcionista IA Sara';\n\nreturn [{ json: {\n  nombre, telefono, servicio, fecha, hora, notas, duracion,\n  fechaInicio: fechaInicio.toISOString(),\n  fechaFin: fechaFin.toISOString(),\n  tituloEvento: nombre + ' - ' + servicio,\n  descripcion, diaSemana, diaMes, mes\n}}];\n"
       },
       "id": "parse-node",
       "name": "Parsear Argumentos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "check-error",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        },
+        "looseTypeValidation": true
+      },
+      "id": "if-valid-node",
+      "name": "¿Error validación?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-error-node",
+      "name": "Responder Error Validación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        160
+      ]
     },
     {
       "parameters": {
@@ -42,7 +97,10 @@
       "name": "Google Calendar - Crear Evento",
       "type": "n8n-nodes-base.googleCalendar",
       "typeVersion": 1.3,
-      "position": [440, 300],
+      "position": [
+        660,
+        440
+      ],
       "credentials": {
         "googleCalendarOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -52,19 +110,79 @@
     },
     {
       "parameters": {
-        "jsCode": "const gcal = $('Google Calendar - Crear Evento').first().json;\nconst datos = $('Parsear Argumentos').first().json;\nreturn [{ json: { ...datos, calendar_event_id: gcal.id || '' }}];"
+        "jsCode": "const gcal = $('Google Calendar - Crear Evento').first().json;\nconst datos = $('Parsear Argumentos').first().json;\nif (!gcal.id) {\n  return [{ json: {\n    error: 'calendar_error',\n    confirmado: false,\n    mensaje: 'Ha habido un problema al guardar la cita en el calendario. ¿Quieres que lo intentemos de nuevo?'\n  }}];\n}\nreturn [{ json: { ...datos, calendar_event_id: gcal.id }}];"
       },
       "id": "merge-node",
       "name": "Añadir Calendar Event ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        880,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "check-gcal-error",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        },
+        "looseTypeValidation": true
+      },
+      "id": "if-gcal-node",
+      "name": "¿GCal OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-gcal-error-node",
+      "name": "Responder Error GCal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "append",
-        "documentId": { "__rl": true, "value": "={{ $env.BIODENTAL_SHEETS_ID }}", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "Citas", "mode": "name" },
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.BIODENTAL_SHEETS_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Citas",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -87,7 +205,10 @@
       "name": "Google Sheets - Añadir Cita",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [880, 300],
+      "position": [
+        1320,
+        580
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -99,14 +220,17 @@
       "parameters": {
         "operation": "send",
         "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
-        "to": "={{ $env.TWILIO_WHATSAPP_TO }}",
-        "body": "=✅ Cita confirmada - Clínica Biodental\n\nHola {{ $('Añadir Calendar Event ID').first().json.nombre }}, tu cita ha quedado confirmada:\n\n📅 {{ $('Añadir Calendar Event ID').first().json.diaSemana }} {{ $('Añadir Calendar Event ID').first().json.diaMes }} de {{ $('Añadir Calendar Event ID').first().json.mes }} a las {{ $('Añadir Calendar Event ID').first().json.hora }}\n🦷 {{ $('Añadir Calendar Event ID').first().json.servicio }}\n📍 Clínica Biodental, Colmenarejo\n\n¿Necesitas cambiar o cancelar? Llámanos al mismo número.\n\n¡Hasta pronto!"
+        "to": "=whatsapp:+34{{ $('Parsear Argumentos').first().json.telefono }}",
+        "body": "=✅ Cita confirmada - Clínica Biodental\n\nHola {{ $('Parsear Argumentos').first().json.nombre }}, tu cita ha quedado confirmada:\n\n📅 {{ $('Parsear Argumentos').first().json.diaSemana }} {{ $('Parsear Argumentos').first().json.diaMes }} de {{ $('Parsear Argumentos').first().json.mes }} a las {{ $('Parsear Argumentos').first().json.hora }}\n🦷 {{ $('Parsear Argumentos').first().json.servicio }}\n📍 Clínica Biodental, Colmenarejo\n\n¿Necesitas cambiar o cancelar? Llámanos al mismo número.\n\n¡Hasta pronto!"
       },
       "id": "twilio-node",
       "name": "Twilio - Enviar WhatsApp",
       "type": "n8n-nodes-base.twilio",
       "typeVersion": 1,
-      "position": [1100, 300],
+      "position": [
+        1540,
+        580
+      ],
       "credentials": {
         "twilioApi": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -117,36 +241,152 @@
     },
     {
       "parameters": {
-        "jsCode": "const datos = $('Añadir Calendar Event ID').first().json;\nconst gcal = $('Google Calendar - Crear Evento').first().json;\nif (gcal.id) {\n  return [{ json: {\n    confirmado: true,\n    id_cita: gcal.id,\n    mensaje_confirmacion: `Cita confirmada. Te esperamos el ${datos.diaSemana} ${datos.diaMes} de ${datos.mes} a las ${datos.hora} para tu ${datos.servicio.toLowerCase()}. Recibirás la confirmación por WhatsApp.`\n  }}];\n}\nreturn [{ json: {\n  confirmado: false,\n  error: 'calendar_error',\n  mensaje: 'Ha habido un problema al crear la cita. ¿Quieres que lo intentemos de nuevo?'\n}}];"
+        "jsCode": "const datos = $('Parsear Argumentos').first().json;\nreturn [{ json: {\n  confirmado: true,\n  id_cita: datos.calendar_event_id,\n  mensaje_confirmacion: `Cita confirmada. Te esperamos el ${datos.diaSemana} ${datos.diaMes} de ${datos.mes} a las ${datos.hora} para tu ${datos.servicio.toLowerCase()}. Recibirás la confirmación por WhatsApp.`\n}}];"
       },
       "id": "response-node",
       "name": "Construir Respuesta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 300]
+      "position": [
+        1760,
+        580
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify($json) }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "respond-node",
       "name": "Responder a Retell",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, 300]
+      "position": [
+        1980,
+        580
+      ]
     }
   ],
   "connections": {
-    "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
-    "Parsear Argumentos": { "main": [[{ "node": "Google Calendar - Crear Evento", "type": "main", "index": 0 }]] },
-    "Google Calendar - Crear Evento": { "main": [[{ "node": "Añadir Calendar Event ID", "type": "main", "index": 0 }]] },
-    "Añadir Calendar Event ID": { "main": [[{ "node": "Google Sheets - Añadir Cita", "type": "main", "index": 0 }]] },
-    "Google Sheets - Añadir Cita": { "main": [[{ "node": "Twilio - Enviar WhatsApp", "type": "main", "index": 0 }]] },
-    "Twilio - Enviar WhatsApp": { "main": [[{ "node": "Construir Respuesta", "type": "main", "index": 0 }]] },
-    "Construir Respuesta": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+    "Retell Tool Call": {
+      "main": [
+        [
+          {
+            "node": "Parsear Argumentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Argumentos": {
+      "main": [
+        [
+          {
+            "node": "¿Error validación?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Error validación?": {
+      "main": [
+        [
+          {
+            "node": "Responder Error Validación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Calendar - Crear Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Calendar - Crear Evento": {
+      "main": [
+        [
+          {
+            "node": "Añadir Calendar Event ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Añadir Calendar Event ID": {
+      "main": [
+        [
+          {
+            "node": "¿GCal OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿GCal OK?": {
+      "main": [
+        [
+          {
+            "node": "Responder Error GCal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets - Añadir Cita",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Añadir Cita": {
+      "main": [
+        [
+          {
+            "node": "Twilio - Enviar WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twilio - Enviar WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Construir Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder a Retell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }

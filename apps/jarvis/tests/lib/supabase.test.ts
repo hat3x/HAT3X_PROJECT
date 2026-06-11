@@ -58,6 +58,47 @@ describe('supabase read bridge', () => {
     expect(result[0].name).toBe('BioDental');
   });
 
+  it('findClients searches clients by name', async () => {
+    const { createClient } = await import('@supabase/supabase-js');
+    const mockData = [
+      { id: 'biodental', name: 'BioDental', sector: 'salud', notes: null, previous_projects: [] },
+    ];
+    const ilike = vi.fn().mockResolvedValue({ data: mockData, error: null });
+    const order = vi.fn().mockReturnValue({ ilike });
+    const select = vi.fn().mockReturnValue({ order });
+    vi.mocked(createClient).mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({ select }),
+    } as any);
+
+    const { findClients } = await import('@/lib/supabase');
+    const result = await findClients('biodental');
+
+    expect(result).toHaveLength(1);
+    expect(ilike).toHaveBeenCalledWith('name', '%biodental%');
+  });
+
+  it('createClientRecord inserts a normalized client record', async () => {
+    const { createClient } = await import('@supabase/supabase-js');
+    const mockData = { id: 'biodental', name: 'BioDental', sector: 'salud', notes: 'Contacto: Ana', previous_projects: [] };
+    const single = vi.fn().mockResolvedValue({ data: mockData, error: null });
+    const select = vi.fn().mockReturnValue({ single });
+    const insert = vi.fn().mockReturnValue({ select });
+    vi.mocked(createClient).mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({ insert }),
+    } as any);
+
+    const { createClientRecord } = await import('@/lib/supabase');
+    const result = await createClientRecord({ name: 'BioDental', sector: 'salud', notes: 'Contacto: Ana' });
+
+    expect(result.id).toBe('biodental');
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'biodental',
+      name: 'BioDental',
+      sector: 'salud',
+      notes: 'Contacto: Ana',
+    }));
+  });
+
   it('readPendingCheckpoints returns only pending items', async () => {
     const { createClient } = await import('@supabase/supabase-js');
     const mockData = [

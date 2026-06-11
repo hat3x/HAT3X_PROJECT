@@ -16,13 +16,47 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  args = raw;\n}\nreturn [{ json: {\n  telefono: String(args.telefono || '').trim(),\n  fecha: String(args.fecha || '').trim(),\n  hora: String(args.hora || '').trim()\n}}];"
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else if (raw.args !== undefined) {\n  args = typeof raw.args === 'string' ? JSON.parse(raw.args) : raw.args;\n} else {\n  args = raw;\n}\n\nconst telefonoRaw = String(args.telefono || '').trim();\nconst telefono = telefonoRaw.replace(/\\D/g, ''); // normalizar: solo dígitos\nconst fecha = String(args.fecha || '').trim();\nconst hora = String(args.hora || '').trim();\n\n// Validar teléfono: exactamente 9 dígitos\nif (!/^\\d{9}$/.test(telefono)) {\n  return [{ json: {\n    error: 'telefono_invalido',\n    cancelado: false,\n    mensaje: 'El teléfono que me has dado no parece correcto. ¿Me puedes repetir los nueve dígitos?'\n  }}];\n}\n\nreturn [{ json: { telefono, fecha, hora }}];"
       },
       "id": "parse-node",
       "name": "Parsear Argumentos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "check-error",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            }
+          ],
+          "combineOperation": "all"
+        },
+        "looseTypeValidation": true
+      },
+      "id": "if-valid-node",
+      "name": "¿Error validación?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-error-node",
+      "name": "Responder Error Validación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 160]
     },
     {
       "parameters": {
@@ -35,7 +69,7 @@
       "name": "Google Sheets - Leer Citas",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [440, 300],
+      "position": [660, 440],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -45,13 +79,13 @@
     },
     {
       "parameters": {
-        "jsCode": "const { telefono, fecha, hora } = $('Parsear Argumentos').first().json;\nconst filas = $('Google Sheets - Leer Citas').all();\n\nconst fila = filas.find(f => {\n  const d = f.json;\n  const telMatch = String(d['Teléfono'] || '').trim() === telefono;\n  const fechaMatch = String(d['Fecha'] || '').trim() === fecha;\n  const activa = d['Estado'] === 'CONFIRMADA';\n  const horaMatch = !hora || String(d['Hora'] || '').trim() === hora;\n  return telMatch && fechaMatch && activa && horaMatch;\n});\n\nif (!fila) {\n  return [{ json: { encontrado: false, calendarEventId: null, telefono, fecha, hora, mensaje: 'No encontré ninguna cita activa para ese teléfono y fecha.' }}];\n}\n\nconst d = new Date(fecha + 'T00:00:00');\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\n\nreturn [{ json: {\n  encontrado: true,\n  calendarEventId: fila.json['Calendar_Event_ID'],\n  nombre: fila.json['Nombre'],\n  servicio: fila.json['Servicio'],\n  telefono, fecha, hora: fila.json['Hora'],\n  fechaTexto: `${diasSemana[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]}`\n}}];"
+        "jsCode": "const { telefono, fecha, hora } = $('Parsear Argumentos').first().json;\nconst filas = $('Google Sheets - Leer Citas').all();\n\nconst fila = filas.find(f => {\n  const d = f.json;\n  const telMatch = String(d['Teléfono'] || '').replace(/\\D/g, '') === telefono;\n  const fechaMatch = String(d['Fecha'] || '').trim() === fecha;\n  const activa = d['Estado'] === 'CONFIRMADA';\n  const horaMatch = !hora || String(d['Hora'] || '').trim() === hora;\n  return telMatch && fechaMatch && activa && horaMatch;\n});\n\nif (!fila) {\n  return [{ json: { encontrado: false, calendarEventId: null, telefono, fecha, hora, mensaje: 'No encontré ninguna cita activa para ese teléfono y fecha.' }}];\n}\n\nconst d = new Date(fecha + 'T00:00:00');\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\n\nreturn [{ json: {\n  encontrado: true,\n  calendarEventId: fila.json['Calendar_Event_ID'],\n  nombre: fila.json['Nombre'],\n  servicio: fila.json['Servicio'],\n  telefono, fecha, hora: fila.json['Hora'],\n  fechaTexto: `${diasSemana[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]}`\n}}];"
       },
       "id": "find-node",
       "name": "Encontrar Cita en Sheets",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [880, 440]
     },
     {
       "parameters": {
@@ -64,7 +98,7 @@
       "name": "Google Calendar - Eliminar Evento",
       "type": "n8n-nodes-base.googleCalendar",
       "typeVersion": 1.3,
-      "position": [880, 300],
+      "position": [1100, 440],
       "credentials": {
         "googleCalendarOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -89,7 +123,7 @@
       "name": "Google Sheets - Actualizar Estado",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1100, 300],
+      "position": [1320, 440],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -106,7 +140,7 @@
       "name": "Construir Respuesta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 300]
+      "position": [1540, 440]
     },
     {
       "parameters": {
@@ -118,12 +152,18 @@
       "name": "Responder a Retell",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, 300]
+      "position": [1760, 440]
     }
   ],
   "connections": {
     "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
-    "Parsear Argumentos": { "main": [[{ "node": "Google Sheets - Leer Citas", "type": "main", "index": 0 }]] },
+    "Parsear Argumentos": { "main": [[{ "node": "¿Error validación?", "type": "main", "index": 0 }]] },
+    "¿Error validación?": {
+      "main": [
+        [{ "node": "Responder Error Validación", "type": "main", "index": 0 }],
+        [{ "node": "Google Sheets - Leer Citas", "type": "main", "index": 0 }]
+      ]
+    },
     "Google Sheets - Leer Citas": { "main": [[{ "node": "Encontrar Cita en Sheets", "type": "main", "index": 0 }]] },
     "Encontrar Cita en Sheets": { "main": [[{ "node": "Google Calendar - Eliminar Evento", "type": "main", "index": 0 }]] },
     "Google Calendar - Eliminar Evento": { "main": [[{ "node": "Google Sheets - Actualizar Estado", "type": "main", "index": 0 }]] },

@@ -12,30 +12,96 @@
       "name": "Retell Tool Call",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  args = raw;\n}\nreturn [{ json: {\n  telefono: String(args.telefono || '').trim(),\n  fecha_actual: String(args.fecha_actual || '').trim(),\n  hora_actual: String(args.hora_actual || '').trim(),\n  nueva_fecha: String(args.nueva_fecha || '').trim(),\n  nueva_hora: String(args.nueva_hora || '').trim()\n}}];"
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else if (raw.args !== undefined) {\n  args = typeof raw.args === 'string' ? JSON.parse(raw.args) : raw.args;\n} else {\n  args = raw;\n}\n\nconst telefonoRaw = String(args.telefono || '').trim();\nconst telefono = telefonoRaw.replace(/\\D/g, '');\nif (!/^\\d{9}$/.test(telefono)) {\n  return [{ json: {\n    error: 'telefono_invalido', modificado: false,\n    mensaje: 'El teléfono que me has dado no parece correcto. ¿Me puedes repetir los nueve dígitos?'\n  }}];\n}\n\nconst nueva_fecha = String(args.nueva_fecha || '').trim();\nconst nueva_hora  = String(args.nueva_hora  || '').trim();\n\nconst HORARIOS = {\n  1: { inicio: 9 * 60 + 30, fin: 19 * 60 },\n  2: { inicio: 9 * 60 + 30, fin: 19 * 60 },\n  3: { inicio: 9 * 60 + 30, fin: 14 * 60 },\n  4: { inicio: 9 * 60 + 30, fin: 19 * 60 },\n  5: { inicio: 9 * 60 + 30, fin: 14 * 60 },\n  6: { inicio: 9 * 60 + 30, fin: 14 * 60 }\n};\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\n\nfunction spainToUTC(dateStr, timeStr) {\n  const asZ = new Date(dateStr + 'T' + timeStr + ':00Z');\n  const inMadrid = new Date(asZ.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\n  return new Date(asZ.getTime() + (asZ - inMadrid));\n}\n\nconst nuevaFechaUTC   = spainToUTC(nueva_fecha, nueva_hora);\nconst localNuevaFecha = new Date(nuevaFechaUTC.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\nconst diaSemana  = localNuevaFecha.getDay();\nconst horarioDia = HORARIOS[diaSemana];\n\nif (!horarioDia) {\n  return [{ json: {\n    error: 'dia_cerrado', modificado: false,\n    mensaje: 'Los domingos estamos cerrados. ¿Quieres un día entre semana?'\n  }}];\n}\n\nconst horaMin = localNuevaFecha.getHours() * 60 + localNuevaFecha.getMinutes();\nif (horaMin < horarioDia.inicio) {\n  return [{ json: {\n    error: 'fuera_horario', modificado: false,\n    mensaje: 'Esa hora es antes de que abramos. Empezamos a las nueve y media.'\n  }}];\n}\nif (horaMin >= horarioDia.fin - 30) {\n  const esMediodia = horarioDia.fin === 14 * 60;\n  return [{ json: {\n    error: 'fuera_horario', modificado: false,\n    mensaje: 'Los ' + diasSemana[diaSemana] + ' cerramos a las ' + (esMediodia ? 'dos de la tarde' : 'siete de la tarde') + ' y necesitamos tiempo para la cita.'\n  }}];\n}\n\nreturn [{ json: {\n  telefono,\n  fecha_actual: String(args.fecha_actual || '').trim(),\n  hora_actual:  String(args.hora_actual  || '').trim(),\n  nueva_fecha, nueva_hora\n}}];\n"
       },
       "id": "parse-node",
       "name": "Parsear Argumentos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "check-parse-error",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        },
+        "looseTypeValidation": true
+      },
+      "id": "if-valid-node",
+      "name": "¿Error validación?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-error-node",
+      "name": "Responder Error Validación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        160
+      ]
     },
     {
       "parameters": {
         "operation": "getAll",
-        "documentId": { "__rl": true, "value": "={{ $env.BIODENTAL_SHEETS_ID }}", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "Citas", "mode": "name" },
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.BIODENTAL_SHEETS_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Citas",
+          "mode": "name"
+        },
         "options": {}
       },
       "id": "sheets-read-node",
       "name": "Google Sheets - Leer Citas",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [440, 300],
+      "position": [
+        660,
+        440
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -45,13 +111,153 @@
     },
     {
       "parameters": {
-        "jsCode": "const { telefono, fecha_actual, hora_actual, nueva_fecha, nueva_hora } = $('Parsear Argumentos').first().json;\nconst filas = $('Google Sheets - Leer Citas').all();\n\nconst fila = filas.find(f => {\n  const d = f.json;\n  const telMatch = String(d['Teléfono'] || '').trim() === telefono;\n  const fechaMatch = String(d['Fecha'] || '').trim() === fecha_actual;\n  const activa = d['Estado'] === 'CONFIRMADA';\n  const horaMatch = !hora_actual || String(d['Hora'] || '').trim() === hora_actual;\n  return telMatch && fechaMatch && activa && horaMatch;\n});\n\nif (!fila) {\n  return [{ json: { encontrado: false, calendarEventId: null, nueva_fecha, nueva_hora }}];\n}\n\nconst servicio = fila.json['Servicio'];\nconst DURACIONES = {\n  'Revision': 30, 'Limpieza dental': 45, 'Empaste': 45,\n  'Extraccion': 30, 'Blanqueamiento dental': 60,\n  'Consulta ortodoncia': 30, 'Consulta implantes': 30, 'Endodoncia': 60\n};\nconst duracion = DURACIONES[servicio] || 30;\n\nconst nuevaFechaInicio = new Date(`${nueva_fecha}T${nueva_hora}:00`);\nconst nuevaFechaFin = new Date(nuevaFechaInicio.getTime() + duracion * 60000);\n\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\n\nreturn [{ json: {\n  encontrado: true,\n  calendarEventId: fila.json['Calendar_Event_ID'],\n  nombre: fila.json['Nombre'],\n  servicio, telefono, fecha_actual, nueva_fecha, nueva_hora,\n  nuevaFechaInicio: nuevaFechaInicio.toISOString(),\n  nuevaFechaFin: nuevaFechaFin.toISOString(),\n  fechaTexto: `${diasSemana[nuevaFechaInicio.getDay()]} ${nuevaFechaInicio.getDate()} de ${meses[nuevaFechaInicio.getMonth()]}`\n}}];"
+        "jsCode": "const { telefono, fecha_actual, hora_actual, nueva_fecha, nueva_hora } = $('Parsear Argumentos').first().json;\nconst filas = $('Google Sheets - Leer Citas').all();\n\nconst fila = filas.find(f => {\n  const d = f.json;\n  const telMatch   = String(d['Teléfono'] || '').replace(/\\D/g, '') === telefono;\n  const fechaMatch = String(d['Fecha']    || '').trim() === fecha_actual;\n  const activa     = d['Estado'] === 'CONFIRMADA' || d['Estado'] === 'MODIFICADA';\n  const horaMatch  = !hora_actual || String(d['Hora'] || '').trim() === hora_actual;\n  return telMatch && fechaMatch && activa && horaMatch;\n});\n\nif (!fila) {\n  return [{ json: {\n    encontrado: false, modificado: false,\n    mensaje: 'No encontré ninguna cita activa para ese teléfono y fecha.'\n  }}];\n}\n\nconst servicio = fila.json['Servicio'];\n// Duración según servicio — tolera nombres con/sin acentos y variantes\nfunction durFor(servicio) {\n  const s = String(servicio || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');\n  const TABLA = [\n    [/blanqueamiento/, 60],\n    [/endodoncia/, 60],\n    [/implante|cirugia/, 60],\n    [/limpieza/, 45],\n    [/empaste/, 45],\n    [/prostodoncia|protesis|corona|puente/, 45],\n    [/periodoncia|encia/, 45],\n    [/extracc/, 30],\n    [/ortodoncia/, 30],\n    [/revis|general|consulta/, 30],\n  ];\n  for (const [re, min] of TABLA) if (re.test(s)) return min;\n  return 30;\n}\nconst duracion = durFor(servicio);\n\nfunction spainToUTC(dateStr, timeStr) {\n  const asZ = new Date(dateStr + 'T' + timeStr + ':00Z');\n  const inMadrid = new Date(asZ.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\n  return new Date(asZ.getTime() + (asZ - inMadrid));\n}\n\nconst nuevaFechaInicio = spainToUTC(nueva_fecha, nueva_hora);\nconst nuevaFechaFin    = new Date(nuevaFechaInicio.getTime() + duracion * 60000);\nconst localInicio      = new Date(nuevaFechaInicio.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\n\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\n\nreturn [{ json: {\n  encontrado: true,\n  calendarEventId: fila.json['Calendar_Event_ID'],\n  nombre:   fila.json['Nombre'],\n  servicio, telefono, fecha_actual, nueva_fecha, nueva_hora,\n  nuevaFechaInicio: nuevaFechaInicio.toISOString(),\n  nuevaFechaFin:    nuevaFechaFin.toISOString(),\n  fechaTexto: diasSemana[localInicio.getDay()] + ' ' + localInicio.getDate() + ' de ' + meses[localInicio.getMonth()]\n}}];\n"
       },
       "id": "find-node",
       "name": "Encontrar Cita en Sheets",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        880,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "check-found",
+              "leftValue": "={{ $json.encontrado }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        },
+        "looseTypeValidation": true
+      },
+      "id": "if-found-node",
+      "name": "¿Cita encontrada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-not-found-node",
+      "name": "Responder Cita No Encontrada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendarId": "={{ $env.BIODENTAL_CALENDAR_ID }}",
+        "options": {
+          "timeMin": "={{ $json.nuevaFechaInicio }}",
+          "timeMax": "={{ $json.nuevaFechaFin }}",
+          "singleEvents": true
+        }
+      },
+      "id": "gcal-check-node",
+      "name": "Google Calendar - Verificar Nuevo Slot",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1320,
+        580
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $('Encontrar Cita en Sheets').first().json;\nconst eventos = $('Google Calendar - Verificar Nuevo Slot').all();\n\nconst newStart = new Date(datos.nuevaFechaInicio);\nconst newEnd = new Date(datos.nuevaFechaFin);\n\n// Excluir el propio evento para evitar falso conflicto\nconst eventosOtros = eventos\n  .map(e => e.json)\n  .filter(e => e.status !== 'cancelled' && e.id !== datos.calendarEventId && (e.start?.dateTime || e.start?.date));\n\nconst hayConflicto = eventosOtros.some(ev => {\n  const evStart = new Date(ev.start.dateTime || ev.start.date + 'T00:00:00');\n  const evEnd = new Date(ev.end.dateTime || ev.end.date + 'T00:00:00');\n  return newStart < evEnd && newEnd > evStart;\n});\n\nreturn [{ json: { ...datos, slotDisponible: !hayConflicto } }];"
+      },
+      "id": "check-conflict-node",
+      "name": "Comprobar Conflictos Nuevo Slot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "check-slot",
+              "leftValue": "={{ $json.slotDisponible }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        },
+        "looseTypeValidation": true
+      },
+      "id": "if-slot-node",
+      "name": "¿Nuevo slot libre?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"modificado\":false,\"mensaje\":\"Ese horario ya está ocupado. ¿Quieres que miremos otra hora?\"}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-conflict-node",
+      "name": "Responder Slot Ocupado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        440
+      ]
     },
     {
       "parameters": {
@@ -68,7 +274,10 @@
       "name": "Google Calendar - Actualizar Evento",
       "type": "n8n-nodes-base.googleCalendar",
       "typeVersion": 1.3,
-      "position": [880, 300],
+      "position": [
+        1980,
+        720
+      ],
       "credentials": {
         "googleCalendarOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -80,8 +289,16 @@
     {
       "parameters": {
         "operation": "update",
-        "documentId": { "__rl": true, "value": "={{ $env.BIODENTAL_SHEETS_ID }}", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "Citas", "mode": "name" },
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.BIODENTAL_SHEETS_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Citas",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -89,7 +306,9 @@
             "Hora": "={{ $('Encontrar Cita en Sheets').first().json.nueva_hora }}",
             "Estado": "MODIFICADA"
           },
-          "matchingColumns": ["Calendar_Event_ID"]
+          "matchingColumns": [
+            "Calendar_Event_ID"
+          ]
         },
         "options": {}
       },
@@ -97,7 +316,10 @@
       "name": "Google Sheets - Actualizar Cita",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1100, 300],
+      "position": [
+        2200,
+        720
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
@@ -108,36 +330,192 @@
     },
     {
       "parameters": {
-        "jsCode": "const datos = $('Encontrar Cita en Sheets').first().json;\nif (!datos.encontrado) {\n  return [{ json: { modificado: false, mensaje: 'No encontré ninguna cita activa para ese teléfono y fecha.' }}];\n}\nreturn [{ json: { modificado: true, mensaje: `Listo, tu cita ha quedado cambiada al ${datos.fechaTexto} a las ${datos.nueva_hora}.` }}];"
+        "jsCode": "const datos = $('Encontrar Cita en Sheets').first().json;\nreturn [{ json: { modificado: true, mensaje: `Listo, tu cita ha quedado cambiada al ${datos.fechaTexto} a las ${datos.nueva_hora}.` }}];"
       },
       "id": "response-node",
       "name": "Construir Respuesta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 300]
+      "position": [
+        2420,
+        720
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify($json) }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "respond-node",
       "name": "Responder a Retell",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1540, 300]
+      "position": [
+        2640,
+        720
+      ]
     }
   ],
   "connections": {
-    "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
-    "Parsear Argumentos": { "main": [[{ "node": "Google Sheets - Leer Citas", "type": "main", "index": 0 }]] },
-    "Google Sheets - Leer Citas": { "main": [[{ "node": "Encontrar Cita en Sheets", "type": "main", "index": 0 }]] },
-    "Encontrar Cita en Sheets": { "main": [[{ "node": "Google Calendar - Actualizar Evento", "type": "main", "index": 0 }]] },
-    "Google Calendar - Actualizar Evento": { "main": [[{ "node": "Google Sheets - Actualizar Cita", "type": "main", "index": 0 }]] },
-    "Google Sheets - Actualizar Cita": { "main": [[{ "node": "Construir Respuesta", "type": "main", "index": 0 }]] },
-    "Construir Respuesta": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+    "Retell Tool Call": {
+      "main": [
+        [
+          {
+            "node": "Parsear Argumentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Argumentos": {
+      "main": [
+        [
+          {
+            "node": "¿Error validación?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Error validación?": {
+      "main": [
+        [
+          {
+            "node": "Responder Error Validación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets - Leer Citas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Leer Citas": {
+      "main": [
+        [
+          {
+            "node": "Encontrar Cita en Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encontrar Cita en Sheets": {
+      "main": [
+        [
+          {
+            "node": "¿Cita encontrada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Cita encontrada?": {
+      "main": [
+        [
+          {
+            "node": "Google Calendar - Verificar Nuevo Slot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Cita No Encontrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Calendar - Verificar Nuevo Slot": {
+      "main": [
+        [
+          {
+            "node": "Comprobar Conflictos Nuevo Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comprobar Conflictos Nuevo Slot": {
+      "main": [
+        [
+          {
+            "node": "¿Nuevo slot libre?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Nuevo slot libre?": {
+      "main": [
+        [
+          {
+            "node": "Google Calendar - Actualizar Evento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Slot Ocupado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Calendar - Actualizar Evento": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Actualizar Cita",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Actualizar Cita": {
+      "main": [
+        [
+          {
+            "node": "Construir Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder a Retell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }

@@ -1,6 +1,6 @@
 const https = require('https');
 
-const N8N_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkMzIxMjMzOC0xN2NhLTQzODgtYWVlNC01NjJmMGE2Njc0ZGQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiODFiY2M3NDktZjFjYy00MzM4LWI5ODQtOWNlYWZjMmRiYWNkIiwiaWF0IjoxNzc2NjcwOTMyfQ.DeYI6CEkuOFKcb-ndkVWNsoGPSA1V3VJNh2DvwgLF88';
+const N8N_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkMzIxMjMzOC0xN2NhLTQzODgtYWVlNC01NjJmMGE2Njc0ZGQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiNDRiNGRiNDMtZTkwYy00NjU3LTlmODEtM2FlNTA5ZmM5ZDM4IiwiaWF0IjoxNzgxMTA3OTk2fQ.ABeU_jd3EWPg0MTa3rN30_LKmmH_4KXQcgE77LNhXoY';
 const BASE = 'hat3xia.app.n8n.cloud';
 const GCAL_CRED = { id: 'KxXdXUleISCLDdUl', name: 'd9a9' };
 const GSHEETS_CRED = { id: 'EJ0DSUb87ZX7u8RL', name: 'Google Sheets OAuth2 API' };
@@ -19,13 +19,15 @@ function req(method, path, body) {
     const data = body ? JSON.stringify(body) : null;
     const opts = {
       hostname: BASE, path, method,
-      headers: { 'X-N8N-API-KEY': N8N_KEY, 'Content-Type': 'application/json',
-        ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}) }
+      headers: {
+        'X-N8N-API-KEY': N8N_KEY, 'Content-Type': 'application/json',
+        ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {})
+      }
     };
     const r = https.request(opts, res => {
       let d = '';
       res.on('data', c => d += c);
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve(d); } });
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { resolve(d); } });
     });
     r.on('error', reject);
     if (data) r.write(data);
@@ -129,7 +131,7 @@ async function run() {
     const patched = { name: w.name, nodes, connections: w.connections, settings: w.settings || {}, pinData: w.pinData || {} };
     await req('PUT', `/api/v1/workflows/${wf.id}`, patched);
     const actRes = await req('POST', `/api/v1/workflows/${wf.id}/activate`);
-    console.log(`${wf.name}: active=${actRes.active} ${actRes.message ? '| ' + actRes.message.substring(0,100) : '✅'}`);
+    console.log(`${wf.name}: active=${actRes.active} ${actRes.message ? '| ' + actRes.message.substring(0, 100) : '✅'}`);
   }
 }
 

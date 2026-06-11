@@ -19,11 +19,11 @@ const MOCK_SUBTASKS = [
   },
 ]
 
-vi.mock("@anthropic-ai/sdk", () => {
+vi.mock("openai", () => {
   const mockCreate = vi.fn()
   return {
-    default: class MockAnthropic {
-      messages = { create: mockCreate }
+    default: class MockOpenAI {
+      responses = { create: mockCreate }
     },
     _mockCreate: mockCreate,
   }
@@ -32,9 +32,11 @@ vi.mock("@anthropic-ai/sdk", () => {
 describe("analyzeTask", () => {
   beforeEach(async () => {
     vi.clearAllMocks()
-    const sdk = await import("@anthropic-ai/sdk")
+    process.env["OPENAI_API_KEY"] = "test-key"
+    const sdk = await import("openai")
     ;(sdk as any)._mockCreate.mockResolvedValue({
-      content: [{ type: "text", text: JSON.stringify(MOCK_SUBTASKS) }],
+      output_text: JSON.stringify(MOCK_SUBTASKS),
+      output: [],
     })
   })
 
@@ -60,9 +62,10 @@ describe("analyzeTask", () => {
   })
 
   it("throws if LLM returns malformed JSON", async () => {
-    const sdk = await import("@anthropic-ai/sdk")
+    const sdk = await import("openai")
     ;(sdk as any)._mockCreate.mockResolvedValue({
-      content: [{ type: "text", text: "not json at all" }],
+      output_text: "not json at all",
+      output: [],
     })
     const { analyzeTask } = await import("../../src/intelligence/task-analyzer")
     await expect(analyzeTask("any order", null)).rejects.toThrow("Invalid LLM response")

@@ -18,6 +18,7 @@ import {
   recordRecurringExpense,
 } from '@/lib/company-brain';
 import { HAT3X_KNOWLEDGE } from '@/lib/hat3x-knowledge';
+import { buildAidenSystemPrompt } from '@/core/aiden-system-prompt';
 import type {
   CommandResult,
   ExecutivePlan,
@@ -157,6 +158,17 @@ async function previewPlan(orderRaw: string, clientId?: string | null): Promise<
 // ─── System prompt ───────────────────────────────────────────────────────────
 
 function buildSystemPrompt(projectMemory: string): string {
+  return buildAidenSystemPrompt({
+    mode: 'work_mode',
+    userName: 'Jota',
+    companyContext: `${HAT3X_KNOWLEDGE}
+
+PROJECT_ROOT = ${PROJECT_ROOT}
+
+Memoria y estructura del proyecto:
+${projectMemory}`,
+  });
+
   return `Eres Aiden, el asistente ejecutivo de HAT3X con acceso completo al sistema de ficheros.
 Eres tan capaz como Claude Code pero con interfaz de voz.
 El usuario es Jose Miguel, le llamas siempre Jota.

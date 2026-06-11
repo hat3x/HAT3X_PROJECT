@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk"
+import OpenAI from "openai"
 import { z } from "zod"
 import type { Subtask, ClientMemory } from "../types.js"
 
@@ -25,6 +25,7 @@ const SubtaskSchema = z.object({
 })
 
 const SubtasksSchema = z.array(SubtaskSchema)
+const COMMAND_MODEL = process.env["COMMAND_MODEL"] ?? "gpt-5.2-codex"
 
 const SYSTEM_PROMPT = `You are an expert project analyzer for HAT3X, an AI consulting agency.
 Given an incoming order, decompose it into concrete subtasks.
@@ -54,33 +55,33 @@ export async function analyzeTask(
   order: string,
   clientMemory: ClientMemory | null
 ): Promise<Subtask[]> {
-  const client = new Anthropic()
+  const apiKey = process.env["OPENAI_API_KEY"]
+  if (apiKey == null || apiKey.trim().length === 0) {
+    throw new Error("Missing OPENAI_API_KEY")
+  }
+
+  const client = new OpenAI({ apiKey })
 
   const contextNote =
     clientMemory != null
       ? `\n\nClient context: ${clientMemory.name}, sector: ${clientMemory.sector ?? "unknown"}, previous projects: ${clientMemory.previousProjects.join(", ")}`
       : ""
 
-  const message = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 2048,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Order: ${order}${contextNote}`,
-      },
-    ],
+  const response = await client.responses.create({
+    model: COMMAND_MODEL,
+    instructions: SYSTEM_PROMPT,
+    input: `Order: ${order}${contextNote}`,
+    max_output_tokens: 2048,
   })
 
-  const textBlock = message.content.find((b) => b.type === "text")
-  if (textBlock == null || textBlock.type !== "text") {
+  const text = response.output_text
+  if (typeof text !== "string" || text.trim().length === 0) {
     throw new Error("Invalid LLM response: no text content")
   }
 
   let parsed: unknown
   try {
-    parsed = JSON.parse(textBlock.text)
+    parsed = JSON.parse(text)
   } catch {
     throw new Error("Invalid LLM response: not valid JSON")
   }
