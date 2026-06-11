@@ -51,6 +51,29 @@ function siguienteHueco(desde, eventos) {
   return null;
 }
 
+// Convierte "18:00" en "las seis de la tarde" para que el TTS lo lea natural
+function horaTexto(hhmm) {
+  const partes = String(hhmm).split(':').map(Number);
+  const h = partes[0], m = partes[1] || 0;
+  const NOMBRES = ['doce','una','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once'];
+  let h12 = h % 12;
+  let nombre = NOMBRES[h12];
+  let suf;
+  if (m === 0) suf = '';
+  else if (m === 15) suf = ' y cuarto';
+  else if (m === 30) suf = ' y media';
+  else if (m === 45) { h12 = (h12 + 1) % 12; nombre = NOMBRES[h12]; suf = ' menos cuarto'; }
+  else suf = ' y ' + m;
+  const hEff = (m === 45) ? h + 1 : h;
+  let periodo;
+  if (hEff < 12) periodo = ' de la mañana';
+  else if (hEff === 12) periodo = ' del mediodía';
+  else if (hEff < 21) periodo = ' de la tarde';
+  else periodo = ' de la noche';
+  const articulo = (nombre === 'una') ? 'la ' : 'las ';
+  return articulo + nombre + suf + periodo;
+}
+
 function formatSig(sig) {
   const local = toMadrid(sig);
   const sigFecha = local.getFullYear() + '-' + String(local.getMonth()+1).padStart(2,'0') + '-' + String(local.getDate()).padStart(2,'0');
@@ -65,7 +88,7 @@ if (newStart <= ahora) {
   if (sig) {
     const { sigFecha, sigHora, sigTexto } = formatSig(sig);
     return [{ json: { disponible: false, siguiente_disponible: { fecha: sigFecha, hora: sigHora },
-      mensaje: 'Esa hora ya ha pasado. El siguiente hueco disponible sería el ' + sigTexto + ' a las ' + sigHora }}];
+      mensaje: 'Esa hora ya ha pasado. El siguiente hueco disponible sería el ' + sigTexto + ' a ' + horaTexto(sigHora) }}];
   }
   return [{ json: { disponible: false, mensaje: 'Esa hora ya ha pasado. Dinos qué día y hora le viene bien y lo comprobamos.' }}];
 }
@@ -81,7 +104,7 @@ const hayConflicto = activos.some(ev => {
 if (!hayConflicto) {
   return [{ json: {
     disponible: true, fecha: input.fecha, hora: input.hora, servicio: input.servicio,
-    mensaje: 'Hay disponibilidad el ' + input.fechaTexto + ' a las ' + input.hora
+    mensaje: 'Hay disponibilidad el ' + input.fechaTexto + ' a ' + horaTexto(input.hora)
   }}];
 }
 
@@ -89,7 +112,7 @@ const sig = siguienteHueco(new Date(newStart.getTime() + 30 * 60000), activos);
 if (sig) {
   const { sigFecha, sigHora, sigTexto } = formatSig(sig);
   return [{ json: { disponible: false, siguiente_disponible: { fecha: sigFecha, hora: sigHora },
-    mensaje: 'No hay disponibilidad a esa hora. El siguiente hueco libre es el ' + sigTexto + ' a las ' + sigHora }}];
+    mensaje: 'No hay disponibilidad a esa hora. El siguiente hueco libre es el ' + sigTexto + ' a ' + horaTexto(sigHora) }}];
 }
 
 return [{ json: { disponible: false, mensaje: 'No hay disponibilidad próxima. Dinos qué días y horarios le vienen mejor y lo buscamos.' }}];
