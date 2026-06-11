@@ -1,0 +1,151 @@
+{
+  "name": "De Nueve a Nueve — Modificar Cita",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "denueveanueve-modificar-cita",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst telefono = String(body.telefono || '').trim();\nconst fecha_actual = String(body.fecha_actual || '').trim();\nconst hora_actual = String(body.hora_actual || '').trim();\nconst nueva_fecha = String(body.nueva_fecha || '').trim();\nconst nueva_hora = String(body.nueva_hora || '').trim();\n\n// Formatear fechas para mensajes\nconst fechaObjActual = new Date(fecha_actual + 'T00:00:00');\nconst fechaObjNueva = new Date(nueva_fecha + 'T00:00:00');\nconst diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\nconst meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];\n\nconst diaSemanaActual = diasSemana[fechaObjActual.getUTCDay()];\nconst diaMesActual = fechaObjActual.getUTCDate();\nconst mesActual = meses[fechaObjActual.getUTCMonth()];\n\nconst diaSemanaNueva = diasSemana[fechaObjNueva.getUTCDay()];\nconst diaMesNueva = fechaObjNueva.getUTCDate();\nconst mesNuevo = meses[fechaObjNueva.getUTCMonth()];\n\n// Ventanas de búsqueda\nconst fechaInicioDiaActual = new Date(fecha_actual + 'T00:00:00').toISOString();\nconst fechaFinDiaActual = new Date(fecha_actual + 'T23:59:59').toISOString();\n\n// Calcular fecha fin para el nuevo hueco (asumimos 60 min por defecto)\nconst nuevaFechaInicio = new Date(`${nueva_fecha}T${nueva_hora}:00`);\nconst nuevaFechaFin = new Date(nuevaFechaInicio.getTime() + 60 * 60000);\n\nreturn [{ json: {\n  telefono,\n  fecha_actual,\n  hora_actual,\n  nueva_fecha,\n  nueva_hora,\n  diaSemanaActual,\n  diaMesActual,\n  mesActual,\n  diaSemanaNueva,\n  diaMesNueva,\n  mesNuevo,\n  fechaInicioDiaActual,\n  fechaFinDiaActual,\n  nuevaFechaInicio: nuevaFechaInicio.toISOString(),\n  nuevaFechaFin: nuevaFechaFin.toISOString()\n}}];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendarId": "primary",
+        "options": {
+          "timeMin": "={{ $json.fechaInicioDiaActual }}",
+          "timeMax": "={{ $json.fechaFinDiaActual }}",
+          "singleEvents": true,
+          "q": "={{ $json.telefono }}"
+        }
+      },
+      "id": "gcal-search-node",
+      "name": "Google Calendar - Buscar Evento",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [440, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const eventos = $('Google Calendar - Buscar Evento').all();\nconst datos = $('Parsear Argumentos').first().json;\n\n// Buscar evento que coincida con la hora actual\nconst eventoEncontrado = eventos.find(e => {\n  const start = e.json.start?.dateTime || e.json.start?.date;\n  if (!start) return false;\n  const horaEvento = start.split('T')[1]?.substring(0, 5);\n  return horaEvento === datos.hora_actual;\n});\n\nif (!eventoEncontrado) {\n  return [{\n    json: {\n      error: true,\n      mensaje: 'No encontré esa cita en el calendario. ¿Estás seguro de la fecha y hora?'\n    }\n  }];\n}\n\nreturn [{ json: {\n  ...datos,\n  evento_id: eventoEncontrado.json.id,\n  evento_summary: eventoEncontrado.json.summary,\n  calendar_id: eventoEncontrado.json.organizer?.email || 'primary'\n}}];"
+      },
+      "id": "find-event-node",
+      "name": "Filtrar Evento por Hora",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendarId": "={{ $json.calendar_id }}",
+        "options": {
+          "timeMin": "={{ $json.nuevaFechaInicio }}",
+          "timeMax": "={{ $json.nuevaFechaFin }}",
+          "singleEvents": true
+        }
+      },
+      "id": "gcal-check-new-node",
+      "name": "Google Calendar - Verificar Nuevo Hueco",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [880, 200],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const eventosOcupados = $('Google Calendar - Verificar Nuevo Hueco').all();\nconst datos = $('Filtrar Evento por Hora').first().json;\n\nif (eventosOcupados.length > 0) {\n  return [{\n    json: {\n      error: true,\n      disponible: false,\n      mensaje: 'El nuevo horario ya está ocupado. ¿Quieres probar con otra hora?'\n    }\n  }];\n}\n\nreturn [{ json: {\n  ...datos,\n  disponible: true\n}}];"
+      },
+      "id": "check-availability-node",
+      "name": "Verificar Disponibilidad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "update",
+        "calendarId": "={{ $json.calendar_id }}",
+        "eventId": "={{ $json.evento_id }}",
+        "start": "={{ $json.nuevaFechaInicio }}",
+        "end": "={{ $json.nuevaFechaFin }}",
+        "additionalFields": {}
+      },
+      "id": "gcal-update-node",
+      "name": "Google Calendar - Actualizar Evento",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [1320, 200],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const updateResult = $('Google Calendar - Actualizar Evento').first().json;\nconst datos = $('Verificar Disponibilidad').first().json;\n\nif (updateResult.id) {\n  const mensaje = `Listo, tu cita ha quedado cambiada del ${datos.diaSemanaActual} ${datos.diaMesActual} de ${datos.mesActual} a las ${datos.hora_actual} al ${datos.diaSemanaNueva} ${datos.diaMesNueva} de ${datos.mesNuevo} a las ${datos.nueva_hora}.`;\n  \n  return [{\n    json: {\n      modificado: true,\n      resumen_nuevo: `${datos.evento_summary} - ${datos.diaSemanaNueva} ${datos.diaMesNueva} de ${datos.mesNuevo} a las ${datos.nueva_hora}`,\n      mensaje: mensaje,\n      google_calendar_event_id: updateResult.id,\n      html_link: updateResult.htmlLink\n    }\n  }];\n} else {\n  return [{\n    json: {\n      modificado: false,\n      error: 'No se pudo actualizar el evento',\n      mensaje: 'Hubo un problema al modificar tu cita. Por favor, llama al salón.'\n    }\n  }];\n}"
+      },
+      "id": "response-node",
+      "name": "Construir Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1760, 200]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
+    "Parsear Argumentos": { "main": [[{ "node": "Google Calendar - Buscar Evento", "type": "main", "index": 0 }]] },
+    "Google Calendar - Buscar Evento": { "main": [[{ "node": "Filtrar Evento por Hora", "type": "main", "index": 0 }]] },
+    "Filtrar Evento por Hora": { "main": [[{ "node": "Google Calendar - Verificar Nuevo Hueco", "type": "main", "index": 0 }]] },
+    "Google Calendar - Verificar Nuevo Hueco": { "main": [[{ "node": "Verificar Disponibilidad", "type": "main", "index": 0 }]] },
+    "Verificar Disponibilidad": { "main": [[{ "node": "Google Calendar - Actualizar Evento", "type": "main", "index": 0 }]] },
+    "Google Calendar - Actualizar Evento": { "main": [[{ "node": "Construir Respuesta", "type": "main", "index": 0 }]] },
+    "Construir Respuesta": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

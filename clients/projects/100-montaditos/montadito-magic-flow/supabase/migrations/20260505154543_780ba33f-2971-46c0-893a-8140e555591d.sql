@@ -1,0 +1,1 @@
+DELETE FROM public.pedido_items; DELETE FROM public.pedidos;

@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import '@fontsource/playfair-display/400.css';
+@import '@fontsource/playfair-display/400-italic.css';
+@import '@fontsource/playfair-display/700.css';
+@import '@fontsource/playfair-display/900.css';
+@import '@fontsource/dm-sans/400.css';
+@import '@fontsource/dm-sans/500.css';
+@import '@fontsource/dm-sans/600.css';
+@import '@fontsource/dm-sans/700.css';
+
+@layer base {
+  :root {
+    /* 100 Montaditos official palette — warm cream & charcoal */
+    --background: 38 79% 88%;
+    --foreground: 15 10% 16%;
+
+    --card: 38 75% 92%;
+    --card-foreground: 15 10% 16%;
+
+    --popover: 38 75% 94%;
+    --popover-foreground: 15 10% 16%;
+
+    --primary: 8 67% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 38 60% 82%;
+    --secondary-foreground: 15 10% 16%;
+
+    --muted: 38 55% 85%;
+    --muted-foreground: 15 8% 40%;
+
+    --accent: 152 38% 36%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 38 45% 78%;
+    --input: 38 45% 78%;
+    --ring: 8 67% 35%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 15 10% 12%;
+    --sidebar-foreground: 30 18% 93%;
+    --sidebar-primary: 8 67% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 15 8% 20%;
+    --sidebar-accent-foreground: 30 18% 93%;
+    --sidebar-border: 15 8% 22%;
+    --sidebar-ring: 8 67% 35%;
+
+    /* Custom tokens */
+    --gold: 15 10% 16%;
+    --gold-light: 15 8% 30%;
+    --surface: 38 75% 92%;
+    --surface-elevated: 38 60% 82%;
+    --border-subtle: 38 45% 78%;
+    --success: 152 60% 42%;
+    --warning: 38 92% 50%;
+    --info: 210 100% 56%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-background/90 backdrop-blur-xl border-b border-border;
+  }
+
+  .glass-card {
+    @apply bg-card border border-border-subtle rounded-xl;
+  }
+
+  .text-gold {
+    color: hsl(var(--primary));
+  }
+
+  .bg-gold {
+    background-color: hsl(var(--primary));
+  }
+
+  .shadow-gold {
+    box-shadow: 0 4px 20px -4px hsl(var(--primary) / 0.15);
+  }
+
+  .shadow-primary {
+    box-shadow: 0 4px 20px -4px hsl(var(--primary) / 0.25);
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      110deg,
+      hsl(var(--primary) / 0) 30%,
+      hsl(var(--primary) / 0.1) 50%,
+      hsl(var(--primary) / 0) 70%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+}

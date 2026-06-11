@@ -1,0 +1,24 @@
+{
+  "cliente": "De Nueve a Nueve",
+  "sector": "Peluquería / Centro de estética",
+  "proyecto": "Asistente de voz IA para gestión de citas",
+  "fecha_inicio": "2026-04",
+  "estado": "En desarrollo",
+  "verticales": ["voz", "automatizaciones"],
+  "integraciones": ["Retell AI", "ElevenLabs", "n8n", "Supabase", "Google Calendar"],
+  "sedes": ["Collado Villalba", "Alpedrete"],
+  "archivos_clave": {
+    "system_prompt": "prompts/system-prompt.md",
+    "retell_config": "docs/retell-config.md",
+    "n8n_workflows": "n8n/",
+    "guia_configuracion": "n8n/CONFIGURACION-RETELL.md"
+  },
+  "pendientes": [
+    "Importar workflows en n8n",
+    "Configurar variables de entorno en n8n",
+    "Crear LLM en Retell AI",
+    "Crear agente en Retell AI",
+    "Asignar número de teléfono",
+    "Pruebas end-to-end"
+  ]
+}

@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@layer base {
+  :root {
+    --background: 228 50% 8%;
+    --foreground: 210 30% 95%;
+
+    --card: 228 35% 12%;
+    --card-foreground: 210 30% 95%;
+
+    --popover: 228 35% 12%;
+    --popover-foreground: 210 30% 95%;
+
+    --primary: 265 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 228 30% 18%;
+    --secondary-foreground: 210 30% 90%;
+
+    --muted: 228 25% 16%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 32 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 228 20% 18%;
+    --input: 228 20% 18%;
+    --ring: 265 100% 50%;
+
+    --radius: 1.125rem;
+
+    --sidebar-background: 228 40% 10%;
+    --sidebar-foreground: 210 30% 90%;
+    --sidebar-primary: 265 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 25% 16%;
+    --sidebar-accent-foreground: 210 30% 90%;
+    --sidebar-border: 228 20% 18%;
+    --sidebar-ring: 265 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .glass-card {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 1.25rem;
+  }
+  .glass-card-highlight {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border: 1px solid hsl(265 100% 50% / 0.4);
+    border-radius: 1.25rem;
+    box-shadow: 0 0 30px hsl(265 100% 50% / 0.1);
+  }
+  .glass-navbar {
+    background: rgba(11, 15, 30, 0.75);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(265 100% 65%), hsl(32 100% 55%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .glow-purple {
+    box-shadow: 0 0 40px hsl(265 100% 50% / 0.15), 0 0 80px hsl(265 100% 50% / 0.05);
+  }
+  .glow-orange {
+    box-shadow: 0 0 20px hsl(32 100% 50% / 0.25);
+  }
+  .btn-primary-glow:hover {
+    box-shadow: 0 0 24px hsl(32 100% 50% / 0.4);
+  }
+  .btn-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .btn-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px hsl(265 100% 50% / 0.18);
+  }
+  .btn-lift:active {
+    transform: translateY(0px);
+  }
+}

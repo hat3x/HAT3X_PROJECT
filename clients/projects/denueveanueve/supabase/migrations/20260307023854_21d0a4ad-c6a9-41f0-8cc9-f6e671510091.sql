@@ -1,0 +1,1 @@
+ALTER TABLE public.services ALTER COLUMN duration_min DROP NOT NULL;

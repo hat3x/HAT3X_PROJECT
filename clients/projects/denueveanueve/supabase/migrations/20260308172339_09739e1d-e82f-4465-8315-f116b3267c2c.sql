@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.check_customer_exists(text, text) TO anon, authenticated;

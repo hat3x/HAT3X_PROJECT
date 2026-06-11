@@ -1,0 +1,85 @@
+{
+  "name": "De Nueve a Nueve — Crear Cita (MINIMO)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "denueveanueve-crear-cita",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst nombre = String(body.nombre || '').trim();\nconst telefono = String(body.telefono || '').trim();\nconst sede = String(body.sede || '').trim();\nconst servicio = String(body.servicio || '').trim();\nconst fecha = String(body.fecha || '').trim();\nconst hora = String(body.hora || '').trim();\nconst empleadoInput = String(body.empleado || body.staff_member || '').trim();\nconst empleado = empleadoInput;\n\nconst TIEMPOS_EXPOSICION = {\n  'Meches completas': { application: 45, exposure: 35, post: 10, total: 90 }\n};\n\nconst DURACIONES_SIMPLES = {\n  'Corte Señora': 45, 'Corte Caballero': 30, 'Corte flequillo': 10\n};\n\nlet applicationMin, exposureMin, postMin, totalMin;\nconst tiempos = TIEMPOS_EXPOSICION[servicio];\nif (tiempos) {\n  applicationMin = tiempos.application;\n  exposureMin = tiempos.exposure;\n  postMin = tiempos.post;\n  totalMin = tiempos.total;\n} else {\n  applicationMin = DURACIONES_SIMPLES[servicio] || 60;\n  exposureMin = 0;\n  postMin = 0;\n  totalMin = applicationMin;\n}\n\nconst LOCATION_IDS = {\n  'collado_villalba': '4159c713-3507-49ba-8319-c4b7ed4f38b2',\n  'alpedrete': '61865f3b-976b-427b-b5f1-c856e7b97cdf'\n};\n\nconst CALENDARIOS_EMPLEADOS = {\n  'isabel': 'df5a40b3c772d155e8451db37483283cb815d71914dfd7af21750266da3eec48@group.calendar.google.com'\n};\n\nconst fechaInicio = new Date(`${fecha}T${hora}:00`);\nconst fechaFin = new Date(fechaInicio.getTime() + totalMin * 60000);\n\nconst diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\nconst meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];\nconst diaSemana = diasSemana[fechaInicio.getUTCDay()];\nconst diaMes = fechaInicio.getUTCDate();\nconst mes = meses[fechaInicio.getUTCMonth()];\n\nconst tituloEvento = `${nombre} - ${servicio} (${sede.replace('_', ' ')})${empleado ? ' con ' + empleado : ''}`;\n\nconst descripcion = `Cliente: ${nombre}\\nTeléfono: ${telefono}\\nServicio: ${servicio}`;\n\nconst empleadoLower = empleado.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nlet calendarId = 'primary';\n\nif (empleado && CALENDARIOS_EMPLEADOS[empleadoLower]) {\n  calendarId = CALENDARIOS_EMPLEADOS[empleadoLower];\n}\n\nreturn [{ json: {\n  nombre,\n  telefono,\n  sede,\n  servicio,\n  fecha,\n  hora,\n  empleado,\n  totalMin,\n  calendar_id: calendarId,\n  location_id: LOCATION_IDS[sede],\n  fechaInicio: fechaInicio.toISOString(),\n  fechaFin: fechaFin.toISOString(),\n  tituloEvento,\n  descripcion,\n  diaSemana,\n  diaMes,\n  mes\n}}];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendarId": "={{ $json.calendar_id }}",
+        "start": "={{ $json.fechaInicio }}",
+        "end": "={{ $json.fechaFin }}",
+        "options": {
+          "summary": "={{ $json.tituloEvento }}",
+          "description": "={{ $json.descripcion }}"
+        }
+      },
+      "id": "gcal-create-node",
+      "name": "Google Calendar - Crear Evento",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const gcalEvent = $('Google Calendar - Crear Evento').first().json;\nconst datos = $('Parsear Argumentos').first().json;\n\nif (gcalEvent.id) {\n  let mensajeConfirmacion = `Cita confirmada. Te esperamos el ${datos.diaSemana} ${datos.diaMes} de ${datos.mes} a las ${datos.hora}`;\n  \n  return [{\n    json: {\n      confirmado: true,\n      id_cita: gcalEvent.id,\n      resumen: `${datos.nombre} - ${datos.servicio} el ${datos.diaSemana} ${datos.diaMes} de ${datos.mes} a las ${datos.hora}`,\n      mensaje_confirmacion: mensajeConfirmacion\n    }\n  }];\n} else {\n  return [{\n    json: {\n      confirmado: false,\n      error: 'No se pudo crear el evento'\n    }\n  }];\n}"
+      },
+      "id": "response-node",
+      "name": "Construir Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [880, 300]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": {
+      "main": [[{"node": "Parsear Argumentos", "type": "main", "index": 0}]]
+    },
+    "Parsear Argumentos": {
+      "main": [[{"node": "Google Calendar - Crear Evento", "type": "main", "index": 0}]]
+    },
+    "Google Calendar - Crear Evento": {
+      "main": [[{"node": "Construir Respuesta", "type": "main", "index": 0}]]
+    },
+    "Construir Respuesta": {
+      "main": [[{"node": "Responder a Retell", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "J4xeZCvjKl3FesOV"
+}

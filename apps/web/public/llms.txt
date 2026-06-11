@@ -1,0 +1,19 @@
+# HAT3X
+
+> Consultoría de Inteligencia Artificial para empresas tradicionales. Implementamos automatización, agentes IA, apps y flujos inteligentes que mejoran la productividad desde el primer mes.
+
+HAT3X diseña e implementa soluciones de IA a medida para negocios que quieren ahorrar tiempo en tareas repetitivas, atender mejor a sus clientes y crecer sin sumar personal. Trabajamos en español y entregamos resultados visibles en semanas.
+
+## Pages
+
+- [Inicio](/): Quiénes somos, situaciones que resolvemos y soluciones tecnológicas para empresas.
+- [Servicios](/servicios): Catálogo de servicios: recepcionista IA, automatización, agentes, apps a medida e integraciones.
+- [Casos de uso](/casos-de-uso): Escenarios reales con problema, solución y resultado.
+- [Proceso](/proceso): Metodología de trabajo en 4 fases no técnicas.
+- [Tu idea](/tu-idea): Cómo transformamos una idea en una solución funcional.
+- [Contacto](/contacto): Formulario para iniciar un proyecto con HAT3X.
+
+## Optional
+
+- [Privacidad](/legal/privacidad): Política de privacidad.
+- [Términos](/legal/terminos): Términos y condiciones.

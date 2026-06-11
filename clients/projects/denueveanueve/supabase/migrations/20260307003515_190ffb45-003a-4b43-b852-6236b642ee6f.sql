@@ -1,0 +1,1 @@
+ALTER TYPE public.salon_section ADD VALUE 'ESTETICA';

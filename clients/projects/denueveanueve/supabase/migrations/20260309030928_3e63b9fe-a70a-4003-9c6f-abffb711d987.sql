@@ -1,0 +1,1 @@
+UPDATE subscriptions SET status = 'EXPIRED' WHERE id = '1e7b77e4-e426-49d4-90ab-7ffc05279bee'

@@ -1,0 +1,89 @@
+{
+  "name": "De Nueve a Nueve — Crear Cita (con exposición)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "denueveanueve-crear-cita",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst nombre = String(body.nombre || '').trim();\nconst telefono = String(body.telefono || '').trim();\nconst sede = String(body.sede || '').trim();\nconst servicio = String(body.servicio || '').trim();\nconst fecha = String(body.fecha || '').trim();\nconst hora = String(body.hora || '').trim();\nconst notas = String(body.notas || '').trim();\nconst empleadoInput = String(body.empleado || body.staff_member || '').trim();\nconst empleado = empleadoInput;\n\nconst TIEMPOS_EXPOSICION = {\n  'Meches completas': { application: 45, exposure: 35, post: 10, total: 90 },\n  'Meches tendencia': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Balayage': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Babylight': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Medias mechas': { application: 35, exposure: 35, post: 10, total: 80 },\n  'Color Raíz': { application: 30, exposure: 25, post: 5, total: 60 },\n  'Tinte raíz': { application: 30, exposure: 25, post: 5, total: 60 },\n  'Baño de color orgánico': { application: 20, exposure: 35, post: 5, total: 60 },\n  'Aplicación barros': { application: 40, exposure: 60, post: 10, total: 110 },\n  'Tratamiento Keratina': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Tratamiento Antifrizz': { application: 60, exposure: 80, post: 20, total: 160 },\n  'Alisado': { application: 60, exposure: 80, post: 20, total: 160 },\n  'Permanente': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Desrizado frontal': { application: 20, exposure: 5, post: 5, total: 30 },\n  'Tratamiento ligero intensivo': { application: 10, exposure: 5, post: 5, total: 20 },\n  'Tratamiento premium': { application: 15, exposure: 10, post: 5, total: 30 },\n  'Tratamiento slow repair': { application: 20, exposure: 20, post: 5, total: 45 },\n  'Tratamiento détox cuero cabelludo': { application: 15, exposure: 10, post: 5, total: 30 },\n  'Tratamiento détox mechas': { application: 15, exposure: 10, post: 5, total: 30 },\n  'Tratamiento anticaída': { application: 10, exposure: 0, post: 5, total: 15 },\n  'Manicura semipermanente': { application: 35, exposure: 5, post: 5, total: 45 },\n  'Pedicura semipermanente': { application: 45, exposure: 10, post: 5, total: 60 },\n  'Pedicura normal': { application: 40, exposure: 0, post: 5, total: 45 },\n  'Tinte cejas': { application: 5, exposure: 3, post: 2, total: 10 },\n  'Servicio Estrella': { application: 60, exposure: 45, post: 15, total: 120 }\n};\n\nconst DURACIONES_SIMPLES = {\n  'Corte Señora': 45, 'Corte Caballero': 30, 'Corte flequillo': 10,\n  'Corte niño/a': 20, 'Lavado + Secado': 20, 'Peinado': 30,\n  'Difusor': 15, 'Quitar humedad': 5, 'Cejas': 15,\n  'Depilación axilas': 10, 'Depilación brazos': 20, 'Depilación ingles': 15,\n  'Depilación ingles integral': 20, 'Depilación piernas': 30, 'Depilación espalda': 30,\n  'Manicura normal': 30, 'Entrecejo': 10, 'Labio': 10\n};\n\nlet applicationMin, exposureMin, postMin, totalMin;\nconst tiempos = TIEMPOS_EXPOSICION[servicio];\nif (tiempos) {\n  applicationMin = tiempos.application;\n  exposureMin = tiempos.exposure;\n  postMin = tiempos.post;\n  totalMin = tiempos.total;\n} else {\n  applicationMin = DURACIONES_SIMPLES[servicio] || 60;\n  exposureMin = 0;\n  postMin = 0;\n  totalMin = applicationMin;\n}\n\nconst LOCATION_IDS = {\n  'collado_villalba': '4159c713-3507-49ba-8319-c4b7ed4f38b2',\n  'alpedrete': '61865f3b-976b-427b-b5f1-c856e7b97cdf'\n};\n\nconst CALENDARIOS_EMPLEADOS = {\n  'fernando': '06136cb5016a75da20e0292649097ca53d818c3145984831dda2d02311d929f4@group.calendar.google.com',\n  'almudena': 'aade57f8bb3504fdc3582de697f8892c71817b94a2e32cebf8a891d8a1d48c2b@group.calendar.google.com',\n  'johanna': 'c35d85ddf7afa97e4edb360ef99552b6289a2d95e9b939745bff7505557b73e2@group.calendar.google.com',\n  'isabel': 'df5a40b3c772d155e8451db37483283cb815d71914dfd7af21750266da3eec48@group.calendar.google.com',\n  'tania': '3e70700c207422d765f314fa80988edf99922c02bca81b62e0398347e15be65c@group.calendar.google.com',\n  'macarena': '293331e0b723181277b20c87228b119f9701886dd1d3645a2747c7ee22b850e8@group.calendar.google.com',\n  'alí': '01dabb00d1abb92b2313be55204645f2a6862e37f18779821045f3b1874250e1@group.calendar.google.com',\n  'maria': '968ca744f4a0356d6948ae097d54127b373c9cc5efcc889479381101773ee8e7@group.calendar.google.com',\n  'maria2': 'd70f48f63430635525a6ad0e7f835a32ae68a6e77aeb74810fd8ba9c4de836a2@group.calendar.google.com',\n  'marian': '4cace839a6b98a4c7f5c910f4e898c1e0ebda5712c45939783b8e720543c9d5e@group.calendar.google.com',\n  'ana': '7ced6d3e137d513c4cc58b517ad1fa344efbb883cdd3dbce8fd0046ac053c924@group.calendar.google.com',\n  'cristina': '62b7d9a94d9f7a745d1d7c65448838ceecaa5ab4e999e3ace21546c913f7a710@group.calendar.google.com'\n};\n\nconst fechaInicio = new Date(`${fecha}T${hora}:00`);\nconst fechaFin = new Date(fechaInicio.getTime() + totalMin * 60000);\nconst finApplication = new Date(fechaInicio.getTime() + applicationMin * 60000);\nconst inicioPost = new Date(finApplication.getTime() + exposureMin * 60000);\n\nconst diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\nconst meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];\nconst diaSemana = diasSemana[fechaInicio.getUTCDay()];\nconst diaMes = fechaInicio.getUTCDate();\nconst mes = meses[fechaInicio.getUTCMonth()];\n\nconst apellido = nombre.split(' ').pop();\nconst tituloEvento = `${nombre} - ${servicio} (${sede.replace('_', ' ')})${empleado ? ' con ' + empleado : ''}`;\n\nconst descripcion = `Cliente: ${nombre}\\nTeléfono: ${telefono}\\nServicio: ${servicio}\\n\\nTIEMPOS:\\n- Inicio: ${hora}\\n- Fin aplicación: ${finApplication.toISOString().split('T')[1].substring(0,5)}\\n- Empleado libre: ${exposureMin} min\\n- Vuelve empleado: ${inicioPost.toISOString().split('T')[1].substring(0,5)}\\n- Fin cita: ${fechaFin.toISOString().split('T')[1].substring(0,5)}\\n\\nDuración total: ${totalMin} min\\nTiempo activo empleado: ${applicationMin + postMin} min${empleado ? '\\nEmpleada: ' + empleado : ''}${notas ? '\\nNotas: ' + notas : ''}`;\n\nconst empleadoLower = empleado.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nlet calendarId = 'primary';\n\nif (empleado && CALENDARIOS_EMPLEADOS[empleadoLower]) {\n  calendarId = CALENDARIOS_EMPLEADOS[empleadoLower];\n} else if (empleado && empleado.length >= 2) {\n  for (const [nombreNorm, calId] of Object.entries(CALENDARIOS_EMPLEADOS)) {\n    if (nombreNorm.includes(empleadoLower) || empleadoLower.includes(nombreNorm)) {\n      calendarId = calId;\n      break;\n    }\n  }\n}\n\nreturn [{ json: {\n  nombre,\n  telefono,\n  sede,\n  servicio,\n  fecha,\n  hora,\n  notas,\n  empleado,\n  applicationMin,\n  exposureMin,\n  postMin,\n  totalMin,\n  calendar_id: calendarId,\n  location_id: LOCATION_IDS[sede],\n  fechaInicio: fechaInicio.toISOString(),\n  fechaFin: fechaFin.toISOString(),\n  finApplication: finApplication.toISOString(),\n  inicioPost: inicioPost.toISOString(),\n  tituloEvento,\n  descripcion,\n  diaSemana,\n  diaMes,\n  mes,\n  apellido\n}}];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendarId": "={{ $json.calendar_id }}",
+        "start": "={{ $json.fechaInicio }}",
+        "end": "={{ $json.fechaFin }}",
+        "additionalFields": {
+          "summary": "={{ $json.tituloEvento }}",
+          "description": "={{ $json.descripcion }}",
+          "colorId": "2",
+          "timezone": "Europe/Madrid"
+        }
+      },
+      "id": "gcal-create-node",
+      "name": "Google Calendar - Crear Evento",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [440, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const gcalEvent = $('Google Calendar - Crear Evento').first().json;\nconst datos = $('Parsear Argumentos').first().json;\n\nif (gcalEvent.id) {\n  let mensajeConfirmacion = `Cita confirmada. Te esperamos el ${datos.diaSemana} ${datos.diaMes} de ${datos.mes} a las ${datos.hora} en ${datos.sede.replace('_', ' ')}`;\n  \n  if (datos.exposureMin > 0) {\n    mensajeConfirmacion += `. La cita dura ${datos.totalMin} minutos, con tiempo de procesamiento incluido.`;\n  }\n  \n  return [{\n    json: {\n      confirmado: true,\n      id_cita: gcalEvent.id,\n      google_calendar_id: gcalEvent.id,\n      resumen: `${datos.nombre} - ${datos.servicio} el ${datos.diaSemana} ${datos.diaMes} de ${datos.mes} a las ${datos.hora}`,\n      mensaje_confirmacion: mensajeConfirmacion,\n      gcal_html_link: gcalEvent.htmlLink,\n      empleado: datos.empleado,\n      sede: datos.sede,\n      tiempos: {\n        application_min: datos.applicationMin,\n        exposure_min: datos.exposureMin,\n        post_min: datos.postMin,\n        total_min: datos.totalMin,\n        tiempo_activo_empleado: datos.applicationMin + datos.postMin\n      }\n    }\n  }];\n} else {\n  return [{\n    json: {\n      confirmado: false,\n      error: 'No se pudo crear el evento en Google Calendar',\n      mensaje: 'Ha habido un problema al crear la cita. ¿Quieres que lo intentemos de nuevo?'\n    }\n  }];\n}"
+      },
+      "id": "response-node",
+      "name": "Construir Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "Content-Type": "application/json; charset=utf-8"
+          }
+        }
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [880, 300]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
+    "Parsear Argumentos": { "main": [[{ "node": "Google Calendar - Crear Evento", "type": "main", "index": 0 }]] },
+    "Google Calendar - Crear Evento": { "main": [[{ "node": "Construir Respuesta", "type": "main", "index": 0 }]] },
+    "Construir Respuesta": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

@@ -1,0 +1,78 @@
+{
+  "name": "De Nueve a Nueve — Post Llamada",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "denueveanueve-post-llamada",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Call Ended",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Retell Call Ended').first().json;\n\nconst callData = {\n  call_id: body.call_id,\n  agent_id: body.agent_id,\n  from_number: body.from_number,\n  to_number: body.to_number,\n  duration_seconds: body.duration_seconds,\n  call_status: body.call_status,\n  transcript: body.transcript || '',\n  call_summary: body.call_analysis?.call_summary || '',\n  user_sentiment: body.call_analysis?.user_sentiment || 'Unknown',\n  call_successful: body.call_analysis?.call_successful || false,\n  timestamp: new Date().toISOString()\n};\n\n// Limpiar número de teléfono para usar como ID\nconst phoneRaw = callData.from_number || '';\nconst phoneClean = phoneRaw.replace(/[^0-9]/g, '').replace(/^34/, '');\n\ncallData.customer_phone_clean = phoneClean;\n\nreturn [{ json: callData }];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL + '/functions/v1/vapi-webhook' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"action\": \"find_customer\",\n  \"customer_phone\": \"{{ $json.customer_phone_clean }}\"\n}",
+        "options": {
+          "headerParameters": {
+            "entries": [
+              { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "find-customer-node",
+      "name": "Buscar o Crear Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"success\": true, \"message\": \"Call log saved\"}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-node",
+      "name": "Responder OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 300]
+    }
+  ],
+  "connections": {
+    "Retell Call Ended": {
+      "main": [[{ "node": "Parsear Payload", "type": "main", "index": 0 }]]
+    },
+    "Parsear Payload": {
+      "main": [[{ "node": "Buscar o Crear Cliente", "type": "main", "index": 0 }]]
+    },
+    "Buscar o Crear Cliente": {
+      "main": [[{ "node": "Responder OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

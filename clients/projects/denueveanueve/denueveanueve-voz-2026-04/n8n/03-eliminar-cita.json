@@ -1,0 +1,72 @@
+{
+  "name": "De Nueve a Nueve — Eliminar Cita",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "denueveanueve-eliminar-cita",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Webhook').first().json.body || $('Webhook').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  args = raw;\n}\n\nconst eventId = args.event_id;\nconst empleado = args.empleado || '';\n\n// Calendarios por empleado (búsqueda por nombre)\nconst CALENDARIOS_EMPLEADOS = {\n  // Collado\n  'fernando': '06136cb5016a75da20e0292649097ca53d818c3145984831dda2d02311d929f4@group.calendar.google.com',\n  'almudena': 'aade57f8bb3504fdc3582de697f8892c71817b94a2e32cebf8a891d8a1d48c2b@group.calendar.google.com',\n  'johanna': 'c35d85ddf7afa97e4edb360ef99552b6289a2d95e9b939745bff7505557b73e2@group.calendar.google.com',\n  'isabel': 'df5a40b3c772d155e8451db37483283cb815d71914dfd7af21750266da3eec48@group.calendar.google.com',\n  'tania': '3e70700c207422d765f314fa80988edf99922c02bca81b62e0398347e15be65c@group.calendar.google.com',\n  'macarena': '293331e0b723181277b20c87228b119f9701886dd1d3645a2747c7ee22b850e8@group.calendar.google.com',\n  'alí': '01dabb00d1abb92b2313be55204645f2a6862e37f18779821045f3b1874250e1@group.calendar.google.com',\n  'maría': '968ca744f4a0356d6948ae097d54127b373c9cc5efcc889479381101773ee8e7@group.calendar.google.com',\n  'maria2': 'd70f48f63430635525a6ad0e7f835a32ae68a6e77aeb74810fd8ba9c4de836a2@group.calendar.google.com',\n  'marian': '4cace839a6b98a4c7f5c910f4e898c1e0ebda5712c45939783b8e720543c9d5e@group.calendar.google.com',\n  // Alpedrete\n  'ana': '7ced6d3e137d513c4cc58b517ad1fa344efbb883cdd3dbce8fd0046ac053c924@group.calendar.google.com',\n  'cristina': '62b7d9a94d9f7a745d1d7c65448838ceecaa5ab4e999e3ace21546c913f7a710@group.calendar.google.com'\n};\n\nfunction normalizarNombre(str) {\n  return str.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\n// Determinar calendario: empleado específico o primary por defecto\nconst empleadoLower = normalizarNombre(empleado);\nlet calendarId = 'primary';\n\n// Búsqueda exacta primero\nif (empleado && CALENDARIOS_EMPLEADOS[empleadoLower]) {\n  calendarId = CALENDARIOS_EMPLEADOS[empleadoLower];\n} else if (empleado && empleado.length >= 2) {\n  // Búsqueda parcial: si \"isa\" está en \"isabel\", usar ese calendario\n  for (const [nombreNorm, calId] of Object.entries(CALENDARIOS_EMPLEADOS)) {\n    if (nombreNorm.includes(empleadoLower) || empleadoLower.includes(nombreNorm)) {\n      calendarId = calId;\n      break;\n    }\n  }\n}\n\nreturn [{ json: {\n  event_id: eventId,\n  empleado,\n  calendar_id: calendarId\n}}];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "delete",
+        "calendarId": "={{ $json.calendar_id }}",
+        "eventId": "={{ $json.event_id }}"
+      },
+      "id": "gcal-delete-node",
+      "name": "Google Calendar - Eliminar Evento",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [440, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: `Cita eliminada exitosamente del calendario de ${$json.empleado || 'empleado'}`, event_id: $json.event_id }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-node",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]]
+    },
+    "Parsear Argumentos": {
+      "main": [[{ "node": "Google Calendar - Eliminar Evento", "type": "main", "index": 0 }]]
+    },
+    "Google Calendar - Eliminar Evento": {
+      "main": [[{ "node": "Responder", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

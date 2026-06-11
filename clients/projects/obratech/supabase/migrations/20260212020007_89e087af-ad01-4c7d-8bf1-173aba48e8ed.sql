@@ -1,0 +1,1 @@
+ALTER TABLE public.supplier_works ADD COLUMN rejection_reason text DEFAULT NULL;

@@ -1,0 +1,10 @@
+project_id = "urzcdtuhznqdmtmvftae"
+
+[functions.send-contact-email]
+verify_jwt = false
+
+[functions.chat-assistant]
+verify_jwt = false
+
+[functions.portal-api]
+verify_jwt = false

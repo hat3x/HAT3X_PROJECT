@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">100M Dashboard</string>
+    <string name="title_activity_main">100M Dashboard</string>
+    <string name="package_name">es.montaditos100.dashboard</string>
+    <string name="custom_url_scheme">es.montaditos100.dashboard</string>
+</resources>

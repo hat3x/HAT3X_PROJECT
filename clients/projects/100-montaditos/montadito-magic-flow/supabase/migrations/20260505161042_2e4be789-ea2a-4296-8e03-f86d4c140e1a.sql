@@ -1,0 +1,1 @@
+ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS tipo text NOT NULL DEFAULT 'completo';
