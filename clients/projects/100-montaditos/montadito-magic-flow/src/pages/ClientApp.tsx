@@ -17,6 +17,7 @@ import { WelcomeScreen } from '@/components/client/WelcomeScreen';
 import { MontyLoader } from '@/components/client/MontyLoader';
 import { useCategories, useProducts } from '@/hooks/use-menu';
 import { useAllergens } from '@/hooks/use-allergens';
+import { useLocalRestricciones, buildRestriccionFilter } from '@/hooks/use-local-restricciones';
 import { useCartStore } from '@/lib/cart-store';
 import { useAllergenFilter } from '@/lib/allergen-filter';
 import { supabase } from '@/integrations/supabase/client';
@@ -103,6 +104,15 @@ const loadActiveOrder = (): ActiveOrder | null => {
 
 const ClientApp = () => {
   const [searchParams] = useSearchParams();
+
+  // Escape hatch: /?reset=1 limpia localStorage y recarga.
+  // Útil cuando el app queda bloqueado por un pedido corrupto en storage.
+  if (searchParams.get('reset') === '1') {
+    localStorage.removeItem(ACTIVE_ORDER_KEY);
+    window.location.replace(window.location.pathname);
+    return null;
+  }
+
   const localSlugFromUrl = searchParams.get('local');
   const mesaNum = searchParams.get('mesa');
 
@@ -117,7 +127,13 @@ const ClientApp = () => {
   const [orderState, setOrderState] = useState<ActiveOrder | null>(null);
   const [pendingCheckout, setPendingCheckout] = useState<ActiveOrder | null>(null);
   const [resumableOrder, setResumableOrder] = useState<ActiveOrder | null>(null);
-  const [recovering, setRecovering] = useState(() => !!loadActiveOrder()?.pedidoId);
+  // Si venimos del redirect de Apple Pay (/?pago=ok), empezamos sin recovering
+  // para que MontyLoader NUNCA bloquee la pantalla. El efecto pago=ok restaura el pedido.
+  const [recovering, setRecovering] = useState(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('pago') === 'ok') return false;
+    return !!loadActiveOrder()?.pedidoId;
+  });
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const { data: allAllergens = [] } = useAllergens();
@@ -170,26 +186,53 @@ const ClientApp = () => {
     const saved = loadActiveOrder();
     if (!saved?.pedidoId) { setRecovering(false); return; }
 
-    supabase
-      .from('pedidos')
-      .select('estado')
-      .eq('id', saved.pedidoId)
-      .maybeSingle()
-      .then(({ data: pedido }) => {
-        if (!pedido || pedido.estado === 'cancelado' || pedido.estado === 'entregado') {
+    // Venimos del redirect de Apple Pay / Google Pay (/?pago=ok).
+    // El pago ya está confirmado por Stripe: mostrar seguimiento inmediatamente
+    // sin esperar la query DB. El polling de OrderTracking actualizará el estado
+    // en cuanto el webhook cambie pendiente_pago → pendiente.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('pago') === 'ok') {
+      setOrderState(saved);
+      setRecovering(false);
+      return;
+    }
+
+    // Timeout de seguridad: si la query DB tarda más de 5 s, mostramos el
+    // pedido igualmente. Evita la pantalla beige infinita por red lenta.
+    const safetyTimer = window.setTimeout(() => {
+      setOrderState(saved);
+      setRecovering(false);
+    }, 5000);
+
+    (async () => {
+      try {
+        // RLS exige la cabecera de sesión: sin ella la lectura devuelve 0 filas
+        // y el pedido (¡ya pagado!) se interpretaba como inexistente y se borraba.
+        const { data: pedido, error } = await supabase
+          .from('pedidos')
+          .select('estado')
+          .eq('id', saved.pedidoId)
+          .setHeader('x-session-id', saved.sessionId ?? '')
+          .maybeSingle();
+        // Regla de oro: NUNCA borrar el pedido local ante una lectura ambigua
+        // (error de red / RLS). Solo se descarta ante un estado terminal explícito.
+        if (error || !pedido) {
+          setOrderState(saved);
+        } else if (pedido.estado === 'cancelado' || pedido.estado === 'entregado') {
           localStorage.removeItem(ACTIVE_ORDER_KEY);
         } else if (pedido.estado === 'pendiente_pago') {
           setResumableOrder(saved);
         } else {
-          // en_preparacion, listo → mostrar seguimiento
           setOrderState(saved);
         }
-      })
-      .catch(() => {
-        // Sin red: mostrar banner recuperable para no perder el pedido
-        setResumableOrder(saved);
-      })
-      .finally(() => setRecovering(false));
+      } catch {
+        // Sin red: mostrar seguimiento (OrderTracking se autocorrige al reconectar)
+        setOrderState(saved);
+      } finally {
+        window.clearTimeout(safetyTimer);
+        setRecovering(false);
+      }
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -215,14 +258,35 @@ const ClientApp = () => {
     }
   }, [activeLocal]);
 
-  // Al volver de Stripe Checkout, mostrar feedback y restaurar el seguimiento del pedido.
+  // Al volver de Stripe (Apple Pay redirect), mostrar feedback y restaurar el pedido.
   useEffect(() => {
     const pago = searchParams.get('pago');
     if (!pago) return;
     if (pago === 'ok') {
       toast.success('¡Pago realizado con éxito!');
       const saved = loadActiveOrder();
-      if (saved) setOrderState(saved);
+      if (saved) {
+        setOrderState(saved);
+      } else {
+        // Fallback: iOS Safari a veces borra localStorage durante el redirect cross-domain.
+        // Recuperamos desde los params que EmbeddedCheckout codificó en el return_url.
+        const pidFromUrl = searchParams.get('pid');
+        const numFromUrl = searchParams.get('num');
+        const sidFromUrl = searchParams.get('sid');
+        const cocinaFromUrl = searchParams.get('cocina');
+        const bebidasFromUrl = searchParams.get('bebidas');
+        if (pidFromUrl && numFromUrl) {
+          const recovered: ActiveOrder = {
+            pedidoId: pidFromUrl,
+            numeroPedido: parseInt(numFromUrl, 10),
+            hasCocina: cocinaFromUrl !== '0',
+            hasBebidas: bebidasFromUrl === '1',
+            sessionId: sidFromUrl ?? undefined,
+          };
+          localStorage.setItem(ACTIVE_ORDER_KEY, JSON.stringify(recovered));
+          setOrderState(recovered);
+        }
+      }
     } else if (pago === 'cancel') {
       toast.error('Pago cancelado');
       localStorage.removeItem(ACTIVE_ORDER_KEY);
@@ -239,7 +303,10 @@ const ClientApp = () => {
   const { subscribe } = usePushSubscription();
 
   const { data: categories = [], isLoading: loadingCategories } = useCategories();
-  const { data: products = [] } = useProducts(activeCategory || undefined);
+  const { data: rawProducts = [] } = useProducts(activeCategory || undefined);
+  const { data: restricciones = [] } = useLocalRestricciones();
+  const { isProductoAllowed, isSeccionAllowed } = buildRestriccionFilter(restricciones);
+  const products = (rawProducts as any[]).filter((p) => isProductoAllowed(p.id));
   const cart = useCartStore();
 
   const selectedCategory = categories.find((c: any) => c.id === activeCategory);
@@ -394,6 +461,8 @@ const ClientApp = () => {
         pedidoId={pendingCheckout.pedidoId}
         sessionId={pendingCheckout.sessionId ?? ''}
         numeroPedido={pendingCheckout.numeroPedido}
+        hasCocina={pendingCheckout.hasCocina}
+        hasBebidas={pendingCheckout.hasBebidas}
         total={pendingCheckout.total ?? 0}
         onSuccess={handlePaymentSuccess}
         onCancel={handlePaymentBackToMenu}
@@ -527,13 +596,15 @@ const ClientApp = () => {
             const isDrink = isBebidas;
 
 
+            const isMontyAhorro = selectedCategory?.nombre === 'MontyAhorro';
+
             if (!sectionList) {
               return (
                 <div className="px-4 pb-32 max-w-lg mx-auto">
 
                   <div className="flex flex-col gap-2">
                     {products.map((product, i) => (
-                      <ProductCard key={product.id} product={product as any} index={i} />
+                      <ProductCard key={product.id} product={product as any} index={i} hideAllergens={isMontyAhorro} />
                     ))}
                   </div>
                 </div>
@@ -541,10 +612,11 @@ const ClientApp = () => {
             }
 
             const available = sectionList.filter((s) =>
+              isSeccionAllowed(s) &&
               (products as any[]).some((p) => p.seccion === s)
             );
             const grouped = sectionList
-              .filter((sec) => !activeSection || sec === activeSection)
+              .filter((sec) => isSeccionAllowed(sec) && (!activeSection || sec === activeSection))
               .map((sec) => ({
                 sec,
                 items: (products as any[])

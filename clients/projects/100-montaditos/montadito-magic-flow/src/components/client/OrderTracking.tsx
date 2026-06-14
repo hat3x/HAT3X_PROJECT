@@ -168,7 +168,10 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
       .maybeSingle();
 
     if (error) return;
-    if (!data) { onNewOrder(); return; }
+    // No rebotar al menú por una lectura nula/transitoria: las eliminaciones
+    // reales llegan por la suscripción realtime DELETE. Perder el ticket aquí
+    // equivale a perder un pedido ya pagado.
+    if (!data) return;
 
     const d = data as any;
     setEstadoGlobal((d.estado ?? 'pendiente') as OrderStatus);

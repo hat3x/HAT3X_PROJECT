@@ -16,6 +16,7 @@ const BASE          = 'hat3xia.app.n8n.cloud';
 const UNIFIED_ID    = 'pkwU41CWs0KVcvTF';
 const GCAL_CRED     = { id: 'vjjm2x8bmRYXXbWo', name: 'ekis' };
 const GSHEETS_CRED  = { id: 'EJ0DSUb87ZX7u8RL', name: 'Google Sheets OAuth2 API' };
+const TWILIO_CRED   = { id: 'ZSpxBSQ8osrO48UA', name: 'Twilio Biodental' };
 const CALENDAR_ID   = 'primary';
 const SHEETS_ID     = '13dgSeExFfpPyFJ-ZIXuLQ5uN-A5F7gcy6dHL1SxoxmY';
 const CAL_RL        = { __rl: true, value: CALENDAR_ID, mode: 'list', cachedResultName: CALENDAR_ID };
@@ -61,19 +62,23 @@ function renameFlow(workflow, prefix, yOffset) {
     node.id   = `${prefix}-${n.id}`;
     node.position = [n.position[0], (n.position[1] || 300) + yOffset];
 
-    if (node.parameters?.jsCode) {
-      let code = node.parameters.jsCode;
-      for (const [old, nw] of Object.entries(nameMap))
-        code = code.replace(new RegExp(`\\$\\('${esc(old)}'\\)`, 'g'), `$('${nw}')`);
-      node.parameters.jsCode = code;
+    // Prefijar referencias $('Nodo') en TODOS los parámetros string del nodo
+    // (jsCode, responseBody, to/message de Twilio, expresiones en options, etc.)
+    function prefixRefs(value) {
+      if (typeof value === 'string') {
+        let s = value;
+        for (const [old, nw] of Object.entries(nameMap))
+          s = s.replace(new RegExp(`\\$\\('${esc(old)}'\\)`, 'g'), `$('${nw}')`);
+        return s;
+      }
+      if (Array.isArray(value)) return value.map(prefixRefs);
+      if (value && typeof value === 'object') {
+        for (const k of Object.keys(value)) value[k] = prefixRefs(value[k]);
+        return value;
+      }
+      return value;
     }
-
-    if (node.parameters?.responseBody) {
-      let rb = node.parameters.responseBody;
-      for (const [old, nw] of Object.entries(nameMap))
-        rb = rb.replace(new RegExp(`\\$\\('${esc(old)}'\\)`, 'g'), `$('${nw}')`);
-      node.parameters.responseBody = rb;
-    }
+    node.parameters = prefixRefs(node.parameters);
 
     return node;
   });
@@ -96,6 +101,7 @@ function renameFlow(workflow, prefix, yOffset) {
 function fixNode(n) {
   if (n.credentials?.googleCalendarOAuth2Api) n.credentials.googleCalendarOAuth2Api = GCAL_CRED;
   if (n.credentials?.googleSheetsOAuth2Api)   n.credentials.googleSheetsOAuth2Api   = GSHEETS_CRED;
+  if (n.credentials?.twilioApi)               n.credentials.twilioApi               = TWILIO_CRED;
 
   if (n.type === 'n8n-nodes-base.googleCalendar') {
     delete n.parameters.calendarId;

@@ -73,7 +73,7 @@ const MATCHERS: Array<{ test: RegExp; src: string }> = [
   { test: /fuze\s*tea|fuzetea/, src: fuzetea },
   { test: /heineken.*0[,.]?0|0[,.]?0.*heineken|heineken.*sin alcohol|sin alcohol.*heineken/, src: heineken00 },
   { test: /desperados/, src: desperados },
-  { test: /cruzcampo.*sin gluten|sin gluten.*cruzcampo/, src: cruzcampoSinGluten },
+  { test: /cruzcampo.*sin gluten|sin gluten.*cruzcampo/, src: botellinCruzcampo },
   { test: /botellin.*cruzcampo|cruzcampo.*botellin/, src: botellinCruzcampo },
   { test: /infusion|te caliente|manzanilla|poleo|tila/, src: infusion },
   // Catch-all cerveza (excluye ladrón de manzanas y tinto de verano)

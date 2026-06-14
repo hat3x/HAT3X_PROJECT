@@ -218,13 +218,13 @@
     },
     {
       "parameters": {
-        "operation": "send",
-        "from": "={{ $env.TWILIO_WHATSAPP_FROM }}",
-        "to": "=whatsapp:+34{{ $('Parsear Argumentos').first().json.telefono }}",
-        "body": "=✅ Cita confirmada - Clínica Biodental\n\nHola {{ $('Parsear Argumentos').first().json.nombre }}, tu cita ha quedado confirmada:\n\n📅 {{ $('Parsear Argumentos').first().json.diaSemana }} {{ $('Parsear Argumentos').first().json.diaMes }} de {{ $('Parsear Argumentos').first().json.mes }} a las {{ $('Parsear Argumentos').first().json.hora }}\n🦷 {{ $('Parsear Argumentos').first().json.servicio }}\n📍 Clínica Biodental, Colmenarejo\n\n¿Necesitas cambiar o cancelar? Llámanos al mismo número.\n\n¡Hasta pronto!"
+        "from": "Biodental",
+        "to": "=+34{{ $('Parsear Argumentos').first().json.telefono }}",
+        "message": "=Clinica Biodental - Cita confirmada\n\nHola {{ $('Parsear Argumentos').first().json.nombre }}, tu cita: {{ $('Parsear Argumentos').first().json.diaSemana }} {{ $('Parsear Argumentos').first().json.diaMes }} de {{ $('Parsear Argumentos').first().json.mes }} a las {{ $('Parsear Argumentos').first().json.hora }} - {{ $('Parsear Argumentos').first().json.servicio }}.\n\nPara cambiar o cancelar, llamenos al mismo numero.\nHasta pronto!",
+        "options": {}
       },
       "id": "twilio-node",
-      "name": "Twilio - Enviar WhatsApp",
+      "name": "Twilio - Enviar SMS",
       "type": "n8n-nodes-base.twilio",
       "typeVersion": 1,
       "position": [
@@ -241,7 +241,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const datos = $('Parsear Argumentos').first().json;\n\n// Convierte \"18:00\" en \"las seis de la tarde\" para que el TTS lo lea natural\nfunction horaTexto(hhmm) {\n  const partes = String(hhmm).split(':').map(Number);\n  const h = partes[0], m = partes[1] || 0;\n  const NOMBRES = ['doce','una','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once'];\n  let h12 = h % 12;\n  let nombre = NOMBRES[h12];\n  let suf;\n  if (m === 0) suf = '';\n  else if (m === 15) suf = ' y cuarto';\n  else if (m === 30) suf = ' y media';\n  else if (m === 45) { h12 = (h12 + 1) % 12; nombre = NOMBRES[h12]; suf = ' menos cuarto'; }\n  else suf = ' y ' + m;\n  const hEff = (m === 45) ? h + 1 : h;\n  let periodo;\n  if (hEff < 12) periodo = ' de la mañana';\n  else if (hEff === 12) periodo = ' del mediodía';\n  else if (hEff < 21) periodo = ' de la tarde';\n  else periodo = ' de la noche';\n  const articulo = (nombre === 'una') ? 'la ' : 'las ';\n  return articulo + nombre + suf + periodo;\n}\n\nreturn [{ json: {\n  confirmado: true,\n  id_cita: datos.calendar_event_id,\n  mensaje_confirmacion: 'Cita confirmada. Te esperamos el ' + datos.diaSemana + ' ' + datos.diaMes + ' de ' + datos.mes + ' a ' + horaTexto(datos.hora) + ' para tu ' + datos.servicio.toLowerCase() + '. Recibirás la confirmación por WhatsApp.'\n}}];"
+        "jsCode": "const datos = $('Parsear Argumentos').first().json;\n\n// Convierte \"18:00\" en \"las seis de la tarde\" para que el TTS lo lea natural\nfunction horaTexto(hhmm) {\n  const partes = String(hhmm).split(':').map(Number);\n  const h = partes[0], m = partes[1] || 0;\n  const NOMBRES = ['doce','una','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once'];\n  let h12 = h % 12;\n  let nombre = NOMBRES[h12];\n  let suf;\n  if (m === 0) suf = '';\n  else if (m === 15) suf = ' y cuarto';\n  else if (m === 30) suf = ' y media';\n  else if (m === 45) { h12 = (h12 + 1) % 12; nombre = NOMBRES[h12]; suf = ' menos cuarto'; }\n  else suf = ' y ' + m;\n  const hEff = (m === 45) ? h + 1 : h;\n  let periodo;\n  if (hEff < 12) periodo = ' de la mañana';\n  else if (hEff === 12) periodo = ' del mediodía';\n  else if (hEff < 21) periodo = ' de la tarde';\n  else periodo = ' de la noche';\n  const articulo = (nombre === 'una') ? 'la ' : 'las ';\n  return articulo + nombre + suf + periodo;\n}\n\nreturn [{ json: {\n  confirmado: true,\n  id_cita: datos.calendar_event_id,\n  mensaje_confirmacion: 'Cita confirmada. Te esperamos el ' + datos.diaSemana + ' ' + datos.diaMes + ' de ' + datos.mes + ' a ' + horaTexto(datos.hora) + ' para tu ' + datos.servicio.toLowerCase() + '. Te llegará un SMS de confirmación.'\n}}];"
       },
       "id": "response-node",
       "name": "Construir Respuesta",
@@ -355,14 +355,14 @@
       "main": [
         [
           {
-            "node": "Twilio - Enviar WhatsApp",
+            "node": "Twilio - Enviar SMS",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Twilio - Enviar WhatsApp": {
+    "Twilio - Enviar SMS": {
       "main": [
         [
           {

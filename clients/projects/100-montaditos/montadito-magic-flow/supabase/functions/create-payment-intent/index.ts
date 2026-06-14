@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
       intent = await stripe.paymentIntents.create({
         amount,
         currency: "eur",
-        payment_method_types: ["card"],
+        automatic_payment_methods: { enabled: true },
         description: `Pedido #${pedido.numero_pedido}`,
         metadata: { pedido_id, session_id },
       });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 
 interface Props {
   variant?: 'short' | 'full';
@@ -29,10 +29,10 @@ export function AllergenLegalNoticeFloat() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-4 z-30 w-10 h-10 rounded-full bg-surface-elevated border border-border-subtle shadow-lg flex items-center justify-center text-amber-500 hover:bg-surface transition-colors"
+        className="fixed bottom-6 right-4 z-30 w-10 h-10 rounded-full bg-surface-elevated border border-border-subtle shadow-lg flex items-center justify-center text-muted-foreground hover:bg-surface transition-colors"
         aria-label="Información sobre alérgenos"
       >
-        <AlertTriangle className="w-5 h-5" />
+        <Info className="w-5 h-5" />
       </button>
 
       <AnimatePresence>

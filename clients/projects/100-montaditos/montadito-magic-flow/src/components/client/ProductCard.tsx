@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Minus, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, AlertCircle } from 'lucide-react';
 import { useCartStore, useAgeGate } from '@/lib/cart-store';
 import { useAllergenFilter } from '@/lib/allergen-filter';
 import { getDrinkIcon } from '@/lib/drink-icon';
@@ -11,8 +11,8 @@ import jarraQuijoteLadronVeranoImg from '@/assets/drinks/jarra-quijote-ladron-ve
 import jarraSanchoLadronVeranoImg from '@/assets/drinks/jarra-sancho-ladron-verano.png';
 import jarraQuijoteLadronManzanasImg from '@/assets/drinks/jarra-quijote-ladron-manzanas.png';
 import jarraSanchoLadronManzanasImg from '@/assets/drinks/jarra-sancho-ladron-manzanas.png';
-import { PRODUCT_IMAGES } from '@/lib/product-images';
-import { AllergenIcon, AllergenIconRow } from './AllergenIcon';
+import { PRODUCT_IMAGES, MONTADITO_IMAGES_BY_NUMERO } from '@/lib/product-images';
+import { AllergenIcon } from './AllergenIcon';
 import { AllergenLegalNotice } from './AllergenLegalNotice';
 import type { ProductAllergen } from '@/hooks/use-menu';
 import {
@@ -42,6 +42,7 @@ interface Props {
   product: Product;
   index: number;
   variant?: 'default' | 'drink';
+  hideAllergens?: boolean;
 }
 
 const BREAD_BADGES: Record<string, string> = {
@@ -54,9 +55,9 @@ const BREAD_BADGES: Record<string, string> = {
 };
 
 const JARRA_SECTIONS = new Set(['Jarras Heladas', 'Cerveza Premium']);
-const SANCHO_EXTRA = 1.0; // Sancho cuesta 1€ más que Quijote
+const SANCHO_EXTRA = 0.5; // Sancho cuesta 0.50€ más que Quijote (Cerveza Premium: 2€/2.50€ · Jarras Heladas: 1.50€/2€)
 
-export function ProductCard({ product, index, variant = 'default' }: Props) {
+export function ProductCard({ product, index, variant = 'default', hideAllergens = false }: Props) {
   const addItem = useCartStore((s) => s.addItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const items = useCartStore((s) => s.items);
@@ -77,7 +78,7 @@ export function ProductCard({ product, index, variant = 'default' }: Props) {
   const rest = product.nombre;
   const productImage = variant === 'drink'
     ? getDrinkImage(product.nombre, product.foto_url)
-    : (PRODUCT_IMAGES[product.nombre] ?? product.foto_url);
+    : ((num ? MONTADITO_IMAGES_BY_NUMERO[num] : undefined) ?? PRODUCT_IMAGES[product.nombre] ?? product.foto_url);
   const drinkIcon = variant === 'drink' && !productImage ? getDrinkIcon(product.nombre) : null;
   const breadBadgeClass = product.tipo_pan ? BREAD_BADGES[product.tipo_pan] ?? 'bg-muted text-muted-foreground border-border' : null;
 
@@ -111,7 +112,7 @@ export function ProductCard({ product, index, variant = 'default' }: Props) {
       ? jarraSanchoLadronManzanasImg
       : jarraSanchoImg;
 
-  const alergenos = product.alergenos ?? [];
+  const alergenos = hideAllergens ? [] : (product.alergenos ?? []);
   const matchedExcluded = alergenos.filter((a) => excluded.includes(a.codigo));
   const hasExcluded = matchedExcluded.length > 0;
 
@@ -245,8 +246,13 @@ export function ProductCard({ product, index, variant = 'default' }: Props) {
         onClick={() => setDetailOpen(true)}
       >
         {productImage && (
-          <span className="w-12 h-12 rounded-xl bg-card overflow-hidden shrink-0 shadow-sm border border-border-subtle">
-            <img src={productImage} alt={product.nombre} className="w-full h-full object-contain" loading="lazy" />
+          <span className="relative w-12 h-12 rounded-xl bg-card overflow-visible shrink-0 shadow-sm border border-border-subtle">
+            <img src={productImage} alt={product.nombre} className="w-full h-full object-contain rounded-xl overflow-hidden" loading="lazy" />
+            {num && productImage?.startsWith('/assets/img/montaditos/') && (
+              <span className="absolute -bottom-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-0.5 rounded-full bg-muted/90 text-muted-foreground text-[9px] font-semibold flex items-center justify-center border border-border leading-none">
+                {num}
+              </span>
+            )}
           </span>
         )}
 
@@ -284,11 +290,6 @@ export function ProductCard({ product, index, variant = 'default' }: Props) {
             <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
               {product.descripcion}
             </p>
-          )}
-          {alergenos.length > 0 && (
-            <div className="mt-1.5">
-              <AllergenIconRow alergenos={alergenos} maxVisible={5} />
-            </div>
           )}
         </div>
 
@@ -360,7 +361,7 @@ export function ProductCard({ product, index, variant = 'default' }: Props) {
         {hasExcluded && (
           <div className="absolute inset-0 rounded-[inherit] bg-destructive/30 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
             <span className="bg-destructive text-destructive-foreground text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
-              <AlertTriangle className="w-3.5 h-3.5" />
+              <AlertCircle className="w-3.5 h-3.5" />
               Contiene alérgenos seleccionados
             </span>
           </div>
@@ -412,7 +413,7 @@ export function ProductCard({ product, index, variant = 'default' }: Props) {
             {alergenos.length > 0 && (
               <div className="mt-4 pt-4 border-t border-border-subtle">
                 <h4 className="font-display text-sm font-bold mb-3 flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-[#92400E]" />
+                  <AlertCircle className="w-4 h-4 text-muted-foreground" />
                   Alérgenos
                 </h4>
                 <div className="flex flex-wrap gap-3">

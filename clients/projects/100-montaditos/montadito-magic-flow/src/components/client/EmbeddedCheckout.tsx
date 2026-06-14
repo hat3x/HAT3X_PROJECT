@@ -9,12 +9,14 @@ interface Props {
   pedidoId: string;
   sessionId: string;
   numeroPedido: number;
+  hasCocina: boolean;
+  hasBebidas: boolean;
   total: number;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-function PayForm({ total, pedidoId, sessionId, onSuccess, onCancel }: { total: number; pedidoId: string; sessionId: string; onSuccess: () => void; onCancel: () => void }) {
+function PayForm({ total, pedidoId, sessionId, numeroPedido, hasCocina, hasBebidas, onSuccess, onCancel }: { total: number; pedidoId: string; sessionId: string; numeroPedido: number; hasCocina: boolean; hasBebidas: boolean; onSuccess: () => void; onCancel: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -33,9 +35,19 @@ function PayForm({ total, pedidoId, sessionId, onSuccess, onCancel }: { total: n
       return;
     }
 
+    // Codificamos los datos del pedido en el return_url como fallback:
+    // iOS Safari a veces borra localStorage durante el redirect cross-domain de Apple Pay.
+    const returnParams = new URLSearchParams({
+      pago: 'ok',
+      pid: pedidoId,
+      num: String(numeroPedido),
+      sid: sessionId,
+      cocina: hasCocina ? '1' : '0',
+      bebidas: hasBebidas ? '1' : '0',
+    });
     const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
       elements,
-      confirmParams: { return_url: `${window.location.origin}/?pago=ok` },
+      confirmParams: { return_url: `${window.location.origin}/?${returnParams.toString()}` },
       redirect: 'if_required',
     });
 
@@ -92,7 +104,7 @@ function PayForm({ total, pedidoId, sessionId, onSuccess, onCancel }: { total: n
   );
 }
 
-export function EmbeddedCheckout({ pedidoId, sessionId, numeroPedido, total, onSuccess, onCancel }: Props) {
+export function EmbeddedCheckout({ pedidoId, sessionId, numeroPedido, hasCocina, hasBebidas, total, onSuccess, onCancel }: Props) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -183,7 +195,7 @@ export function EmbeddedCheckout({ pedidoId, sessionId, numeroPedido, total, onS
               },
             }}
           >
-            <PayForm total={total} pedidoId={pedidoId} sessionId={sessionId} onSuccess={onSuccess} onCancel={onCancel} />
+            <PayForm total={total} pedidoId={pedidoId} sessionId={sessionId} numeroPedido={numeroPedido} hasCocina={hasCocina} hasBebidas={hasBebidas} onSuccess={onSuccess} onCancel={onCancel} />
           </Elements>
         )}
       </div>
