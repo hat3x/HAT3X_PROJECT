@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+﻿import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { ClientHeader } from '@/components/client/ClientHeader';
@@ -76,10 +76,11 @@ const loadActiveOrder = (): ActiveOrder | null => {
     const raw = localStorage.getItem(ACTIVE_ORDER_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed?.pedidoId && parsed?.numeroPedido) {
+    // Only pedidoId is required — numeroPedido can be 0 when the DB trigger hasn't fired yet
+    if (parsed?.pedidoId) {
       return {
         pedidoId: parsed.pedidoId,
-        numeroPedido: parsed.numeroPedido,
+        numeroPedido: parsed.numeroPedido ?? 0,
         hasCocina: parsed.hasCocina ?? true,
         hasBebidas: parsed.hasBebidas ?? false,
         sessionId: parsed.sessionId,
@@ -187,11 +188,16 @@ const ClientApp = () => {
     if (!saved?.pedidoId) { setRecovering(false); return; }
 
     // Venimos del redirect de Apple Pay / Google Pay (/?pago=ok).
-    // El pago ya está confirmado por Stripe: mostrar seguimiento inmediatamente
-    // sin esperar la query DB. El polling de OrderTracking actualizará el estado
-    // en cuanto el webhook cambie pendiente_pago → pendiente.
+    // Llamamos confirm-payment para que el pedido salga de pendiente_pago inmediatamente
+    // sin depender del timing del webhook de Stripe.
     const params = new URLSearchParams(window.location.search);
     if (params.get('pago') === 'ok') {
+      const paymentIntentId = params.get('payment_intent');
+      if (paymentIntentId && saved.pedidoId && saved.sessionId) {
+        supabase.functions.invoke('confirm-payment', {
+          body: { pedido_id: saved.pedidoId, session_id: saved.sessionId, payment_intent_id: paymentIntentId },
+        }).catch((e) => console.error('[confirm-payment redirect]', e));
+      }
       setOrderState(saved);
       setRecovering(false);
       return;
@@ -264,18 +270,29 @@ const ClientApp = () => {
     if (!pago) return;
     if (pago === 'ok') {
       toast.success('¡Pago realizado con éxito!');
+
+      // Stripe añade payment_intent al return_url en redirects (Apple Pay, Google Pay).
+      // Lo usamos para llamar confirm-payment inmediatamente y sacar el pedido de
+      // pendiente_pago sin esperar al webhook — esto soluciona la pantalla en blanco.
+      const paymentIntentId = searchParams.get('payment_intent');
+      const pidFromUrl = searchParams.get('pid');
+      const sidFromUrl = searchParams.get('sid');
+      if (paymentIntentId && pidFromUrl && sidFromUrl) {
+        supabase.functions.invoke('confirm-payment', {
+          body: { pedido_id: pidFromUrl, session_id: sidFromUrl, payment_intent_id: paymentIntentId },
+        }).catch((e) => console.error('[confirm-payment redirect]', e));
+      }
+
       const saved = loadActiveOrder();
       if (saved) {
         setOrderState(saved);
       } else {
         // Fallback: iOS Safari a veces borra localStorage durante el redirect cross-domain.
         // Recuperamos desde los params que EmbeddedCheckout codificó en el return_url.
-        const pidFromUrl = searchParams.get('pid');
         const numFromUrl = searchParams.get('num');
-        const sidFromUrl = searchParams.get('sid');
         const cocinaFromUrl = searchParams.get('cocina');
         const bebidasFromUrl = searchParams.get('bebidas');
-        if (pidFromUrl && numFromUrl) {
+        if (pidFromUrl && numFromUrl !== null) {
           const recovered: ActiveOrder = {
             pedidoId: pidFromUrl,
             numeroPedido: parseInt(numFromUrl, 10),
@@ -305,8 +322,27 @@ const ClientApp = () => {
   const { data: categories = [], isLoading: loadingCategories } = useCategories();
   const { data: rawProducts = [] } = useProducts(activeCategory || undefined);
   const { data: restricciones = [] } = useLocalRestricciones();
-  const { isProductoAllowed, isSeccionAllowed } = buildRestriccionFilter(restricciones);
-  const products = (rawProducts as any[]).filter((p) => isProductoAllowed(p.id));
+  const { isProductoAllowed, isSeccionAllowed: isSeccionAllowedDB } = buildRestriccionFilter(restricciones);
+
+  const now = new Date();
+  const isAfter17 = now.getHours() >= 17;
+  const CAFE_SECTION = 'Café e Infusiones';
+
+  // After 17:00: keep Café e Infusiones visible (DB hides it entirely, we override to show only Agua)
+  const isSeccionAllowed = (sec: string) => {
+    if (isAfter17 && sec === CAFE_SECTION) return true;
+    return isSeccionAllowedDB(sec);
+  };
+
+  const products = (rawProducts as any[]).filter((p) => {
+    if (!isProductoAllowed(p.id)) return false;
+    // After 17:00: only Agua survives in Café e Infusiones
+    if (isAfter17 && p.seccion === CAFE_SECTION) {
+      const nombre: string = (p.nombre ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      return nombre.includes('agua');
+    }
+    return true;
+  });
   const cart = useCartStore();
 
   const selectedCategory = categories.find((c: any) => c.id === activeCategory);
@@ -332,13 +368,26 @@ const ClientApp = () => {
       const productIds = Array.from(new Set(cart.items.map((i) => i.productoId)));
       const { data: prodCats, error: prodErr } = await supabase
         .from('menu_productos')
-        .select('id, categoria_id, menu_categorias(nombre)')
+        .select('id, nombre, categoria_id, menu_categorias(nombre)')
         .in('id', productIds);
       if (prodErr) throw prodErr;
 
+      // Normalize a string: remove diacritics, lowercase, trim
+      const norm = (s: string) =>
+        s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+      // Aperitivos servidos en barra — matched by substring to be resilient to
+      // exact DB name variants (e.g. "Gilda boqueron" / "Gilda anchoa" / "Gildas")
+      const isAperitivoBarra = (nombre: string) => {
+        const n = norm(nombre);
+        return n.includes('aceituna') || n.includes('gilda') || n.includes('cucurucho');
+      };
+
       const isBebida = (productoId: string) => {
         const p = prodCats?.find((x) => x.id === productoId);
-        return (p?.menu_categorias as any)?.nombre === BEBIDAS_CATEGORY_NAME;
+        if ((p?.menu_categorias as any)?.nombre === BEBIDAS_CATEGORY_NAME) return true;
+        if (p?.nombre && isAperitivoBarra(p.nombre)) return true;
+        return false;
       };
 
       const hasBebidas = cart.items.some((i) => isBebida(i.productoId));

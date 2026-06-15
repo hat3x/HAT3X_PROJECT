@@ -5,10 +5,23 @@ import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useCartStore } from '@/lib/cart-store';
+import { useCartStore, useAgeGate } from '@/lib/cart-store';
 import { getDrinkImage } from '@/lib/drink-image';
+import { PRODUCT_IMAGES, MONTADITO_IMAGES_BY_NUMERO } from '@/lib/product-images';
 import { Monty } from './Monty';
-
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import jarraQuijoteImg from '@/assets/drinks/jarra-quijote.png';
+import jarraSanchoImg from '@/assets/drinks/jarra-sancho.png';
+import jarraQuijoteLadronVeranoImg from '@/assets/drinks/jarra-quijote-ladron-verano.png';
+import jarraSanchoLadronVeranoImg from '@/assets/drinks/jarra-sancho-ladron-verano.png';
+import jarraQuijoteLadronManzanasImg from '@/assets/drinks/jarra-quijote-ladron-manzanas.png';
+import jarraSanchoLadronManzanasImg from '@/assets/drinks/jarra-sancho-ladron-manzanas.png';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -17,6 +30,9 @@ type Product = {
   nombre: string;
   precio: number;
   foto_url: string | null;
+  numero?: string | null;
+  contiene_alcohol?: boolean;
+  seccion?: string | null;
 };
 
 type FlyingItem = {
@@ -30,6 +46,8 @@ type FlyingItem = {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-menu`;
 const TYPEWRITER_CPS = 150;
+const JARRA_SECTIONS = new Set(['Jarras Heladas', 'Cerveza Premium']);
+const SANCHO_EXTRA = 0.5;
 
 const SUGGESTIONS = [
   '¿Qué montaditos de pollo tenéis?',
@@ -38,7 +56,23 @@ const SUGGESTIONS = [
   'Opciones vegetarianas',
 ];
 
-// Extract [[add:NAME]] tokens from assistant text
+// Normalises a product name for fuzzy matching
+function normalizeName(s: string) {
+  return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+}
+
+const isJarraProduct = (p: Product) =>
+  (!!p.seccion && JARRA_SECTIONS.has(p.seccion)) || normalizeName(p.nombre).includes('jarra');
+
+const isGildaProduct = (p: Product) => {
+  const n = normalizeName(p.nombre);
+  return n === 'gildas' || n === 'gilda';
+};
+
+const isNachosProduct = (p: Product) => normalizeName(p.nombre) === 'nachos';
+
+const isAlitasProduct = (p: Product) => normalizeName(p.nombre) === 'alitas de pollo';
+
 function parseMessage(raw: string): { text: string; productNames: string[] } {
   const productNames: string[] = [];
   const text = raw
@@ -46,10 +80,8 @@ function parseMessage(raw: string): { text: string; productNames: string[] } {
       productNames.push(name.trim());
       return '';
     })
-    // collapse extra blank lines left behind
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  // De-duplicate while preserving order
   const seen = new Set<string>();
   const unique = productNames.filter((n) => {
     const k = n.toLowerCase();
@@ -63,6 +95,13 @@ function parseMessage(raw: string): { text: string; productNames: string[] } {
 function findProduct(name: string, products: Product[] | undefined): Product | null {
   if (!products) return null;
   const target = name.trim().toLowerCase();
+
+  const numMatch = target.match(/^#?(\d+)(?:\s|$)/);
+  if (numMatch) {
+    const byNum = products.find((p) => p.numero === numMatch[1]);
+    if (byNum) return byNum;
+  }
+
   return (
     products.find((p) => p.nombre.toLowerCase() === target) ||
     products.find((p) => p.nombre.toLowerCase().includes(target)) ||
@@ -70,6 +109,15 @@ function findProduct(name: string, products: Product[] | undefined): Product | n
     null
   );
 }
+
+function resolveProductImage(product: Product): string | null {
+  if (product.numero && MONTADITO_IMAGES_BY_NUMERO[product.numero]) {
+    return MONTADITO_IMAGES_BY_NUMERO[product.numero];
+  }
+  return getDrinkImage(product.nombre, product.foto_url);
+}
+
+// ─── Product chip rendered below AI messages ─────────────────────────────────
 
 interface ProductChipProps {
   product: Product;
@@ -79,12 +127,11 @@ interface ProductChipProps {
 function ProductChip({ product, onAdd }: ProductChipProps) {
   const [added, setAdded] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
-  const imageSrc = getDrinkImage(product.nombre, product.foto_url);
+  const imageSrc = resolveProductImage(product);
 
   const handleClick = () => {
     if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    onAdd(product, rect);
+    onAdd(product, ref.current.getBoundingClientRect());
     setAdded(true);
     setTimeout(() => setAdded(false), 1200);
   };
@@ -98,7 +145,12 @@ function ProductChip({ product, onAdd }: ProductChipProps) {
     >
       <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-muted shrink-0">
         {imageSrc ? (
-          <img src={imageSrc} alt={product.nombre} className="w-full h-full object-contain" loading="lazy" />
+          <img
+            src={imageSrc}
+            alt={product.nombre}
+            className="w-full h-full object-contain"
+            loading="lazy"
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-lg">🥖</div>
         )}
@@ -120,6 +172,8 @@ function ProductChip({ product, onAdd }: ProductChipProps) {
   );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export function MenuChatBot() {
   const [open, setOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -128,9 +182,18 @@ export function MenuChatBot() {
   const [loading, setLoading] = useState(false);
   const [flying, setFlying] = useState<FlyingItem[]>([]);
   const [cartPulse, setCartPulse] = useState(false);
+
+  // Variant dialog state
+  const [pendingVariantProduct, setPendingVariantProduct] = useState<Product | null>(null);
+  const [jarraOpen, setJarraOpen] = useState(false);
+  const [gildaOpen, setGildaOpen] = useState(false);
+  const [nachosOpen, setNachosOpen] = useState(false);
+  const [alitasOpen, setAlitasOpen] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const cartIconRef = useRef<HTMLButtonElement>(null);
   const flyingIdRef = useRef(0);
+  const pendingRectRef = useRef<DOMRect | null>(null);
 
   const addItem = useCartStore((s) => s.addItem);
   const itemCount = useCartStore((s) => s.itemCount);
@@ -138,6 +201,7 @@ export function MenuChatBot() {
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
   const cartTotal = useCartStore((s) => s.total);
+  const requestAlcohol = useAgeGate((s) => s.request);
 
   const fullTextRef = useRef<string>('');
   const revealedRef = useRef<number>(0);
@@ -145,11 +209,11 @@ export function MenuChatBot() {
   const abortRef = useRef<AbortController | null>(null);
 
   const { data: products } = useQuery({
-    queryKey: ['all-products-min'],
+    queryKey: ['all-products-chatbot'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('menu_productos')
-        .select('id, nombre, precio, foto_url')
+        .select('id, nombre, precio, foto_url, numero, contiene_alcohol, seccion')
         .eq('disponible', true);
       if (error) throw error;
       return data as Product[];
@@ -167,6 +231,8 @@ export function MenuChatBot() {
       abortRef.current?.abort();
     };
   }, []);
+
+  // ── Typewriter helpers ────────────────────────────────────────────────────
 
   const startTypewriter = () => {
     if (intervalRef.current) return;
@@ -195,8 +261,169 @@ export function MenuChatBot() {
     stopTypewriter();
   };
 
+  // ── Flying cart animation ─────────────────────────────────────────────────
+
+  const triggerFlyingAnimation = (imgUrl: string | null, nombre: string, originRect: DOMRect) => {
+    const cartRect = cartIconRef.current?.getBoundingClientRect();
+    if (!cartRect) return;
+    const id = ++flyingIdRef.current;
+    setFlying((prev) => [
+      ...prev,
+      {
+        id,
+        product: { id: '', nombre, precio: 0, foto_url: imgUrl },
+        fromX: originRect.left,
+        fromY: originRect.top,
+        toX: cartRect.left + cartRect.width / 2 - 20,
+        toY: cartRect.top + cartRect.height / 2 - 20,
+      },
+    ]);
+    setTimeout(() => {
+      setCartPulse(true);
+      setTimeout(() => setCartPulse(false), 400);
+    }, 650);
+    setTimeout(() => {
+      setFlying((prev) => prev.filter((f) => f.id !== id));
+    }, 900);
+  };
+
+  // ── Variant add helpers ───────────────────────────────────────────────────
+
+  const getJarraImgs = (p: Product) => {
+    const n = normalizeName(p.nombre);
+    if (n.includes('ladron de verano') || n.includes('tinto de verano'))
+      return { q: jarraQuijoteLadronVeranoImg, s: jarraSanchoLadronVeranoImg };
+    if (n.includes('ladron de manzana'))
+      return { q: jarraQuijoteLadronManzanasImg, s: jarraSanchoLadronManzanasImg };
+    return { q: jarraQuijoteImg, s: jarraSanchoImg };
+  };
+
+  const addJarraVariant = (size: 'quijote' | 'sancho') => {
+    if (!pendingVariantProduct) return;
+    const p = pendingVariantProduct;
+    const label = size === 'quijote' ? 'Jarra Quijote' : 'Jarra Sancho';
+    const precio = size === 'quijote' ? p.precio : p.precio + SANCHO_EXTRA;
+    const { q, s } = getJarraImgs(p);
+    const img = size === 'quijote' ? q : s;
+    const payload = {
+      id: `${p.id}::${size}`,
+      productoId: p.id,
+      variant: size,
+      variantLabel: label,
+      nombre: `${p.nombre} · ${label}`,
+      precio,
+      foto_url: img,
+      contiene_alcohol: !!p.contiene_alcohol,
+    };
+    if (p.contiene_alcohol) {
+      requestAlcohol(payload);
+    } else {
+      addItem(payload);
+    }
+    pendingRectRef.current && triggerFlyingAnimation(img, payload.nombre, pendingRectRef.current);
+    toast.success(`${payload.nombre} añadido al carrito`);
+    setJarraOpen(false);
+    setPendingVariantProduct(null);
+  };
+
+  const addGildaVariant = (tipo: 'boqueron' | 'anchoa') => {
+    if (!pendingVariantProduct) return;
+    const p = pendingVariantProduct;
+    const label = tipo === 'boqueron' ? 'Boquerón' : 'Anchoa';
+    const img = tipo === 'boqueron' ? PRODUCT_IMAGES._gildaBoqueron : PRODUCT_IMAGES._gildaAnchoa;
+    const nombre = tipo === 'boqueron' ? 'Gilda de boquerón' : 'Gilda de anchoa';
+    const payload = {
+      id: `${p.id}::${tipo}`,
+      productoId: p.id,
+      variant: tipo,
+      variantLabel: label,
+      nombre,
+      precio: p.precio,
+      foto_url: img,
+      contiene_alcohol: false,
+    };
+    addItem(payload);
+    pendingRectRef.current && triggerFlyingAnimation(img, nombre, pendingRectRef.current);
+    toast.success(`${nombre} añadida al carrito`);
+    setGildaOpen(false);
+    setPendingVariantProduct(null);
+  };
+
+  const addNachosVariant = (salsa: 'bacon' | 'guacamole') => {
+    if (!pendingVariantProduct) return;
+    const p = pendingVariantProduct;
+    const label = salsa === 'bacon' ? 'Cheddar y bacon ahumado' : 'Cheddar y guacamole';
+    const img = salsa === 'bacon' ? PRODUCT_IMAGES._nachosBacon : PRODUCT_IMAGES._nachosGuaca;
+    const nombre = `Nachos · ${label}`;
+    const payload = {
+      id: `${p.id}::${salsa}`,
+      productoId: p.id,
+      variant: salsa,
+      variantLabel: label,
+      nombre,
+      precio: p.precio,
+      foto_url: img,
+      contiene_alcohol: false,
+    };
+    addItem(payload);
+    pendingRectRef.current && triggerFlyingAnimation(img, nombre, pendingRectRef.current);
+    toast.success('Nachos añadidos al carrito');
+    setNachosOpen(false);
+    setPendingVariantProduct(null);
+  };
+
+  const addAlitasVariant = (sabor: 'bbq' | 'brava') => {
+    if (!pendingVariantProduct) return;
+    const p = pendingVariantProduct;
+    const label = sabor === 'bbq' ? 'BBQ' : 'Brava';
+    const img = sabor === 'bbq' ? PRODUCT_IMAGES._alitasBbq : PRODUCT_IMAGES._alitasBrava;
+    const nombre = `Alitas de pollo · ${label}`;
+    const payload = {
+      id: `${p.id}::${sabor}`,
+      productoId: p.id,
+      variant: sabor,
+      variantLabel: label,
+      nombre,
+      precio: p.precio,
+      foto_url: img,
+      contiene_alcohol: false,
+    };
+    addItem(payload);
+    pendingRectRef.current && triggerFlyingAnimation(img, nombre, pendingRectRef.current);
+    toast.success(`Alitas ${label} añadidas al carrito`);
+    setAlitasOpen(false);
+    setPendingVariantProduct(null);
+  };
+
+  // ── Main add handler (checks for variants first) ──────────────────────────
+
   const handleAddProduct = (product: Product, originRect: DOMRect) => {
-    const resolvedImage = getDrinkImage(product.nombre, product.foto_url);
+    if (isJarraProduct(product)) {
+      setPendingVariantProduct(product);
+      pendingRectRef.current = originRect;
+      setJarraOpen(true);
+      return;
+    }
+    if (isGildaProduct(product)) {
+      setPendingVariantProduct(product);
+      pendingRectRef.current = originRect;
+      setGildaOpen(true);
+      return;
+    }
+    if (isNachosProduct(product)) {
+      setPendingVariantProduct(product);
+      pendingRectRef.current = originRect;
+      setNachosOpen(true);
+      return;
+    }
+    if (isAlitasProduct(product)) {
+      setPendingVariantProduct(product);
+      pendingRectRef.current = originRect;
+      setAlitasOpen(true);
+      return;
+    }
+
+    const resolvedImage = resolveProductImage(product);
     const cartRect = cartIconRef.current?.getBoundingClientRect();
     if (cartRect) {
       const id = ++flyingIdRef.current;
@@ -237,6 +464,8 @@ export function MenuChatBot() {
 
     toast.success(`${product.nombre} añadido al carrito`);
   };
+
+  // ── Send message ──────────────────────────────────────────────────────────
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -304,9 +533,7 @@ export function MenuChatBot() {
           try {
             const parsed = JSON.parse(json);
             const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              fullTextRef.current += content;
-            }
+            if (content) fullTextRef.current += content;
           } catch {
             buffer = line + '\n' + buffer;
             break;
@@ -330,15 +557,18 @@ export function MenuChatBot() {
     }
   };
 
-  // Determine if the last assistant message is still streaming (typewriter active)
   const isStreamingLast = (idx: number) =>
     idx === messages.length - 1 &&
     messages[idx].role === 'assistant' &&
     revealedRef.current < fullTextRef.current.length;
 
+  const jarraImgs = pendingVariantProduct ? getJarraImgs(pendingVariantProduct) : { q: jarraQuijoteImg, s: jarraSanchoImg };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <>
-      {/* Floating Monty mascot button */}
+      {/* Floating Monty button */}
       <div className="fixed bottom-5 left-4 z-40 flex items-end gap-2">
         <motion.button
           initial={{ scale: 0, rotate: -20 }}
@@ -402,7 +632,6 @@ export function MenuChatBot() {
                 </div>
 
                 <div className="flex items-center gap-1">
-                  {/* Cart bubble */}
                   <motion.button
                     ref={cartIconRef}
                     onClick={() => setCartOpen((v) => !v)}
@@ -440,7 +669,7 @@ export function MenuChatBot() {
                 </div>
               </div>
 
-              {/* Cart panel (collapsible) */}
+              {/* Mini cart panel */}
               <AnimatePresence initial={false}>
                 {cartOpen && (
                   <motion.div
@@ -502,9 +731,7 @@ export function MenuChatBot() {
                                   </div>
                                   <div className="flex items-center gap-1 shrink-0">
                                     <button
-                                      onClick={() =>
-                                        updateQuantity(item.id, item.cantidad - 1)
-                                      }
+                                      onClick={() => updateQuantity(item.id, item.cantidad - 1)}
                                       className="w-6 h-6 rounded-full bg-muted hover:bg-muted/70 flex items-center justify-center"
                                       aria-label="Quitar uno"
                                     >
@@ -514,9 +741,7 @@ export function MenuChatBot() {
                                       {item.cantidad}
                                     </span>
                                     <button
-                                      onClick={() =>
-                                        updateQuantity(item.id, item.cantidad + 1)
-                                      }
+                                      onClick={() => updateQuantity(item.id, item.cantidad + 1)}
                                       className="w-6 h-6 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 flex items-center justify-center"
                                       aria-label="Añadir uno"
                                     >
@@ -601,7 +826,6 @@ export function MenuChatBot() {
                         </div>
                       )}
 
-                      {/* Product recommendation cards — only show when streaming finished */}
                       {!stillStreaming && matchedProducts.length > 0 && (
                         <div className="flex flex-col gap-1.5 w-full">
                           {matchedProducts.map((p) => (
@@ -646,18 +870,13 @@ export function MenuChatBot() {
         )}
       </AnimatePresence>
 
-      {/* Flying-to-cart animation layer */}
+      {/* Flying items layer */}
       <AnimatePresence>
         {flying.map((f) => (
           <motion.div
             key={f.id}
             initial={{ x: f.fromX, y: f.fromY, scale: 1, opacity: 1 }}
-            animate={{
-              x: f.toX,
-              y: f.toY,
-              scale: 0.3,
-              opacity: 0.9,
-            }}
+            animate={{ x: f.toX, y: f.toY, scale: 0.3, opacity: 0.9 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.7, ease: [0.5, 0, 0.75, 0] }}
             className="fixed top-0 left-0 z-[60] w-10 h-10 rounded-full overflow-hidden shadow-2xl ring-2 ring-primary pointer-events-none bg-background"
@@ -677,6 +896,217 @@ export function MenuChatBot() {
           </motion.div>
         ))}
       </AnimatePresence>
+
+      {/* ── Jarra variant dialog ────────────────────────────────────────────── */}
+      <Dialog
+        open={jarraOpen}
+        onOpenChange={(v) => {
+          setJarraOpen(v);
+          if (!v) setPendingVariantProduct(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">¿Qué jarra prefieres?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground pt-1">
+              {pendingVariantProduct?.nombre}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <button
+              onClick={() => addJarraVariant('quijote')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <img
+                src={jarraImgs.q}
+                alt="Jarra Quijote"
+                className="h-24 w-auto object-contain"
+              />
+              <span className="font-display font-bold text-base text-foreground">Quijote</span>
+              <span className="text-xs text-muted-foreground">Tamaño estándar</span>
+              <span className="text-lg font-black text-gold mt-1">
+                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+              </span>
+            </button>
+            <button
+              onClick={() => addJarraVariant('sancho')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <img
+                src={jarraImgs.s}
+                alt="Jarra Sancho"
+                className="h-24 w-auto object-contain"
+              />
+              <span className="font-display font-bold text-base text-foreground">Sancho</span>
+              <span className="text-xs text-muted-foreground">Tamaño grande</span>
+              <span className="text-lg font-black text-gold mt-1">
+                {pendingVariantProduct
+                  ? (pendingVariantProduct.precio + SANCHO_EXTRA).toFixed(2)
+                  : '—'}{' '}
+                €
+              </span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Gilda variant dialog ────────────────────────────────────────────── */}
+      <Dialog
+        open={gildaOpen}
+        onOpenChange={(v) => {
+          setGildaOpen(v);
+          if (!v) setPendingVariantProduct(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">¿Qué gilda prefieres?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground pt-1">
+              Elige el sabor de tu gilda
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <button
+              onClick={() => addGildaVariant('boqueron')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <img
+                src={PRODUCT_IMAGES._gildaBoqueron}
+                alt="Gilda de boquerón"
+                className="h-24 w-auto object-contain"
+                loading="lazy"
+              />
+              <span className="font-display font-bold text-base text-foreground">Boquerón</span>
+              <span className="text-xs text-muted-foreground text-center">Suave y fresco</span>
+              <span className="text-lg font-black text-gold mt-1">
+                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+              </span>
+            </button>
+            <button
+              onClick={() => addGildaVariant('anchoa')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <img
+                src={PRODUCT_IMAGES._gildaAnchoa}
+                alt="Gilda de anchoa"
+                className="h-24 w-auto object-contain"
+                loading="lazy"
+              />
+              <span className="font-display font-bold text-base text-foreground">Anchoa</span>
+              <span className="text-xs text-muted-foreground text-center">Intenso y curado</span>
+              <span className="text-lg font-black text-gold mt-1">
+                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+              </span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Nachos variant dialog ───────────────────────────────────────────── */}
+      <Dialog
+        open={nachosOpen}
+        onOpenChange={(v) => {
+          setNachosOpen(v);
+          if (!v) setPendingVariantProduct(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">¿Con qué salsa?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground pt-1">
+              Elige la salsa para tus nachos
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <button
+              onClick={() => addNachosVariant('bacon')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <img
+                src={PRODUCT_IMAGES._nachosBacon}
+                alt="Nachos cheddar y bacon"
+                className="h-24 w-auto object-contain"
+                loading="lazy"
+              />
+              <span className="font-display font-bold text-sm text-foreground text-center">
+                Cheddar y bacon ahumado
+              </span>
+              <span className="text-lg font-black text-gold mt-1">
+                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+              </span>
+            </button>
+            <button
+              onClick={() => addNachosVariant('guacamole')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <img
+                src={PRODUCT_IMAGES._nachosGuaca}
+                alt="Nachos cheddar y guacamole"
+                className="h-24 w-auto object-contain"
+                loading="lazy"
+              />
+              <span className="font-display font-bold text-sm text-foreground text-center">
+                Cheddar y guacamole
+              </span>
+              <span className="text-lg font-black text-gold mt-1">
+                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+              </span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Alitas variant dialog ───────────────────────────────────────────── */}
+      <Dialog
+        open={alitasOpen}
+        onOpenChange={(v) => {
+          setAlitasOpen(v);
+          if (!v) setPendingVariantProduct(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">¿Qué sabor?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground pt-1">
+              Elige el sabor para tus alitas
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <button
+              onClick={() => addAlitasVariant('bbq')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <img
+                src={PRODUCT_IMAGES._alitasBbq}
+                alt="Alitas BBQ"
+                className="h-24 w-auto object-contain"
+                loading="lazy"
+              />
+              <span className="font-display font-bold text-base text-foreground">Sabor BBQ</span>
+              <span className="text-xs text-muted-foreground text-center">Ahumado y dulce</span>
+              <span className="text-lg font-black text-gold mt-1">
+                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+              </span>
+            </button>
+            <button
+              onClick={() => addAlitasVariant('brava')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <img
+                src={PRODUCT_IMAGES._alitasBrava}
+                alt="Alitas Brava"
+                className="h-24 w-auto object-contain"
+                loading="lazy"
+              />
+              <span className="font-display font-bold text-base text-foreground">Sabor Brava</span>
+              <span className="text-xs text-muted-foreground text-center">Picante e intenso</span>
+              <span className="text-lg font-black text-gold mt-1">
+                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+              </span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

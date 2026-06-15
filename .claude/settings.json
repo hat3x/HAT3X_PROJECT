@@ -1,4 +1,20 @@
 {
+  "permissions": {
+    "allow": [
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; cd \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\"; npm install jimp --save-dev 2>&1 | Select-String -Pattern \"added|error\" | Select-Object -First 5)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; cd \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\"; node remove-bg.mjs 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; cd \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\"; npm run build 2>&1 | Select-String -Pattern \"monty-euromania|built in|error\" | Select-Object -First 5)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; cd \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\"; npm run build 2>&1 | Select-String -Pattern \"built in|error\" | Select-Object -First 3)",
+      "PowerShell(ffmpeg -version 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; cd \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\"; npm install --save-dev ffmpeg-static 2>&1 | Select-String -Pattern \"added|error\" | Select-Object -First 3)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; node -e \"const p = require\\('ffmpeg-static'\\); console.log\\(p\\);\")",
+      "PowerShell(\\(Get-Item \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\\\\src\\\\assets\\\\monty-euromania.webm\"\\).Length / 1MB)",
+      "PowerShell(Start-Sleep -Seconds 20; \\(Get-Item \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\\\\src\\\\assets\\\\monty-euromania.webm\" -ErrorAction SilentlyContinue\\).Length / 1MB)",
+      "PowerShell(\\(Get-Item \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\\\\src\\\\assets\\\\monty-euromania.webm\"\\).Length)",
+      "Bash(cmd.exe /c convert.bat)",
+      "Bash(\"C:/Program Files/nodejs/node.exe\" convert.mjs)"
+    ]
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
   }

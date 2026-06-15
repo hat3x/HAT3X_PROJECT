@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
       supabase.from("menu_categorias").select("id, nombre").order("orden"),
       supabase
         .from("menu_productos")
-        .select("nombre, descripcion, precio, categoria_id")
+        .select("nombre, descripcion, precio, categoria_id, numero")
         .eq("disponible", true),
     ]);
 
@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     const menuText = (prods ?? [])
       .map(
         (p: any) =>
-          `- [${catMap.get(p.categoria_id) ?? "Otro"}] ${p.nombre} — ${
+          `- [${catMap.get(p.categoria_id) ?? "Otro"}] ${p.numero ? `#${p.numero} ` : ""}${p.nombre} — ${
             p.precio
           }€${p.descripcion ? ` (${p.descripcion})` : ""}`
       )
@@ -45,14 +45,14 @@ REGLAS:
 - Responde SIEMPRE en español, de forma breve, amable y directa.
 - Recomienda SOLO productos del menú listado abajo. Nunca inventes productos.
 - Cuando recomiendes, lista 2-5 opciones con su nombre exacto y precio.
+- Los montaditos tienen un número identificador del #1 al #100. Cuando un cliente pregunte por un número (ej: "el 3", "el número 15", "ponme el 42"), identifica el montadito por su número en el menú y recomiéndalo indicando su nombre completo.
 - Si el cliente menciona una alergia o ingrediente que no quiere, analiza descripciones y nombres para excluir productos que probablemente lo contengan. Si no estás seguro, avísale de que confirme con el personal.
 - Si pregunta por algo que no está en la carta, dilo claramente.
 - Mantén el texto BREVE (1-3 frases). NO escribas listas de productos en el texto, los productos se mostrarán como botones aparte.
-- IMPORTANTE: Para cada producto que recomiendes, añade al FINAL del mensaje (después del texto) una línea por producto con esta etiqueta exacta: [[add:NOMBRE_EXACTO_DEL_PRODUCTO]] usando el nombre TAL CUAL aparece en el menú (sin negritas, sin precio, sin números extra). Ejemplo de respuesta completa:
-"¡Genial! Te recomiendo estas opciones picantes 🌶️
-[[add:1 La Isla]]
-[[add:23 El Picantón]]"
-- NO incluyas el precio ni descripciones junto a la etiqueta. Solo la etiqueta sola en su línea.
+- IMPORTANTE: Para cada producto que recomiendes, añade al FINAL del mensaje (después del texto) una línea por producto con esta etiqueta exacta: [[add:NOMBRE_EXACTO_DEL_PRODUCTO]] usando el nombre TAL CUAL aparece en el menú (sin negritas, sin precio, SIN el número #). Ejemplo de respuesta completa:
+"¡El #3 es el Pulled pork BBQ! 🐷
+[[add:Pulled pork BBQ]]"
+- NO incluyas el número ni el precio en la etiqueta. Solo el nombre exacto del producto.
 
 MENÚ DISPONIBLE:
 ${menuText}`;

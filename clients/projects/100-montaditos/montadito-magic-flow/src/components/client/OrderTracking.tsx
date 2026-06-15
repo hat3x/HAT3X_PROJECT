@@ -133,6 +133,9 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
   const [estadoGlobal, setEstadoGlobal] = useState<OrderStatus>('pendiente_pago');
   const [retrying, setRetrying] = useState(false);
   const [orderAllergens, setOrderAllergens] = useState<{ codigo: string; nombre: string; icono: string | null }[]>([]);
+  // numeroPedido can be 0 if the DB trigger hadn't fired yet when the order was created;
+  // refreshOrderStatus will update it once the real value is available.
+  const [numeroDisplay, setNumeroDisplay] = useState(numeroPedido);
   const readyFiredCocina = useRef(false);
   const readyFiredBebidas = useRef(false);
 
@@ -162,7 +165,7 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
   const refreshOrderStatus = useCallback(async () => {
     const { data, error } = await supabase
       .from('pedidos')
-      .select('estado, estado_cocina, estado_bebidas')
+      .select('estado, estado_cocina, estado_bebidas, numero_pedido')
       .eq('id', pedidoId)
       .setHeader('x-session-id', sessionId ?? '')
       .maybeSingle();
@@ -177,7 +180,11 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
     setEstadoGlobal((d.estado ?? 'pendiente') as OrderStatus);
     setEstadoCocina((d.estado_cocina ?? d.estado) as OrderStatus);
     setEstadoBebidas((d.estado_bebidas ?? d.estado) as OrderStatus);
-  }, [pedidoId, sessionId, onNewOrder]);
+    // Update the displayed order number if the DB has a real value (trigger may have fired after INSERT)
+    if (d.numero_pedido && d.numero_pedido !== numeroDisplay) {
+      setNumeroDisplay(d.numero_pedido);
+    }
+  }, [pedidoId, sessionId, onNewOrder, numeroDisplay]);
 
   // Initial fetch — bounce to menu if order missing
   useEffect(() => {
@@ -271,7 +278,7 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
         <div>
           <p className="text-muted-foreground text-xs uppercase tracking-widest mb-1">Pedido</p>
           <h1 className="font-display font-black leading-none text-foreground text-5xl">
-            #{String(numeroPedido).padStart(4, '0')}
+            #{String(numeroDisplay).padStart(4, '0')}
           </h1>
         </div>
         <h2 className="font-display text-2xl font-bold">
@@ -317,7 +324,7 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
           Tu número de pedido
         </p>
         <h1 className={`font-display font-black leading-none ${anyReady ? 'text-gold' : 'text-foreground'} text-[88px]`}>
-          #{String(numeroPedido).padStart(4, '0')}
+          #{String(numeroDisplay).padStart(4, '0')}
         </h1>
       </motion.div>
 

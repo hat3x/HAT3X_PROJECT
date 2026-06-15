@@ -1,3 +1,4 @@
+import { PRODUCT_IMAGES } from './product-images';
 import absolutSprite from '@/assets/drinks/absolut-sprite.png';
 import absolutVodka from '@/assets/drinks/absolut-vodka.png';
 import agua from '@/assets/drinks/agua.png';
@@ -81,6 +82,8 @@ const MATCHERS: Array<{ test: RegExp; src: string }> = [
 ];
 
 export function getDrinkImage(name: string, fotoUrl?: string | null) {
+  // Check static product image map first (montaditos, aperitivos, raciones)
+  if (PRODUCT_IMAGES[name]) return PRODUCT_IMAGES[name];
   const normalized = normalize(name);
   const matched = MATCHERS.find((entry) => entry.test.test(normalized));
   return matched?.src ?? fotoUrl ?? null;
