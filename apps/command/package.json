@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "cli": "tsx src/index.ts",
     "telegram": "tsx src/telegram/index.ts",
-    "server": "tsx src/server.ts"
+    "server": "tsx src/server.ts",
+    "office": "tsx src/supervisor/index.ts"
   },
   "dependencies": {
     "openai": "^4.98.0",

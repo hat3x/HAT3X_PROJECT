@@ -49,6 +49,19 @@ export function buildCli(): Command {
     })
 
   program
+    .command("start")
+    .description("Enciende la oficina (server + telegram + scheduler)")
+    .action(async () => {
+      const { startSupervisor, OFFICE_SERVICES } = await import("../supervisor/index.js")
+      console.log("🏢 Oficina HAT3X encendida — Ctrl+C para apagar")
+      const handle = startSupervisor(OFFICE_SERVICES)
+      process.on("SIGINT", () => {
+        handle.stop()
+        process.exit(0)
+      })
+    })
+
+  program
     .command("ejecutar <id>")
     .description("Ejecuta el plan de una tarea con agentes headless")
     .action(async (id: string) => {
