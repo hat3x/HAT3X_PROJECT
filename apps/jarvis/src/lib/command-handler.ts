@@ -510,7 +510,7 @@ const TOOLS: Anthropic.Tool[] = [
         title: { type: 'string' },
         content: { type: 'string' },
         source: { type: 'string' },
-        importance: { type: 'number' },
+        importance: { type: 'number', description: 'Entero de 1 (menor) a 5 (crítico). Default 3.' },
       },
       required: ['title', 'content'],
     },

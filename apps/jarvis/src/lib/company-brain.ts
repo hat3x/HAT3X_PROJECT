@@ -229,6 +229,10 @@ export async function recordProjectCost(input: RecordProjectCostInput): Promise<
 }
 
 export async function addCompanyMemory(input: AddCompanyMemoryInput): Promise<BrainWriteResult> {
+  // La tabla exige INTEGER 1-5; el modelo a veces manda 0.9, 10, etc.
+  const rawImportance = input.importance ?? 3;
+  const importance = Math.min(5, Math.max(1, Math.round(rawImportance <= 1 ? rawImportance * 5 : rawImportance)));
+
   const { data, error } = await getSupabaseClient()
     .from('hat3x_company_memory')
     .insert({
@@ -237,7 +241,7 @@ export async function addCompanyMemory(input: AddCompanyMemoryInput): Promise<Br
       title: input.title,
       content: input.content,
       source: input.source ?? 'jarvis',
-      importance: input.importance ?? 3,
+      importance,
       active: true,
     })
     .select('id, title')
