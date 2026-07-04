@@ -9,6 +9,7 @@ import { createReporter } from "./reporter.js"
 import { runAgent } from "./agent-runner.js"
 import { prepareWorkspace } from "./workspace.js"
 import { executePlan, type RunSubtaskFn, type ExecutePlanResult } from "./queue.js"
+import { loadRoster, findRosterAgent } from "../intelligence/capability-map/roster.js"
 
 export interface ExecutorDeps {
   loadTask(taskId: string): Promise<HatTask>
@@ -90,12 +91,19 @@ export async function executeTask(taskId: string, overrides: Partial<ExecutorDep
 
   const ws = await prepareWorkspaceFn({ taskId, clientId: task.clientId, reposRoot })
   const report = createReporter(taskId, publish)
+  const roster = overrides.runSubtask !== undefined ? null : await loadRoster()
+  const repoRoot = resolve(process.cwd(), "..", "..")
 
   const runSubtask: RunSubtaskFn = overrides.runSubtask ?? (async (subtask: Subtask, agentId: string) => {
+    // Identidad: primero la ruta exacta del roster (pool de 178), luego el PM de la vertical
+    const rosterAgent = findRosterAgent(roster, agentId)
+    const rosterConfig = rosterAgent !== null && existsSync(join(repoRoot, rosterAgent.configPath))
+      ? readFileSync(join(repoRoot, rosterAgent.configPath), "utf8")
+      : null
     const r = await runAgent({
       subtask,
       agentId,
-      agentConfig: loadAgentConfig(agentId, subtask.vertical),
+      agentConfig: rosterConfig ?? loadAgentConfig(agentId, subtask.vertical),
       clientContext: task.clientId !== null ? `Cliente: ${task.clientId}` : "",
       artifacts: [],
       workspaceDir: ws.dir,

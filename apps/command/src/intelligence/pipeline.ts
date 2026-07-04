@@ -4,6 +4,8 @@ import { matchCapabilities } from "./capability-matcher.js"
 import { planExecution } from "./execution-planner.js"
 import { assessRisk } from "./risk-assessor.js"
 import { loadCapabilityMap } from "./capability-map/loader.js"
+import { loadRoster } from "./capability-map/roster.js"
+import { refineSelectionsWithLLM } from "./agent-selector.js"
 import { loadClientMemory } from "../command-center/client-memory.js"
 import { publishEvent } from "../state-bus/publisher.js"
 import { EVENT_TYPES } from "../state-bus/event-types.js"
@@ -28,13 +30,17 @@ export async function runIntelligencePipeline(taskId: string): Promise<PipelineR
   if (error || !task) throw new Error(`Task not found: ${taskId}`)
   if (task.status !== "pending") throw new Error(`Task ${taskId} is not pending (status: ${task.status})`)
 
-  const [capMap, clientMemory] = await Promise.all([
+  const [capMap, roster, clientMemory] = await Promise.all([
     loadCapabilityMap(),
+    loadRoster(),
     task.client_id ? loadClientMemory(task.client_id as string) : Promise.resolve(null),
   ])
 
   const subtasks = await analyzeTask(task.order_raw as string, clientMemory)
-  const selections = matchCapabilities(subtasks, capMap)
+  let selections = matchCapabilities(subtasks, capMap, roster)
+  if (roster !== null) {
+    selections = await refineSelectionsWithLLM(subtasks, selections, roster)
+  }
   const rawPlan = planExecution(subtasks, selections)
   const finalPlan = assessRisk(rawPlan, subtasks, capMap)
 

@@ -63,6 +63,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   child.stdin.end()
 
   let resultText = ""
+  let stderrText = ""
+  child.stderr.on("data", (chunk: Buffer) => { stderrText += chunk.toString() })
   const rl = createInterface({ input: child.stdout })
 
   const done = new Promise<number | null>((resolve) => {
@@ -85,7 +87,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const code = await done
 
   if (code !== 0 && code !== null) {
-    await emit("failed", `exit code ${code}`)
+    const reason = stderrText.trim().slice(-200) || resultText.trim().slice(-200) || "sin salida"
+    await emit("failed", `exit code ${code}: ${reason}`)
     return { outcome: "failed", resultText }
   }
 
