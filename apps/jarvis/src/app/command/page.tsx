@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { getSupabase, fetchTasks, fetchRecentEvents, fetchCheckpoints } from '@/lib/supabase-command'
 import type { HatTask, BusEvent, HatCheckpoint } from '@/lib/supabase-command'
+import { useOfficeState } from '@/hooks/use-office-state'
+
+const AGENT_STATUS_META: Record<string, { label: string; color: string }> = {
+  working: { label: 'trabajando', color: '#10b981' },
+  meeting: { label: 'en reunión', color: '#3b82f6' },
+  blocked: { label: 'bloqueado', color: '#ef4444' },
+  idle: { label: 'descansando', color: '#64748b' },
+}
 
 const STATUS_COLOR: Record<string, string> = {
   running: '#3b82f6',
@@ -42,6 +50,7 @@ export default function CommandOverview() {
   const [events, setEvents] = useState<BusEvent[]>([])
   const [checkpoints, setCheckpoints] = useState<HatCheckpoint[]>([])
   const [loading, setLoading] = useState(true)
+  const { agents } = useOfficeState()
 
   useEffect(() => {
     Promise.all([fetchTasks(), fetchRecentEvents(20), fetchCheckpoints('pending')]).then(([t, e, c]) => {
@@ -96,6 +105,39 @@ export default function CommandOverview() {
               </div>
             ))}
           </div>
+
+          {/* Agentes activos */}
+          {agents.filter(a => a.status !== 'idle').length > 0 && (
+            <div style={{ background: '#07101f', border: '1px solid #0f2040', borderRadius: 10, padding: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>Agentes activos</span>
+                <Link href="/oficina" style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}>🏢 Ver oficina →</Link>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {agents.filter(a => a.status !== 'idle').map((a) => {
+                  const meta = AGENT_STATUS_META[a.status] ?? AGENT_STATUS_META['idle']!
+                  return (
+                    <div key={a.agentId} style={{
+                      border: `1px solid ${meta.color}40`, borderRadius: 8, padding: '8px 12px',
+                      display: 'flex', flexDirection: 'column', gap: 2, minWidth: 180, maxWidth: 260,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color, display: 'inline-block' }} />
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#cbd5e1' }}>{a.agentId}</span>
+                        <span style={{ fontSize: 10, color: meta.color }}>{meta.label}</span>
+                      </div>
+                      {a.bubble && (
+                        <span style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {a.bubble}
+                        </span>
+                      )}
+                      {a.taskId && <span style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace' }}>{a.taskId}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Checkpoint alerts */}
           {checkpoints.length > 0 && (

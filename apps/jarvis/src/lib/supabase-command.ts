@@ -115,8 +115,19 @@ export async function resolveCheckpoint(
   status: 'approved' | 'rejected',
   feedback?: string
 ): Promise<void> {
-  await getSupabase()
+  const { data } = await getSupabase()
     .from('hat3x_checkpoints')
     .update({ status, feedback: feedback ?? null, resolved_at: new Date().toISOString() })
     .eq('id', id)
+    .select('task_id')
+    .single()
+
+  if (data?.task_id) {
+    await getSupabase().from('bus_events').insert({
+      task_id: data.task_id as string,
+      event_type: status === 'approved' ? 'checkpoint.approved' : 'checkpoint.rejected',
+      agent_id: null,
+      payload: { checkpointId: id, feedback: feedback ?? null },
+    })
+  }
 }
