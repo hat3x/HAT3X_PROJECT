@@ -136,11 +136,20 @@ function loadProjectMemory(): string {
 
 async function triggerIntelligencePipeline(taskId: string): Promise<void> {
   try {
-    await fetch(`${COMMAND_SERVER_URL}/api/process`, {
+    const res = await fetch(`${COMMAND_SERVER_URL}/api/process`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ taskId }),
     });
+    if (res.ok) {
+      // Plan listo → arrancan los agentes headless. La ejecución dura minutos u horas,
+      // así que fire-and-forget: el progreso se sigue por la oficina (/oficina) y Telegram.
+      void fetch(`${COMMAND_SERVER_URL}/api/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId }),
+      }).catch(() => { /* progreso visible via bus_events */ });
+    }
   } catch { /* server may not be running */ }
 }
 
