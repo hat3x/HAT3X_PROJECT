@@ -8,13 +8,40 @@ import {
   type OfficeEvent,
 } from '@/lib/office-state';
 
-export function useOfficeState(): { agents: OfficeAgent[]; events: OfficeEvent[] } {
+// El intelligence-layer es el cerebro del sistema, no un trabajador con mesa.
+const NON_WORKERS = new Set(['intelligence-layer', 'rt-tester']);
+
+export interface OfficeStateResult {
+  agents: OfficeAgent[];
+  events: OfficeEvent[];
+  verticalByAgent: Record<string, string>;
+}
+
+export function useOfficeState(): OfficeStateResult {
   const [agents, setAgents] = useState<Map<string, OfficeAgent>>(new Map());
   const [events, setEvents] = useState<OfficeEvent[]>([]);
+  const [rosterIdle, setRosterIdle] = useState<Map<string, OfficeAgent>>(new Map());
+  const [verticalByAgent, setVerticalByAgent] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const supabase = getSupabaseClient();
     let cancelled = false;
+
+    // Plantilla completa: todos los agentes del roster empiezan descansando
+    void fetch('/api/office/roster')
+      .then((r) => r.json())
+      .then((roster: { agents: Array<{ id: string; verticals: string[] }> }) => {
+        if (cancelled) return;
+        const idle = new Map<string, OfficeAgent>();
+        const verticals: Record<string, string> = {};
+        for (const a of roster.agents) {
+          idle.set(a.id, { agentId: a.id, status: 'idle', bubble: null, taskId: null, lastEventAt: '' });
+          if (a.verticals[0] !== undefined) verticals[a.id] = a.verticals[0];
+        }
+        setRosterIdle(idle);
+        setVerticalByAgent(verticals);
+      })
+      .catch(() => {});
 
     void supabase
       .from('bus_events')
@@ -43,5 +70,11 @@ export function useOfficeState(): { agents: OfficeAgent[]; events: OfficeEvent[]
     };
   }, []);
 
-  return { agents: Array.from(agents.values()), events };
+  // Plantilla (idle) + estado real por eventos (pisa al idle); sin pseudo-agentes
+  const merged = new Map(rosterIdle);
+  for (const [id, agent] of agents) {
+    if (!NON_WORKERS.has(id)) merged.set(id, agent);
+  }
+
+  return { agents: Array.from(merged.values()), events, verticalByAgent };
 }

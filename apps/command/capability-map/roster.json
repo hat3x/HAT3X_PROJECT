@@ -1,0 +1,3811 @@
+{
+  "agents": [
+    {
+      "id": "integrations-mcp-memory-backend-architect-with-memory",
+      "configPath": "agents/automatizaciones/subagentes/integrations-mcp-memory-backend-architect-with-memory/CLAUDE.md",
+      "verticals": [
+        "automatizaciones",
+        "webs-apps"
+      ],
+      "keywords": [
+        "integrations",
+        "mcp",
+        "memory",
+        "backend",
+        "architect",
+        "vertical",
+        "automatizaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "senior",
+        "specializing",
+        "scalable"
+      ]
+    },
+    {
+      "id": "specialized-automation-governance-architect",
+      "configPath": "agents/automatizaciones/subagentes/specialized-automation-governance-architect/CLAUDE.md",
+      "verticals": [
+        "automatizaciones",
+        "webs-apps"
+      ],
+      "keywords": [
+        "specialized",
+        "automation",
+        "governance",
+        "architect",
+        "first",
+        "vertical",
+        "automatizaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "business",
+        "automations"
+      ]
+    },
+    {
+      "id": "specialized-data-consolidation-agent",
+      "configPath": "agents/automatizaciones/subagentes/specialized-data-consolidation-agent/CLAUDE.md",
+      "verticals": [
+        "automatizaciones"
+      ],
+      "keywords": [
+        "specialized",
+        "data",
+        "consolidation",
+        "consolidates",
+        "sales",
+        "into",
+        "live",
+        "reporting",
+        "dashboards",
+        "vertical",
+        "automatizaciones",
+        "agency"
+      ]
+    },
+    {
+      "id": "specialized-report-distribution-agent",
+      "configPath": "agents/automatizaciones/subagentes/specialized-report-distribution-agent/CLAUDE.md",
+      "verticals": [
+        "automatizaciones",
+        "github"
+      ],
+      "keywords": [
+        "specialized",
+        "report",
+        "distribution",
+        "automates",
+        "consolidated",
+        "sales",
+        "reports",
+        "vertical",
+        "automatizaciones",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "specialized-sales-data-extraction-agent",
+      "configPath": "agents/automatizaciones/subagentes/specialized-sales-data-extraction-agent/CLAUDE.md",
+      "verticals": [
+        "automatizaciones",
+        "crm"
+      ],
+      "keywords": [
+        "specialized",
+        "sales",
+        "data",
+        "extraction",
+        "excel",
+        "files",
+        "metrics",
+        "vertical",
+        "automatizaciones",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "marketing-marketing-ai-citation-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-ai-citation-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "ai",
+        "citation",
+        "strategist",
+        "instead",
+        "recommends",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "recommendation",
+        "engine"
+      ]
+    },
+    {
+      "id": "marketing-marketing-app-store-optimizer",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-app-store-optimizer/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "webs-apps"
+      ],
+      "keywords": [
+        "marketing",
+        "app",
+        "store",
+        "optimizer",
+        "optimization",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "focused",
+        "conversion",
+        "rate"
+      ]
+    },
+    {
+      "id": "marketing-marketing-baidu-seo-specialist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-baidu-seo-specialist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "baidu",
+        "seo",
+        "search",
+        "chinese",
+        "ecosystem",
+        "china",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "optimization"
+      ]
+    },
+    {
+      "id": "marketing-marketing-bilibili-content-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-bilibili-content-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "documentation"
+      ],
+      "keywords": [
+        "marketing",
+        "bilibili",
+        "content",
+        "strategist",
+        "danmaku",
+        "community",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "focused"
+      ]
+    },
+    {
+      "id": "marketing-marketing-book-co-author",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-book-co-author/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "book",
+        "co",
+        "author",
+        "into",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "strategic",
+        "thought",
+        "leadership"
+      ]
+    },
+    {
+      "id": "marketing-marketing-carousel-growth-engine",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-carousel-growth-engine/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "carousel",
+        "growth",
+        "engine",
+        "generation",
+        "generates",
+        "viral",
+        "carousels",
+        "publishes",
+        "feed",
+        "vertical",
+        "chatbots"
+      ]
+    },
+    {
+      "id": "marketing-marketing-china-ecommerce-operator",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-china-ecommerce-operator/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "china",
+        "ecommerce",
+        "operator",
+        "commerce",
+        "operations",
+        "taobao",
+        "tmall",
+        "pinduoduo",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "marketing-marketing-china-market-localization-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-china-market-localization-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "china",
+        "market",
+        "localization",
+        "strategist",
+        "trend",
+        "into",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "marketing-marketing-content-creator",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-content-creator/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "documentation"
+      ],
+      "keywords": [
+        "marketing",
+        "content",
+        "creator",
+        "platform",
+        "compelling",
+        "across",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "strategist"
+      ]
+    },
+    {
+      "id": "marketing-marketing-cross-border-ecommerce",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-cross-border-ecommerce/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "cross",
+        "border",
+        "ecommerce",
+        "commerce",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "full",
+        "funnel"
+      ]
+    },
+    {
+      "id": "marketing-marketing-douyin-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-douyin-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "douyin",
+        "strategist",
+        "short",
+        "video",
+        "algorithm",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "specializing"
+      ]
+    },
+    {
+      "id": "marketing-marketing-growth-hacker",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-growth-hacker/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "growth",
+        "hacker",
+        "finds",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "strategist",
+        "specializing",
+        "rapid"
+      ]
+    },
+    {
+      "id": "marketing-marketing-instagram-curator",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-instagram-curator/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "instagram",
+        "curator",
+        "community",
+        "masters",
+        "aesthetic",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "focused"
+      ]
+    },
+    {
+      "id": "marketing-marketing-kuaishou-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-kuaishou-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "kuaishou",
+        "strategist",
+        "live",
+        "commerce",
+        "grassroots",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "specializing"
+      ]
+    },
+    {
+      "id": "marketing-marketing-linkedin-content-creator",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-linkedin-content-creator/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "documentation"
+      ],
+      "keywords": [
+        "marketing",
+        "linkedin",
+        "content",
+        "creator",
+        "professional",
+        "building",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "strategist"
+      ]
+    },
+    {
+      "id": "marketing-marketing-livestream-commerce-coach",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-livestream-commerce-coach/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "livestream",
+        "commerce",
+        "coach",
+        "live",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "veteran",
+        "specializing"
+      ]
+    },
+    {
+      "id": "marketing-marketing-podcast-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-podcast-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "podcast",
+        "strategist",
+        "audio",
+        "content",
+        "audience",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "strategy"
+      ]
+    },
+    {
+      "id": "marketing-marketing-private-domain-operator",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-private-domain-operator/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "private",
+        "domain",
+        "operator",
+        "wechat",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "building",
+        "enterprise"
+      ]
+    },
+    {
+      "id": "marketing-marketing-reddit-community-builder",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-reddit-community-builder/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "webs-apps"
+      ],
+      "keywords": [
+        "marketing",
+        "reddit",
+        "community",
+        "builder",
+        "authentic",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "focused",
+        "engagement"
+      ]
+    },
+    {
+      "id": "marketing-marketing-seo-specialist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-seo-specialist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "seo",
+        "search",
+        "optimization",
+        "technical",
+        "content",
+        "organic",
+        "drives",
+        "sustainable",
+        "traffic",
+        "through",
+        "vertical",
+        "chatbots"
+      ]
+    },
+    {
+      "id": "marketing-marketing-short-video-editing-coach",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-short-video-editing-coach/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "short",
+        "video",
+        "editing",
+        "coach",
+        "color",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "hands"
+      ]
+    },
+    {
+      "id": "marketing-marketing-social-media-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-social-media-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "social",
+        "media",
+        "strategist",
+        "cross",
+        "platform",
+        "campaigns",
+        "engagement",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "marketing-marketing-tiktok-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-tiktok-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "tiktok",
+        "strategist",
+        "algorithm",
+        "community",
+        "culture",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "focused"
+      ]
+    },
+    {
+      "id": "marketing-marketing-twitter-engager",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-twitter-engager/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "twitter",
+        "engager",
+        "time",
+        "thought",
+        "leadership",
+        "builds",
+        "brand",
+        "authority",
+        "vertical",
+        "chatbots",
+        "agency"
+      ]
+    },
+    {
+      "id": "marketing-marketing-video-optimization-specialist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-video-optimization-specialist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "video",
+        "optimization",
+        "audience",
+        "retention",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "strategist",
+        "specializing"
+      ]
+    },
+    {
+      "id": "marketing-marketing-wechat-official-account",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-wechat-official-account/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "wechat",
+        "official",
+        "account",
+        "manager",
+        "content",
+        "subscriber",
+        "loyal",
+        "communities",
+        "through",
+        "consistent",
+        "value"
+      ]
+    },
+    {
+      "id": "marketing-marketing-weibo-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-weibo-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "weibo",
+        "strategist",
+        "topic",
+        "public",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "full",
+        "spectrum"
+      ]
+    },
+    {
+      "id": "marketing-marketing-xiaohongshu-specialist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-xiaohongshu-specialist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "xiaohongshu",
+        "content",
+        "lifestyle",
+        "masters",
+        "aesthetic",
+        "storytelling",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "marketing-marketing-zhihu-strategist",
+      "configPath": "agents/chatbots/subagentes/marketing-marketing-zhihu-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "marketing",
+        "zhihu",
+        "strategist",
+        "knowledge",
+        "builds",
+        "brand",
+        "authority",
+        "through",
+        "sharing",
+        "vertical",
+        "chatbots",
+        "agency"
+      ]
+    },
+    {
+      "id": "sales-sales-account-strategist",
+      "configPath": "agents/chatbots/subagentes/sales-sales-account-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "crm"
+      ],
+      "keywords": [
+        "sales",
+        "account",
+        "strategist",
+        "turns",
+        "into",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "post",
+        "sale"
+      ]
+    },
+    {
+      "id": "sales-sales-coach",
+      "configPath": "agents/chatbots/subagentes/sales-sales-coach/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "crm"
+      ],
+      "keywords": [
+        "sales",
+        "coach",
+        "coaching",
+        "deal",
+        "makes",
+        "every",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "focused"
+      ]
+    },
+    {
+      "id": "sales-sales-deal-strategist",
+      "configPath": "agents/chatbots/subagentes/sales-sales-deal-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "crm"
+      ],
+      "keywords": [
+        "sales",
+        "deal",
+        "strategist",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "senior",
+        "specializing",
+        "meddpicc",
+        "qualification"
+      ]
+    },
+    {
+      "id": "sales-sales-discovery-coach",
+      "configPath": "agents/chatbots/subagentes/sales-sales-discovery-coach/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "crm"
+      ],
+      "keywords": [
+        "sales",
+        "discovery",
+        "coach",
+        "that",
+        "question",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "coaches",
+        "teams"
+      ]
+    },
+    {
+      "id": "sales-sales-engineer",
+      "configPath": "agents/chatbots/subagentes/sales-sales-engineer/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "crm",
+        "webs-apps"
+      ],
+      "keywords": [
+        "sales",
+        "engineer",
+        "technical",
+        "wins",
+        "decision",
+        "deal",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "senior"
+      ]
+    },
+    {
+      "id": "sales-sales-outbound-strategist",
+      "configPath": "agents/chatbots/subagentes/sales-sales-outbound-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "crm"
+      ],
+      "keywords": [
+        "sales",
+        "outbound",
+        "strategist",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "signal",
+        "based",
+        "designs",
+        "multi"
+      ]
+    },
+    {
+      "id": "sales-sales-pipeline-analyst",
+      "configPath": "agents/chatbots/subagentes/sales-sales-pipeline-analyst/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "crm"
+      ],
+      "keywords": [
+        "sales",
+        "pipeline",
+        "analyst",
+        "forecast",
+        "data",
+        "before",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "revenue"
+      ]
+    },
+    {
+      "id": "sales-sales-proposal-strategist",
+      "configPath": "agents/chatbots/subagentes/sales-sales-proposal-strategist/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "crm"
+      ],
+      "keywords": [
+        "sales",
+        "proposal",
+        "strategist",
+        "into",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente",
+        "strategic",
+        "architect",
+        "transforms"
+      ]
+    },
+    {
+      "id": "specialized-identity-graph-operator",
+      "configPath": "agents/chatbots/subagentes/specialized-identity-graph-operator/CLAUDE.md",
+      "verticals": [
+        "chatbots"
+      ],
+      "keywords": [
+        "specialized",
+        "identity",
+        "graph",
+        "operator",
+        "agents",
+        "ensures",
+        "every",
+        "multi",
+        "system",
+        "gets",
+        "same",
+        "canonical"
+      ]
+    },
+    {
+      "id": "specialized-recruitment-specialist",
+      "configPath": "agents/chatbots/subagentes/specialized-recruitment-specialist/CLAUDE.md",
+      "verticals": [
+        "chatbots",
+        "webs-apps"
+      ],
+      "keywords": [
+        "specialized",
+        "recruitment",
+        "talent",
+        "china",
+        "hiring",
+        "platforms",
+        "compliance",
+        "vertical",
+        "chatbots",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "-CONTRIBUTING_zh-CN",
+      "configPath": "agents/operaciones/subagentes/-CONTRIBUTING_zh-CN/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "contributing",
+        "zh",
+        "cn",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray",
+        "emoji",
+        "vibe",
+        "especialista"
+      ]
+    },
+    {
+      "id": "academic-academic-anthropologist",
+      "configPath": "agents/operaciones/subagentes/academic-academic-anthropologist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "academic",
+        "anthropologist",
+        "systems",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "cultural",
+        "rituals",
+        "kinship",
+        "belief"
+      ]
+    },
+    {
+      "id": "academic-academic-geographer",
+      "configPath": "agents/operaciones/subagentes/academic-academic-geographer/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "academic",
+        "geographer",
+        "geography",
+        "climate",
+        "where",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "physical",
+        "human"
+      ]
+    },
+    {
+      "id": "academic-academic-historian",
+      "configPath": "agents/operaciones/subagentes/academic-academic-historian/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "academic",
+        "historian",
+        "historical",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "analysis",
+        "periodization",
+        "material",
+        "culture"
+      ]
+    },
+    {
+      "id": "academic-academic-narratologist",
+      "configPath": "agents/operaciones/subagentes/academic-academic-narratologist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "academic",
+        "narratologist",
+        "story",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "narrative",
+        "theory",
+        "structure",
+        "character"
+      ]
+    },
+    {
+      "id": "academic-academic-psychologist",
+      "configPath": "agents/operaciones/subagentes/academic-academic-psychologist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "academic",
+        "psychologist",
+        "reason",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "human",
+        "behavior",
+        "personality",
+        "theory"
+      ]
+    },
+    {
+      "id": "game-development-blender-blender-addon-engineer",
+      "configPath": "agents/operaciones/subagentes/game-development-blender-blender-addon-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "blender",
+        "addon",
+        "engineer",
+        "pipeline",
+        "that",
+        "repetitive",
+        "work",
+        "into",
+        "reliable",
+        "click",
+        "vertical"
+      ]
+    },
+    {
+      "id": "game-development-game-audio-engineer",
+      "configPath": "agents/operaciones/subagentes/game-development-game-audio-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "audio",
+        "engineer",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "interactive",
+        "masters",
+        "fmod"
+      ]
+    },
+    {
+      "id": "game-development-game-designer",
+      "configPath": "agents/operaciones/subagentes/game-development-game-designer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "designer",
+        "architect",
+        "player",
+        "gameplay",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "systems"
+      ]
+    },
+    {
+      "id": "game-development-godot-godot-gameplay-scripter",
+      "configPath": "agents/operaciones/subagentes/game-development-godot-godot-gameplay-scripter/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "godot",
+        "gameplay",
+        "scripter",
+        "signal",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "composition"
+      ]
+    },
+    {
+      "id": "game-development-godot-godot-multiplayer-engineer",
+      "configPath": "agents/operaciones/subagentes/game-development-godot-godot-multiplayer-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "godot",
+        "multiplayer",
+        "engineer",
+        "masters",
+        "multiplayerapi",
+        "real",
+        "time",
+        "vertical",
+        "operaciones",
+        "agency"
+      ]
+    },
+    {
+      "id": "game-development-godot-godot-shader-developer",
+      "configPath": "agents/operaciones/subagentes/game-development-godot-godot-shader-developer/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "godot",
+        "shader",
+        "developer",
+        "effects",
+        "shading",
+        "language",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "game-development-level-designer",
+      "configPath": "agents/operaciones/subagentes/game-development-level-designer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "level",
+        "designer",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "spatial",
+        "storytelling",
+        "flow"
+      ]
+    },
+    {
+      "id": "game-development-narrative-designer",
+      "configPath": "agents/operaciones/subagentes/game-development-narrative-designer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "narrative",
+        "designer",
+        "story",
+        "systems",
+        "dialogue",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "game-development-roblox-studio-roblox-avatar-creator",
+      "configPath": "agents/operaciones/subagentes/game-development-roblox-studio-roblox-avatar-creator/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "roblox",
+        "studio",
+        "avatar",
+        "creator",
+        "pipeline",
+        "masters",
+        "rigging",
+        "marketplace",
+        "submission",
+        "vertical"
+      ]
+    },
+    {
+      "id": "game-development-roblox-studio-roblox-experience-designer",
+      "configPath": "agents/operaciones/subagentes/game-development-roblox-studio-roblox-experience-designer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "roblox",
+        "studio",
+        "experience",
+        "designer",
+        "monetization",
+        "engagement",
+        "systems",
+        "vertical",
+        "operaciones",
+        "agency"
+      ]
+    },
+    {
+      "id": "game-development-roblox-studio-roblox-systems-scripter",
+      "configPath": "agents/operaciones/subagentes/game-development-roblox-studio-roblox-systems-scripter/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "roblox",
+        "studio",
+        "systems",
+        "scripter",
+        "luau",
+        "client",
+        "server",
+        "security",
+        "scalable",
+        "experiences"
+      ]
+    },
+    {
+      "id": "game-development-technical-artist",
+      "configPath": "agents/operaciones/subagentes/game-development-technical-artist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "technical",
+        "artist",
+        "engine",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "pipeline",
+        "masters"
+      ]
+    },
+    {
+      "id": "game-development-unity-unity-architect",
+      "configPath": "agents/operaciones/subagentes/game-development-unity-unity-architect/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "unity",
+        "architect",
+        "data",
+        "driven",
+        "decoupled",
+        "systems",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "game-development-unity-unity-editor-tool-developer",
+      "configPath": "agents/operaciones/subagentes/game-development-unity-unity-editor-tool-developer/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "unity",
+        "editor",
+        "tool",
+        "developer",
+        "automation",
+        "custom",
+        "that",
+        "teams",
+        "hours",
+        "week"
+      ]
+    },
+    {
+      "id": "game-development-unity-unity-multiplayer-engineer",
+      "configPath": "agents/operaciones/subagentes/game-development-unity-unity-multiplayer-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "unity",
+        "multiplayer",
+        "engineer",
+        "networked",
+        "gameplay",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "game-development-unity-unity-shader-graph-artist",
+      "configPath": "agents/operaciones/subagentes/game-development-unity-unity-shader-graph-artist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "unity",
+        "shader",
+        "graph",
+        "artist",
+        "visual",
+        "effects",
+        "custom",
+        "real",
+        "time",
+        "vertical"
+      ]
+    },
+    {
+      "id": "game-development-unreal-engine-unreal-multiplayer-architect",
+      "configPath": "agents/operaciones/subagentes/game-development-unreal-engine-unreal-multiplayer-architect/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "unreal",
+        "engine",
+        "multiplayer",
+        "architect",
+        "server",
+        "authoritative",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "game-development-unreal-engine-unreal-systems-engineer",
+      "configPath": "agents/operaciones/subagentes/game-development-unreal-engine-unreal-systems-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "unreal",
+        "engine",
+        "systems",
+        "engineer",
+        "masters",
+        "blueprint",
+        "continuum",
+        "grade",
+        "projects",
+        "vertical"
+      ]
+    },
+    {
+      "id": "game-development-unreal-engine-unreal-technical-artist",
+      "configPath": "agents/operaciones/subagentes/game-development-unreal-engine-unreal-technical-artist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "unreal",
+        "engine",
+        "technical",
+        "artist",
+        "pipeline",
+        "material",
+        "editor",
+        "niagara",
+        "vertical",
+        "operaciones"
+      ]
+    },
+    {
+      "id": "game-development-unreal-engine-unreal-world-builder",
+      "configPath": "agents/operaciones/subagentes/game-development-unreal-engine-unreal-world-builder/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "game",
+        "development",
+        "unreal",
+        "engine",
+        "world",
+        "builder",
+        "open",
+        "partition",
+        "procedural",
+        "foliage",
+        "seamless",
+        "vertical"
+      ]
+    },
+    {
+      "id": "paid-media-paid-media-auditor",
+      "configPath": "agents/operaciones/subagentes/paid-media-paid-media-auditor/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "paid",
+        "media",
+        "auditor",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "comprehensive",
+        "systematically",
+        "evaluates",
+        "google"
+      ]
+    },
+    {
+      "id": "paid-media-paid-media-creative-strategist",
+      "configPath": "agents/operaciones/subagentes/paid-media-paid-media-creative-strategist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "paid",
+        "media",
+        "creative",
+        "strategist",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "focused",
+        "copywriting",
+        "optimization"
+      ]
+    },
+    {
+      "id": "paid-media-paid-media-paid-social-strategist",
+      "configPath": "agents/operaciones/subagentes/paid-media-paid-media-paid-social-strategist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "paid",
+        "media",
+        "social",
+        "strategist",
+        "platform",
+        "meta",
+        "linkedin",
+        "tiktok",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "paid-media-paid-media-ppc-strategist",
+      "configPath": "agents/operaciones/subagentes/paid-media-paid-media-ppc-strategist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "paid",
+        "media",
+        "ppc",
+        "strategist",
+        "campaign",
+        "scale",
+        "that",
+        "monthly",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "paid-media-paid-media-programmatic-buyer",
+      "configPath": "agents/operaciones/subagentes/paid-media-paid-media-programmatic-buyer/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "paid",
+        "media",
+        "programmatic",
+        "buyer",
+        "display",
+        "platforms",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "advertising"
+      ]
+    },
+    {
+      "id": "paid-media-paid-media-search-query-analyst",
+      "configPath": "agents/operaciones/subagentes/paid-media-paid-media-search-query-analyst/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "paid",
+        "media",
+        "search",
+        "query",
+        "analyst",
+        "intent",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "term"
+      ]
+    },
+    {
+      "id": "paid-media-paid-media-tracking-specialist",
+      "configPath": "agents/operaciones/subagentes/paid-media-paid-media-tracking-specialist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "paid",
+        "media",
+        "tracking",
+        "measurement",
+        "conversion",
+        "google",
+        "every",
+        "correctly",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "product-product-behavioral-nudge-engine",
+      "configPath": "agents/operaciones/subagentes/product-product-behavioral-nudge-engine/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "product",
+        "behavioral",
+        "nudge",
+        "engine",
+        "psychology",
+        "adapts",
+        "software",
+        "maximize",
+        "user",
+        "motivation",
+        "vertical",
+        "operaciones"
+      ]
+    },
+    {
+      "id": "product-product-feedback-synthesizer",
+      "configPath": "agents/operaciones/subagentes/product-product-feedback-synthesizer/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "product",
+        "feedback",
+        "synthesizer",
+        "user",
+        "into",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "collecting",
+        "analyzing"
+      ]
+    },
+    {
+      "id": "product-product-manager",
+      "configPath": "agents/operaciones/subagentes/product-product-manager/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "product",
+        "manager",
+        "right",
+        "thing",
+        "outcome",
+        "user",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "holistic"
+      ]
+    },
+    {
+      "id": "product-product-sprint-prioritizer",
+      "configPath": "agents/operaciones/subagentes/product-product-sprint-prioritizer/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "product",
+        "sprint",
+        "prioritizer",
+        "prioritization",
+        "value",
+        "through",
+        "data",
+        "driven",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "product-product-trend-researcher",
+      "configPath": "agents/operaciones/subagentes/product-product-trend-researcher/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "product",
+        "trend",
+        "researcher",
+        "emerging",
+        "trends",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "market",
+        "intelligence"
+      ]
+    },
+    {
+      "id": "project-management-project-management-experiment-tracker",
+      "configPath": "agents/operaciones/subagentes/project-management-project-management-experiment-tracker/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "project",
+        "management",
+        "experiment",
+        "tracker",
+        "data",
+        "experiments",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "manager"
+      ]
+    },
+    {
+      "id": "project-management-project-management-jira-workflow-steward",
+      "configPath": "agents/operaciones/subagentes/project-management-project-management-jira-workflow-steward/CLAUDE.md",
+      "verticals": [
+        "automatizaciones"
+      ],
+      "keywords": [
+        "project",
+        "management",
+        "jira",
+        "workflow",
+        "steward",
+        "enforces",
+        "traceable",
+        "commits",
+        "structured",
+        "release",
+        "safe",
+        "branch"
+      ]
+    },
+    {
+      "id": "project-management-project-management-project-shepherd",
+      "configPath": "agents/operaciones/subagentes/project-management-project-management-project-shepherd/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "project",
+        "management",
+        "shepherd",
+        "cross",
+        "functional",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "manager",
+        "specializing"
+      ]
+    },
+    {
+      "id": "project-management-project-management-studio-operations",
+      "configPath": "agents/operaciones/subagentes/project-management-project-management-studio-operations/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "project",
+        "management",
+        "studio",
+        "operations",
+        "processes",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "manager",
+        "specializing"
+      ]
+    },
+    {
+      "id": "project-management-project-management-studio-producer",
+      "configPath": "agents/operaciones/subagentes/project-management-project-management-studio-producer/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "project",
+        "management",
+        "studio",
+        "producer",
+        "creative",
+        "vision",
+        "business",
+        "objectives",
+        "complex",
+        "initiatives",
+        "vertical",
+        "operaciones"
+      ]
+    },
+    {
+      "id": "project-management-project-manager-senior",
+      "configPath": "agents/operaciones/subagentes/project-management-project-manager-senior/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "project",
+        "management",
+        "manager",
+        "senior",
+        "converts",
+        "specs",
+        "tasks",
+        "realistic",
+        "scope",
+        "vertical",
+        "operaciones",
+        "agency"
+      ]
+    },
+    {
+      "id": "specialized-accounts-payable-agent",
+      "configPath": "agents/operaciones/subagentes/specialized-accounts-payable-agent/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "accounts",
+        "payable",
+        "payment",
+        "across",
+        "rail",
+        "crypto",
+        "fiat",
+        "stablecoins",
+        "vertical",
+        "operaciones",
+        "agency"
+      ]
+    },
+    {
+      "id": "specialized-agentic-identity-trust",
+      "configPath": "agents/operaciones/subagentes/specialized-agentic-identity-trust/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "agentic",
+        "identity",
+        "trust",
+        "agents",
+        "what",
+        "they",
+        "architect",
+        "ensures",
+        "prove",
+        "actually",
+        "vertical"
+      ]
+    },
+    {
+      "id": "specialized-agents-orchestrator",
+      "configPath": "agents/operaciones/subagentes/specialized-agents-orchestrator/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "agents",
+        "orchestrator",
+        "pipeline",
+        "entire",
+        "vertical",
+        "operaciones",
+        "agency",
+        "subagente",
+        "autonomous",
+        "manager",
+        "that"
+      ]
+    },
+    {
+      "id": "specialized-blockchain-security-auditor",
+      "configPath": "agents/operaciones/subagentes/specialized-blockchain-security-auditor/CLAUDE.md",
+      "verticals": [
+        "security"
+      ],
+      "keywords": [
+        "specialized",
+        "blockchain",
+        "security",
+        "auditor",
+        "smart",
+        "contract",
+        "exploit",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "specialized-compliance-auditor",
+      "configPath": "agents/operaciones/subagentes/specialized-compliance-auditor/CLAUDE.md",
+      "verticals": [
+        "security"
+      ],
+      "keywords": [
+        "specialized",
+        "compliance",
+        "auditor",
+        "readiness",
+        "assessment",
+        "through",
+        "evidence",
+        "collection",
+        "certification",
+        "vertical",
+        "operaciones",
+        "agency"
+      ]
+    },
+    {
+      "id": "specialized-corporate-training-designer",
+      "configPath": "agents/operaciones/subagentes/specialized-corporate-training-designer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "specialized",
+        "corporate",
+        "training",
+        "designer",
+        "design",
+        "development",
+        "needs",
+        "analysis",
+        "programs",
+        "evaluation",
+        "what",
+        "vertical"
+      ]
+    },
+    {
+      "id": "specialized-government-digital-presales-consultant",
+      "configPath": "agents/operaciones/subagentes/specialized-government-digital-presales-consultant/CLAUDE.md",
+      "verticals": [
+        "crm"
+      ],
+      "keywords": [
+        "specialized",
+        "government",
+        "digital",
+        "presales",
+        "consultant",
+        "transformation",
+        "policy",
+        "projects",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "specialized-healthcare-marketing-compliance",
+      "configPath": "agents/operaciones/subagentes/specialized-healthcare-marketing-compliance/CLAUDE.md",
+      "verticals": [
+        "security"
+      ],
+      "keywords": [
+        "specialized",
+        "healthcare",
+        "marketing",
+        "compliance",
+        "medical",
+        "china",
+        "health",
+        "content",
+        "within",
+        "legal",
+        "boundaries",
+        "vertical"
+      ]
+    },
+    {
+      "id": "specialized-specialized-civil-engineer",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-civil-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "specialized",
+        "civil",
+        "engineer",
+        "structural",
+        "code",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "global",
+        "standards"
+      ]
+    },
+    {
+      "id": "specialized-specialized-cultural-intelligence-strategist",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-cultural-intelligence-strategist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "cultural",
+        "intelligence",
+        "strategist",
+        "detects",
+        "invisible",
+        "exclusion",
+        "ensures",
+        "software",
+        "resonates",
+        "across",
+        "vertical"
+      ]
+    },
+    {
+      "id": "specialized-specialized-developer-advocate",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-developer-advocate/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "developer",
+        "advocate",
+        "through",
+        "authentic",
+        "engineering",
+        "engagement",
+        "bridges",
+        "product",
+        "vertical",
+        "operaciones",
+        "agency"
+      ]
+    },
+    {
+      "id": "specialized-specialized-document-generator",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-document-generator/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "document",
+        "generator",
+        "professional",
+        "code",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "creation",
+        "generates"
+      ]
+    },
+    {
+      "id": "specialized-specialized-french-consulting-market",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-french-consulting-market/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "french",
+        "consulting",
+        "market",
+        "navigator",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "navigate",
+        "freelance"
+      ]
+    },
+    {
+      "id": "specialized-specialized-korean-business-navigator",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-korean-business-navigator/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "korean",
+        "business",
+        "navigator",
+        "relationship",
+        "deal",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "culture"
+      ]
+    },
+    {
+      "id": "specialized-specialized-mcp-builder",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-mcp-builder/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "specialized",
+        "mcp",
+        "builder",
+        "agents",
+        "builds",
+        "that",
+        "vertical",
+        "operaciones",
+        "agency",
+        "subagente",
+        "model",
+        "context",
+        "protocol"
+      ]
+    },
+    {
+      "id": "specialized-specialized-model-qa",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-model-qa/CLAUDE.md",
+      "verticals": [
+        "testing"
+      ],
+      "keywords": [
+        "specialized",
+        "model",
+        "qa",
+        "audits",
+        "models",
+        "data",
+        "reconstruction",
+        "calibration",
+        "testing",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "specialized-specialized-salesforce-architect",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-salesforce-architect/CLAUDE.md",
+      "verticals": [
+        "crm",
+        "webs-apps"
+      ],
+      "keywords": [
+        "specialized",
+        "salesforce",
+        "architect",
+        "architecture",
+        "governor",
+        "that",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "solution"
+      ]
+    },
+    {
+      "id": "specialized-specialized-workflow-architect",
+      "configPath": "agents/operaciones/subagentes/specialized-specialized-workflow-architect/CLAUDE.md",
+      "verticals": [
+        "automatizaciones",
+        "webs-apps"
+      ],
+      "keywords": [
+        "specialized",
+        "workflow",
+        "architect",
+        "agents",
+        "every",
+        "system",
+        "paths",
+        "against",
+        "vertical",
+        "operaciones",
+        "agency",
+        "subagente"
+      ]
+    },
+    {
+      "id": "specialized-study-abroad-advisor",
+      "configPath": "agents/operaciones/subagentes/specialized-study-abroad-advisor/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "study",
+        "abroad",
+        "advisor",
+        "planning",
+        "school",
+        "selection",
+        "chinese",
+        "students",
+        "vertical",
+        "operaciones",
+        "agency"
+      ]
+    },
+    {
+      "id": "specialized-supply-chain-strategist",
+      "configPath": "agents/operaciones/subagentes/specialized-supply-chain-strategist/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "supply",
+        "chain",
+        "strategist",
+        "management",
+        "procurement",
+        "supplier",
+        "sourcing",
+        "china",
+        "manufacturing",
+        "ecosystem",
+        "vertical"
+      ]
+    },
+    {
+      "id": "specialized-zk-steward",
+      "configPath": "agents/operaciones/subagentes/specialized-zk-steward/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "specialized",
+        "zk",
+        "steward",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray",
+        "emoji",
+        "vibe"
+      ]
+    },
+    {
+      "id": "strategy-coordination-agent-activation-prompts",
+      "configPath": "agents/operaciones/subagentes/strategy-coordination-agent-activation-prompts/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "coordination",
+        "activation",
+        "prompts",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "strategy-coordination-handoff-templates",
+      "configPath": "agents/operaciones/subagentes/strategy-coordination-handoff-templates/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "coordination",
+        "handoff",
+        "templates",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "strategy-nexus-strategy",
+      "configPath": "agents/operaciones/subagentes/strategy-nexus-strategy/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "nexus",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray",
+        "emoji",
+        "vibe"
+      ]
+    },
+    {
+      "id": "strategy-playbooks-phase-0-discovery",
+      "configPath": "agents/operaciones/subagentes/strategy-playbooks-phase-0-discovery/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "playbooks",
+        "phase",
+        "discovery",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "strategy-playbooks-phase-1-strategy",
+      "configPath": "agents/operaciones/subagentes/strategy-playbooks-phase-1-strategy/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "playbooks",
+        "phase",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray",
+        "emoji"
+      ]
+    },
+    {
+      "id": "strategy-playbooks-phase-2-foundation",
+      "configPath": "agents/operaciones/subagentes/strategy-playbooks-phase-2-foundation/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "playbooks",
+        "phase",
+        "foundation",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "strategy-playbooks-phase-3-build",
+      "configPath": "agents/operaciones/subagentes/strategy-playbooks-phase-3-build/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "strategy",
+        "playbooks",
+        "phase",
+        "build",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "strategy-playbooks-phase-4-hardening",
+      "configPath": "agents/operaciones/subagentes/strategy-playbooks-phase-4-hardening/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "playbooks",
+        "phase",
+        "hardening",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "strategy-playbooks-phase-5-launch",
+      "configPath": "agents/operaciones/subagentes/strategy-playbooks-phase-5-launch/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "playbooks",
+        "phase",
+        "launch",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "strategy-playbooks-phase-6-operate",
+      "configPath": "agents/operaciones/subagentes/strategy-playbooks-phase-6-operate/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "playbooks",
+        "phase",
+        "operate",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "strategy-runbooks-scenario-enterprise-feature",
+      "configPath": "agents/operaciones/subagentes/strategy-runbooks-scenario-enterprise-feature/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "runbooks",
+        "scenario",
+        "enterprise",
+        "feature",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color"
+      ]
+    },
+    {
+      "id": "strategy-runbooks-scenario-incident-response",
+      "configPath": "agents/operaciones/subagentes/strategy-runbooks-scenario-incident-response/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "runbooks",
+        "scenario",
+        "incident",
+        "response",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color"
+      ]
+    },
+    {
+      "id": "strategy-runbooks-scenario-marketing-campaign",
+      "configPath": "agents/operaciones/subagentes/strategy-runbooks-scenario-marketing-campaign/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "runbooks",
+        "scenario",
+        "marketing",
+        "campaign",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color"
+      ]
+    },
+    {
+      "id": "strategy-runbooks-scenario-startup-mvp",
+      "configPath": "agents/operaciones/subagentes/strategy-runbooks-scenario-startup-mvp/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "strategy",
+        "runbooks",
+        "scenario",
+        "startup",
+        "mvp",
+        "subagente",
+        "especializado",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "color",
+        "gray"
+      ]
+    },
+    {
+      "id": "support-support-analytics-reporter",
+      "configPath": "agents/operaciones/subagentes/support-support-analytics-reporter/CLAUDE.md",
+      "verticals": [
+        "github"
+      ],
+      "keywords": [
+        "support",
+        "analytics",
+        "reporter",
+        "data",
+        "into",
+        "insights",
+        "decision",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "support-support-executive-summary-generator",
+      "configPath": "agents/operaciones/subagentes/support-support-executive-summary-generator/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "support",
+        "executive",
+        "summary",
+        "generator",
+        "consultant",
+        "like",
+        "mckinsey",
+        "suite",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "support-support-finance-tracker",
+      "configPath": "agents/operaciones/subagentes/support-support-finance-tracker/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "support",
+        "finance",
+        "tracker",
+        "financial",
+        "business",
+        "cash",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "analyst"
+      ]
+    },
+    {
+      "id": "support-support-infrastructure-maintainer",
+      "configPath": "agents/operaciones/subagentes/support-support-infrastructure-maintainer/CLAUDE.md",
+      "verticals": [
+        "deployment"
+      ],
+      "keywords": [
+        "support",
+        "infrastructure",
+        "maintainer",
+        "performance",
+        "operations",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "focused",
+        "system"
+      ]
+    },
+    {
+      "id": "support-support-legal-compliance-checker",
+      "configPath": "agents/operaciones/subagentes/support-support-legal-compliance-checker/CLAUDE.md",
+      "verticals": [
+        "security"
+      ],
+      "keywords": [
+        "support",
+        "legal",
+        "compliance",
+        "checker",
+        "operations",
+        "comply",
+        "across",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "support-support-support-responder",
+      "configPath": "agents/operaciones/subagentes/support-support-support-responder/CLAUDE.md",
+      "verticals": [
+        "documentation"
+      ],
+      "keywords": [
+        "support",
+        "responder",
+        "customer",
+        "into",
+        "vertical",
+        "operaciones",
+        "agency",
+        "agents",
+        "subagente",
+        "delivering",
+        "exceptional",
+        "service"
+      ]
+    },
+    {
+      "id": "design-design-brand-guardian",
+      "configPath": "agents/webs-apps/subagentes/design-design-brand-guardian/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "design",
+        "brand",
+        "guardian",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "strategist",
+        "specializing",
+        "identity"
+      ]
+    },
+    {
+      "id": "design-design-image-prompt-engineer",
+      "configPath": "agents/webs-apps/subagentes/design-design-image-prompt-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "design",
+        "image",
+        "prompt",
+        "engineer",
+        "photography",
+        "prompts",
+        "visual",
+        "concepts",
+        "into",
+        "precise",
+        "that",
+        "stunning"
+      ]
+    },
+    {
+      "id": "design-design-inclusive-visuals-specialist",
+      "configPath": "agents/webs-apps/subagentes/design-design-inclusive-visuals-specialist/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "design",
+        "inclusive",
+        "visuals",
+        "defeats",
+        "systemic",
+        "biases",
+        "generate",
+        "culturally",
+        "accurate",
+        "affirming",
+        "vertical",
+        "webs"
+      ]
+    },
+    {
+      "id": "design-design-ui-designer",
+      "configPath": "agents/webs-apps/subagentes/design-design-ui-designer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "design",
+        "ui",
+        "designer",
+        "creates",
+        "beautiful",
+        "consistent",
+        "accessible",
+        "interfaces",
+        "that",
+        "vertical",
+        "webs",
+        "apps",
+        "agency"
+      ]
+    },
+    {
+      "id": "design-design-ux-architect",
+      "configPath": "agents/webs-apps/subagentes/design-design-ux-architect/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "design",
+        "ux",
+        "architect",
+        "developers",
+        "solid",
+        "foundations",
+        "systems",
+        "clear",
+        "implementation",
+        "vertical",
+        "webs",
+        "apps",
+        "agency"
+      ]
+    },
+    {
+      "id": "design-design-ux-researcher",
+      "configPath": "agents/webs-apps/subagentes/design-design-ux-researcher/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "design",
+        "ux",
+        "researcher",
+        "user",
+        "usability",
+        "data",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "experience"
+      ]
+    },
+    {
+      "id": "design-design-visual-storyteller",
+      "configPath": "agents/webs-apps/subagentes/design-design-visual-storyteller/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "design",
+        "visual",
+        "storyteller",
+        "narratives",
+        "complex",
+        "information",
+        "into",
+        "that",
+        "vertical",
+        "webs",
+        "apps",
+        "agency"
+      ]
+    },
+    {
+      "id": "design-design-whimsy-injector",
+      "configPath": "agents/webs-apps/subagentes/design-design-whimsy-injector/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "design",
+        "whimsy",
+        "injector",
+        "delight",
+        "that",
+        "brands",
+        "unexpected",
+        "moments",
+        "vertical",
+        "webs",
+        "apps",
+        "agency"
+      ]
+    },
+    {
+      "id": "engineering-engineering-ai-data-remediation-engineer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-ai-data-remediation-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "ai",
+        "data",
+        "remediation",
+        "engineer",
+        "surgical",
+        "broken",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "engineering-engineering-ai-engineer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-ai-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "ai",
+        "engineer",
+        "into",
+        "production",
+        "features",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "specializing"
+      ]
+    },
+    {
+      "id": "engineering-engineering-autonomous-optimization-architect",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-autonomous-optimization-architect/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "autonomous",
+        "optimization",
+        "architect",
+        "system",
+        "governor",
+        "that",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "engineering-engineering-backend-architect",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-backend-architect/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "backend",
+        "architect",
+        "cloud",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "senior",
+        "specializing"
+      ]
+    },
+    {
+      "id": "engineering-engineering-cms-developer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-cms-developer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "cms",
+        "developer",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "drupal",
+        "wordpress",
+        "theme",
+        "development"
+      ]
+    },
+    {
+      "id": "engineering-engineering-code-reviewer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-code-reviewer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "code",
+        "reviewer",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "provides",
+        "constructive",
+        "actionable"
+      ]
+    },
+    {
+      "id": "engineering-engineering-data-engineer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-data-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "database"
+      ],
+      "keywords": [
+        "engineering",
+        "data",
+        "engineer",
+        "pipelines",
+        "turn",
+        "into",
+        "trusted",
+        "analytics",
+        "ready",
+        "assets",
+        "vertical",
+        "webs"
+      ]
+    },
+    {
+      "id": "engineering-engineering-database-optimizer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-database-optimizer/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "database"
+      ],
+      "keywords": [
+        "engineering",
+        "database",
+        "optimizer",
+        "schema",
+        "design",
+        "query",
+        "databases",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "engineering-engineering-devops-automator",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-devops-automator/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "deployment",
+        "automatizaciones"
+      ],
+      "keywords": [
+        "engineering",
+        "devops",
+        "automator",
+        "infrastructure",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "engineer",
+        "specializing"
+      ]
+    },
+    {
+      "id": "engineering-engineering-email-intelligence-engineer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-email-intelligence-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "email",
+        "intelligence",
+        "engineer",
+        "agents",
+        "reasoning",
+        "ready",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "subagente"
+      ]
+    },
+    {
+      "id": "engineering-engineering-embedded-firmware-engineer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-embedded-firmware-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "embedded",
+        "firmware",
+        "engineer",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "bare",
+        "metal"
+      ]
+    },
+    {
+      "id": "engineering-engineering-feishu-integration-developer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-feishu-integration-developer/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "automatizaciones"
+      ],
+      "keywords": [
+        "engineering",
+        "feishu",
+        "integration",
+        "developer",
+        "lark",
+        "platform",
+        "bots",
+        "workflows",
+        "automation",
+        "enterprise",
+        "vertical",
+        "webs"
+      ]
+    },
+    {
+      "id": "engineering-engineering-filament-optimization-specialist",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-filament-optimization-specialist/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "filament",
+        "optimization",
+        "admin",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "restructuring",
+        "optimizing"
+      ]
+    },
+    {
+      "id": "engineering-engineering-frontend-developer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-frontend-developer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "frontend",
+        "developer",
+        "apps",
+        "vertical",
+        "webs",
+        "agency",
+        "agents",
+        "subagente",
+        "specializing",
+        "modern",
+        "technologies"
+      ]
+    },
+    {
+      "id": "engineering-engineering-git-workflow-master",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-git-workflow-master/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "github",
+        "automatizaciones"
+      ],
+      "keywords": [
+        "engineering",
+        "git",
+        "workflow",
+        "master",
+        "commits",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "workflows",
+        "branching"
+      ]
+    },
+    {
+      "id": "engineering-engineering-incident-response-commander",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-incident-response-commander/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "incident",
+        "response",
+        "commander",
+        "production",
+        "structured",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "engineering-engineering-mobile-app-builder",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-mobile-app-builder/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "mobile",
+        "app",
+        "builder",
+        "apps",
+        "native",
+        "android",
+        "vertical",
+        "webs",
+        "agency",
+        "agents",
+        "subagente",
+        "specialized"
+      ]
+    },
+    {
+      "id": "engineering-engineering-rapid-prototyper",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-rapid-prototyper/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "rapid",
+        "prototyper",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "specialized",
+        "ultra",
+        "fast"
+      ]
+    },
+    {
+      "id": "engineering-engineering-security-engineer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-security-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "security"
+      ],
+      "keywords": [
+        "engineering",
+        "security",
+        "engineer",
+        "code",
+        "architecture",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "application"
+      ]
+    },
+    {
+      "id": "engineering-engineering-senior-developer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-senior-developer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "senior",
+        "developer",
+        "premium",
+        "laravel",
+        "livewire",
+        "advanced",
+        "three",
+        "vertical",
+        "webs",
+        "apps",
+        "agency"
+      ]
+    },
+    {
+      "id": "engineering-engineering-software-architect",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-software-architect/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "software",
+        "architect",
+        "design",
+        "decision",
+        "systems",
+        "that",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "engineering-engineering-solidity-smart-contract-engineer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-solidity-smart-contract-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "solidity",
+        "smart",
+        "contract",
+        "engineer",
+        "developer",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "engineering-engineering-sre",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-sre/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "sre",
+        "reliability",
+        "site",
+        "engineer",
+        "error",
+        "budgets",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "engineering-engineering-technical-writer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-technical-writer/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "documentation"
+      ],
+      "keywords": [
+        "engineering",
+        "technical",
+        "writer",
+        "docs",
+        "that",
+        "developers",
+        "actually",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "engineering-engineering-threat-detection-engineer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-threat-detection-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "threat",
+        "detection",
+        "engineer",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "specializing",
+        "siem"
+      ]
+    },
+    {
+      "id": "engineering-engineering-wechat-mini-program-developer",
+      "configPath": "agents/webs-apps/subagentes/engineering-engineering-wechat-mini-program-developer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "engineering",
+        "wechat",
+        "mini",
+        "program",
+        "developer",
+        "ecosystem",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "spatial-computing-macos-spatial-metal-engineer",
+      "configPath": "agents/webs-apps/subagentes/spatial-computing-macos-spatial-metal-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "spatial",
+        "computing",
+        "macos",
+        "metal",
+        "engineer",
+        "rendering",
+        "vision",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "spatial-computing-terminal-integration-specialist",
+      "configPath": "agents/webs-apps/subagentes/spatial-computing-terminal-integration-specialist/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "automatizaciones"
+      ],
+      "keywords": [
+        "spatial",
+        "computing",
+        "terminal",
+        "integration",
+        "emulation",
+        "text",
+        "rendering",
+        "modern",
+        "swift",
+        "applications",
+        "vertical",
+        "webs"
+      ]
+    },
+    {
+      "id": "spatial-computing-visionos-spatial-engineer",
+      "configPath": "agents/webs-apps/subagentes/spatial-computing-visionos-spatial-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "spatial",
+        "computing",
+        "visionos",
+        "engineer",
+        "native",
+        "volumetric",
+        "interfaces",
+        "liquid",
+        "glass",
+        "vertical",
+        "webs",
+        "apps"
+      ]
+    },
+    {
+      "id": "spatial-computing-xr-cockpit-interaction-specialist",
+      "configPath": "agents/webs-apps/subagentes/spatial-computing-xr-cockpit-interaction-specialist/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "spatial",
+        "computing",
+        "xr",
+        "cockpit",
+        "interaction",
+        "immersive",
+        "control",
+        "systems",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "spatial-computing-xr-immersive-developer",
+      "configPath": "agents/webs-apps/subagentes/spatial-computing-xr-immersive-developer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "spatial",
+        "computing",
+        "xr",
+        "immersive",
+        "developer",
+        "webxr",
+        "browser",
+        "based",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "spatial-computing-xr-interface-architect",
+      "configPath": "agents/webs-apps/subagentes/spatial-computing-xr-interface-architect/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "spatial",
+        "computing",
+        "xr",
+        "interface",
+        "architect",
+        "interaction",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "designer"
+      ]
+    },
+    {
+      "id": "specialized-lsp-index-engineer",
+      "configPath": "agents/webs-apps/subagentes/specialized-lsp-index-engineer/CLAUDE.md",
+      "verticals": [
+        "webs-apps"
+      ],
+      "keywords": [
+        "specialized",
+        "lsp",
+        "index",
+        "engineer",
+        "unified",
+        "code",
+        "intelligence",
+        "through",
+        "orchestration",
+        "semantic",
+        "indexing",
+        "vertical",
+        "webs"
+      ]
+    },
+    {
+      "id": "testing-testing-accessibility-auditor",
+      "configPath": "agents/webs-apps/subagentes/testing-testing-accessibility-auditor/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "testing"
+      ],
+      "keywords": [
+        "testing",
+        "accessibility",
+        "auditor",
+        "tested",
+        "screen",
+        "reader",
+        "accessible",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "testing-testing-api-tester",
+      "configPath": "agents/webs-apps/subagentes/testing-testing-api-tester/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "testing"
+      ],
+      "keywords": [
+        "testing",
+        "api",
+        "tester",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "focused",
+        "comprehensive",
+        "validation",
+        "performance"
+      ]
+    },
+    {
+      "id": "testing-testing-evidence-collector",
+      "configPath": "agents/webs-apps/subagentes/testing-testing-evidence-collector/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "testing"
+      ],
+      "keywords": [
+        "testing",
+        "evidence",
+        "collector",
+        "screenshot",
+        "obsessed",
+        "visual",
+        "proof",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents"
+      ]
+    },
+    {
+      "id": "testing-testing-performance-benchmarker",
+      "configPath": "agents/webs-apps/subagentes/testing-testing-performance-benchmarker/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "testing"
+      ],
+      "keywords": [
+        "testing",
+        "performance",
+        "benchmarker",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "optimization",
+        "focused",
+        "measuring"
+      ]
+    },
+    {
+      "id": "testing-testing-reality-checker",
+      "configPath": "agents/webs-apps/subagentes/testing-testing-reality-checker/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "testing"
+      ],
+      "keywords": [
+        "testing",
+        "reality",
+        "checker",
+        "needs",
+        "work",
+        "requires",
+        "overwhelming",
+        "proof",
+        "production",
+        "readiness",
+        "vertical",
+        "webs"
+      ]
+    },
+    {
+      "id": "testing-testing-test-results-analyzer",
+      "configPath": "agents/webs-apps/subagentes/testing-testing-test-results-analyzer/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "testing"
+      ],
+      "keywords": [
+        "testing",
+        "test",
+        "results",
+        "analyzer",
+        "analysis",
+        "reads",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente"
+      ]
+    },
+    {
+      "id": "testing-testing-tool-evaluator",
+      "configPath": "agents/webs-apps/subagentes/testing-testing-tool-evaluator/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "testing"
+      ],
+      "keywords": [
+        "testing",
+        "tool",
+        "evaluator",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "technology",
+        "assessment",
+        "focused"
+      ]
+    },
+    {
+      "id": "testing-testing-workflow-optimizer",
+      "configPath": "agents/webs-apps/subagentes/testing-testing-workflow-optimizer/CLAUDE.md",
+      "verticals": [
+        "webs-apps",
+        "testing",
+        "automatizaciones"
+      ],
+      "keywords": [
+        "testing",
+        "workflow",
+        "optimizer",
+        "process",
+        "vertical",
+        "webs",
+        "apps",
+        "agency",
+        "agents",
+        "subagente",
+        "improvement",
+        "focused"
+      ]
+    }
+  ]
+}

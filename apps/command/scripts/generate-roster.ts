@@ -98,6 +98,8 @@ function scan(): RosterAgent[] {
 const agents = scan()
 const roster: Roster = { agents }
 writeFileSync(OUT_PATH, yaml.dump(roster, { lineWidth: 200 }))
+// Copia JSON para consumidores sin js-yaml (p. ej. la API de la oficina en Jarvis)
+writeFileSync(OUT_PATH.replace(/\.yaml$/, ".json"), JSON.stringify(roster, null, 2))
 
 const byVertical = new Map<string, number>()
 for (const a of agents) for (const v of a.verticals) byVertical.set(v, (byVertical.get(v) ?? 0) + 1)
