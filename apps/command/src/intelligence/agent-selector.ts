@@ -53,7 +53,8 @@ export async function refineSelectionsWithLLM(
       input,
       max_output_tokens: 1024,
     })
-    const parsed = SelectionSchema.safeParse(JSON.parse(response.output_text))
+    const raw = response.output_text.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "")
+    const parsed = SelectionSchema.safeParse(JSON.parse(raw))
     if (!parsed.success) return heuristic
 
     const byId = new Map(parsed.data.map((s) => [s.subtaskId, s.agentId]))
