@@ -1,10 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest"
 import { loadClientMemory, upsertClient } from "../../src/command-center/client-memory.js"
-import { getTestClient } from "../helpers/supabase-test-client.js"
+import { getTestClient, LIVE } from "../helpers/supabase-test-client.js"
 
 const TEST_ID = "test-client-mem-001"
 
-describe("loadClientMemory", () => {
+describe.skipIf(!LIVE)("loadClientMemory", () => {
   afterEach(async () => {
     await getTestClient().from("hat3x_clients").delete().eq("id", TEST_ID)
   })
@@ -22,7 +22,7 @@ describe("loadClientMemory", () => {
   })
 })
 
-describe("upsertClient", () => {
+describe.skipIf(!LIVE)("upsertClient", () => {
   afterEach(async () => {
     await getTestClient().from("hat3x_clients").delete().eq("id", TEST_ID)
   })

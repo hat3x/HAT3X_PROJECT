@@ -1,6 +1,9 @@
 import { getSupabaseClient } from "../../src/database/client.js"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+// Tests de integración: solo corren con HAT3X_TEST_LIVE=1 y un proyecto Supabase accesible
+export const LIVE = process.env["HAT3X_TEST_LIVE"] === "1"
+
 export function getTestClient(): SupabaseClient {
   return getSupabaseClient()
 }

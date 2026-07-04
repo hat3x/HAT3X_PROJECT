@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest"
 import { createTask } from "../../src/command-center/task-factory.js"
-import { getTestClient, cleanTestData } from "../helpers/supabase-test-client.js"
+import { getTestClient, cleanTestData, LIVE } from "../helpers/supabase-test-client.js"
 
-describe("createTask", () => {
+describe.skipIf(!LIVE)("createTask", () => {
   const createdIds: string[] = []
 
   afterEach(async () => {

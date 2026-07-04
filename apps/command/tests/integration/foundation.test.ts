@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest"
 import { CommandCenter } from "../../src/command-center/index.js"
 import { publishEvent, createSubscriber, EVENT_TYPES } from "../../src/state-bus/index.js"
-import { cleanTestData } from "../helpers/supabase-test-client.js"
+import { cleanTestData, LIVE } from "../helpers/supabase-test-client.js"
 
-describe("Foundation integration", () => {
+describe.skipIf(!LIVE)("Foundation integration", () => {
   const ids: string[] = []
   afterEach(async () => { for (const id of ids) await cleanTestData(id); ids.length = 0 })
 

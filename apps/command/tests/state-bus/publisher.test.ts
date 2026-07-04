@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { publishEvent } from "../../src/state-bus/publisher.js"
 import { EVENT_TYPES } from "../../src/state-bus/event-types.js"
-import { getTestClient, cleanTestData } from "../helpers/supabase-test-client.js"
+import { getTestClient, cleanTestData, LIVE } from "../helpers/supabase-test-client.js"
 
 const TASK_ID = "HAT3X-TEST-PUB"
 
-describe("publishEvent", () => {
+describe.skipIf(!LIVE)("publishEvent", () => {
   beforeEach(async () => {
     await getTestClient().from("hat3x_tasks").upsert({
       id: TASK_ID, order_raw: "test", control_mode: "phased", status: "running",

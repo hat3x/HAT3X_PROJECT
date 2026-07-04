@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { createSubscriber } from "../../src/state-bus/subscriber.js"
 import { publishEvent } from "../../src/state-bus/publisher.js"
 import { EVENT_TYPES } from "../../src/state-bus/event-types.js"
-import { getTestClient, cleanTestData } from "../helpers/supabase-test-client.js"
+import { getTestClient, cleanTestData, LIVE } from "../helpers/supabase-test-client.js"
 
 const TASK_ID = "HAT3X-TEST-SUB"
 
-describe("createSubscriber", () => {
+describe.skipIf(!LIVE)("createSubscriber", () => {
   beforeEach(async () => {
     await getTestClient().from("hat3x_tasks").upsert({
       id: TASK_ID, order_raw: "test sub", control_mode: "phased", status: "running",
