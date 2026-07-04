@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from "vitest"
 import { EventEmitter } from "node:events"
 import { Readable } from "node:stream"
+import { mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { runAgent } from "../../src/executor/agent-runner.js"
 import type { Subtask } from "../../src/types.js"
 
@@ -10,7 +13,12 @@ const subtask: Subtask = {
 }
 
 function fakeChild(lines: string[], exitCode = 0) {
-  const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable }
+  const child = new EventEmitter() as EventEmitter & {
+    stdin: { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> }
+    stdout: Readable
+    stderr: Readable
+  }
+  child.stdin = { write: vi.fn(), end: vi.fn() }
   child.stdout = Readable.from(lines.map((l) => l + "\n"))
   child.stderr = Readable.from([])
   child.stdout.on("end", () => setImmediate(() => child.emit("close", exitCode)))
@@ -19,7 +27,7 @@ function fakeChild(lines: string[], exitCode = 0) {
 
 const base = {
   subtask, agentId: "lead-programmer", agentConfig: "config", clientContext: "", artifacts: [],
-  workspaceDir: "C:/tmp",
+  workspaceDir: mkdtempSync(join(tmpdir(), "hat3x-runner-test-")),
 }
 
 describe("runAgent", () => {

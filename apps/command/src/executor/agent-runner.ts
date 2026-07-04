@@ -1,11 +1,14 @@
 import { spawn as nodeSpawn } from "node:child_process"
 import { createInterface } from "node:readline"
+import { writeFileSync } from "node:fs"
+import { join } from "node:path"
 import type { Subtask } from "../types.js"
 import type { RunnerEvent } from "./types.js"
 import { buildAgentPrompt } from "./agent-prompt.js"
 import { buildAgentSettings } from "./redline-guard.js"
 
 export interface ChildLike {
+  stdin: { write(data: string): void; end(): void }
   stdout: NodeJS.ReadableStream
   stderr: NodeJS.ReadableStream
   on(ev: "close", cb: (code: number | null) => void): void
@@ -13,8 +16,10 @@ export interface ChildLike {
 
 export type SpawnFn = (cmd: string, args: string[], opts: { cwd: string }) => ChildLike
 
+// Sin shell: el prompt viaja por stdin y los settings por fichero, así no hay
+// problemas de escaping de argumentos en Windows.
 const defaultSpawn: SpawnFn = (cmd, args, opts) =>
-  nodeSpawn(cmd, args, { cwd: opts.cwd, shell: process.platform === "win32" }) as unknown as ChildLike
+  nodeSpawn(cmd, args, { cwd: opts.cwd, stdio: ["pipe", "pipe", "pipe"] }) as unknown as ChildLike
 
 export interface RunAgentInput {
   subtask: Subtask
@@ -39,19 +44,23 @@ const CHECKPOINT_MARKER = "HAT3X_CHECKPOINT:"
 export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const spawn = input.spawn ?? defaultSpawn
   const prompt = buildAgentPrompt(input)
-  const settings = JSON.stringify(buildAgentSettings(input.workspaceDir))
+  const settingsPath = join(input.workspaceDir, ".hat3x-agent-settings.json")
+  writeFileSync(settingsPath, JSON.stringify(buildAgentSettings(input.workspaceDir)))
   const emit = (kind: RunnerEvent["kind"], detail: string) =>
     input.onEvent({ kind, subtaskId: input.subtask.id, agentId: input.agentId, detail })
 
   await emit("started", input.subtask.description)
 
   const child = spawn("claude", [
-    "-p", prompt,
+    "-p",
     "--output-format", "stream-json",
     "--verbose",
     "--permission-mode", "bypassPermissions",
-    "--settings", settings,
+    "--settings", settingsPath,
   ], { cwd: input.workspaceDir })
+
+  child.stdin.write(prompt)
+  child.stdin.end()
 
   let resultText = ""
   const rl = createInterface({ input: child.stdout })
