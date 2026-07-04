@@ -1,19 +1,32 @@
-/* HAT3X Landing — base styles (mobile-first) */
+/* HAT3X Landing — editorial ink-on-paper (mobile-first)
+   Dirección: papel cálido + tinta profunda + un solo color de señal (bermellón).
+   Tipografía display: Space Grotesk. Sin degradados, sin tarjetas genéricas. */
 
 /* --- Tokens --- */
 :root {
-  --color-bg: #ffffff;
-  --color-text: #1a1a1a;
-  --color-muted: #555555;
-  --color-primary: #0f62fe;
-  --color-primary-dark: #0043ce;
-  --color-surface: #f4f4f4;
+  --color-bg: oklch(97.5% 0.008 85);          /* papel cálido, no blanco puro */
+  --color-ink: oklch(21% 0.015 75);           /* tinta cálida, no negro puro */
+  --color-muted: oklch(45% 0.02 75);
+  --color-signal: oklch(58% 0.19 35);          /* bermellón */
+  --color-signal-dark: oklch(48% 0.17 35);
+  --color-line: oklch(85% 0.015 80);           /* filetes */
+  --color-surface: oklch(94.5% 0.012 85);
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
   --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* escala modular 1.25 */
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.563rem;
+  --step-3: 1.953rem;
+  --step-4: 2.441rem;
+
   --space-1: 0.5rem;
   --space-2: 1rem;
   --space-3: 2rem;
   --space-4: 4rem;
-  --radius: 8px;
+  --space-5: 6rem;
   --max-width: 72rem;
 }
 
@@ -31,9 +44,16 @@ html {
 body {
   margin: 0;
   font-family: var(--font-body);
-  color: var(--color-text);
+  color: var(--color-ink);
   background: var(--color-bg);
   line-height: 1.6;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
 img {
@@ -56,8 +76,8 @@ img {
 
 /* --- Foco visible global --- */
 :focus-visible {
-  outline: 3px solid var(--color-primary);
-  outline-offset: 2px;
+  outline: 3px solid var(--color-signal);
+  outline-offset: 3px;
 }
 
 /* --- Z1 Header --- */
@@ -70,14 +90,25 @@ img {
   justify-content: space-between;
   padding: var(--space-1) var(--space-2);
   background: var(--color-bg);
-  border-bottom: 1px solid var(--color-surface);
+  border-bottom: 1px solid var(--color-ink);
 }
 
 .logo {
+  font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.25rem;
+  font-size: var(--step-1);
+  letter-spacing: 0.04em;
   text-decoration: none;
-  color: var(--color-text);
+  color: var(--color-ink);
+}
+
+.logo::after {
+  content: "";
+  display: inline-block;
+  width: 0.45em;
+  height: 0.45em;
+  margin-left: 0.3em;
+  background: var(--color-signal);
 }
 
 .site-nav ul {
@@ -89,39 +120,53 @@ img {
 }
 
 .site-nav a {
-  color: var(--color-text);
+  color: var(--color-ink);
   text-decoration: none;
+  font-weight: 500;
   padding: var(--space-1);
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  border-bottom: 2px solid transparent;
 }
 
 .site-nav a:hover,
 .site-nav a:focus-visible {
-  color: var(--color-primary);
-  text-decoration: underline;
+  color: var(--color-signal-dark);
+  border-bottom-color: var(--color-signal);
 }
 
-/* --- Z2 Hero --- */
+/* --- Z2 Hero: anclado a la izquierda, tipografía como protagonista --- */
 .hero {
-  padding: var(--space-4) var(--space-2);
-  text-align: center;
+  padding: var(--space-5) var(--space-2) var(--space-4);
   max-width: var(--max-width);
   margin: 0 auto;
+  text-align: left;
 }
 
 .hero h1 {
-  font-size: clamp(2rem, 5vw, 3.5rem);
-  line-height: 1.15;
+  font-size: clamp(2.4rem, 7vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  max-width: 16ch;
   margin: 0 0 var(--space-2);
 }
 
+/* subrayado de señal bajo el titular */
+.hero h1::after {
+  content: "";
+  display: block;
+  width: 3.5rem;
+  height: 0.35rem;
+  margin-top: var(--space-2);
+  background: var(--color-signal);
+}
+
 .hero-sub {
-  font-size: 1.125rem;
+  font-size: var(--step-1);
   color: var(--color-muted);
-  max-width: 40ch;
-  margin: 0 auto var(--space-3);
+  max-width: 42ch;
+  margin: 0 0 var(--space-3);
 }
 
 .cta {
@@ -130,21 +175,24 @@ img {
   justify-content: center;
   min-height: 44px;
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-0);
   text-decoration: none;
 }
 
 .cta-primary {
-  background: var(--color-primary);
-  color: #ffffff;
-  border: 2px solid var(--color-primary);
+  background: var(--color-ink);
+  color: var(--color-bg);
+  border: 2px solid var(--color-ink);
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
 .cta-primary:hover,
 .cta-primary:focus-visible {
-  background: var(--color-primary-dark);
-  border-color: var(--color-primary-dark);
+  background: var(--color-signal-dark);
+  border-color: var(--color-signal-dark);
+  transform: translateY(-2px);
 }
 
 .cta-note {
@@ -153,102 +201,192 @@ img {
   color: var(--color-muted);
 }
 
-/* --- Z3 Servicios (mobile-first: tarjetas apiladas) --- */
+/* --- Z3 Servicios: índice editorial numerado, no tarjetas --- */
 .services {
-  padding: var(--space-4) var(--space-2);
+  padding: var(--space-4) var(--space-2) var(--space-5);
   background: var(--color-surface);
+  border-top: 1px solid var(--color-ink);
+  counter-reset: servicio;
 }
 
 .services h2 {
-  text-align: center;
-  font-size: clamp(1.5rem, 4vw, 2.25rem);
-  margin: 0 auto var(--space-3);
+  font-size: clamp(1.6rem, 4vw, var(--step-4));
   max-width: var(--max-width);
+  margin: 0 auto var(--space-3);
 }
 
 .service {
-  background: var(--color-bg);
-  border-radius: var(--radius);
-  padding: var(--space-3);
-  margin: 0 auto var(--space-2);
+  counter-increment: servicio;
   max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-line);
 }
 
+/* numeración 01 / 02 / 03 */
 .service h3 {
-  margin-top: 0;
-  font-size: 1.25rem;
+  margin: 0 0 var(--space-1);
+  font-size: var(--step-2);
+  font-weight: 500;
+}
+
+.service h3::before {
+  content: "0" counter(servicio);
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--color-signal);
+  margin-bottom: var(--space-1);
+}
+
+.service p {
+  color: var(--color-muted);
+  max-width: 55ch;
+  margin: 0 0 var(--space-2);
 }
 
 .service-link {
-  color: var(--color-primary);
-  font-weight: 600;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 700;
   text-decoration: none;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  gap: 0.4em;
+  border-bottom: 2px solid var(--color-signal);
+  transition: color 150ms ease;
+}
+
+.service-link::after {
+  content: "→";
+  transition: transform 150ms ease;
 }
 
 .service-link:hover,
 .service-link:focus-visible {
-  text-decoration: underline;
+  color: var(--color-signal-dark);
+}
+
+.service-link:hover::after,
+.service-link:focus-visible::after {
+  transform: translateX(4px);
 }
 
 /* --- Z8 Footer --- */
 .site-footer {
-  padding: var(--space-3) var(--space-2);
-  text-align: center;
-  background: var(--color-text);
-  color: #ffffff;
+  padding: var(--space-4) var(--space-2);
+  text-align: left;
+  background: var(--color-ink);
+  color: var(--color-bg);
+}
+
+.site-footer > * {
+  max-width: var(--max-width);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .footer-brand {
+  font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.25rem;
-  margin: 0 0 var(--space-1);
+  font-size: var(--step-2);
+  letter-spacing: 0.04em;
+  margin: 0 auto var(--space-2);
 }
 
 .site-footer a {
-  color: #ffffff;
+  color: var(--color-bg);
+  text-underline-offset: 3px;
+}
+
+.site-footer a:hover,
+.site-footer a:focus-visible {
+  color: oklch(80% 0.1 40);
 }
 
 .site-footer address {
   font-style: normal;
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--space-2);
 }
 
 .site-footer nav ul {
   display: flex;
-  justify-content: center;
   gap: var(--space-2);
   list-style: none;
-  margin: 0 0 var(--space-1);
+  margin: 0 auto var(--space-2);
   padding: 0;
 }
 
 .footer-copy {
   font-size: 0.875rem;
-  color: #cccccc;
-  margin: 0;
+  color: oklch(70% 0.01 75);
+  margin: 0 auto;
 }
 
-/* --- Desktop (≥1024px): servicios en grid de 3 columnas --- */
-@media (min-width: 1024px) {
-  .services {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-2);
-    max-width: var(--max-width);
-    margin: 0 auto;
-    background: transparent;
+/* --- Revelado escalonado al cargar (un solo momento de motion) --- */
+@media (prefers-reduced-motion: no-preference) {
+  .hero h1,
+  .hero-sub,
+  .hero .cta,
+  .hero .cta-note {
+    animation: rise 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 
-  .services h2 {
-    grid-column: 1 / -1;
+  .hero-sub {
+    animation-delay: 100ms;
   }
 
+  .hero .cta {
+    animation-delay: 200ms;
+  }
+
+  .hero .cta-note {
+    animation-delay: 280ms;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Tablet (≥768px): servicios con número a la izquierda --- */
+@media (min-width: 768px) {
   .service {
-    margin: 0;
-    background: var(--color-surface);
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: var(--space-3);
+    align-items: start;
+  }
+
+  .service p {
+    grid-column: 2;
+    margin-top: 0;
+  }
+
+  .service-link {
+    grid-column: 2;
+  }
+}
+
+/* --- Desktop (≥1024px): hero asimétrico, más aire --- */
+@media (min-width: 1024px) {
+  .hero {
+    padding-top: var(--space-5);
+    padding-bottom: var(--space-5);
+  }
+
+  .services {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
   }
 }
 
