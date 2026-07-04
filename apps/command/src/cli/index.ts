@@ -49,6 +49,20 @@ export function buildCli(): Command {
     })
 
   program
+    .command("ejecutar <id>")
+    .description("Ejecuta el plan de una tarea con agentes headless")
+    .action(async (id: string) => {
+      try {
+        const { executeTask } = await import("../executor/index.js")
+        const r = await executeTask(id)
+        console.log(`Completadas: ${r.completed.length} · Fallidas: ${r.failed.length} · Checkpoints: ${r.checkpoints}`)
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err))
+        process.exit(1)
+      }
+    })
+
+  program
     .command("aprender")
     .description("Ejecuta el ciclo de aprendizaje del Learning Officer")
     .option("--task <id>", "Analizar solo esta tarea")

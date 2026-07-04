@@ -2,6 +2,7 @@ import "dotenv/config"
 import { createServer } from "node:http"
 import { runIntelligencePipeline } from "./intelligence/pipeline.js"
 import { previewExecutionPlan } from "./intelligence/preview.js"
+import { executeTask } from "./executor/index.js"
 
 const PORT = parseInt(process.env["COMMAND_SERVER_PORT"] ?? "3002", 10)
 
@@ -68,6 +69,38 @@ createServer((req, res) => {
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err)
           console.error(`[pipeline] ${taskId}: ${message}`)
+          res.writeHead(500, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: message }))
+        })
+    })
+    return
+  }
+
+  if (req.method === "POST" && req.url === "/api/execute") {
+    let body = ""
+    req.on("data", (chunk: Buffer) => { body += chunk.toString() })
+    req.on("end", () => {
+      let taskId: string | undefined
+      try {
+        taskId = (JSON.parse(body) as { taskId?: string }).taskId
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "Invalid JSON" }))
+        return
+      }
+      if (!taskId) {
+        res.writeHead(400, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "taskId is required" }))
+        return
+      }
+      executeTask(taskId)
+        .then((result) => {
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ ok: true, ...result }))
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err)
+          console.error(`[execute] ${taskId}: ${message}`)
           res.writeHead(500, { "Content-Type": "application/json" })
           res.end(JSON.stringify({ error: message }))
         })
