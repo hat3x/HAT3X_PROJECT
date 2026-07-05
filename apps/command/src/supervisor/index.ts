@@ -54,10 +54,11 @@ export function startSupervisor(services: ServiceSpec[], spawnFn: SupervisorSpaw
   }
 }
 
+// El LearningScheduler arranca dentro del servicio de telegram (telegram/index.ts),
+// por eso no es un servicio independiente: como proceso suelto no tiene main y sale al instante.
 export const OFFICE_SERVICES: ServiceSpec[] = [
   { name: "server", cmd: "npx", args: ["tsx", "src/server.ts"] },
   { name: "telegram", cmd: "npx", args: ["tsx", "src/telegram/index.ts"] },
-  { name: "scheduler", cmd: "npx", args: ["tsx", "src/scheduler/index.ts"] },
 ]
 
 const isMain = process.argv[1]?.replace(/\\/g, "/").endsWith("supervisor/index.ts") ?? false
