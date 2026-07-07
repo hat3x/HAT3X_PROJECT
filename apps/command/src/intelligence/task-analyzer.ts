@@ -79,9 +79,12 @@ export async function analyzeTask(
     throw new Error("Invalid LLM response: no text content")
   }
 
+  // El modelo a veces envuelve el JSON en fences markdown (```json ... ```)
+  const raw = text.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "")
+
   let parsed: unknown
   try {
-    parsed = JSON.parse(text)
+    parsed = JSON.parse(raw)
   } catch {
     throw new Error("Invalid LLM response: not valid JSON")
   }
