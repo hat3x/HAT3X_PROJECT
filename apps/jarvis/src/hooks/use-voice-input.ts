@@ -44,6 +44,9 @@ export function useVoiceInput(): UseVoiceInputReturn {
   useEffect(() => () => stopVolumeTracking(), [stopVolumeTracking]);
 
   const startRecording = useCallback(async (deviceId?: string) => {
+    // Evita recorders solapados (modo auto): dos grabadoras compartiendo chunks
+    // producen un webm entrelazado que Whisper rechaza como formato inválido.
+    if (mediaRecorderRef.current !== null && mediaRecorderRef.current.state !== 'inactive') return;
     setError(null);
     try {
       const audioConstraints = deviceId ? { deviceId: { exact: deviceId } } : true;
@@ -56,8 +59,9 @@ export function useVoiceInput(): UseVoiceInputReturn {
         : 'audio/mp4';
 
       const recorder = new MediaRecorder(stream, { mimeType });
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      const localChunks: Blob[] = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) localChunks.push(e.data); };
+      chunksRef.current = localChunks;
       recorder.start(100);
       mediaRecorderRef.current = recorder;
       startVolumeTracking(stream);
