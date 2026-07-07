@@ -2,6 +2,7 @@ import OpenAI from "openai"
 import { z } from "zod"
 import type { Subtask, AgentSelection } from "../types.js"
 import { topCandidatesForSubtask, type Roster } from "./capability-map/roster.js"
+import { askClaude, stripFences, brainProvider } from "./brain.js"
 
 const COMMAND_MODEL = process.env["COMMAND_MODEL"] ?? "gpt-5.2-codex"
 
@@ -27,8 +28,9 @@ export async function refineSelectionsWithLLM(
   heuristic: AgentSelection[],
   roster: Roster
 ): Promise<AgentSelection[]> {
+  const provider = brainProvider()
   const apiKey = process.env["OPENAI_API_KEY"]
-  if (apiKey == null || apiKey.trim().length === 0) return heuristic
+  if (provider === "openai" && (apiKey == null || apiKey.trim().length === 0)) return heuristic
 
   const shortlists = subtasks.map((st) => ({
     subtask: st,
@@ -46,14 +48,20 @@ export async function refineSelectionsWithLLM(
     .join("\n\n")
 
   try {
-    const client = new OpenAI({ apiKey })
-    const response = await client.responses.create({
-      model: COMMAND_MODEL,
-      instructions: SYSTEM_PROMPT,
-      input,
-      max_output_tokens: 1024,
-    })
-    const raw = response.output_text.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "")
+    let outputText: string
+    if (provider === "openai") {
+      const client = new OpenAI({ apiKey: apiKey! })
+      const response = await client.responses.create({
+        model: COMMAND_MODEL,
+        instructions: SYSTEM_PROMPT,
+        input,
+        max_output_tokens: 1024,
+      })
+      outputText = response.output_text
+    } else {
+      outputText = await askClaude(SYSTEM_PROMPT, input)
+    }
+    const raw = stripFences(outputText)
     const parsed = SelectionSchema.safeParse(JSON.parse(raw))
     if (!parsed.success) return heuristic
 

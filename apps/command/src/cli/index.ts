@@ -62,6 +62,33 @@ export function buildCli(): Command {
     })
 
   program
+    .command("orden <texto>")
+    .description("Ciclo completo: crea la tarea, genera el plan y la ejecuta con agentes")
+    .option("--cliente <id>", "Cliente asociado")
+    .option("--modo <modo>", "autopilot | phased | supervised")
+    .action(async (texto: string, opts: { cliente?: string; modo?: string }) => {
+      try {
+        const { CommandCenter } = await import("../command-center/index.js")
+        const { runIntelligencePipeline } = await import("../intelligence/pipeline.js")
+        const { executeTask } = await import("../executor/index.js")
+        const task = await new CommandCenter().processOrder({
+          orderRaw: texto,
+          ...(opts.modo !== undefined ? { controlMode: opts.modo as import("../types.js").ControlMode } : {}),
+          ...(opts.cliente !== undefined ? { clientId: opts.cliente } : {}),
+        })
+        console.log(`📋 Tarea ${task.id} creada. Planificando (cerebro: ${process.env["COMMAND_BRAIN"] === "openai" ? "OpenAI" : "Claude"})...`)
+        const plan = await runIntelligencePipeline(task.id)
+        console.log(`🧠 Plan: ${plan.subtaskCount} subtareas · ${plan.phaseCount} fases · ~${plan.totalEstimatedHours}h · riesgo ${plan.riskLevel}`)
+        console.log(`🏢 Ejecutando con agentes (máx ${process.env["MAX_CONCURRENT_AGENTS"] ?? 4} en paralelo)...`)
+        const r = await executeTask(task.id)
+        console.log(`✅ Completadas: ${r.completed.length} · ❌ Fallidas: ${r.failed.length} · 🔔 Checkpoints: ${r.checkpoints}`)
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err))
+        process.exit(1)
+      }
+    })
+
+  program
     .command("ejecutar <id>")
     .description("Ejecuta el plan de una tarea con agentes headless")
     .action(async (id: string) => {

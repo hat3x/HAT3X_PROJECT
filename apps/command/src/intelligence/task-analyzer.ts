@@ -1,6 +1,7 @@
 import OpenAI from "openai"
 import { z } from "zod"
 import type { Subtask, ClientMemory } from "../types.js"
+import { askClaude, stripFences, brainProvider } from "./brain.js"
 
 const SubtaskSchema = z.object({
   id: z.string(),
@@ -51,36 +52,53 @@ Rules:
 - estimatedHours is a realistic estimate (1-40)
 - skills come from HAT3X skill catalog`
 
-export async function analyzeTask(
-  order: string,
-  clientMemory: ClientMemory | null
-): Promise<Subtask[]> {
+async function askOpenAI(input: string): Promise<string> {
   const apiKey = process.env["OPENAI_API_KEY"]
   if (apiKey == null || apiKey.trim().length === 0) {
     throw new Error("Missing OPENAI_API_KEY")
   }
-
   const client = new OpenAI({ apiKey })
+  const response = await client.responses.create({
+    model: COMMAND_MODEL,
+    instructions: SYSTEM_PROMPT,
+    input,
+    max_output_tokens: 2048,
+  })
+  return response.output_text
+}
 
+export async function analyzeTask(
+  order: string,
+  clientMemory: ClientMemory | null
+): Promise<Subtask[]> {
   const contextNote =
     clientMemory != null
       ? `\n\nClient context: ${clientMemory.name}, sector: ${clientMemory.sector ?? "unknown"}, previous projects: ${clientMemory.previousProjects.join(", ")}`
       : ""
+  const input = `Order: ${order}${contextNote}`
 
-  const response = await client.responses.create({
-    model: COMMAND_MODEL,
-    instructions: SYSTEM_PROMPT,
-    input: `Order: ${order}${contextNote}`,
-    max_output_tokens: 2048,
-  })
+  // Cerebro default: Claude Code headless (suscripción). Fallback: OpenAI API.
+  let text: string
+  if (brainProvider() === "openai") {
+    text = await askOpenAI(input)
+  } else {
+    try {
+      text = await askClaude(SYSTEM_PROMPT, input)
+    } catch (err) {
+      if (process.env["OPENAI_API_KEY"]) {
+        console.warn("[task-analyzer] claude headless falló, fallback a OpenAI:", err instanceof Error ? err.message : String(err))
+        text = await askOpenAI(input)
+      } else {
+        throw err
+      }
+    }
+  }
 
-  const text = response.output_text
   if (typeof text !== "string" || text.trim().length === 0) {
     throw new Error("Invalid LLM response: no text content")
   }
 
-  // El modelo a veces envuelve el JSON en fences markdown (```json ... ```)
-  const raw = text.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "")
+  const raw = stripFences(text)
 
   let parsed: unknown
   try {
