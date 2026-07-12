@@ -216,7 +216,7 @@ async function slotsForProfessional(
       .select("starts_at, ends_at")
       .eq("salon_id", salon.id)
       .eq("professional_id", professionalId)
-      .in("status", ACTIVE_STATUSES as unknown as string[])
+      .in("status", ACTIVE_STATUSES)
       .gte("starts_at", startIso)
       .lt("starts_at", endIso),
   ]);
