@@ -1,0 +1,417 @@
+/**
+ * Lógica de servidor de la reserva pública. USO EXCLUSIVO DE SERVIDOR:
+ * usa el cliente admin (service role) y por eso valida a mano que todo lo que
+ * toca pertenezca al salón del `slug`.
+ */
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  generateSlots,
+  mergeSlotsByProfessional,
+  type AvailableSlot,
+  type BusyInterval,
+} from "@/lib/booking/availability";
+import { normalizeEmail, type CreateBookingInput } from "@/lib/booking/schema";
+import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
+import type {
+  BookingBootstrap,
+  BookingConfirmation,
+  PublicSlot,
+} from "@/lib/booking/types";
+
+/** Estados de cita que ocupan agenda (bloquean disponibilidad). */
+const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
+
+/** Error de dominio con código HTTP asociado, para respuestas homogéneas. */
+export class BookingError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "BookingError";
+  }
+}
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+interface SalonConfig {
+  id: string;
+  timezone: string;
+  slotIntervalMinutes: number;
+  minLeadMinutes: number;
+}
+
+/** Lee números opcionales de salons.settings sin romper el tipado. */
+function readSettingNumber(
+  settings: unknown,
+  key: string,
+  fallback: number,
+): number {
+  if (settings && typeof settings === "object" && key in settings) {
+    const value = (settings as Record<string, unknown>)[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return fallback;
+}
+
+/** Carga un salón activo por slug o lanza BookingError 404. */
+async function loadSalon(admin: AdminClient, slug: string): Promise<SalonConfig> {
+  const { data, error } = await admin
+    .from("salons")
+    .select("id, timezone, settings, active")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error) throw new BookingError(500, "Error al cargar el salón.");
+  if (!data || !data.active) throw new BookingError(404, "Salón no encontrado.");
+
+  return {
+    id: data.id,
+    timezone: data.timezone,
+    slotIntervalMinutes: readSettingNumber(data.settings, "slot_interval_minutes", 15),
+    minLeadMinutes: readSettingNumber(data.settings, "min_lead_minutes", 0),
+  };
+}
+
+/** Límites UTC [inicio, fin) del día local del salón. */
+function dayBoundsUtc(date: string, timeZone: string): { startIso: string; endIso: string } {
+  const start = zonedWallTimeToUtc(date, "00:00", timeZone);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
+// -----------------------------------------------------------------------------
+// Bootstrap: salón + catálogo activo + mapa servicio→profesionales
+// -----------------------------------------------------------------------------
+export async function getBootstrap(slug: string): Promise<BookingBootstrap> {
+  const admin = createAdminClient();
+
+  const { data: salon, error: salonError } = await admin
+    .from("salons")
+    .select("id, name, slug, timezone, phone, address, active")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (salonError) throw new BookingError(500, "Error al cargar el salón.");
+  if (!salon || !salon.active) throw new BookingError(404, "Salón no encontrado.");
+
+  const [servicesRes, professionalsRes, linksRes] = await Promise.all([
+    admin
+      .from("services")
+      .select("id, name, description, category, duration_minutes, price_cents, currency")
+      .eq("salon_id", salon.id)
+      .eq("active", true)
+      .order("category", { ascending: true })
+      .order("name", { ascending: true }),
+    admin
+      .from("professionals")
+      .select("id, full_name, color")
+      .eq("salon_id", salon.id)
+      .eq("active", true)
+      .order("full_name", { ascending: true }),
+    admin
+      .from("professional_services")
+      .select("service_id, professional_id")
+      .eq("salon_id", salon.id),
+  ]);
+
+  if (servicesRes.error || professionalsRes.error || linksRes.error) {
+    throw new BookingError(500, "Error al cargar el catálogo.");
+  }
+
+  const activeProfessionalIds = new Set(
+    (professionalsRes.data ?? []).map((p) => p.id),
+  );
+
+  const serviceProfessionals: Record<string, string[]> = {};
+  for (const link of linksRes.data ?? []) {
+    if (!activeProfessionalIds.has(link.professional_id)) continue;
+    (serviceProfessionals[link.service_id] ??= []).push(link.professional_id);
+  }
+
+  return {
+    salon: {
+      id: salon.id,
+      name: salon.name,
+      slug: salon.slug,
+      timezone: salon.timezone,
+      phone: salon.phone,
+      address: salon.address,
+    },
+    services: (servicesRes.data ?? []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      category: s.category,
+      durationMinutes: s.duration_minutes,
+      priceCents: s.price_cents,
+      currency: s.currency,
+    })),
+    professionals: (professionalsRes.data ?? []).map((p) => ({
+      id: p.id,
+      fullName: p.full_name,
+      color: p.color,
+    })),
+    serviceProfessionals,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Disponibilidad
+// -----------------------------------------------------------------------------
+
+/** Profesionales activos que prestan el servicio (opcionalmente filtrado a uno). */
+async function resolveProfessionals(
+  admin: AdminClient,
+  salonId: string,
+  serviceId: string,
+  professionalId: string | undefined,
+): Promise<string[]> {
+  const { data, error } = await admin
+    .from("professional_services")
+    .select("professional_id, professionals!inner(active)")
+    .eq("salon_id", salonId)
+    .eq("service_id", serviceId);
+
+  if (error) throw new BookingError(500, "Error al cargar profesionales.");
+
+  const offering = (data ?? [])
+    .filter((row) => {
+      const prof = row.professionals as unknown as { active: boolean } | null;
+      return prof?.active === true;
+    })
+    .map((row) => row.professional_id);
+
+  if (professionalId) {
+    return offering.includes(professionalId) ? [professionalId] : [];
+  }
+  return offering;
+}
+
+/** Huecos de un profesional para un día. */
+async function slotsForProfessional(
+  admin: AdminClient,
+  salon: SalonConfig,
+  professionalId: string,
+  serviceDurationMinutes: number,
+  date: string,
+): Promise<AvailableSlot[]> {
+  const { startIso, endIso } = dayBoundsUtc(date, salon.timezone);
+
+  const [schedulesRes, exceptionRes, busyRes] = await Promise.all([
+    admin
+      .from("professional_schedules")
+      .select("weekday, start_time, end_time")
+      .eq("salon_id", salon.id)
+      .eq("professional_id", professionalId),
+    admin
+      .from("schedule_exceptions")
+      .select("is_available, start_time, end_time")
+      .eq("salon_id", salon.id)
+      .eq("professional_id", professionalId)
+      .eq("exception_date", date)
+      .maybeSingle(),
+    admin
+      .from("appointments")
+      .select("starts_at, ends_at")
+      .eq("salon_id", salon.id)
+      .eq("professional_id", professionalId)
+      .in("status", ACTIVE_STATUSES as unknown as string[])
+      .gte("starts_at", startIso)
+      .lt("starts_at", endIso),
+  ]);
+
+  if (schedulesRes.error || busyRes.error) {
+    throw new BookingError(500, "Error al cargar la disponibilidad.");
+  }
+
+  const busy: BusyInterval[] = (busyRes.data ?? []).map((a) => ({
+    starts_at: a.starts_at,
+    ends_at: a.ends_at,
+  }));
+
+  return generateSlots({
+    date,
+    timeZone: salon.timezone,
+    serviceDurationMinutes,
+    schedules: schedulesRes.data ?? [],
+    exception: exceptionRes.data ?? null,
+    busy,
+    slotIntervalMinutes: salon.slotIntervalMinutes,
+    minLeadMinutes: salon.minLeadMinutes,
+  });
+}
+
+export async function getAvailability(
+  slug: string,
+  serviceId: string,
+  date: string,
+  professionalId: string | undefined,
+): Promise<PublicSlot[]> {
+  const admin = createAdminClient();
+  const salon = await loadSalon(admin, slug);
+
+  const { data: service, error: serviceError } = await admin
+    .from("services")
+    .select("duration_minutes, active")
+    .eq("salon_id", salon.id)
+    .eq("id", serviceId)
+    .maybeSingle();
+
+  if (serviceError) throw new BookingError(500, "Error al cargar el servicio.");
+  if (!service || !service.active) throw new BookingError(404, "Servicio no disponible.");
+
+  const professionalIds = await resolveProfessionals(
+    admin,
+    salon.id,
+    serviceId,
+    professionalId,
+  );
+  if (professionalIds.length === 0) return [];
+
+  const perProfessional = await Promise.all(
+    professionalIds.map(async (id) => ({
+      professionalId: id,
+      slots: await slotsForProfessional(admin, salon, id, service.duration_minutes, date),
+    })),
+  );
+
+  // Profesional concreto → sus huecos; "cualquiera" → unión por instante.
+  if (professionalId) {
+    const entry = perProfessional[0];
+    return (entry?.slots ?? []).map((s) => ({ ...s, professionalId }));
+  }
+  return mergeSlotsByProfessional(perProfessional);
+}
+
+// -----------------------------------------------------------------------------
+// Creación de reserva
+// -----------------------------------------------------------------------------
+
+/** Busca un cliente existente por email/teléfono en el salón, o lo crea. */
+async function findOrCreateCustomer(
+  admin: AdminClient,
+  salonId: string,
+  customer: CreateBookingInput["customer"],
+): Promise<string> {
+  const email = normalizeEmail(customer.email);
+  const phone = customer.phone.trim();
+
+  // Coincidencia por email (índice único por salón) y, si no, por teléfono.
+  if (email) {
+    const { data } = await admin
+      .from("customers")
+      .select("id")
+      .eq("salon_id", salonId)
+      .eq("email", email)
+      .maybeSingle();
+    if (data) return data.id;
+  } else {
+    const { data } = await admin
+      .from("customers")
+      .select("id")
+      .eq("salon_id", salonId)
+      .eq("phone", phone)
+      .limit(1)
+      .maybeSingle();
+    if (data) return data.id;
+  }
+
+  const { data: created, error } = await admin
+    .from("customers")
+    .insert({
+      salon_id: salonId,
+      full_name: customer.fullName.trim(),
+      email,
+      phone,
+      marketing_consent: customer.marketingConsent ?? false,
+    })
+    .select("id")
+    .single();
+
+  if (error || !created) throw new BookingError(500, "No se pudo registrar el cliente.");
+  return created.id;
+}
+
+export async function createBooking(
+  slug: string,
+  input: CreateBookingInput,
+): Promise<BookingConfirmation> {
+  const admin = createAdminClient();
+  const salon = await loadSalon(admin, slug);
+
+  const { data: salonMeta } = await admin
+    .from("salons")
+    .select("name")
+    .eq("id", salon.id)
+    .single();
+
+  const { data: service, error: serviceError } = await admin
+    .from("services")
+    .select("id, name, duration_minutes, price_cents, currency, active")
+    .eq("salon_id", salon.id)
+    .eq("id", input.serviceId)
+    .maybeSingle();
+
+  if (serviceError) throw new BookingError(500, "Error al cargar el servicio.");
+  if (!service || !service.active) throw new BookingError(404, "Servicio no disponible.");
+
+  // Fecha local del salón para el instante elegido.
+  const date = localDateInZone(salon.timezone, new Date(input.startsAt));
+  const wantedProfessional =
+    input.professionalId === "any" ? undefined : input.professionalId;
+
+  // Recalcular disponibilidad en el servidor: nunca confiar en el hueco enviado.
+  const slots = await getAvailability(slug, input.serviceId, date, wantedProfessional);
+  const match = slots.find((s) => s.startsAt === input.startsAt);
+  if (!match) {
+    throw new BookingError(409, "Ese horario ya no está disponible. Elige otro.");
+  }
+
+  const professionalId = match.professionalId;
+  const endsAt = new Date(
+    new Date(input.startsAt).getTime() + service.duration_minutes * 60_000,
+  ).toISOString();
+
+  const customerId = await findOrCreateCustomer(admin, salon.id, input.customer);
+
+  const { data: appointment, error: insertError } = await admin
+    .from("appointments")
+    .insert({
+      salon_id: salon.id,
+      customer_id: customerId,
+      professional_id: professionalId,
+      service_id: service.id,
+      status: "pending",
+      starts_at: input.startsAt,
+      ends_at: endsAt,
+      price_cents: service.price_cents,
+      currency: service.currency,
+      notes: input.customer.notes?.trim() || null,
+    })
+    .select("id, starts_at, ends_at")
+    .single();
+
+  if (insertError) {
+    // Violación de la exclusion constraint anti-solape: alguien reservó antes.
+    if (insertError.code === "23P01") {
+      throw new BookingError(409, "Ese horario acaba de ocuparse. Elige otro.");
+    }
+    throw new BookingError(500, "No se pudo crear la reserva.");
+  }
+
+  const { data: professional } = await admin
+    .from("professionals")
+    .select("full_name")
+    .eq("id", professionalId)
+    .single();
+
+  return {
+    appointmentId: appointment.id,
+    startsAt: appointment.starts_at,
+    endsAt: appointment.ends_at,
+    professionalName: professional?.full_name ?? "",
+    serviceName: service.name,
+    salonName: salonMeta?.name ?? "",
+  };
+}
