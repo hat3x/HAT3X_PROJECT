@@ -36,6 +36,10 @@ const STOPWORDS = new Set([
   "name", "description", "tools", "read", "write", "edit", "bash", "grep", "glob",
 ])
 
+// Dominios sin encaje en las verticales de HAT3X (web/chatbots/voz/automatización):
+// generan staffing absurdo (un godot-engineer haciendo CRUD web). Fuera del roster.
+const EXCLUDED_PREFIXES = ["game-development-", "spatial-computing-", "academic-"]
+
 function keywordsFromId(id: string): string[] {
   const parts = id.toLowerCase().split(/[^a-z0-9]+/).filter((p) => p.length > 1 && !STOPWORDS.has(p))
   return [...new Set(parts)]
@@ -88,6 +92,7 @@ function scan(): RosterAgent[] {
       } else {
         continue
       }
+      if (EXCLUDED_PREFIXES.some((p) => id.startsWith(p))) continue
       const keywords = [...new Set([...keywordsFromId(id), ...keywordsFromConfig(join(REPO_ROOT, configPath))])]
       agents.push({ id, configPath, verticals: verticalsFor(id, folder), keywords })
     }
