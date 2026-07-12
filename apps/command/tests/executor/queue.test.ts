@@ -41,6 +41,20 @@ describe("executePlan", () => {
     expect(r.completed).not.toContain("D")
   })
 
+  it("skips subtasks already completed in a previous run", async () => {
+    const runSubtask = vi.fn(async () => ({ outcome: "completed" as const }))
+    const r = await executePlan({
+      plan, subtasks, maxConcurrent: 4, runSubtask, onCheckpoint: vi.fn(),
+      alreadyCompleted: new Set(["A", "B", "C"]),
+    })
+    // A, B, C no se reejecutan; solo corren D y E
+    expect(runSubtask).toHaveBeenCalledTimes(2)
+    const runIds = runSubtask.mock.calls.map((c) => (c[0] as Subtask).id).sort()
+    expect(runIds).toEqual(["D", "E"])
+    // El resultado sigue reportando las 5 como completadas
+    expect(r.completed.sort()).toEqual(["A", "B", "C", "D", "E"])
+  })
+
   it("stops after a failure", async () => {
     const runSubtask = vi.fn(async (s: Subtask) =>
       s.id === "A" ? { outcome: "failed" as const } : { outcome: "completed" as const }

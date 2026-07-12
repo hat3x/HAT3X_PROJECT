@@ -18,6 +18,7 @@ export interface ExecutorDeps {
   publish: PublishFn
   insertCheckpoint(input: { taskId: string; reason: string }): Promise<void>
   prepareWorkspaceFn(input: { taskId: string; clientId: string | null; reposRoot: string }): Promise<{ dir: string; branch: string }>
+  loadCompletedSubtasks(taskId: string): Promise<Set<string>>
   reposRoot: string
   maxConcurrent: number
 }
@@ -41,6 +42,21 @@ async function defaultLoadTask(taskId: string): Promise<HatTask> {
 async function defaultUpdateStatus(taskId: string, status: TaskStatus): Promise<void> {
   const { error } = await getSupabaseClient().from("hat3x_tasks").update({ status }).eq("id", taskId)
   if (error != null) throw new Error(`No se pudo actualizar ${taskId}: ${error.message}`)
+}
+
+async function defaultLoadCompletedSubtasks(taskId: string): Promise<Set<string>> {
+  const { data, error } = await getSupabaseClient()
+    .from("bus_events")
+    .select("payload")
+    .eq("task_id", taskId)
+    .eq("event_type", "task.completed")
+  if (error != null) return new Set()
+  const ids = new Set<string>()
+  for (const row of data ?? []) {
+    const sid = (row as { payload?: { subtaskId?: string } }).payload?.subtaskId
+    if (typeof sid === "string") ids.add(sid)
+  }
+  return ids
 }
 
 async function defaultInsertCheckpoint(input: { taskId: string; reason: string }): Promise<void> {
@@ -116,12 +132,16 @@ export async function executeTask(taskId: string, overrides: Partial<ExecutorDep
 
   await updateTaskStatus(taskId, "running")
 
+  const loadCompleted = overrides.loadCompletedSubtasks ?? defaultLoadCompletedSubtasks
+  const alreadyCompleted = await loadCompleted(taskId)
+
   const result = await executePlan({
     plan: task.executionPlan,
     subtasks: task.subtasks,
     maxConcurrent,
     runSubtask,
     onCheckpoint: async ({ reason }) => { await insertCheckpoint({ taskId, reason }) },
+    alreadyCompleted,
   })
 
   const finalStatus: TaskStatus =

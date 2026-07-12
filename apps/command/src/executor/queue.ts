@@ -13,6 +13,8 @@ export interface ExecutePlanInput {
   maxConcurrent: number
   runSubtask: RunSubtaskFn
   onCheckpoint: CheckpointFn
+  /** IDs de subtareas ya completadas en una ejecución previa: no se reejecutan. */
+  alreadyCompleted?: Set<string>
 }
 
 export interface ExecutePlanResult {
@@ -23,12 +25,13 @@ export interface ExecutePlanResult {
 
 export async function executePlan(input: ExecutePlanInput): Promise<ExecutePlanResult> {
   const byId = new Map(input.subtasks.map((s) => [s.id, s]))
-  const completed: string[] = []
+  const done = input.alreadyCompleted ?? new Set<string>()
+  const completed: string[] = [...done]
   const failed: string[] = []
   let checkpoints = 0
 
   for (const phase of input.plan.phases) {
-    const pending = [...phase.subtasks]
+    const pending = phase.subtasks.filter((s) => !done.has(s.subtaskId))
     let halt = false
 
     async function worker(): Promise<void> {
