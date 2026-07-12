@@ -24,6 +24,25 @@ npm run typecheck
 - Verifica que la ruta del componente está cubierta por `content` en `tailwind.config.ts` (`./src/**/*.{ts,tsx}`).
 - No mover componentes fuera de `src/`.
 
+## Base de datos (Supabase)
+
+### Aplicar migraciones
+```bash
+npx supabase link --project-ref <project-ref>   # una sola vez
+npx supabase db push                            # aplica supabase/migrations/ en orden
+```
+Tras aplicar, regenerar tipos (ver arriba). Las migraciones son inmutables: para cambiar el esquema, crear una nueva con `npx supabase migration new <nombre>`.
+
+### Modelo multi-tenant (resumen)
+- **Tenant raíz:** `salons`. Toda tabla de dominio lleva `salon_id`.
+- **RLS:** el acceso se resuelve por membresía en `salon_members` (roles `owner` > `manager` > `staff`). Los helpers viven en el esquema `app` (SECURITY DEFINER, no expuestos por PostgREST).
+- **Integridad de tenant:** las FKs de `appointments`, `visits` y `professional_services` son compuestas `(fk_id, salon_id)` — la base de datos impide mezclar entidades de salones distintos. Al añadir tablas nuevas con FKs a entidades del salón, replicar este patrón.
+- **Historial:** `appointment_history` y `customer_history` se escriben solo vía triggers; no tienen política de INSERT para clientes. `visits` se genera automáticamente al pasar una cita a `completed`.
+- **Borrado de salones:** usar soft-delete (`active = false`). El DELETE físico puede chocar con las FKs RESTRICT de citas/visitas (intencionado).
+
+### La cita no genera visita al completarse
+- El trigger solo dispara en la **transición** a `completed` (`UPDATE ... SET status = 'completed'`). Si la cita ya estaba en `completed`, no re-genera (idempotente por `UNIQUE (appointment_id)`).
+
 ## Tareas periódicas
 
 | Frecuencia | Tarea |

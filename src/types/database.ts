@@ -226,17 +226,17 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: "professional_services_professional_id_fkey";
-            columns: ["professional_id"];
+            columns: ["professional_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "professionals";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
           {
             foreignKeyName: "professional_services_service_id_fkey";
-            columns: ["service_id"];
+            columns: ["service_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "services";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
           {
             foreignKeyName: "professional_services_salon_id_fkey";
@@ -356,24 +356,24 @@ export interface Database {
           },
           {
             foreignKeyName: "appointments_customer_id_fkey";
-            columns: ["customer_id"];
+            columns: ["customer_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "customers";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
           {
             foreignKeyName: "appointments_professional_id_fkey";
-            columns: ["professional_id"];
+            columns: ["professional_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "professionals";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
           {
             foreignKeyName: "appointments_service_id_fkey";
-            columns: ["service_id"];
+            columns: ["service_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "services";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
         ];
       };
@@ -430,31 +430,31 @@ export interface Database {
           },
           {
             foreignKeyName: "visits_appointment_id_fkey";
-            columns: ["appointment_id"];
+            columns: ["appointment_id", "salon_id"];
             isOneToOne: true;
             referencedRelation: "appointments";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
           {
             foreignKeyName: "visits_customer_id_fkey";
-            columns: ["customer_id"];
+            columns: ["customer_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "customers";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
           {
             foreignKeyName: "visits_professional_id_fkey";
-            columns: ["professional_id"];
+            columns: ["professional_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "professionals";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
           {
             foreignKeyName: "visits_service_id_fkey";
-            columns: ["service_id"];
+            columns: ["service_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "services";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "salon_id"];
           },
         ];
       };
