@@ -30,6 +30,8 @@ describe("refineSelectionsWithLLM", () => {
   beforeEach(() => {
     createMock.mockReset()
     process.env["OPENAI_API_KEY"] = "sk-test"
+    // Este suite SÍ ejercita la ruta LLM (mockeada): desactiva el off-switch global
+    delete process.env["COMMAND_DISABLE_STAFFING_LLM"]
   })
 
   it("replaces heuristic pick with LLM choice when valid", async () => {

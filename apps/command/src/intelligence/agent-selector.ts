@@ -28,6 +28,9 @@ export async function refineSelectionsWithLLM(
   heuristic: AgentSelection[],
   roster: Roster
 ): Promise<AgentSelection[]> {
+  // Off-switch para tests deterministas (evita llamadas LLM reales)
+  if (process.env["COMMAND_DISABLE_STAFFING_LLM"] === "1") return heuristic
+
   const provider = brainProvider()
   const apiKey = process.env["OPENAI_API_KEY"]
   if (provider === "openai" && (apiKey == null || apiKey.trim().length === 0)) return heuristic

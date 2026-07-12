@@ -6,7 +6,7 @@ import { executeTask } from "./executor/index.js"
 
 const PORT = parseInt(process.env["COMMAND_SERVER_PORT"] ?? "3002", 10)
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
   if (req.method === "POST" && req.url === "/api/preview") {
     let body = ""
     req.on("data", (chunk: Buffer) => { body += chunk.toString() })
@@ -116,6 +116,16 @@ createServer((req, res) => {
 
   res.writeHead(404)
   res.end()
-}).listen(PORT, () => {
+})
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`[command-server] El puerto ${PORT} ya está en uso — ya hay otra oficina en marcha. No arranco un duplicado.`)
+    process.exit(1)
+  }
+  throw err
+})
+
+server.listen(PORT, () => {
   console.log(`[command-server] listening on port ${PORT}`)
 })
