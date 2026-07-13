@@ -62,17 +62,23 @@ export function buildCli(): Command {
     })
 
   program
-    .command("orden <texto>")
+    .command("orden [texto]")
     .description("Ciclo completo: crea la tarea, genera el plan y la ejecuta con agentes")
     .option("--cliente <id>", "Cliente asociado")
     .option("--modo <modo>", "autopilot | phased | supervised")
-    .action(async (texto: string, opts: { cliente?: string; modo?: string }) => {
+    .option("--orden-file <path>", "Lee la orden desde un fichero (recomendado para órdenes largas: evita romper el parseo de argumentos)")
+    .action(async (texto: string | undefined, opts: { cliente?: string; modo?: string; ordenFile?: string }) => {
       try {
+        const { readFileSync } = await import("node:fs")
+        const orderRaw = opts.ordenFile !== undefined ? readFileSync(opts.ordenFile, "utf8") : texto
+        if (orderRaw === undefined || orderRaw.trim().length === 0) {
+          throw new Error("Falta la orden: pásala como argumento o con --orden-file <path>")
+        }
         const { CommandCenter } = await import("../command-center/index.js")
         const { runIntelligencePipeline } = await import("../intelligence/pipeline.js")
         const { executeTask } = await import("../executor/index.js")
         const task = await new CommandCenter().processOrder({
-          orderRaw: texto,
+          orderRaw,
           ...(opts.modo !== undefined ? { controlMode: opts.modo as import("../types.js").ControlMode } : {}),
           ...(opts.cliente !== undefined ? { clientId: opts.cliente } : {}),
         })
