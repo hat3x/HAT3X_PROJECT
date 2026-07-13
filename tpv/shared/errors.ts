@@ -17,6 +17,8 @@ export type CodigoErrorTpv =
   | 'METODO_PAGO_INVALIDO' // método de pago inexistente/inactivo/de otro salón
   | 'SOBREPAGO'            // el importe cobrado supera el total del ticket
   | 'PAGO_INSUFICIENTE'    // se pide marcar pagada sin cubrir el total
+  | 'TICKET_YA_FACTURADO'  // el ticket ya tiene una factura emitida
+  | 'TICKET_NO_FACTURABLE' // el ticket está anulado/reembolsado o vacío
   | 'CONFLICTO'            // violación de invariante/constraint de BD
   | 'METODO_NO_PERMITIDO'  // verbo HTTP no soportado por la función
   | 'INTERNO';             // fallo inesperado
@@ -32,6 +34,8 @@ export const HTTP_POR_CODIGO: Record<CodigoErrorTpv, number> = {
   METODO_PAGO_INVALIDO: 422,
   SOBREPAGO: 409,
   PAGO_INSUFICIENTE: 409,
+  TICKET_YA_FACTURADO: 409,
+  TICKET_NO_FACTURABLE: 409,
   CONFLICTO: 409,
   METODO_NO_PERMITIDO: 405,
   INTERNO: 500,

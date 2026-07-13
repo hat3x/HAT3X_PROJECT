@@ -24,14 +24,17 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   actualizarLineas,
   crearTicket,
+  emitirFactura,
+  obtenerFactura,
   obtenerTicket,
   registrarPago,
 } from './apiClient';
 import { tpvKeys } from './queryKeys';
-import type { TicketCompleto } from '../shared/types';
+import type { FacturaCompleta, TicketCompleto } from '../shared/types';
 import type {
   ActualizarLineasInput,
   CrearTicketInput,
+  EmitirFacturaInput,
   LineaInput,
   RegistrarPagoInput,
 } from '../shared/schemas';
@@ -106,5 +109,46 @@ export function useRegistrarPago(
   return useMutation({
     mutationFn: (input: RegistrarPagoInput) => registrarPago(sb, input),
     onSuccess: (ticket) => sincronizarCache(qc, ticket),
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Facturación (sub-6)
+// ----------------------------------------------------------------------------
+
+/** Query: factura ya emitida de un ticket (null mientras no exista venta_id). */
+export function useFactura(
+  sb: SupabaseClient,
+  ventaId: string | null | undefined,
+): UseQueryResult<FacturaCompleta, Error> {
+  return useQuery({
+    queryKey: tpvKeys.facturaDeVenta(ventaId ?? '∅'),
+    queryFn: () => obtenerFactura(sb, { venta_id: ventaId as string }),
+    enabled: !!ventaId,
+    staleTime: Infinity, // una factura emitida es inmutable
+    retry: false, // 404 (aún no facturado) no debe reintentarse
+  });
+}
+
+/**
+ * Mutación: emitir factura a partir de un ticket. Escribe la factura en la caché
+ * (por id y por venta) e invalida el ticket, que pasa a estar facturado.
+ */
+export function useEmitirFactura(
+  sb: SupabaseClient,
+): UseMutationResult<FacturaCompleta, Error, EmitirFacturaInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: EmitirFacturaInput) => emitirFactura(sb, input),
+    onSuccess: (res) => {
+      qc.setQueryData(tpvKeys.factura(res.factura.id), res);
+      if (res.factura.venta_id) {
+        qc.setQueryData(tpvKeys.facturaDeVenta(res.factura.venta_id), res);
+        qc.invalidateQueries({ queryKey: tpvKeys.ticket(res.factura.venta_id) });
+      }
+      qc.invalidateQueries({
+        queryKey: tpvKeys.ticketsList(res.factura.salon_id),
+      });
+    },
   });
 }

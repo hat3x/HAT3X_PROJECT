@@ -12,14 +12,18 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ErrorTpv, type ErrorTpvSerializado } from '../shared/errors';
-import type { TicketCompleto } from '../shared/types';
+import type { FacturaCompleta, TicketCompleto } from '../shared/types';
 import {
   actualizarLineasSchema,
   crearTicketSchema,
+  emitirFacturaSchema,
+  obtenerFacturaSchema,
   obtenerTicketSchema,
   registrarPagoSchema,
   type ActualizarLineasInput,
   type CrearTicketInput,
+  type EmitirFacturaInput,
+  type ObtenerFacturaInput,
   type ObtenerTicketInput,
   type RegistrarPagoInput,
 } from '../shared/schemas';
@@ -30,6 +34,8 @@ export const FUNCIONES = {
   actualizarLineas: 'tpv-actualizar-lineas',
   registrarPago: 'tpv-registrar-pago',
   obtenerTicket: 'tpv-obtener-ticket',
+  emitirFactura: 'tpv-emitir-factura',
+  obtenerFactura: 'tpv-obtener-factura',
 } as const;
 
 /** Valida el input en cliente y lanza ErrorTpv('VALIDACION') si no cumple. */
@@ -110,4 +116,18 @@ export function obtenerTicket(
   input: ObtenerTicketInput,
 ): Promise<TicketCompleto> {
   return invocar(sb, FUNCIONES.obtenerTicket, validar(obtenerTicketSchema, input));
+}
+
+export function emitirFactura(
+  sb: SupabaseClient,
+  input: EmitirFacturaInput,
+): Promise<FacturaCompleta> {
+  return invocar(sb, FUNCIONES.emitirFactura, validar(emitirFacturaSchema, input));
+}
+
+export function obtenerFactura(
+  sb: SupabaseClient,
+  input: ObtenerFacturaInput,
+): Promise<FacturaCompleta> {
+  return invocar(sb, FUNCIONES.obtenerFactura, validar(obtenerFacturaSchema, input));
 }

@@ -1,12 +1,15 @@
 # TPV — Capa de API de cobros (Edge Functions + Zod + TanStack Query)
 
 Capa **aditiva** de aplicación para el módulo TPV: crear tickets, gestionar
-líneas, aplicar descuentos, calcular totales e IVA y registrar pagos (efectivo,
-tarjeta y **mixto**). Se apoya en el esquema de `db/` (migraciones `tpv_*`) y en
-su **RLS por `salon_id`**. No toca ni la agenda ni los endpoints de reservas.
+líneas, aplicar descuentos, calcular totales e IVA, registrar pagos (efectivo,
+tarjeta y **mixto**) y **emitir facturas** (numeración por salón + serie,
+snapshot fiscal y exportación a PDF). Se apoya en el esquema de `db/`
+(migraciones `tpv_*`) y en su **RLS por `salon_id`**. No toca ni la agenda ni
+los endpoints de reservas.
 
-> Sub-tarea **sub-3**. Depende de sub-1 (esquema `20260713000001_tpv_module`) y
-> sub-2 (RLS `20260713000002_tpv_rls`).
+> Sub-tareas **sub-3** (cobros) y **sub-6** (facturación). Dependen de sub-1
+> (esquema `20260713000001_tpv_module`) y sub-2 (RLS `20260713000002_tpv_rls`);
+> la facturación añade `20260713000003_tpv_facturacion`.
 
 ## Estructura
 
@@ -15,21 +18,27 @@ tpv/
 ├── shared/                 # Núcleo compartido servidor + cliente (sin framework)
 │   ├── money.ts            #   Cálculo autoritativo: líneas, IVA, totales, saldo
 │   ├── money_test.ts       #   Tests del núcleo (deno test)
+│   ├── factura.ts          #   Snapshot de factura: líneas, desglose, formato
+│   ├── facturaHtml.ts      #   Render HTML imprimible/descargable a PDF (puro)
+│   ├── factura_test.ts     #   Tests de facturación (deno test)
 │   ├── schemas.ts          #   Esquemas Zod (contrato de entrada) + tipos inferidos
 │   ├── types.ts            #   Tipos de filas de BD / respuestas de la API
 │   └── errors.ts           #   ErrorTpv tipado (código estable + estado HTTP)
 ├── functions/              # Supabase Edge Functions (Deno)
-│   ├── _shared/            #   cors · http (Zod parse + errores) · supabase · ticket
+│   ├── _shared/            #   cors · http · supabase · ticket · factura
 │   ├── tpv-crear-ticket/
 │   ├── tpv-actualizar-lineas/
 │   ├── tpv-registrar-pago/
 │   ├── tpv-obtener-ticket/
+│   ├── tpv-emitir-factura/
+│   ├── tpv-obtener-factura/
 │   ├── deno.json
 │   └── import_map.json
 ├── web/                    # Consumo desde el navegador
 │   ├── apiClient.ts        #   Invocación tipada de las funciones + ErrorTpv
 │   ├── queryKeys.ts        #   Fábrica de query keys
-│   └── hooks.ts            #   Hooks de dominio TanStack Query
+│   ├── hooks.ts            #   Hooks de dominio TanStack Query
+│   └── facturaPdf.ts       #   Imprimir / descargar la factura como PDF
 ├── .env.example
 └── README.md
 ```
@@ -62,6 +71,13 @@ Todas son `POST`, cuerpo JSON, respuesta `TicketCompleto`
 | `tpv-registrar-pago` | `registrarPagoSchema` | Registra 1..N pagos (efectivo/tarjeta/**mixto**), valida métodos del salón, controla sobrepago/insuficiencia y marca `pagada` si queda cubierta. `200`. |
 | `tpv-obtener-ticket` | `obtenerTicketSchema` | Devuelve el agregado completo con saldo. `200`. |
 
+Facturación (respuesta `FacturaCompleta` = `{ factura, referencia }`):
+
+| Función | Cuerpo (Zod) | Efecto |
+|---|---|---|
+| `tpv-emitir-factura` | `emitirFacturaSchema` | Emite la factura de un ticket: congela emisor/cliente/desglose/líneas y la BD asigna el nº correlativo por `(salon, serie)`. `201`. |
+| `tpv-obtener-factura` | `obtenerFacturaSchema` | Devuelve una factura por `factura_id` **o** `venta_id`. `200`. |
+
 ### Cálculo de IVA y totales
 
 Convención España, `precio_unitario` = base **sin** IVA:
@@ -88,6 +104,41 @@ Cabecera:  subtotal = Σ base_neta · descuento_total = Σ descuento
   cubrir el total salvo `permitir_parcial: true`. El **sobrepago** se rechaza
   (`SOBREPAGO`): para efectivo, incluye una línea de cambio con importe negativo.
 
+### Facturación (sub-6)
+
+- **Numeración correlativa por salón.** El nº de factura lo asigna el trigger
+  `tpv_asignar_numero_factura()` (BD) bajo *advisory lock* por `(salon_id, serie)`:
+  **sin saltos** y seguro ante concurrencia. La referencia visible es
+  `SERIE/NÚMERO` con relleno (`A/000123`).
+- **Serie configurable por salón.** `tpv_config_facturacion.serie_por_defecto`
+  fija la serie; se puede sobrescribir por emisión (`serie` en el cuerpo).
+  Cambiar de serie reinicia su correlativo desde 1 (comportamiento fiscal).
+- **Datos fiscales.** Del **emisor** (el salón) salen de la config
+  (`emisor_razon_social/nif/direccion_fiscal`); los del **cliente** llegan en la
+  petición (`cliente: { razon_social, nif, direccion_fiscal, email }`). Sin datos
+  de cliente → factura simplificada («cliente contado»).
+- **Snapshot inmutable.** Al emitir se **congelan** en la fila de factura el
+  emisor, el desglose de IVA y las líneas (`lineas_snapshot`). La factura es
+  autocontenida: se reimprime igual aunque cambien la config o el ticket.
+- **Bases e IVA autoritativos.** `base_imponible`, `impuestos`, `total` y el
+  `desglose_iva` se **recalculan** en el servidor desde las líneas persistidas
+  con el mismo `money.ts` (nunca se reciben del cliente).
+- **Un ticket = una factura.** `UNIQUE(venta_id)` → segundo intento
+  `TICKET_YA_FACTURADO`. Un ticket `anulada`/`reembolsada` o vacío no es
+  facturable (`TICKET_NO_FACTURABLE`).
+
+#### Exportar a PDF (imprimible / descargable)
+
+`shared/facturaHtml.ts` genera un HTML **autocontenido** (CSS embebido, A4). La
+exportación a PDF usa la impresión del navegador (sin dependencias de servidor):
+
+```ts
+import { imprimirFactura, descargarFacturaHTML } from './web/facturaPdf';
+
+imprimirFactura(factura);        // iframe oculto → diálogo «Guardar como PDF»
+descargarFacturaHTML(factura);   // descarga factura-A-000123.html (archivable)
+```
+
 ## Errores
 
 `ErrorTpv` serializa `{ error: { codigo, mensaje, detalles? } }` con estado HTTP:
@@ -102,6 +153,8 @@ Cabecera:  subtotal = Σ base_neta · descuento_total = Σ descuento
 | `SIN_LINEAS` | 422 | Cobrar un ticket vacío. |
 | `METODO_PAGO_INVALIDO` | 422 | Método inexistente/inactivo/de otro salón. |
 | `SOBREPAGO` / `PAGO_INSUFICIENTE` | 409 | Descuadre en el cobro. |
+| `TICKET_YA_FACTURADO` | 409 | El ticket ya tiene una factura emitida. |
+| `TICKET_NO_FACTURABLE` | 409 | Ticket anulado/reembolsado o sin líneas. |
 | `CONFLICTO` | 409 | Violación de constraint (p.ej. ya facturado). |
 
 ## Uso desde la web (TanStack Query)
@@ -125,27 +178,48 @@ pago.mutate({
 const totales = previsualizarTicket(lineasEnCurso);
 ```
 
+Emitir factura y exportarla a PDF:
+
+```ts
+import { useEmitirFactura, useFactura } from './web/hooks';
+import { imprimirFactura } from './web/facturaPdf';
+
+const emitir = useEmitirFactura(supabase);
+
+emitir.mutate(
+  { venta_id: ventaId, cliente: { razon_social: 'ACME S.L.', nif: 'B12345678' } },
+  { onSuccess: ({ factura }) => imprimirFactura(factura) }, // → PDF del navegador
+);
+
+// Reabrir/reimprimir una factura ya emitida de un ticket.
+const { data: fac } = useFactura(supabase, ventaId);
+```
+
 ## Ejecutar / desplegar
 
 ```bash
-# Tests del núcleo de cálculo (no necesita red ni Supabase)
-deno test tpv/shared/money_test.ts
+# Tests del núcleo (no necesita red ni Supabase)
+deno test tpv/shared/money_test.ts tpv/shared/factura_test.ts
 
-# Servir en local (requiere migraciones sub-1 + sub-2 aplicadas)
+# Servir en local (requiere migraciones sub-1 + sub-2 + sub-6 aplicadas)
 supabase functions serve --import-map tpv/functions/import_map.json
 
 # Desplegar cada función (lo realiza el responsable de release, no el agente)
-supabase functions deploy tpv-crear-ticket      --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-crear-ticket       --import-map tpv/functions/import_map.json
 supabase functions deploy tpv-actualizar-lineas  --import-map tpv/functions/import_map.json
 supabase functions deploy tpv-registrar-pago     --import-map tpv/functions/import_map.json
 supabase functions deploy tpv-obtener-ticket     --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-emitir-factura     --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-obtener-factura    --import-map tpv/functions/import_map.json
 ```
 
 > **Deno/Supabase importa `shared/` con extensión `.ts`; el bundler de la web lo
-> importa sin extensión.** Los ficheros de `shared/` son autocontenidos (sólo
-> `schemas.ts` depende de `zod`), por lo que ambos consumos conviven sin build.
-> Peer deps de la web: `react`, `@tanstack/react-query`, `@supabase/supabase-js`,
-> `zod`.
+> importa sin extensión en el boundary web→shared.** Las dependencias *externas*
+> de `shared/` se limitan a `zod` (en `schemas.ts`); los cross-imports internos
+> (`factura.ts` → `money.ts`/`types.ts`, `facturaHtml.ts` → `factura.ts`) usan
+> `.ts` porque Deno lo exige, y los bundlers modernos (Vite/esbuild/Turbopack)
+> resuelven la extensión explícita sin configuración extra. Peer deps de la web:
+> `react`, `@tanstack/react-query`, `@supabase/supabase-js`, `zod`.
 
 ## Verificación realizada
 
@@ -153,3 +227,9 @@ supabase functions deploy tpv-obtener-ticket     --import-map tpv/functions/impo
   desglose y saldo mixto/parcial/sobrepago) comprobada numéricamente. Suite en
   `shared/money_test.ts` (`deno test`) — Deno no está instalado en el entorno
   del agente; ejecútala en CI.
+- Facturación (`shared/factura.ts`, `shared/facturaHtml.ts`): snapshot de
+  líneas, resumen base/IVA/total, desglose por tipo, formato de referencia y
+  render HTML (escapado anti-inyección, factura simplificada, auto-impresión) en
+  `shared/factura_test.ts` (`deno test`). Tipado estricto de los módulos puros
+  `shared/factura.ts` + `shared/facturaHtml.ts` verificado con `tsc --strict`
+  (sin errores). Las Edge Functions y la capa web se ejercitan en CI/preview.

@@ -140,3 +140,63 @@ export const obtenerTicketSchema = z
   .strict();
 
 export type ObtenerTicketInput = z.infer<typeof obtenerTicketSchema>;
+
+// ----------------------------------------------------------------------------
+// 5. Facturación (sub-6)
+// ----------------------------------------------------------------------------
+
+/** Serie de facturación: alfanumérica corta (p.ej. 'A', '2026', 'FR'). */
+export const serieFacturaSchema = z
+  .string()
+  .trim()
+  .min(1, 'La serie no puede estar vacía')
+  .max(16, 'La serie es demasiado larga')
+  .regex(/^[A-Za-z0-9-]+$/, 'La serie sólo admite letras, dígitos y guiones');
+
+/**
+ * Datos fiscales del CLIENTE al emitir. Todos opcionales: sin ellos la factura
+ * es simplificada (tique). Se congelan como snapshot en la factura.
+ */
+export const datosFiscalesClienteSchema = z
+  .object({
+    razon_social: z.string().trim().max(200).nullish(),
+    nif: z.string().trim().max(20).nullish(),
+    direccion_fiscal: z.string().trim().max(400).nullish(),
+    email: z.string().trim().email('Email no válido').max(200).nullish(),
+  })
+  .strict();
+
+export type DatosFiscalesClienteInput = z.infer<typeof datosFiscalesClienteSchema>;
+
+/**
+ * Emitir factura a partir de un ticket. La numeración correlativa por
+ * (salon, serie) la asigna la BD; los importes/desglose los recalcula el
+ * servidor desde las líneas persistidas (nunca se envían importes).
+ */
+export const emitirFacturaSchema = z
+  .object({
+    venta_id: uuid,
+    /** Serie a usar; si se omite se toma la del salón (config) o 'A'. */
+    serie: serieFacturaSchema.optional(),
+    /** Datos fiscales del cliente; si se omiten → factura simplificada. */
+    cliente: datosFiscalesClienteSchema.optional(),
+  })
+  .strict();
+
+export type EmitirFacturaInput = z.infer<typeof emitirFacturaSchema>;
+
+/** Obtener una factura ya emitida (para ver / reimprimir / descargar). */
+export const obtenerFacturaSchema = z
+  .object({
+    /** Por id de factura… */
+    factura_id: uuid.optional(),
+    /** …o por el ticket del que procede. Debe venir exactamente uno. */
+    venta_id: uuid.optional(),
+  })
+  .strict()
+  .refine((v) => !!v.factura_id !== !!v.venta_id, {
+    message: 'Indica factura_id O venta_id (exactamente uno)',
+    path: ['factura_id'],
+  });
+
+export type ObtenerFacturaInput = z.infer<typeof obtenerFacturaSchema>;

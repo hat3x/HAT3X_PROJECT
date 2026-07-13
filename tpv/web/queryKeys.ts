@@ -18,4 +18,15 @@ export const tpvKeys = {
 
   metodosPago: (salonId: string) =>
     [...tpvKeys.all, 'metodos-pago', salonId] as const,
+
+  facturas: () => [...tpvKeys.all, 'facturas'] as const,
+  /** Una factura concreta por su id. */
+  factura: (facturaId: string) =>
+    [...tpvKeys.facturas(), 'detail', facturaId] as const,
+  /** La factura asociada a un ticket (si existe). */
+  facturaDeVenta: (ventaId: string) =>
+    [...tpvKeys.facturas(), 'de-venta', ventaId] as const,
+  /** Config de facturación de un salón (serie + datos fiscales). */
+  configFacturacion: (salonId: string) =>
+    [...tpvKeys.all, 'config-facturacion', salonId] as const,
 } as const;
