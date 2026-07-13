@@ -1,0 +1,109 @@
+/* ==========================================================================
+   TPV · UI · Design tokens
+   --------------------------------------------------------------------------
+   Dirección visual: "ticket de mostrador" — tinta cálida sobre papel, un único
+   acento terracota con carácter, superficies táctiles con sombra de pulsación
+   (no glassmorphism), y NÚMEROS tabulares para que los importes no bailen.
+   Pensado para TABLET en horizontal sobre el mostrador: objetivos de toque
+   grandes (>= 56px), tipografía legible a un brazo de distancia.
+
+   Color en oklch: neutros tintados hacia el ámbar de marca, sin negro/blanco
+   puros. Un solo acento cálido; el verde de "cobrado" es el único secundario.
+   ========================================================================== */
+
+:root {
+  /* -- Paleta base (papel + tinta cálida) -------------------------------- */
+  --paper:        oklch(0.982 0.008 85);   /* fondo general, blanco roto cálido */
+  --paper-2:      oklch(0.965 0.010 84);   /* superficies elevadas suaves        */
+  --card:         oklch(0.995 0.004 90);   /* tiles / rail del ticket            */
+  --ink:          oklch(0.245 0.020 62);   /* texto principal, casi negro cálido */
+  --ink-2:        oklch(0.470 0.022 62);   /* texto secundario                   */
+  --ink-3:        oklch(0.620 0.020 65);   /* texto terciario / placeholders     */
+  --line:         oklch(0.905 0.012 78);   /* separadores finos                  */
+  --line-strong:  oklch(0.845 0.016 76);   /* bordes de controles                */
+
+  /* -- Acento (terracota/ámbar de marca) --------------------------------- */
+  --brand:        oklch(0.605 0.150 47);   /* acción primaria                    */
+  --brand-press:  oklch(0.540 0.150 45);   /* estado :active                     */
+  --brand-tint:   oklch(0.945 0.040 60);   /* fondos suaves de acento            */
+  --brand-ink:    oklch(0.985 0.010 90);   /* texto sobre el acento              */
+
+  /* -- Semánticos -------------------------------------------------------- */
+  --ok:           oklch(0.585 0.130 155);  /* cobrado / éxito                    */
+  --ok-tint:      oklch(0.945 0.045 155);
+  --warn:         oklch(0.720 0.140 75);   /* pendiente / aviso                  */
+  --warn-tint:    oklch(0.950 0.055 85);
+  --danger:       oklch(0.560 0.170 27);   /* error / eliminar                   */
+  --danger-tint:  oklch(0.950 0.040 30);
+
+  /* -- Tipografía -------------------------------------------------------- */
+  /* Sin fuentes de "slop" (Inter/Roboto). Stack de sistema con carácter;
+     --font-display permite inyectar una display (Fraunces/Space Grotesk) sin
+     romper si no carga. --font-num fuerza cifras tabulares para los importes. */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue',
+             'Noto Sans', sans-serif;
+  --font-display: var(--font-ui);
+  --font-num: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono',
+              'Menlo', monospace;
+
+  /* Escala modular ~1.2 (mayor que en web: se lee de lejos) */
+  --fs-xs:   0.8125rem;  /* 13px */
+  --fs-sm:   0.9375rem;  /* 15px */
+  --fs-base: 1.0625rem;  /* 17px */
+  --fs-lg:   1.25rem;    /* 20px */
+  --fs-xl:   1.5rem;     /* 24px */
+  --fs-2xl:  1.9375rem;  /* 31px */
+  --fs-3xl:  2.5rem;     /* 40px — total del ticket */
+
+  /* -- Espaciado (base 4) ------------------------------------------------ */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.25rem;
+  --s-6: 1.5rem;
+  --s-8: 2rem;
+  --s-10: 2.5rem;
+
+  /* -- Objetivos de toque (tablet) --------------------------------------- */
+  --touch:     3.5rem;   /* 56px mínimo cómodo con el pulgar */
+  --touch-lg:  4.5rem;   /* 72px acción principal (cobrar)   */
+
+  /* -- Radios, sombras, movimiento --------------------------------------- */
+  --r-sm: 0.5rem;
+  --r-md: 0.75rem;
+  --r-lg: 1.125rem;
+  --r-full: 999px;
+
+  /* Sombra de "objeto físico": doble capa, cálida, sin halos neón */
+  --shadow-1: 0 1px 2px oklch(0.245 0.02 62 / 0.06),
+              0 2px 6px oklch(0.245 0.02 62 / 0.05);
+  --shadow-2: 0 2px 4px oklch(0.245 0.02 62 / 0.07),
+              0 10px 24px oklch(0.245 0.02 62 / 0.10);
+  --shadow-pressed: inset 0 2px 4px oklch(0.245 0.02 62 / 0.18);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 110ms var(--ease);
+  --t-med: 220ms var(--ease);
+}
+
+/* Modo noche del mostrador (turno de tarde, luz baja). Opt-in por atributo. */
+[data-tpv-theme='noche'] {
+  --paper:       oklch(0.240 0.014 70);
+  --paper-2:     oklch(0.280 0.016 70);
+  --card:        oklch(0.310 0.018 70);
+  --ink:         oklch(0.945 0.012 85);
+  --ink-2:       oklch(0.800 0.014 82);
+  --ink-3:       oklch(0.660 0.016 78);
+  --line:        oklch(0.380 0.016 72);
+  --line-strong: oklch(0.460 0.018 72);
+  --brand:       oklch(0.700 0.145 55);
+  --brand-press: oklch(0.640 0.145 52);
+  --brand-tint:  oklch(0.360 0.060 55);
+  --brand-ink:   oklch(0.200 0.02 60);
+  --ok-tint:     oklch(0.360 0.055 155);
+  --warn-tint:   oklch(0.380 0.060 85);
+  --danger-tint: oklch(0.360 0.050 30);
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.30), 0 2px 6px oklch(0 0 0 / 0.28);
+  --shadow-2: 0 2px 4px oklch(0 0 0 / 0.34), 0 12px 28px oklch(0 0 0 / 0.40);
+}
