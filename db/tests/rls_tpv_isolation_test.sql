@@ -7,8 +7,9 @@
 -- Qué verifica:
 --   Que las políticas RLS de 20260713000002_tpv_rls.up.sql aíslan totalmente
 --   dos salones (A y B): NINGÚN salón puede LEER, INSERTAR, ACTUALIZAR ni
---   BORRAR datos TPV de otro salón, en las 6 tablas (sesiones_caja, metodos_pago,
---   ventas/tickets, lineas_ticket, pagos, facturas).
+--   BORRAR datos TPV de otro salón, en las 7 tablas (sesiones_caja,
+--   movimientos_caja, metodos_pago, ventas/tickets, lineas_ticket, pagos,
+--   facturas).
 --
 -- Cómo ejecutarlo (requiere las migraciones 0001 y 0002 ya aplicadas):
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/rls_tpv_isolation_test.sql
@@ -50,6 +51,7 @@ $$;
 GRANT USAGE ON SCHEMA public TO tpv_rls_tester;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
     public.tpv_sesiones_caja,
+    public.tpv_movimientos_caja,
     public.tpv_metodos_pago,
     public.tpv_ventas,
     public.tpv_lineas_ticket,
@@ -92,6 +94,8 @@ INSERT INTO public.tpv_pagos (id, venta_id, salon_id, metodo_pago_id, sesion_caj
     ('55555555-0000-0000-0000-0000000000a1', '33333333-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-0000-0000-0000-0000000000a1', '22222222-0000-0000-0000-0000000000a1', 50);
 INSERT INTO public.tpv_facturas (id, salon_id, venta_id, total) VALUES
     ('66666666-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '33333333-0000-0000-0000-0000000000a1', 50);
+INSERT INTO public.tpv_movimientos_caja (id, sesion_caja_id, salon_id, tipo, importe, motivo) VALUES
+    ('77777777-0000-0000-0000-0000000000a1', '22222222-0000-0000-0000-0000000000a1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'entrada', 20, 'Aporte de cambio A');
 
 -- --- Datos TPV del salón B --------------------------------------------------
 INSERT INTO public.tpv_metodos_pago (id, salon_id, codigo, nombre) VALUES
@@ -106,6 +110,8 @@ INSERT INTO public.tpv_pagos (id, venta_id, salon_id, metodo_pago_id, sesion_caj
     ('55555555-0000-0000-0000-0000000000b1', '33333333-0000-0000-0000-0000000000b1', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '11111111-0000-0000-0000-0000000000b1', '22222222-0000-0000-0000-0000000000b1', 80);
 INSERT INTO public.tpv_facturas (id, salon_id, venta_id, total) VALUES
     ('66666666-0000-0000-0000-0000000000b1', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '33333333-0000-0000-0000-0000000000b1', 80);
+INSERT INTO public.tpv_movimientos_caja (id, sesion_caja_id, salon_id, tipo, importe, motivo) VALUES
+    ('77777777-0000-0000-0000-0000000000b1', '22222222-0000-0000-0000-0000000000b1', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'salida', 15, 'Pago a mensajero B');
 
 RESET app.current_user_id;
 
@@ -120,7 +126,7 @@ DECLARE
     n_a   bigint;
     n_b   bigint;
     tablas text[] := ARRAY[
-        'tpv_sesiones_caja','tpv_metodos_pago','tpv_ventas',
+        'tpv_sesiones_caja','tpv_movimientos_caja','tpv_metodos_pago','tpv_ventas',
         'tpv_lineas_ticket','tpv_pagos','tpv_facturas'
     ];
     t     text;
@@ -243,6 +249,7 @@ BEGIN
       + (SELECT count(*) FROM public.tpv_pagos)
       + (SELECT count(*) FROM public.tpv_facturas)
       + (SELECT count(*) FROM public.tpv_sesiones_caja)
+      + (SELECT count(*) FROM public.tpv_movimientos_caja)
       + (SELECT count(*) FROM public.tpv_metodos_pago)
       + (SELECT count(*) FROM public.tpv_lineas_ticket)
       INTO total;

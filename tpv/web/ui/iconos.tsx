@@ -110,3 +110,52 @@ export const IconoRayo = (p: Props) => (
     <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
   </Base>
 );
+
+// -- Caja (sub-5) -------------------------------------------------------------
+
+/** Cajón de caja registradora (apertura / módulo de caja). */
+export const IconoCajon = (p: Props) => (
+  <Base {...p}>
+    <path d="M3 10.5 5.5 5h13L21 10.5M3 10.5V18a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-7.5M3 10.5h18" />
+    <path d="M10 14h4" />
+  </Base>
+);
+
+/** Candado cerrado (sesión de caja cerrada). */
+export const IconoCandado = (p: Props) => (
+  <Base {...p}>
+    <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+    <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+  </Base>
+);
+
+/** Flecha entrante (entrada de efectivo). */
+export const IconoEntrada = (p: Props) => (
+  <Base {...p}>
+    <path d="M12 4v10m0 0 4-4m-4 4-4-4" />
+    <path d="M5 20h14" />
+  </Base>
+);
+
+/** Flecha saliente (salida de efectivo). */
+export const IconoSalida = (p: Props) => (
+  <Base {...p}>
+    <path d="M12 20V10m0 0 4 4m-4-4-4 4" />
+    <path d="M5 4h14" />
+  </Base>
+);
+
+/** Balanza (arqueo / cuadre de caja). */
+export const IconoBalanza = (p: Props) => (
+  <Base {...p}>
+    <path d="M12 3v18M7 21h10M4.5 7h15M12 4l-7 3 3 6a3 3 0 0 1-6 0l3-6M12 4l7 3-3 6a3 3 0 0 0 6 0l-3-6" />
+  </Base>
+);
+
+/** Reloj (marca temporal de apertura/cierre). */
+export const IconoReloj = (p: Props) => (
+  <Base {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Base>
+);

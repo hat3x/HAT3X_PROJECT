@@ -66,5 +66,37 @@ export type {
   Descuento,
 } from './carritoReducer';
 
+// -- Caja (sub-5) -------------------------------------------------------------
+// Orquestador del módulo de caja (montar sólo esto, junto a caja.css):
+//   import 'tpv/web/ui/caja.css';
+//   import { PanelCaja } from 'tpv/web/ui';
+export { PanelCaja } from './PanelCaja';
+export type { PanelCajaProps } from './PanelCaja';
+
+// Componentes de caja (composición a medida)
+export { AbrirCajaForm } from './AbrirCajaForm';
+export type { AbrirCajaFormProps } from './AbrirCajaForm';
+export { MovimientoCajaForm } from './MovimientoCajaForm';
+export type { MovimientoCajaFormProps } from './MovimientoCajaForm';
+export { MovimientosLista } from './MovimientosLista';
+export type { MovimientosListaProps } from './MovimientosLista';
+export { ResumenCobros } from './ResumenCobros';
+export type { ResumenCobrosProps } from './ResumenCobros';
+export { ArqueoBanda } from './ArqueoBanda';
+export type { ArqueoBandaProps } from './ArqueoBanda';
+export { ArqueoCierre } from './ArqueoCierre';
+export type { ArqueoCierreProps } from './ArqueoCierre';
+export { HistorialCajas } from './HistorialCajas';
+export type { HistorialCajasProps } from './HistorialCajas';
+
 // Formateo
-export { euros, numero, porcentaje, hora, numeroTicket } from './formato';
+export {
+  euros,
+  numero,
+  porcentaje,
+  hora,
+  numeroTicket,
+  fecha,
+  fechaHora,
+  eurosConSigno,
+} from './formato';

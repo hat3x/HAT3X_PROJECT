@@ -89,6 +89,16 @@ Integración con la agenda/reservas (sub-7):
 | `tpv-crear-ticket-desde-reserva` | `crearTicketDesdeReservaSchema` | Convierte una reserva **completada** en un ticket precargado (servicio + cliente). Idempotente: si la reserva ya tiene ticket vivo lo devuelve (`200`, `ya_existia:true`); si lo crea, `201`. Respuesta `TicketDesdeReserva` = `{ ticket, ya_existia }`. |
 | `tpv-obtener-reserva-cobro` | `obtenerReservaCobroSchema` | Estado de cobro de una reserva (enlace bidireccional). Respuesta `ReservaCobro`. `200`. |
 
+Caja (sub-5) — depende de la migración `20260713000004_tpv_caja` (tabla `tpv_movimientos_caja` + RLS). Respuesta común `CajaCompleta` = `{ sesion, movimientos, arqueo, resumen }`:
+
+| Función | Cuerpo (Zod) | Efecto |
+|---|---|---|
+| `tpv-abrir-caja` | `abrirCajaSchema` | Abre la sesión de caja del salón con un fondo inicial. Máx. **una** sesión abierta por salón; si ya hay, `CAJA_YA_ABIERTA`. `201`. |
+| `tpv-movimiento-caja` | `movimientoCajaSchema` | Registra un movimiento manual de efectivo (`entrada`/`salida`) en la sesión abierta. `salon_id` se toma de la sesión. `201`. |
+| `tpv-cerrar-caja` | `cerrarCajaSchema` | Cierra con arqueo: el cajero aporta el efectivo **real**; el servidor calcula el **teórico** (fondo + efectivo + movimientos) y el **descuadre**. `200`. |
+| `tpv-obtener-caja` | `obtenerCajaSchema` | Caja por `sesion_caja_id` **o** la sesión abierta de un `salon_id` (centinela `{ sesion: null }` si no hay). `200`. |
+| `tpv-listar-cajas` | `listarSesionesCajaSchema` | Histórico de sesiones del salón con total cobrado y nº de tickets (`ResumenSesion[]`). `200`. |
+
 ### Cálculo de IVA y totales
 
 Convención España, `precio_unitario` = base **sin** IVA:
@@ -210,6 +220,8 @@ abrir.mutate(
 | `TICKET_NO_FACTURABLE` | 409 | Ticket anulado/reembolsado o sin líneas. |
 | `RESERVA_NO_COMPLETADA` | 409 | La reserva no está en un estado cobrable (sub-7). |
 | `INTEGRACION_RESERVAS` | 422 | Falta la vista de integración (migración 0005 no aplicada) (sub-7). |
+| `CAJA_YA_ABIERTA` | 409 | Ya hay una sesión de caja abierta en el salón (sub-5). |
+| `CAJA_NO_ABIERTA` | 409 | Movimiento/cierre sobre una sesión de caja ya cerrada (sub-5). |
 | `CONFLICTO` | 409 | Violación de constraint (p.ej. ya facturado). |
 
 ## Uso desde la web (TanStack Query)
@@ -268,6 +280,11 @@ supabase functions deploy tpv-emitir-factura     --import-map tpv/functions/impo
 supabase functions deploy tpv-obtener-factura    --import-map tpv/functions/import_map.json
 supabase functions deploy tpv-crear-ticket-desde-reserva --import-map tpv/functions/import_map.json
 supabase functions deploy tpv-obtener-reserva-cobro      --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-abrir-caja        --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-movimiento-caja   --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-cerrar-caja       --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-obtener-caja      --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-listar-cajas      --import-map tpv/functions/import_map.json
 ```
 
 > **Deno/Supabase importa `shared/` con extensión `.ts`; el bundler de la web lo

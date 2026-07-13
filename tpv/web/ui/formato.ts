@@ -49,3 +49,45 @@ export function hora(iso: string): string {
 export function numeroTicket(n: number): string {
   return `#${String(n).padStart(4, '0')}`;
 }
+
+const fmtFecha = new Intl.DateTimeFormat('es-ES', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
+const fmtFechaHora = new Intl.DateTimeFormat('es-ES', {
+  day: '2-digit',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** Fecha corta "13 jul 2026" desde un ISO-8601. */
+export function fecha(iso: string): string {
+  try {
+    return fmtFecha.format(new Date(iso));
+  } catch {
+    return '';
+  }
+}
+
+/** Fecha + hora "13 jul, 18:42" desde un ISO-8601 (para el histórico de caja). */
+export function fechaHora(iso: string): string {
+  try {
+    return fmtFechaHora.format(new Date(iso));
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Importe con signo explícito para descuadres/movimientos: 3.5 → "+3,50 €",
+ * −5 → "−5,00 €", 0 → "0,00 €". Usa el menos tipográfico (−), no el guion.
+ */
+export function eurosConSigno(valor: number | null | undefined): string {
+  const n = Number.isFinite(valor as number) ? (valor as number) : 0;
+  if (n > 0) return `+${euros(n)}`;
+  if (n < 0) return `−${euros(Math.abs(n))}`;
+  return euros(0);
+}
