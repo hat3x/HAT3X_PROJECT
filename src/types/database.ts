@@ -227,6 +227,7 @@ export interface Database {
         Row: {
           id: string;
           salon_id: string;
+          location_id: string;
           user_id: string | null;
           full_name: string;
           email: string | null;
@@ -240,6 +241,7 @@ export interface Database {
         Insert: {
           id?: string;
           salon_id: string;
+          location_id: string;
           user_id?: string | null;
           full_name: string;
           email?: string | null;
@@ -253,6 +255,7 @@ export interface Database {
         Update: {
           id?: string;
           salon_id?: string;
+          location_id?: string;
           user_id?: string | null;
           full_name?: string;
           email?: string | null;
@@ -270,6 +273,13 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "salons";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "professionals_location_id_fkey";
+            columns: ["location_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "locations";
+            referencedColumns: ["id", "salon_id"];
           },
         ];
       };
