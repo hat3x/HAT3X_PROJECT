@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path"
 import { readFileSync, existsSync } from "node:fs"
+import { randomUUID } from "node:crypto"
 import { getSupabaseClient } from "../database/client.js"
 import { publishEvent } from "../state-bus/publisher.js"
 import { EVENT_TYPES } from "../state-bus/event-types.js"
@@ -60,7 +61,9 @@ async function defaultLoadCompletedSubtasks(taskId: string): Promise<Set<string>
 }
 
 async function defaultInsertCheckpoint(input: { taskId: string; reason: string }): Promise<void> {
+  // hat3x_checkpoints.id es TEXT PRIMARY KEY sin default en la DB — hay que generarlo aquí.
   const { error } = await getSupabaseClient().from("hat3x_checkpoints").insert({
+    id: randomUUID(),
     task_id: input.taskId,
     after_phase: 0,
     reason: input.reason,
