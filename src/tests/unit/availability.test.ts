@@ -1,0 +1,240 @@
+import { describe, it, expect } from "vitest";
+import {
+  generateSlots,
+  mergeSlotsByProfessional,
+  type ScheduleSlot,
+  type BusyInterval,
+} from "@/lib/booking/availability";
+
+// Fixed reference time: Monday 2025-06-09 08:00 UTC (10:00 Europe/Madrid CEST)
+const NOW = new Date("2025-06-09T08:00:00.000Z");
+const DATE = "2025-06-09"; // Lunes (weekday 1)
+const TZ = "Europe/Madrid";
+
+const MONDAY_SCHEDULE: ScheduleSlot[] = [
+  { weekday: 1, start_time: "09:00:00", end_time: "17:00:00" },
+];
+
+describe("generateSlots", () => {
+  it("returns empty array when serviceDurationMinutes <= 0", () => {
+    expect(
+      generateSlots({
+        date: DATE,
+        timeZone: TZ,
+        serviceDurationMinutes: 0,
+        schedules: MONDAY_SCHEDULE,
+        busy: [],
+        now: NOW,
+      }),
+    ).toEqual([]);
+  });
+
+  it("returns slots within working hours", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: MONDAY_SCHEDULE,
+      busy: [],
+      slotIntervalMinutes: 60,
+      minLeadMinutes: 0,
+      now: new Date("2025-06-09T00:00:00.000Z"), // midnight — all slots in future
+    });
+
+    // 09:00–17:00 with 60min service & 60min interval → 8 slots (09:00, 10:00 … 16:00)
+    expect(slots.length).toBe(8);
+    // All slots are ISO strings
+    slots.forEach((s) => {
+      expect(s.startsAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(s.endsAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+    // Each slot's endsAt is exactly 60 minutes after startsAt
+    slots.forEach((s) => {
+      const diff =
+        new Date(s.endsAt).getTime() - new Date(s.startsAt).getTime();
+      expect(diff).toBe(60 * 60 * 1000);
+    });
+  });
+
+  it("excludes slots that start before earliest (minLeadMinutes)", () => {
+    // now = 10:00 Madrid time, minLead = 30min → earliest = 10:30 Madrid
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE,
+      busy: [],
+      slotIntervalMinutes: 30,
+      minLeadMinutes: 30,
+      now: NOW, // 08:00 UTC = 10:00 CEST
+    });
+
+    // 09:00–17:00 with 30min service, 30min interval, earliest = 10:30 Madrid
+    // Excluded: 09:00, 09:30, 10:00 → first allowed = 10:30
+    const firstStart = slots[0]?.startsAt;
+    expect(firstStart).toBeDefined();
+    const firstHour = new Date(firstStart!).getUTCHours();
+    // 10:30 CEST = 08:30 UTC
+    expect(firstHour).toBe(8);
+    expect(new Date(firstStart!).getUTCMinutes()).toBe(30);
+  });
+
+  it("returns empty when day has no schedule", () => {
+    // MONDAY_SCHEDULE only has weekday 1; DATE = Mon so passing a Tue schedule gives nothing
+    const tuesdaySchedule: ScheduleSlot[] = [
+      { weekday: 2, start_time: "09:00:00", end_time: "17:00:00" },
+    ];
+    const slots = generateSlots({
+      date: DATE, // Monday
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: tuesdaySchedule,
+      busy: [],
+      now: new Date("2025-06-09T00:00:00.000Z"),
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it("respects exception: closed day", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE,
+      exception: { is_available: false, start_time: null, end_time: null },
+      busy: [],
+      now: new Date("2025-06-09T00:00:00.000Z"),
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it("respects exception: custom hours override schedule", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE, // 09:00–17:00
+      exception: {
+        is_available: true,
+        start_time: "10:00:00",
+        end_time: "12:00:00",
+      },
+      busy: [],
+      slotIntervalMinutes: 30,
+      now: new Date("2025-06-09T00:00:00.000Z"),
+    });
+
+    // 10:00–12:00 with 30min service & 30min interval → 4 slots
+    expect(slots.length).toBe(4);
+    // First slot: 10:00 Madrid = 08:00 UTC
+    expect(new Date(slots[0]!.startsAt).getUTCHours()).toBe(8);
+    expect(new Date(slots[0]!.startsAt).getUTCMinutes()).toBe(0);
+  });
+
+  it("excludes slots overlapping busy intervals", () => {
+    // Busy 10:00–11:00 Madrid (08:00–09:00 UTC)
+    const busy: BusyInterval[] = [
+      {
+        starts_at: "2025-06-09T08:00:00.000Z",
+        ends_at: "2025-06-09T09:00:00.000Z",
+      },
+    ];
+
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: MONDAY_SCHEDULE,
+      busy,
+      slotIntervalMinutes: 60,
+      now: new Date("2025-06-09T00:00:00.000Z"),
+    });
+
+    // 10:00 Madrid = 08:00 UTC → blocked
+    const startsAtUtcHours = slots.map((s) => new Date(s.startsAt).getUTCHours());
+    expect(startsAtUtcHours).not.toContain(8);
+  });
+
+  it("does not generate slot that would end after working hours", () => {
+    // 30min service, 15min interval → last valid start is 16:30 (end 17:00)
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE, // ends 17:00
+      busy: [],
+      slotIntervalMinutes: 15,
+      now: new Date("2025-06-09T00:00:00.000Z"),
+    });
+
+    const lastSlot = slots[slots.length - 1];
+    expect(lastSlot).toBeDefined();
+    // 16:30 Madrid = 14:30 UTC
+    expect(new Date(lastSlot!.startsAt).getUTCHours()).toBe(14);
+    expect(new Date(lastSlot!.startsAt).getUTCMinutes()).toBe(30);
+  });
+
+  it("handles multiple schedule ranges in a day", () => {
+    const splitSchedule: ScheduleSlot[] = [
+      { weekday: 1, start_time: "09:00:00", end_time: "13:00:00" },
+      { weekday: 1, start_time: "15:00:00", end_time: "17:00:00" },
+    ];
+
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: splitSchedule,
+      busy: [],
+      slotIntervalMinutes: 60,
+      now: new Date("2025-06-09T00:00:00.000Z"),
+    });
+
+    // Morning: 09:00, 10:00, 11:00, 12:00 → 4 slots
+    // Afternoon: 15:00, 16:00 → 2 slots
+    expect(slots.length).toBe(6);
+  });
+});
+
+describe("mergeSlotsByProfessional", () => {
+  const slotA = {
+    startsAt: "2025-06-09T09:00:00.000Z",
+    endsAt: "2025-06-09T10:00:00.000Z",
+  };
+  const slotB = {
+    startsAt: "2025-06-09T10:00:00.000Z",
+    endsAt: "2025-06-09T11:00:00.000Z",
+  };
+
+  it("returns empty when no professionals", () => {
+    expect(mergeSlotsByProfessional([])).toEqual([]);
+  });
+
+  it("merges slots from single professional", () => {
+    const result = mergeSlotsByProfessional([
+      { professionalId: "prof-1", slots: [slotA, slotB] },
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ ...slotA, professionalId: "prof-1" });
+  });
+
+  it("deduplicates overlapping start times, keeping first professional", () => {
+    const result = mergeSlotsByProfessional([
+      { professionalId: "prof-1", slots: [slotA] },
+      { professionalId: "prof-2", slots: [slotA, slotB] },
+    ]);
+    // slotA appears from both professionals, only first is kept
+    expect(result).toHaveLength(2);
+    const foundA = result.find((s) => s.startsAt === slotA.startsAt);
+    expect(foundA?.professionalId).toBe("prof-1");
+  });
+
+  it("is sorted by startsAt ascending", () => {
+    const result = mergeSlotsByProfessional([
+      { professionalId: "prof-2", slots: [slotB] },
+      { professionalId: "prof-1", slots: [slotA] },
+    ]);
+    expect(result[0]?.startsAt).toBe(slotA.startsAt);
+    expect(result[1]?.startsAt).toBe(slotB.startsAt);
+  });
+});

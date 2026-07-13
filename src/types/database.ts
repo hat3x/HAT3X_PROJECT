@@ -585,6 +585,57 @@ export interface Database {
           },
         ];
       };
+      appointment_blocks: {
+        Row: {
+          id: string;
+          appointment_id: string;
+          professional_id: string;
+          salon_id: string;
+          /** tstzrange devuelto como literal PostgreSQL, ej: ["2026-01-01 10:00:00+00","2026-01-01 10:15:00+00") */
+          occupied_range: string;
+          phase: "application" | "post_exposure";
+        };
+        // Gestionada exclusivamente por trigger SECURITY DEFINER; nunca se inserta desde el cliente.
+        Insert: {
+          id?: string;
+          appointment_id: string;
+          professional_id: string;
+          salon_id: string;
+          occupied_range: string;
+          phase: "application" | "post_exposure";
+        };
+        Update: {
+          id?: string;
+          appointment_id?: string;
+          professional_id?: string;
+          salon_id?: string;
+          occupied_range?: string;
+          phase?: "application" | "post_exposure";
+        };
+        Relationships: [
+          {
+            foreignKeyName: "appointment_blocks_appointment_id_fkey";
+            columns: ["appointment_id"];
+            isOneToOne: false;
+            referencedRelation: "appointments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "appointment_blocks_professional_id_fkey";
+            columns: ["professional_id"];
+            isOneToOne: false;
+            referencedRelation: "professionals";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "appointment_blocks_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       appointment_history: {
         Row: {
           id: number;

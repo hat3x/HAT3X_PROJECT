@@ -18,9 +18,6 @@ import type {
   PublicSlot,
 } from "@/lib/booking/types";
 
-/** Estados de cita que ocupan agenda (bloquean disponibilidad). */
-const ACTIVE_STATUSES = ["pending", "confirmed"] as const;
-
 /** Error de dominio con código HTTP asociado, para respuestas homogéneas. */
 export class BookingError extends Error {
   constructor(
@@ -188,17 +185,34 @@ async function resolveProfessionals(
   return offering;
 }
 
+/**
+ * Convierte el literal tstzrange devuelto por PostgreSQL a un BusyInterval.
+ * Formato típico: ["2026-01-01 10:00:00+00","2026-01-01 10:15:00+00")
+ */
+function parseTstzRange(range: string): BusyInterval {
+  const inner = range.slice(1, range.length - 1); // quitar '[' y ')'
+  const commaIdx = inner.indexOf(",");
+  const rawLower = inner.slice(0, commaIdx).trim().replace(/^"|"$/g, "");
+  const rawUpper = inner.slice(commaIdx + 1).trim().replace(/^"|"$/g, "");
+  // "2026-01-01 10:00:00+00" → "2026-01-01T10:00:00+00:00" (ISO 8601 estricto)
+  const normalize = (ts: string) =>
+    ts.replace(" ", "T").replace(/\+00$/, "+00:00");
+  return { starts_at: normalize(rawLower), ends_at: normalize(rawUpper) };
+}
+
 /** Huecos de un profesional para un día. */
 async function slotsForProfessional(
   admin: AdminClient,
   salon: SalonConfig,
   professionalId: string,
-  serviceDurationMinutes: number,
+  applicationMin: number,
+  exposureMin: number,
+  postExposureMin: number,
   date: string,
 ): Promise<AvailableSlot[]> {
   const { startIso, endIso } = dayBoundsUtc(date, salon.timezone);
 
-  const [schedulesRes, exceptionRes, busyRes] = await Promise.all([
+  const [schedulesRes, exceptionRes, blocksRes] = await Promise.all([
     admin
       .from("professional_schedules")
       .select("weekday, start_time, end_time")
@@ -211,29 +225,34 @@ async function slotsForProfessional(
       .eq("professional_id", professionalId)
       .eq("exception_date", date)
       .maybeSingle(),
+    // Solo bloques físicos de ocupación del profesional (application + post_exposure).
+    // El tramo de exposure de otras citas NO aparece aquí y por tanto no bloquea.
     admin
-      .from("appointments")
-      .select("starts_at, ends_at")
+      .from("appointment_blocks")
+      .select("occupied_range")
       .eq("salon_id", salon.id)
       .eq("professional_id", professionalId)
-      .in("status", ACTIVE_STATUSES)
-      .gte("starts_at", startIso)
-      .lt("starts_at", endIso),
+      .filter("occupied_range", "ov", `["${startIso}","${endIso}")`),
   ]);
 
-  if (schedulesRes.error || busyRes.error) {
+  if (schedulesRes.error || blocksRes.error) {
     throw new BookingError(500, "Error al cargar la disponibilidad.");
   }
 
-  const busy: BusyInterval[] = (busyRes.data ?? []).map((a) => ({
-    starts_at: a.starts_at,
-    ends_at: a.ends_at,
-  }));
+  const busy: BusyInterval[] = (blocksRes.data ?? []).map((b) =>
+    parseTstzRange(b.occupied_range),
+  );
+
+  // Duración de bloqueo efectivo: solo las fases activas que generan bloques.
+  const blockingMin = applicationMin + postExposureMin;
+  // Duración total: encaje en horario laboral y endsAt del hueco devuelto al cliente.
+  const totalMin = applicationMin + exposureMin + postExposureMin;
 
   return generateSlots({
     date,
     timeZone: salon.timezone,
-    serviceDurationMinutes,
+    serviceDurationMinutes: blockingMin,
+    appointmentDurationMinutes: totalMin,
     schedules: schedulesRes.data ?? [],
     exception: exceptionRes.data ?? null,
     busy,
@@ -253,7 +272,7 @@ export async function getAvailability(
 
   const { data: service, error: serviceError } = await admin
     .from("services")
-    .select("duration_minutes, active")
+    .select("application_min, exposure_min, post_exposure_min, active")
     .eq("salon_id", salon.id)
     .eq("id", serviceId)
     .maybeSingle();
@@ -272,7 +291,15 @@ export async function getAvailability(
   const perProfessional = await Promise.all(
     professionalIds.map(async (id) => ({
       professionalId: id,
-      slots: await slotsForProfessional(admin, salon, id, service.duration_minutes, date),
+      slots: await slotsForProfessional(
+        admin,
+        salon,
+        id,
+        service.application_min,
+        service.exposure_min,
+        service.post_exposure_min,
+        date,
+      ),
     })),
   );
 

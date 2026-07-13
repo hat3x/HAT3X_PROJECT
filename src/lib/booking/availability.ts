@@ -33,13 +33,24 @@ export interface GenerateSlotsInput {
   date: string;
   /** Zona IANA del salón. */
   timeZone: string;
-  /** Duración del servicio en minutos. */
+  /**
+   * Duración efectiva de bloqueo del profesional en minutos
+   * (application_min + post_exposure_min del servicio).
+   * Se usa para la ventana de solapamiento contra appointment_blocks.
+   */
   serviceDurationMinutes: number;
+  /**
+   * Duración total de la cita en minutos
+   * (application_min + exposure_min + post_exposure_min).
+   * Se usa para `lastStart` (encaje en horario laboral) y `endsAt` del hueco.
+   * Si se omite, iguala `serviceDurationMinutes` (comportamiento legacy).
+   */
+  appointmentDurationMinutes?: number;
   /** Horario recurrente del profesional (puede tener varios tramos/día). */
   schedules: ScheduleSlot[];
   /** Excepción de ese día, si existe. */
   exception?: ExceptionSlot | null;
-  /** Citas activas del profesional ese día (UTC). */
+  /** Bloques ocupados del profesional ese día (UTC). Fuente: appointment_blocks. */
   busy: BusyInterval[];
   /** Paso entre inicios de hueco, en minutos (por defecto 15). */
   slotIntervalMinutes?: number;
@@ -81,6 +92,7 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
     date,
     timeZone,
     serviceDurationMinutes,
+    appointmentDurationMinutes,
     schedules,
     exception = null,
     busy,
@@ -88,6 +100,10 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
     minLeadMinutes = 0,
     now = new Date(),
   } = input;
+
+  // totalDuration: duración completa de la cita (para encaje en horario y endsAt).
+  // serviceDurationMinutes: ventana de bloqueo efectivo (para chequeo de solapamiento).
+  const totalDuration = appointmentDurationMinutes ?? serviceDurationMinutes;
 
   if (serviceDurationMinutes <= 0) return [];
 
@@ -124,8 +140,8 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
   const slots: AvailableSlot[] = [];
 
   for (const range of workingRanges) {
-    // El último inicio posible deja sitio a la duración completa.
-    const lastStart = range.end - serviceDurationMinutes;
+    // El último inicio posible deja sitio a la duración total de la cita.
+    const lastStart = range.end - totalDuration;
 
     for (
       let startMin = range.start;
@@ -133,16 +149,19 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
       startMin += slotIntervalMinutes
     ) {
       const startsAt = zonedWallTimeToUtc(date, minutesToTime(startMin), timeZone);
-      const endsAt = new Date(startsAt.getTime() + serviceDurationMinutes * MINUTE_MS);
+      // endsAt refleja el fin real de la cita (duración total).
+      const endsAt = new Date(startsAt.getTime() + totalDuration * MINUTE_MS);
+      // checkEnd: ventana efectiva de bloqueo del profesional para detectar solapamiento.
+      const checkEnd = new Date(startsAt.getTime() + serviceDurationMinutes * MINUTE_MS);
 
       // Descartar huecos pasados o sin la antelación mínima.
       if (startsAt < earliest) continue;
 
-      // Descartar solapes con citas existentes.
+      // Descartar solapamiento con bloques ocupados de appointment_blocks.
       const overlaps = busy.some((b) => {
         const bStart = new Date(b.starts_at).getTime();
         const bEnd = new Date(b.ends_at).getTime();
-        return startsAt.getTime() < bEnd && endsAt.getTime() > bStart;
+        return startsAt.getTime() < bEnd && checkEnd.getTime() > bStart;
       });
       if (overlaps) continue;
 
