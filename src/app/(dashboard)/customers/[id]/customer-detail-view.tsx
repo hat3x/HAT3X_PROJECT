@@ -247,6 +247,8 @@ export function CustomerDetailView({
               birth_date: record.birth_date ?? "",
               notes: record.notes ?? "",
               marketing_consent: record.marketing_consent,
+              tax_id: record.tax_id ?? "",
+              address: record.address ?? "",
             }}
             submitLabel="Guardar cambios"
             pending={updateMutation.isPending}

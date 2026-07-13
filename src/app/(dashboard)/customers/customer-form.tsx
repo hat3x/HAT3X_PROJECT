@@ -16,6 +16,8 @@ export interface CustomerFormDefaults {
   birth_date: string;
   notes: string;
   marketing_consent: boolean;
+  tax_id: string;
+  address: string;
 }
 
 const EMPTY_DEFAULTS: CustomerFormDefaults = {
@@ -25,6 +27,8 @@ const EMPTY_DEFAULTS: CustomerFormDefaults = {
   birth_date: "",
   notes: "",
   marketing_consent: false,
+  tax_id: "",
+  address: "",
 };
 
 interface CustomerFormProps {
@@ -66,6 +70,8 @@ export function CustomerForm({
       birth_date: values.birth_date,
       notes: values.notes,
       marketing_consent: values.marketing_consent,
+      tax_id: values.tax_id,
+      address: values.address,
     });
   }
 
@@ -124,6 +130,37 @@ export function CustomerForm({
           placeholder="Alergias, preferencias, observaciones…"
         />
       </div>
+
+      <fieldset className="grid gap-4 rounded-md border p-4">
+        <legend className="px-1 text-sm font-medium">
+          Datos fiscales{" "}
+          <span className="font-normal text-muted-foreground">(opcional)</span>
+        </legend>
+        <p className="text-xs text-muted-foreground">
+          Solo necesarios si el cliente pide factura completa nominativa. El
+          ticket simplificado no los requiere.
+        </p>
+        <div className="grid gap-2">
+          <Label htmlFor="tax_id">NIF / CIF</Label>
+          <Input
+            id="tax_id"
+            value={values.tax_id}
+            onChange={(e) => update("tax_id", e.target.value)}
+            placeholder="12345678Z"
+            autoComplete="off"
+            maxLength={20}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="address">Dirección fiscal</Label>
+          <Textarea
+            id="address"
+            value={values.address}
+            onChange={(e) => update("address", e.target.value)}
+            placeholder="Calle, número, código postal, ciudad…"
+          />
+        </div>
+      </fieldset>
 
       <label className="flex items-center gap-2 text-sm">
         <input

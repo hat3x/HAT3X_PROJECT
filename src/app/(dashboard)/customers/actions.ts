@@ -23,6 +23,8 @@ function toWritePayload(
     birth_date: values.birth_date ?? null,
     notes: values.notes ?? null,
     marketing_consent: values.marketing_consent,
+    tax_id: values.tax_id ?? null,
+    address: values.address ?? null,
   };
 }
 

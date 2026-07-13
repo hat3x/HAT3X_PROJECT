@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Clock, Scissors, Store, Users } from "lucide-react";
+import { Building2, Clock, Receipt, Scissors, Store, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/ajustes/personal", label: "Personal", icon: Users },
   { href: "/ajustes/horarios", label: "Horarios", icon: Clock },
   { href: "/ajustes/datos", label: "Datos del salón", icon: Store },
+  { href: "/ajustes/fiscal", label: "Datos fiscales", icon: Receipt },
 ];
 
 /**

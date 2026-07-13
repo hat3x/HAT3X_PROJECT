@@ -41,6 +41,10 @@ export const customerSchema = z.object({
     .transform((value) => (value === undefined || value === "" ? undefined : value)),
   notes: optionalText(2000),
   marketing_consent: z.boolean().default(false),
+  // Datos fiscales opcionales — solo necesarios para emitir factura completa
+  // nominativa. El ticket simplificado no los requiere.
+  tax_id: optionalText(20),
+  address: optionalText(1000),
 });
 
 export type CustomerInput = z.input<typeof customerSchema>;
