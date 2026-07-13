@@ -15,6 +15,17 @@ vistas) y enlaza.
 > facturación añade `20260713000003_tpv_facturacion` y la integración
 > `20260713000005_tpv_reservas_integracion`.
 
+## Documentación
+
+| Documento | Para quién | Contenido |
+|---|---|---|
+| **`GUIA-USO.md`** | Personal del salón | Guía sin tecnicismos: abrir/cerrar caja, cobrar (efectivo/tarjeta/mixto), emitir factura, avisos habituales. |
+| **`MANTENIMIENTO.md`** | Responsable del salón · HAT3X | Troubleshooting de **descuadres de caja** y **numeración de facturas**, errores del módulo, comprobaciones de salud y cuándo escalar. |
+| **`README.md`** (este) | Técnico | Arquitectura, endpoints, cálculo de IVA/totales, despliegue. |
+| **`tests/README.md`** | Técnico/QA | Suite de pruebas (unitarias, integración, e2e, SQL). |
+| **`web/ui/README.md`** | Frontend | Componentes de UI tablet-first del TPV. |
+| **`.env.example`** | DevOps | Variables de entorno (solo `SUPABASE_URL` + `SUPABASE_ANON_KEY`). |
+
 ## Estructura
 
 ```
