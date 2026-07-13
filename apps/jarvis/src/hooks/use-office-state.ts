@@ -36,7 +36,11 @@ export function useOfficeState(): OfficeStateResult {
         const verticals: Record<string, string> = {};
         for (const a of roster.agents) {
           idle.set(a.id, { agentId: a.id, status: 'idle', bubble: null, taskId: null, lastEventAt: '' });
-          if (a.verticals[0] !== undefined) verticals[a.id] = a.verticals[0];
+          // 'webs-apps' es la carpeta cajón-de-sastre; si el agente tiene otra
+          // vertical más específica (testing, security...), esa manda para la zona.
+          const specific = a.verticals.find((v) => v !== 'webs-apps');
+          const chosen = specific ?? a.verticals[0];
+          if (chosen !== undefined) verticals[a.id] = chosen;
         }
         setRosterIdle(idle);
         setVerticalByAgent(verticals);
@@ -46,11 +50,14 @@ export function useOfficeState(): OfficeStateResult {
     void supabase
       .from('bus_events')
       .select('*')
-      .order('created_at', { ascending: true })
+      // Los 200 eventos MÁS RECIENTES (descending), no los más antiguos: si no,
+      // la vista se queda anclada a tareas viejas y nunca muestra la actividad real.
+      .order('created_at', { ascending: false })
       .limit(200)
       .then(({ data }) => {
         if (cancelled || data == null) return;
-        const evs = (data as Record<string, unknown>[]).map(rowToOfficeEvent);
+        // Invertir a orden cronológico (viejo→nuevo) para que el reducer aplique bien.
+        const evs = (data as Record<string, unknown>[]).map(rowToOfficeEvent).reverse();
         setEvents(evs);
         setAgents(evs.reduce((m, e) => reduceOfficeState(m, e), new Map<string, OfficeAgent>()));
       });
