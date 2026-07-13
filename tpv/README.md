@@ -275,6 +275,11 @@ const { data: fac } = useFactura(supabase, ventaId);
 
 ## Ejecutar / desplegar
 
+> **Despliegue a producción:** el runbook completo (orden de migraciones
+> aditivas, Edge Functions, Vercel, **feature flag por salón** y **verificación
+> post-deploy** de aislamiento y aditividad) está en **`tpv/DEPLOY.md`**. CI en
+> `.github/workflows/tpv-ci.yml`.
+
 ```bash
 # Suite completa TPV (sub-8): unitarias + integración + e2e (+ SQL si hay BD).
 # Ver tpv/tests/README.md para el detalle.
