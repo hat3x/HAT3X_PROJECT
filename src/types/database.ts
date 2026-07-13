@@ -52,6 +52,12 @@ export type PosSessionStatus = "open" | "closed";
 /** Tipo derivado (generado) de una línea de venta. */
 export type PosSaleLineItemKind = "service" | "product" | "manual";
 
+/**
+ * Tipo de factura Veri*factu (registro de facturación de alta).
+ * `ticket` = simplificada (F2, sin receptor) | `completa` = ordinaria (F1, con receptor).
+ */
+export type PosInvoiceType = "ticket" | "completa";
+
 export interface Database {
   public: {
     Tables: {
@@ -1273,6 +1279,75 @@ export interface Database {
           },
         ];
       };
+      pos_invoices: {
+        Row: {
+          id: string;
+          salon_id: string;
+          sale_id: string | null; // venta de origen (opcional)
+          invoice_type: PosInvoiceType;
+          series: string;
+          sequential_number: number; // bigint (correlativo por serie)
+          full_number: string; // generado: serie-número (read-only)
+          issued_at: string; // fecha de expedición
+          currency: string;
+          tax_breakdown: Json; // array [{vat_rate, base_cents, cuota_cents, total_cents}]
+          taxable_base_cents: number; // Σ bases imponibles
+          tax_cents: number; // Σ cuotas de IVA
+          total_cents: number; // = taxable_base_cents + tax_cents
+          issuer_data: Json | null; // snapshot emisor {tax_id, legal_name, fiscal_address}
+          recipient_data: Json | null; // datos_receptor {tax_id, name, address}; null en 'ticket'
+          hash_algorithm: string; // 'SHA-256'
+          current_hash: string; // hash_actual (SHA-256 hex, 64)
+          previous_hash: string | null; // hash_anterior_64 (null = primer registro)
+          created_at: string; // marca temporal de generación del registro
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          sale_id?: string | null;
+          invoice_type?: PosInvoiceType;
+          series: string;
+          sequential_number: number;
+          // full_number es generada: omitir en Insert
+          issued_at?: string;
+          currency?: string;
+          tax_breakdown: Json;
+          taxable_base_cents: number;
+          tax_cents: number;
+          total_cents: number;
+          issuer_data?: Json | null;
+          recipient_data?: Json | null;
+          hash_algorithm?: string;
+          current_hash: string;
+          previous_hash?: string | null;
+          created_at?: string;
+        };
+        // Registro inmutable: sin UPDATE (el trigger de BD aborta cualquier modificación).
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "pos_invoices_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pos_invoices_sale_id_fkey";
+            columns: ["sale_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "pos_sales";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_invoices_chain_fkey";
+            columns: ["salon_id", "previous_hash"];
+            isOneToOne: false;
+            referencedRelation: "pos_invoices";
+            referencedColumns: ["salon_id", "current_hash"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;
@@ -1284,6 +1359,7 @@ export interface Database {
       pos_sale_status: PosSaleStatus;
       pos_payment_method: PosPaymentMethod;
       pos_session_status: PosSessionStatus;
+      pos_invoice_type: PosInvoiceType;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -1323,6 +1399,7 @@ export type PosSession = Tables<"pos_sessions">;
 export type PosSale = Tables<"pos_sales">;
 export type PosSaleLine = Tables<"pos_sale_lines">;
 export type PosPayment = Tables<"pos_payments">;
+export type PosInvoice = Tables<"pos_invoices">;
 
 // Phase helpers -----------------------------------------------------------------
 

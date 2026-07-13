@@ -400,3 +400,71 @@ enteros (§1.6).
 > Convive con `trg_salons_register_owner` en el mismo evento AFTER INSERT de
 > `salons` (independientes). Además, `updated_at` automático en
 > `pos_payment_methods`, `pos_sessions`, `pos_sales`, `pos_sale_lines`.
+
+---
+
+## 13. Facturación Veri*factu (migración `verifactu_invoices`, `20260714100000`)
+
+Registro de facturación **inmutable y encadenado por huella** conforme al
+Reglamento Veri*factu (RD 1007/2023), operando en **modo NO VERI*FACTU**: los
+registros NO se remiten en tiempo real a la AEAT, pero el software conserva la
+cadena inalterable exigida. **1 tabla** (`pos_invoices`, mapea `tpv_facturas`) +
+**1 enum** + **1 función/trigger de inmutabilidad**. Sigue el prefijo `pos_` del
+módulo TPV (§12) y las convenciones de §1.
+
+### 13.1 Enum nuevo (`public`)
+
+- `pos_invoice_type (ticket | completa)` — `ticket` = simplificada (Veri*factu
+  **F2**, sin receptor); `completa` = ordinaria (**F1**, con receptor identificado).
+
+### 13.2 Tabla `pos_invoices`
+
+| Grupo | Columnas | Notas |
+|---|---|---|
+| Identidad | `id` uuid PK, `salon_id` (FK cascade), `sale_id` (opcional) | `sale_id` FK compuesta a `pos_sales`, `on delete set null (sale_id)`: el registro fiscal sobrevive a la venta. |
+| Numeración | `invoice_type`, `series varchar(60)`, `sequential_number bigint >0`, `full_number` (**generada** `series-número`) | Unicidad `pos_invoices_series_number_key (salon_id, series, sequential_number)`. |
+| Importes | `issued_at` (fecha expedición), `currency`, `tax_breakdown jsonb`, `taxable_base_cents`, `tax_cents`, `total_cents` | `tax_breakdown` = array `[{vat_rate, base_cents, cuota_cents, total_cents}]` (varios tipos de IVA por documento). Agregados en céntimos (§1.6). |
+| Snapshots | `issuer_data jsonb`, `recipient_data jsonb` | Copia inmutable de emisor/receptor. `recipient_data` NULL en `ticket`, obligatorio en `completa`. |
+| Huella (cadena) | `hash_algorithm` (def. `SHA-256`), `current_hash varchar(64)`, `previous_hash varchar(64)` | `current_hash`/`previous_hash` = SHA-256 hex (64). `previous_hash` NULL solo en el primer registro. |
+| Sello | `created_at` | Marca temporal de generación del registro (≠ `issued_at`). **SIN `updated_at`** (inmutable). |
+
+**Constraints (checks):** `total_consistency` (`total = base + cuota`);
+`tax_breakdown_is_array`; `current_hash_hex` / `previous_hash_hex`
+(`^[0-9A-Fa-f]{64}$`); `recipient_required` (`completa` ⇒ `recipient_data not
+null`). **Únicos:** `(salon_id, series, sequential_number)`, `(salon_id,
+current_hash)`, `(id, salon_id)` (clave de apoyo).
+
+**FKs compuestas:**
+
+| Columnas | Destino | ON DELETE |
+|---|---|---|
+| `(sale_id, salon_id)` | `pos_sales(id, salon_id)` | set null (sale_id) |
+| `(salon_id, previous_hash)` | `pos_invoices(salon_id, current_hash)` | — (no action) |
+
+> La **FK de encadenamiento** `(salon_id, previous_hash) → (salon_id,
+> current_hash)` obliga a que cada `previous_hash` corresponda a un registro real
+> de la cadena del mismo salón (o sea NULL en el primero).
+
+### 13.3 Inmutabilidad (requisito legal)
+
+| Trigger | Evento | Función | Efecto |
+|---|---|---|---|
+| `trg_pos_invoices_immutable` | BEFORE UPDATE OR DELETE | `app.prevent_pos_invoice_mutation()` | `raise exception` (`restrict_violation`): aborta toda modificación/borrado. |
+
+> **Defensa en profundidad:** el trigger bloquea a **todos** los roles (incluido
+> `service_role` y funciones `SECURITY DEFINER`), cosa que la RLS por sí sola no
+> hace. **Corolario:** el hard-delete de un `salon` con facturas queda BLOQUEADO
+> por la cascada→trigger (retención legal); usar soft-delete (`salons.active =
+> false`), coherente con §3.
+
+### 13.4 RLS (matriz)
+
+| Tabla | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `pos_invoices` | miembro | miembro | — (inmutable) | — (inmutable) |
+
+> Sin políticas de UPDATE/DELETE **a propósito**: la inmutabilidad es absoluta.
+> El alta es operativa (se genera al cerrar la venta); el cálculo de `current_hash`
+> sobre el contenido + `previous_hash` lo hace la app/RPC. En `database.ts` el tipo
+> `pos_invoices` declara `Update: never` para reflejar la inmutabilidad en el
+> contrato TS.
