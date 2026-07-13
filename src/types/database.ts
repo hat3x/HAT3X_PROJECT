@@ -24,6 +24,19 @@ export type AppointmentStatus =
 
 export type HistoryAction = "INSERT" | "UPDATE" | "DELETE";
 
+export type ReminderType =
+  | "confirmacion"
+  | "recordatorio_24h"
+  | "recordatorio_2h"
+  | "post_visita";
+
+export type ReminderStatus =
+  | "pending"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "skipped";
+
 export interface Database {
   public: {
     Tables: {
@@ -640,12 +653,83 @@ export interface Database {
         };
         Relationships: [];
       };
+      whatsapp_reminder_queue: {
+        Row: {
+          id: string;
+          salon_id: string;
+          appointment_id: string;
+          reminder_type: ReminderType;
+          status: ReminderStatus;
+          scheduled_for: string;
+          attempts: number;
+          max_attempts: number;
+          next_retry_at: string | null;
+          sent_at: string | null;
+          twilio_message_sid: string | null;
+          customer_phone: string;
+          last_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          appointment_id: string;
+          reminder_type: ReminderType;
+          status?: ReminderStatus;
+          scheduled_for: string;
+          attempts?: number;
+          max_attempts?: number;
+          next_retry_at?: string | null;
+          sent_at?: string | null;
+          twilio_message_sid?: string | null;
+          customer_phone: string;
+          last_error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          appointment_id?: string;
+          reminder_type?: ReminderType;
+          status?: ReminderStatus;
+          scheduled_for?: string;
+          attempts?: number;
+          max_attempts?: number;
+          next_retry_at?: string | null;
+          sent_at?: string | null;
+          twilio_message_sid?: string | null;
+          customer_phone?: string;
+          last_error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_reminder_queue_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "whatsapp_reminder_queue_appointment_id_fkey";
+            columns: ["appointment_id"];
+            isOneToOne: false;
+            referencedRelation: "appointments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;
     Enums: {
       member_role: MemberRole;
       appointment_status: AppointmentStatus;
+      reminder_type: ReminderType;
+      reminder_status: ReminderStatus;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -676,6 +760,7 @@ export type ProfessionalSchedule = Tables<"professional_schedules">;
 export type ScheduleException = Tables<"schedule_exceptions">;
 export type AppointmentHistoryEntry = Tables<"appointment_history">;
 export type CustomerHistoryEntry = Tables<"customer_history">;
+export type WhatsappReminderQueueEntry = Tables<"whatsapp_reminder_queue">;
 
 // Phase helpers -----------------------------------------------------------------
 
