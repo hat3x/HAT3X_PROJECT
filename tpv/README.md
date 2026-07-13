@@ -265,8 +265,15 @@ const { data: fac } = useFactura(supabase, ventaId);
 ## Ejecutar / desplegar
 
 ```bash
-# Tests del núcleo (no necesita red ni Supabase)
-deno test tpv/shared/money_test.ts tpv/shared/factura_test.ts
+# Suite completa TPV (sub-8): unitarias + integración + e2e (+ SQL si hay BD).
+# Ver tpv/tests/README.md para el detalle.
+./tpv/tests/run_tests.sh            # o  ./tpv/tests/run_tests.ps1  (Windows)
+
+# Sólo el núcleo puro (no necesita red ni Supabase)
+deno test tpv/shared/
+
+# Integración + e2e con el doble en memoria (offline, stub de Supabase)
+deno test --import-map=tpv/tests/import_map.test.json tpv/tests/
 
 # Servir en local (requiere migraciones sub-1 + sub-2 + sub-6 aplicadas)
 supabase functions serve --import-map tpv/functions/import_map.json
