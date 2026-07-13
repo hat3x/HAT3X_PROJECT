@@ -4,16 +4,30 @@ import { AgentAvatar } from './AgentAvatar';
 
 const VERTICAL_ZONE: Record<string, string> = {
   'webs-apps': 'Dev', github: 'Dev', deployment: 'Dev', database: 'Dev',
-  chatbots: 'Diseño', voz: 'Diseño',
+  chatbots: 'Operaciones', voz: 'Operaciones',
   testing: 'QA', security: 'QA',
   automatizaciones: 'Operaciones', crm: 'Operaciones', calendar: 'Operaciones', documentation: 'Operaciones',
 };
 
 const ZONES = ['Sala de reuniones', 'Dev', 'Diseño', 'QA', 'Operaciones', 'Descanso'] as const;
 
+// La zona se decide por el ROL del agente (su nombre) — mucho más fino que la
+// vertical, porque no existe una vertical "diseño" y muchos agentes caen en la
+// carpeta genérica webs-apps. El nombre delata lo que hace de verdad.
+const ROLE_ZONE: Array<[RegExp, string]> = [
+  [/design|dise[nñ]|\bui\b|ui-|-ui|\bux\b|ux-|-ux|art-|visual|whimsy|brand|figma|stitch/i, 'Diseño'],
+  [/test|qa\b|quality|e2e|playwright|review|reviewer|audit|security|pentest/i, 'QA'],
+  [/market|sales|content|community|support|crm|operation|ops\b|automation|automat|n8n|calendar|\bdoc|writer|seo|social/i, 'Operaciones'],
+  [/engineer|backend|frontend|fullstack|database|\bsql|devops|deploy|\bapi\b|architect|programmer|\bgit|infra|migration/i, 'Dev'],
+];
+
 function zoneOf(agent: OfficeAgent, verticalByAgent: Record<string, string>): string {
   if (agent.status === 'meeting') return 'Sala de reuniones';
   if (agent.status === 'idle') return 'Descanso';
+  for (const [re, zone] of ROLE_ZONE) {
+    if (re.test(agent.agentId)) return zone;
+  }
+  // Fallback: por vertical, y si tampoco, Dev.
   return VERTICAL_ZONE[verticalByAgent[agent.agentId] ?? ''] ?? 'Dev';
 }
 
