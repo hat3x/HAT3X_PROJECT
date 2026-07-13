@@ -113,3 +113,49 @@ export function localDateInZone(timeZone: string, instant: Date = new Date()): s
   // en-CA produce directamente YYYY-MM-DD.
   return dtf.format(instant);
 }
+
+/**
+ * `true` si `timeZone` es una zona horaria IANA válida (p. ej. `Europe/Madrid`).
+ *
+ * Se apoya en `Intl`: construir un `DateTimeFormat` con una zona inválida lanza
+ * `RangeError`. Sirve igual en el runtime de Node (Server Action) y en el
+ * navegador, sin mantener a mano la lista completa de zonas.
+ */
+export function isValidTimeZone(timeZone: string): boolean {
+  if (timeZone.trim() === "") {
+    return false;
+  }
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Zonas horarias ofrecidas en el selector de ajustes, priorizando España y el
+ * entorno europeo del negocio. La lista es orientativa: el esquema valida
+ * cualquier zona IANA válida, así que la zona actual del salón siempre puede
+ * mostrarse aunque no figure aquí.
+ */
+export const COMMON_TIMEZONES: readonly string[] = [
+  "Europe/Madrid",
+  "Atlantic/Canary",
+  "Europe/Lisbon",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Rome",
+  "Europe/Amsterdam",
+  "Europe/Brussels",
+  "Europe/Zurich",
+  "Europe/Dublin",
+  "Europe/Andorra",
+  "America/New_York",
+  "America/Los_Angeles",
+  "America/Mexico_City",
+  "America/Bogota",
+  "America/Argentina/Buenos_Aires",
+  "UTC",
+] as const;
