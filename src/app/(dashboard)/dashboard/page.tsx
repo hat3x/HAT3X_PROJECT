@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -44,11 +45,30 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader>
+            <CardTitle>Panel del día</CardTitle>
+            <CardDescription>Vista en tiempo real por profesional</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/day-panel"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Abrir panel del día →
+            </Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
             <CardTitle>Citas</CardTitle>
             <CardDescription>Agenda del día</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Próximamente</p>
+            <Link
+              href="/appointments"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Ver agenda y gestionar citas →
+            </Link>
           </CardContent>
         </Card>
         <Card>
@@ -57,7 +77,12 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
             <CardDescription>Base de clientes</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Próximamente</p>
+            <Link
+              href="/customers"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Ver fichas e historial →
+            </Link>
           </CardContent>
         </Card>
         <Card>

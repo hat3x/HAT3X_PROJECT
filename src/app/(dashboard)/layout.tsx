@@ -24,6 +24,12 @@ export default function DashboardLayout({
               Panel
             </Link>
             <Link
+              href="/day-panel"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Panel del día
+            </Link>
+            <Link
               href="/appointments"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >
