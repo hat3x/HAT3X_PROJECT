@@ -1,14 +1,18 @@
 import Link from "next/link";
 
 import { QueryProvider } from "@/components/providers/query-provider";
+import { canManageSettings, getActiveMembership } from "@/lib/salon";
 
 /**
  * Layout compartido de las rutas autenticadas del panel.
  * Envuelve el árbol en el provider de TanStack Query y añade la navegación.
  */
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
-}: Readonly<{ children: React.ReactNode }>): React.ReactElement {
+}: Readonly<{ children: React.ReactNode }>): Promise<React.ReactElement> {
+  const membership = await getActiveMembership();
+  const showSettings = canManageSettings(membership?.role);
+
   return (
     <QueryProvider>
       <div className="flex min-h-screen flex-col">
@@ -41,6 +45,14 @@ export default function DashboardLayout({
             >
               Clientes
             </Link>
+            {showSettings && (
+              <Link
+                href="/ajustes"
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Ajustes
+              </Link>
+            )}
           </nav>
         </header>
         <div className="flex-1">{children}</div>

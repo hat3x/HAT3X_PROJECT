@@ -1,10 +1,64 @@
 import { createClient } from "@/lib/supabase/server";
+import type { MemberRole } from "@/types/database";
 
 export interface ActiveSalon {
   id: string;
   name: string;
   slug: string;
   timezone: string;
+}
+
+export interface ActiveMembership {
+  salonId: string;
+  role: MemberRole;
+}
+
+/**
+ * Roles con permiso para administrar los ajustes del salón.
+ * `staff` queda excluido de forma deliberada.
+ */
+export const SETTINGS_ROLES: readonly MemberRole[] = ["owner", "manager"];
+
+/**
+ * Resuelve la pertenencia activa (salón + rol) del usuario autenticado.
+ *
+ * Como en {@link getActiveSalonId} tomamos la primera pertenencia (la más
+ * antigua). Devuelve `null` si no hay sesión o el usuario no pertenece a
+ * ningún salón. Reutiliza esta función para decidir permisos en servidor.
+ */
+export async function getActiveMembership(): Promise<ActiveMembership | null> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user === null) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("salon_members")
+    .select("salon_id, role")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(`No se pudo resolver la pertenencia activa: ${error.message}`);
+  }
+
+  if (data === null) {
+    return null;
+  }
+
+  return { salonId: data.salon_id, role: data.role };
+}
+
+/** `true` si el rol tiene permiso para administrar los ajustes del salón. */
+export function canManageSettings(role: MemberRole | null | undefined): boolean {
+  return role === "owner" || role === "manager";
 }
 
 /**
