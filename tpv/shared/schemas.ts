@@ -200,3 +200,126 @@ export const obtenerFacturaSchema = z
   });
 
 export type ObtenerFacturaInput = z.infer<typeof obtenerFacturaSchema>;
+
+// ----------------------------------------------------------------------------
+// 6. Caja (sub-5) — apertura, movimientos manuales, cierre con arqueo, histórico
+// ----------------------------------------------------------------------------
+
+export const tipoMovimientoCajaSchema = z.enum(['entrada', 'salida']);
+export const estadoCajaSchema = z.enum(['abierta', 'cerrada']);
+
+/**
+ * Abrir caja con un fondo inicial. Como máximo puede haber UNA sesión abierta
+ * por salón (índice único parcial en BD); el servidor traduce el conflicto.
+ */
+export const abrirCajaSchema = z
+  .object({
+    salon_id: uuid,
+    /** Fondo de cambio con el que arranca el turno (≥ 0). */
+    saldo_inicial: z.coerce.number().min(0, 'El fondo inicial no puede ser negativo'),
+    empleado_apertura_id: uuid.nullish(),
+    notas: z.string().trim().max(1000).nullish(),
+  })
+  .strict();
+
+export type AbrirCajaInput = z.infer<typeof abrirCajaSchema>;
+
+/**
+ * Movimiento manual de efectivo sobre una sesión abierta. `importe` positivo;
+ * el signo lo aporta `tipo` (entrada suma al cajón, salida resta).
+ */
+export const movimientoCajaSchema = z
+  .object({
+    sesion_caja_id: uuid,
+    tipo: tipoMovimientoCajaSchema,
+    importe: z.coerce.number().refine((n) => n >= 0.01, 'El importe debe ser > 0'),
+    motivo: z.string().trim().min(1, 'El motivo es obligatorio').max(300),
+    empleado_id: uuid.nullish(),
+  })
+  .strict();
+
+export type MovimientoCajaInput = z.infer<typeof movimientoCajaSchema>;
+
+/**
+ * Cerrar caja con arqueo. El cajero aporta el efectivo REAL contado; el teórico
+ * y el descuadre los calcula el servidor (fuente de verdad: shared/caja.ts).
+ */
+export const cerrarCajaSchema = z
+  .object({
+    sesion_caja_id: uuid,
+    /** Efectivo físicamente contado en el cajón al cierre (≥ 0). */
+    efectivo_real: z.coerce.number().min(0, 'El efectivo contado no puede ser negativo'),
+    empleado_cierre_id: uuid.nullish(),
+    /** Nota de cierre (p.ej. justificación de un descuadre). Se añade a notas. */
+    notas_cierre: z.string().trim().max(1000).nullish(),
+  })
+  .strict();
+
+export type CerrarCajaInput = z.infer<typeof cerrarCajaSchema>;
+
+/**
+ * Obtener una caja: por su id, o la sesión ABIERTA de un salón (para reanudar el
+ * turno). Debe venir exactamente uno de los dos.
+ */
+export const obtenerCajaSchema = z
+  .object({
+    sesion_caja_id: uuid.optional(),
+    /** Devuelve la sesión abierta del salón (o `null` si no hay ninguna). */
+    salon_id: uuid.optional(),
+  })
+  .strict()
+  .refine((v) => !!v.sesion_caja_id !== !!v.salon_id, {
+    message: 'Indica sesion_caja_id O salon_id (exactamente uno)',
+    path: ['sesion_caja_id'],
+  });
+
+export type ObtenerCajaInput = z.infer<typeof obtenerCajaSchema>;
+
+/** Histórico de sesiones de caja de un salón, filtrable por estado y ventana. */
+export const listarSesionesCajaSchema = z
+  .object({
+    salon_id: uuid,
+    estado: estadoCajaSchema.optional(),
+    /** Límite de filas (paginación simple, orden por apertura desc). */
+    limite: z.coerce.number().int().min(1).max(200).default(50),
+    /** Sólo sesiones abiertas a partir de esta marca ISO-8601 (opcional). */
+    desde: z.string().datetime({ offset: true }).optional(),
+    /** Sólo sesiones abiertas hasta esta marca ISO-8601 (opcional). */
+    hasta: z.string().datetime({ offset: true }).optional(),
+  })
+  .strict();
+
+export type ListarSesionesCajaInput = z.infer<typeof listarSesionesCajaSchema>;
+
+// ----------------------------------------------------------------------------
+// 7. Integración con la agenda/reservas (sub-7)
+// ----------------------------------------------------------------------------
+
+/**
+ * Crear un ticket PRECARGADO a partir de una reserva completada. El servidor
+ * lee la reserva (vista `tpv_v_reserva_precarga`, RLS del usuario), valida su
+ * estado y monta la línea de servicio + cliente/empleado. El cliente NO envía
+ * importes ni descripción: sólo referencia la reserva. Idempotente: si la
+ * reserva ya tiene un ticket vivo, se devuelve ese mismo ticket.
+ */
+export const crearTicketDesdeReservaSchema = z
+  .object({
+    reserva_id: uuid,
+    /** Caja en la que se registra el cobro (opcional). */
+    sesion_caja_id: uuid.nullish(),
+    /** Empleado que cobra; si se omite, se toma el de la reserva. */
+    empleado_id: uuid.nullish(),
+    notas: z.string().trim().max(1000).nullish(),
+  })
+  .strict();
+
+export type CrearTicketDesdeReservaInput = z.infer<
+  typeof crearTicketDesdeReservaSchema
+>;
+
+/** Consultar el estado de cobro (enlace bidireccional) de una reserva. */
+export const obtenerReservaCobroSchema = z
+  .object({ reserva_id: uuid })
+  .strict();
+
+export type ObtenerReservaCobroInput = z.infer<typeof obtenerReservaCobroSchema>;

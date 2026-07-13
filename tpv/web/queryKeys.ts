@@ -29,4 +29,18 @@ export const tpvKeys = {
   /** Config de facturación de un salón (serie + datos fiscales). */
   configFacturacion: (salonId: string) =>
     [...tpvKeys.all, 'config-facturacion', salonId] as const,
+
+  /** Estado de cobro (enlace bidireccional) de una reserva de la agenda (sub-7). */
+  reservaCobro: (reservaId: string) =>
+    [...tpvKeys.all, 'reserva-cobro', reservaId] as const,
+
+  // -- Caja (sub-5) -----------------------------------------------------------
+  caja: () => [...tpvKeys.all, 'caja'] as const,
+  /** Una sesión de caja concreta (agregado completo). */
+  sesionCaja: (sesionId: string) => [...tpvKeys.caja(), 'detail', sesionId] as const,
+  /** La sesión de caja ABIERTA de un salón (o su ausencia). */
+  cajaAbierta: (salonId: string) => [...tpvKeys.caja(), 'abierta', salonId] as const,
+  /** Histórico de sesiones de un salón (con filtros serializables). */
+  sesionesCaja: (salonId: string, filtros?: Record<string, unknown>) =>
+    [...tpvKeys.caja(), 'list', salonId, filtros ?? {}] as const,
 } as const;

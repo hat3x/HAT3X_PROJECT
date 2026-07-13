@@ -12,18 +12,39 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ErrorTpv, type ErrorTpvSerializado } from '../shared/errors';
-import type { FacturaCompleta, TicketCompleto } from '../shared/types';
+import type {
+  CajaCompleta,
+  FacturaCompleta,
+  ReservaCobro,
+  ResumenSesion,
+  TicketCompleto,
+  TicketDesdeReserva,
+} from '../shared/types';
 import {
+  abrirCajaSchema,
   actualizarLineasSchema,
+  cerrarCajaSchema,
+  crearTicketDesdeReservaSchema,
   crearTicketSchema,
   emitirFacturaSchema,
+  listarSesionesCajaSchema,
+  movimientoCajaSchema,
+  obtenerCajaSchema,
   obtenerFacturaSchema,
+  obtenerReservaCobroSchema,
   obtenerTicketSchema,
   registrarPagoSchema,
+  type AbrirCajaInput,
   type ActualizarLineasInput,
+  type CerrarCajaInput,
+  type CrearTicketDesdeReservaInput,
   type CrearTicketInput,
   type EmitirFacturaInput,
+  type ListarSesionesCajaInput,
+  type MovimientoCajaInput,
+  type ObtenerCajaInput,
   type ObtenerFacturaInput,
+  type ObtenerReservaCobroInput,
   type ObtenerTicketInput,
   type RegistrarPagoInput,
 } from '../shared/schemas';
@@ -36,6 +57,13 @@ export const FUNCIONES = {
   obtenerTicket: 'tpv-obtener-ticket',
   emitirFactura: 'tpv-emitir-factura',
   obtenerFactura: 'tpv-obtener-factura',
+  crearTicketDesdeReserva: 'tpv-crear-ticket-desde-reserva',
+  obtenerReservaCobro: 'tpv-obtener-reserva-cobro',
+  abrirCaja: 'tpv-abrir-caja',
+  movimientoCaja: 'tpv-movimiento-caja',
+  cerrarCaja: 'tpv-cerrar-caja',
+  obtenerCaja: 'tpv-obtener-caja',
+  listarCajas: 'tpv-listar-cajas',
 } as const;
 
 /** Valida el input en cliente y lanza ErrorTpv('VALIDACION') si no cumple. */
@@ -130,4 +158,84 @@ export function obtenerFactura(
   input: ObtenerFacturaInput,
 ): Promise<FacturaCompleta> {
   return invocar(sb, FUNCIONES.obtenerFactura, validar(obtenerFacturaSchema, input));
+}
+
+// ----------------------------------------------------------------------------
+// Integración con la agenda/reservas (sub-7)
+// ----------------------------------------------------------------------------
+
+/** Convierte una reserva completada en un ticket precargado (o devuelve el existente). */
+export function crearTicketDesdeReserva(
+  sb: SupabaseClient,
+  input: CrearTicketDesdeReservaInput,
+): Promise<TicketDesdeReserva> {
+  return invocar(
+    sb,
+    FUNCIONES.crearTicketDesdeReserva,
+    validar(crearTicketDesdeReservaSchema, input),
+  );
+}
+
+/** Estado de cobro (enlace bidireccional) de una reserva. */
+export function obtenerReservaCobro(
+  sb: SupabaseClient,
+  input: ObtenerReservaCobroInput,
+): Promise<ReservaCobro> {
+  return invocar(
+    sb,
+    FUNCIONES.obtenerReservaCobro,
+    validar(obtenerReservaCobroSchema, input),
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Caja (sub-5) — apertura, movimientos, cierre con arqueo, obtención e histórico
+// ----------------------------------------------------------------------------
+
+/** Abre la caja del salón con un fondo inicial. */
+export function abrirCaja(
+  sb: SupabaseClient,
+  input: AbrirCajaInput,
+): Promise<CajaCompleta> {
+  return invocar(sb, FUNCIONES.abrirCaja, validar(abrirCajaSchema, input));
+}
+
+/** Registra un movimiento manual de efectivo (entrada/salida) en la sesión. */
+export function registrarMovimiento(
+  sb: SupabaseClient,
+  input: MovimientoCajaInput,
+): Promise<CajaCompleta> {
+  return invocar(sb, FUNCIONES.movimientoCaja, validar(movimientoCajaSchema, input));
+}
+
+/** Cierra la caja con arqueo (aporta el efectivo real contado). */
+export function cerrarCaja(
+  sb: SupabaseClient,
+  input: CerrarCajaInput,
+): Promise<CajaCompleta> {
+  return invocar(sb, FUNCIONES.cerrarCaja, validar(cerrarCajaSchema, input));
+}
+
+/**
+ * Obtiene una caja por id de sesión, o la sesión abierta de un salón. Devuelve
+ * `null` si se pide por salón y no hay caja abierta (centinela { sesion: null }).
+ */
+export async function obtenerCaja(
+  sb: SupabaseClient,
+  input: ObtenerCajaInput,
+): Promise<CajaCompleta | null> {
+  const res = await invocar<CajaCompleta | { sesion: null }>(
+    sb,
+    FUNCIONES.obtenerCaja,
+    validar(obtenerCajaSchema, input),
+  );
+  return res.sesion == null ? null : (res as CajaCompleta);
+}
+
+/** Histórico de sesiones de caja de un salón (con su total y nº de tickets). */
+export function listarSesionesCaja(
+  sb: SupabaseClient,
+  input: ListarSesionesCajaInput,
+): Promise<ResumenSesion[]> {
+  return invocar(sb, FUNCIONES.listarCajas, validar(listarSesionesCajaSchema, input));
 }

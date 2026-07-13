@@ -14,7 +14,10 @@ para salones: caja, tickets, líneas, métodos de pago, pagos y facturas.
 | `migrations/20260713000001_tpv_module.down.sql` | Reversa completa (drop de todo lo anterior). |
 | `migrations/20260713000002_tpv_rls.up.sql`      | Activa RLS y políticas de aislamiento por `salon_id` en las 6 tablas TPV. |
 | `migrations/20260713000002_tpv_rls.down.sql`    | Desactiva RLS y elimina políticas y helpers. |
+| `migrations/20260713000005_tpv_reservas_integracion.up.sql`   | Integración con reservas (sub-7): índice "1 ticket vivo/reserva" + vistas `tpv_v_reserva_precarga` y `tpv_v_reservas_cobro`. |
+| `migrations/20260713000005_tpv_reservas_integracion.down.sql` | Reversa: elimina las 2 vistas y el índice. |
 | `tests/rls_tpv_isolation_test.sql`              | Test de aislamiento cruzado entre dos salones (CI). |
+| `tests/tpv_reservas_integracion_test.sql`       | Test de la invariante y del enlace de cobro reserva↔ticket (CI). |
 
 ## Aplicar / revertir
 
@@ -83,6 +86,39 @@ Todas las tablas llevan **`salon_id uuid NOT NULL`** con FK a `salones(id)`
 3. Claves primarias en `uuid`. **Si tu esquema usa `bigint`**, cambia el tipo de
    `salon_id` y de las columnas `*_id` a `bigint` de forma consistente antes de
    aplicar (los tipos de FK deben coincidir con la columna referenciada).
+
+## Integración TPV ↔ reservas (sub-7, `20260713000005`)
+
+Conecta el TPV con la agenda **sin modificar** `reservas` (el flujo actual queda
+intacto). Sólo añade objetos nuevos:
+
+| Objeto | Qué es | Para qué |
+|---|---|---|
+| Índice `tpv_ventas_reserva_activa_uq` | Único parcial sobre `tpv_ventas(reserva_id)` con `estado <> 'anulada'`. | Garantiza **un solo ticket vivo por reserva** (idempotencia del cobro). |
+| Vista `tpv_v_reserva_precarga` | Normaliza una reserva → forma de precarga de ticket (servicio + cliente). | La leen las Edge Functions para abrir el ticket. **Único punto de acoplamiento** con el esquema de la agenda. |
+| Vista `tpv_v_reservas_cobro` | Deriva `estado_cobro` (`sin_ticket`/`ticket_abierto`/`cobrada`/`reembolsada`) y el ticket vivo de cada reserva, desde `tpv_ventas`. | Enlace **bidireccional** sin escribir en `reservas`. |
+
+Ambas vistas usan `security_invoker = true` (PG15+): respetan la RLS de
+`reservas` y de `tpv_ventas` con la identidad del usuario que consulta.
+
+**Enlace bidireccional:** hacia adelante ya existe `tpv_ventas.reserva_id`
+(migración 0001); hacia atrás lo aporta `tpv_v_reservas_cobro` (derivado, no
+persistido). Anular el ticket libera la reserva para volver a cobrarla.
+
+### Supuestos de columnas de `public.reservas`
+
+La vista `tpv_v_reserva_precarga` asume: `id, salon_id, cliente_id, empleado_id,
+servicio_id, servicio_nombre, precio (BASE sin IVA), tipo_impuesto (% IVA),
+estado, inicio_at`. Si tu agenda difiere (p.ej. el precio vive en
+`public.servicios`), **adapta sólo esa vista** — hay un ejemplo de JOIN en el pie
+de la migración 0005. Las vistas se crean únicamente si `public.reservas` existe
+(bloque `DO` tolerante); si no, se emite un `NOTICE` y la integración queda
+inactiva hasta crearlas.
+
+```bash
+# Verificación (requiere 0001 aplicada; crea una reservas mínima si falta, con ROLLBACK)
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/tpv_reservas_integracion_test.sql
+```
 
 ## RLS — Aislamiento multi-salón (incluido en `20260713000002_tpv_rls`)
 

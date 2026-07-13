@@ -19,6 +19,10 @@ export type CodigoErrorTpv =
   | 'PAGO_INSUFICIENTE'    // se pide marcar pagada sin cubrir el total
   | 'TICKET_YA_FACTURADO'  // el ticket ya tiene una factura emitida
   | 'TICKET_NO_FACTURABLE' // el ticket está anulado/reembolsado o vacío
+  | 'RESERVA_NO_COMPLETADA' // la reserva no está en un estado cobrable (sub-7)
+  | 'INTEGRACION_RESERVAS'  // la integración con la agenda no está configurada (sub-7)
+  | 'CAJA_YA_ABIERTA'      // ya existe una sesión de caja abierta en el salón (sub-5)
+  | 'CAJA_NO_ABIERTA'      // se opera sobre una sesión de caja ya cerrada (sub-5)
   | 'CONFLICTO'            // violación de invariante/constraint de BD
   | 'METODO_NO_PERMITIDO'  // verbo HTTP no soportado por la función
   | 'INTERNO';             // fallo inesperado
@@ -36,6 +40,10 @@ export const HTTP_POR_CODIGO: Record<CodigoErrorTpv, number> = {
   PAGO_INSUFICIENTE: 409,
   TICKET_YA_FACTURADO: 409,
   TICKET_NO_FACTURABLE: 409,
+  RESERVA_NO_COMPLETADA: 409,
+  INTEGRACION_RESERVAS: 422,
+  CAJA_YA_ABIERTA: 409,
+  CAJA_NO_ABIERTA: 409,
   CONFLICTO: 409,
   METODO_NO_PERMITIDO: 405,
   INTERNO: 500,

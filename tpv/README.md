@@ -3,13 +3,17 @@
 Capa **aditiva** de aplicación para el módulo TPV: crear tickets, gestionar
 líneas, aplicar descuentos, calcular totales e IVA, registrar pagos (efectivo,
 tarjeta y **mixto**) y **emitir facturas** (numeración por salón + serie,
-snapshot fiscal y exportación a PDF). Se apoya en el esquema de `db/`
-(migraciones `tpv_*`) y en su **RLS por `salon_id`**. No toca ni la agenda ni
-los endpoints de reservas.
+snapshot fiscal y exportación a PDF) e **integra con la agenda/reservas**
+(precargar un ticket desde una reserva completada, con enlace bidireccional de
+estado). Se apoya en el esquema de `db/` (migraciones `tpv_*`) y en su **RLS por
+`salon_id`**. **No modifica** la agenda ni la tabla `reservas`: sólo lee (vía
+vistas) y enlaza.
 
-> Sub-tareas **sub-3** (cobros) y **sub-6** (facturación). Dependen de sub-1
-> (esquema `20260713000001_tpv_module`) y sub-2 (RLS `20260713000002_tpv_rls`);
-> la facturación añade `20260713000003_tpv_facturacion`.
+> Sub-tareas **sub-3** (cobros), **sub-6** (facturación) y **sub-7**
+> (integración con reservas). Dependen de sub-1 (esquema
+> `20260713000001_tpv_module`) y sub-2 (RLS `20260713000002_tpv_rls`); la
+> facturación añade `20260713000003_tpv_facturacion` y la integración
+> `20260713000005_tpv_reservas_integracion`.
 
 ## Estructura
 
@@ -78,6 +82,13 @@ Facturación (respuesta `FacturaCompleta` = `{ factura, referencia }`):
 | `tpv-emitir-factura` | `emitirFacturaSchema` | Emite la factura de un ticket: congela emisor/cliente/desglose/líneas y la BD asigna el nº correlativo por `(salon, serie)`. `201`. |
 | `tpv-obtener-factura` | `obtenerFacturaSchema` | Devuelve una factura por `factura_id` **o** `venta_id`. `200`. |
 
+Integración con la agenda/reservas (sub-7):
+
+| Función | Cuerpo (Zod) | Efecto |
+|---|---|---|
+| `tpv-crear-ticket-desde-reserva` | `crearTicketDesdeReservaSchema` | Convierte una reserva **completada** en un ticket precargado (servicio + cliente). Idempotente: si la reserva ya tiene ticket vivo lo devuelve (`200`, `ya_existia:true`); si lo crea, `201`. Respuesta `TicketDesdeReserva` = `{ ticket, ya_existia }`. |
+| `tpv-obtener-reserva-cobro` | `obtenerReservaCobroSchema` | Estado de cobro de una reserva (enlace bidireccional). Respuesta `ReservaCobro`. `200`. |
+
 ### Cálculo de IVA y totales
 
 Convención España, `precio_unitario` = base **sin** IVA:
@@ -139,6 +150,48 @@ imprimirFactura(factura);        // iframe oculto → diálogo «Guardar como PD
 descargarFacturaHTML(factura);   // descarga factura-A-000123.html (archivable)
 ```
 
+### Integración con la agenda/reservas (sub-7)
+
+Convierte una reserva **completada** en un ticket precargado y mantiene el
+enlace **bidireccional** de estado, **sin tocar la tabla `reservas`** ni el flujo
+de la agenda (ver `db/migrations/20260713000005_tpv_reservas_integracion`).
+
+- **Precarga desde reserva.** `tpv-crear-ticket-desde-reserva` lee la reserva por
+  la vista `tpv_v_reserva_precarga` (RLS del usuario), comprueba que su estado es
+  *cobrable* (`ESTADOS_RESERVA_COMPLETADA` en `functions/_shared/reserva.ts`) y
+  abre el ticket con la línea del servicio y el `cliente_id`/`empleado_id` de la
+  reserva. A partir de ahí es un ticket normal (editar líneas, cobrar, facturar).
+- **Idempotente y sin duplicados.** Un índice único parcial garantiza **un solo
+  ticket vivo (no anulado) por reserva**. Si ya existe, la función devuelve ese
+  mismo ticket (`ya_existia:true`) y resuelve la carrera si dos cajeros pulsan a
+  la vez. Anular el ticket libera la reserva para volver a cobrarla.
+- **Enlace hacia adelante:** `tpv_ventas.reserva_id` (ya existente). **Hacia
+  atrás:** la vista `tpv_v_reservas_cobro` **deriva** el `estado_cobro`
+  (`sin_ticket` → `ticket_abierto` → `cobrada`/`reembolsada`) desde `tpv_ventas`;
+  no se persiste estado en la reserva. `tpv-obtener-reserva-cobro` la expone para
+  pintar un chip en la agenda y abrir el ticket asociado.
+
+```ts
+import { useCrearTicketDesdeReserva, useReservaCobro } from './web/hooks';
+
+// En la agenda: ¿cómo va el cobro de esta reserva?
+const { data: cobro } = useReservaCobro(supabase, reservaId);
+// cobro?.estado_cobro → 'sin_ticket' | 'ticket_abierto' | 'cobrada' | ...
+
+// "Cobrar" desde una reserva completada → ticket precargado listo para cobrar.
+const abrir = useCrearTicketDesdeReserva(supabase);
+abrir.mutate(
+  { reserva_id: reservaId },
+  { onSuccess: ({ ticket }) => irACobro(ticket.venta.id) },
+);
+```
+
+> **Supuestos de esquema de la agenda** (columnas de `public.reservas`) están
+> encapsulados en la **vista** `tpv_v_reserva_precarga`. Si tu agenda usa otros
+> nombres o el precio vive en `public.servicios`, adapta **solo esa vista**
+> (ejemplo en el pie de la migración 0005 y en `db/README.md`). Ninguna Edge
+> Function ni la capa web necesitan cambios.
+
 ## Errores
 
 `ErrorTpv` serializa `{ error: { codigo, mensaje, detalles? } }` con estado HTTP:
@@ -155,6 +208,8 @@ descargarFacturaHTML(factura);   // descarga factura-A-000123.html (archivable)
 | `SOBREPAGO` / `PAGO_INSUFICIENTE` | 409 | Descuadre en el cobro. |
 | `TICKET_YA_FACTURADO` | 409 | El ticket ya tiene una factura emitida. |
 | `TICKET_NO_FACTURABLE` | 409 | Ticket anulado/reembolsado o sin líneas. |
+| `RESERVA_NO_COMPLETADA` | 409 | La reserva no está en un estado cobrable (sub-7). |
+| `INTEGRACION_RESERVAS` | 422 | Falta la vista de integración (migración 0005 no aplicada) (sub-7). |
 | `CONFLICTO` | 409 | Violación de constraint (p.ej. ya facturado). |
 
 ## Uso desde la web (TanStack Query)
@@ -211,6 +266,8 @@ supabase functions deploy tpv-registrar-pago     --import-map tpv/functions/impo
 supabase functions deploy tpv-obtener-ticket     --import-map tpv/functions/import_map.json
 supabase functions deploy tpv-emitir-factura     --import-map tpv/functions/import_map.json
 supabase functions deploy tpv-obtener-factura    --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-crear-ticket-desde-reserva --import-map tpv/functions/import_map.json
+supabase functions deploy tpv-obtener-reserva-cobro      --import-map tpv/functions/import_map.json
 ```
 
 > **Deno/Supabase importa `shared/` con extensión `.ts`; el bundler de la web lo
@@ -233,3 +290,7 @@ supabase functions deploy tpv-obtener-factura    --import-map tpv/functions/impo
   `shared/factura_test.ts` (`deno test`). Tipado estricto de los módulos puros
   `shared/factura.ts` + `shared/facturaHtml.ts` verificado con `tsc --strict`
   (sin errores). Las Edge Functions y la capa web se ejercitan en CI/preview.
+- Integración con reservas (sub-7): la invariante "un ticket vivo por reserva" y
+  la derivación de `estado_cobro` se comprueban en
+  `db/tests/tpv_reservas_integracion_test.sql` (autocontenido, `psql` con
+  `ROLLBACK`). Deno no está instalado en el entorno del agente; ejecútalo en CI.
