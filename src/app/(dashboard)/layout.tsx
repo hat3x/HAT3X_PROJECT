@@ -45,6 +45,12 @@ export default async function DashboardLayout({
             >
               Clientes
             </Link>
+            <Link
+              href="/products"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Productos
+            </Link>
             {showSettings && (
               <Link
                 href="/ajustes"
