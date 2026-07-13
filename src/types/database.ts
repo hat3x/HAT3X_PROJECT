@@ -37,6 +37,21 @@ export type ReminderStatus =
   | "failed"
   | "skipped";
 
+// TPV (Terminal Punto de Venta) — módulo de caja/ventas
+export type PosSaleStatus = "open" | "completed" | "voided" | "refunded";
+
+export type PosPaymentMethod =
+  | "efectivo"
+  | "tarjeta"
+  | "bizum"
+  | "transferencia"
+  | "otro";
+
+export type PosSessionStatus = "open" | "closed";
+
+/** Tipo derivado (generado) de una línea de venta. */
+export type PosSaleLineItemKind = "service" | "product" | "manual";
+
 export interface Database {
   public: {
     Tables: {
@@ -894,6 +909,370 @@ export interface Database {
           },
         ];
       };
+      // TPV (Terminal Punto de Venta) --------------------------------------------
+      pos_payment_methods: {
+        Row: {
+          id: string;
+          salon_id: string;
+          kind: PosPaymentMethod; // tipo base del método
+          name: string; // etiqueta visible
+          affects_cash_drawer: boolean; // mueve efectivo físico (arqueo)
+          active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          kind: PosPaymentMethod;
+          name: string;
+          affects_cash_drawer?: boolean;
+          active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          kind?: PosPaymentMethod;
+          name?: string;
+          affects_cash_drawer?: boolean;
+          active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "pos_payment_methods_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      pos_sessions: {
+        Row: {
+          id: string;
+          salon_id: string;
+          location_id: string | null;
+          status: PosSessionStatus;
+          currency: string;
+          opened_by: string | null;
+          opened_at: string;
+          opening_float_cents: number; // fondo de caja inicial
+          closed_by: string | null;
+          closed_at: string | null;
+          expected_cash_cents: number | null; // efectivo esperado
+          counted_cash_cents: number | null; // efectivo contado
+          cash_variance_cents: number | null; // descuadre (puede ser negativo)
+          closing_totals: Json | null; // snapshot de totales por método
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          location_id?: string | null;
+          status?: PosSessionStatus;
+          currency?: string;
+          opened_by?: string | null;
+          opened_at?: string;
+          opening_float_cents?: number;
+          closed_by?: string | null;
+          closed_at?: string | null;
+          expected_cash_cents?: number | null;
+          counted_cash_cents?: number | null;
+          cash_variance_cents?: number | null;
+          closing_totals?: Json | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          location_id?: string | null;
+          status?: PosSessionStatus;
+          currency?: string;
+          opened_by?: string | null;
+          opened_at?: string;
+          opening_float_cents?: number;
+          closed_by?: string | null;
+          closed_at?: string | null;
+          expected_cash_cents?: number | null;
+          counted_cash_cents?: number | null;
+          cash_variance_cents?: number | null;
+          closing_totals?: Json | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "pos_sessions_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pos_sessions_location_id_fkey";
+            columns: ["location_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "locations";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      pos_sales: {
+        Row: {
+          id: string;
+          salon_id: string;
+          session_id: string | null;
+          appointment_id: string | null;
+          customer_id: string | null;
+          professional_id: string | null;
+          status: PosSaleStatus;
+          subtotal_cents: number; // base imponible (sin IVA)
+          discount_cents: number;
+          tax_cents: number; // IVA total
+          total_cents: number; // total a cobrar
+          currency: string;
+          sold_by: string | null;
+          sold_at: string;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          session_id?: string | null;
+          appointment_id?: string | null;
+          customer_id?: string | null;
+          professional_id?: string | null;
+          status?: PosSaleStatus;
+          subtotal_cents?: number;
+          discount_cents?: number;
+          tax_cents?: number;
+          total_cents?: number;
+          currency?: string;
+          sold_by?: string | null;
+          sold_at?: string;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          session_id?: string | null;
+          appointment_id?: string | null;
+          customer_id?: string | null;
+          professional_id?: string | null;
+          status?: PosSaleStatus;
+          subtotal_cents?: number;
+          discount_cents?: number;
+          tax_cents?: number;
+          total_cents?: number;
+          currency?: string;
+          sold_by?: string | null;
+          sold_at?: string;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "pos_sales_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pos_sales_session_id_fkey";
+            columns: ["session_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "pos_sessions";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_sales_appointment_id_fkey";
+            columns: ["appointment_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "appointments";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_sales_customer_id_fkey";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_sales_professional_id_fkey";
+            columns: ["professional_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "professionals";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      pos_sale_lines: {
+        Row: {
+          id: string;
+          salon_id: string;
+          sale_id: string;
+          service_id: string | null;
+          product_id: string | null;
+          item_kind: PosSaleLineItemKind; // generado (read-only)
+          description: string; // snapshot del nombre
+          quantity: number; // numeric(12,3)
+          unit_price_cents: number; // precio unitario (snapshot)
+          discount_cents: number;
+          vat_rate: number; // IVA aplicado (%)
+          line_total_cents: number; // total de la línea (IVA incl.)
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          sale_id: string;
+          service_id?: string | null;
+          product_id?: string | null;
+          // item_kind es generada: omitir en Insert
+          description: string;
+          quantity?: number;
+          unit_price_cents?: number;
+          discount_cents?: number;
+          vat_rate?: number;
+          line_total_cents?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          sale_id?: string;
+          service_id?: string | null;
+          product_id?: string | null;
+          // item_kind es generada: omitir en Update
+          description?: string;
+          quantity?: number;
+          unit_price_cents?: number;
+          discount_cents?: number;
+          vat_rate?: number;
+          line_total_cents?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "pos_sale_lines_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pos_sale_lines_sale_id_fkey";
+            columns: ["sale_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "pos_sales";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_sale_lines_service_id_fkey";
+            columns: ["service_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "services";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_sale_lines_product_id_fkey";
+            columns: ["product_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      pos_payments: {
+        Row: {
+          id: string;
+          salon_id: string;
+          sale_id: string;
+          session_id: string | null;
+          method: PosPaymentMethod; // tipo base (autoridad de reconciliación)
+          payment_method_id: string | null; // catálogo del salón (opcional)
+          amount_cents: number;
+          paid_at: string;
+          reference: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          sale_id: string;
+          session_id?: string | null;
+          method: PosPaymentMethod;
+          payment_method_id?: string | null;
+          amount_cents: number;
+          paid_at?: string;
+          reference?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          sale_id?: string;
+          session_id?: string | null;
+          method?: PosPaymentMethod;
+          payment_method_id?: string | null;
+          amount_cents?: number;
+          paid_at?: string;
+          reference?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "pos_payments_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pos_payments_sale_id_fkey";
+            columns: ["sale_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "pos_sales";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_payments_session_id_fkey";
+            columns: ["session_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "pos_sessions";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_payments_payment_method_id_fkey";
+            columns: ["payment_method_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "pos_payment_methods";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;
@@ -902,6 +1281,9 @@ export interface Database {
       appointment_status: AppointmentStatus;
       reminder_type: ReminderType;
       reminder_status: ReminderStatus;
+      pos_sale_status: PosSaleStatus;
+      pos_payment_method: PosPaymentMethod;
+      pos_session_status: PosSessionStatus;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -935,6 +1317,12 @@ export type ScheduleException = Tables<"schedule_exceptions">;
 export type AppointmentHistoryEntry = Tables<"appointment_history">;
 export type CustomerHistoryEntry = Tables<"customer_history">;
 export type WhatsappReminderQueueEntry = Tables<"whatsapp_reminder_queue">;
+// TPV (Terminal Punto de Venta)
+export type PosPaymentMethodRow = Tables<"pos_payment_methods">;
+export type PosSession = Tables<"pos_sessions">;
+export type PosSale = Tables<"pos_sales">;
+export type PosSaleLine = Tables<"pos_sale_lines">;
+export type PosPayment = Tables<"pos_payments">;
 
 // Phase helpers -----------------------------------------------------------------
 

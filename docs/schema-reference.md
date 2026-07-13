@@ -5,7 +5,7 @@
 > migraciones sin romper las invariantes existentes. Auditoría de solo lectura;
 > ninguna migración se ha modificado.
 >
-> Fuente: 11 migraciones (`20260711100000` … `20260713170000`) + tipos generados
+> Fuente: 12 migraciones (`20260711100000` … `20260713180000`) + tipos generados
 > a mano en `src/types/database.ts`. Estado: **proyecto en desarrollo, sin datos
 > de producción** (las migraciones de evolución añaden columnas NOT NULL sin
 > fase de backfill; ver `locations`, `services_phase_duration`).
@@ -324,3 +324,79 @@ invariante `price_cents (integer) + currency` (§1.6), **no** `precio_cents`.
 > vez de introducir un sinónimo español, para no fragmentar el vocabulario ni los
 > helpers de dinero. El contrato para el resto de subtareas es
 > `src/types/database.ts` (tipos regenerados a mano).
+
+---
+
+## 12. TPV — Terminal Punto de Venta (migración `pos_base`, `20260713180000`)
+
+Módulo de caja/ventas de mostrador. Registra cobros de servicios y de productos
+retail, sus pagos por método, el catálogo de métodos aceptados y las sesiones de
+caja (apertura/cierre con arqueo). **5 tablas** con prefijo `pos_` (Point of Sale
+= TPV) y **3 enums**. Mapeo del brief español → identificadores en inglés (§1):
+`tpv_ventas → pos_sales`, `tpv_lineas → pos_sale_lines`, `tpv_pagos →
+pos_payments`, `tpv_metodos_pago → pos_payment_methods`, `tpv_sesiones_caja →
+pos_sessions`; `precio_cents → unit_price_cents`, `iva_pct → vat_rate`,
+`cantidad → quantity`, `importe_cents → amount_cents`. Dinero en céntimos
+enteros (§1.6).
+
+### 12.1 Enums nuevos (`public`)
+
+- `pos_sale_status (open|completed|voided|refunded)`.
+- `pos_payment_method (efectivo|tarjeta|bizum|transferencia|otro)`.
+- `pos_session_status (open|closed)`.
+
+> **"Pago mixto":** NO es un valor de método. Un ticket con varios métodos se
+> modela como **varias filas** en `pos_payments` (una por método).
+
+### 12.2 Tablas
+
+| Tabla | PK | Clave `(id,salon_id)` | RLS | Notas |
+|---|---|---|---|---|
+| `pos_payment_methods` | `id` uuid | `pos_payment_methods_id_salon_key` | sí | catálogo por salón. `unique(salon_id,name)`. `kind` (enum base), `affects_cash_drawer`, `active`, `sort_order`. Autoprovisionado por trigger. RLS = `services`. |
+| `pos_sessions` | `id` uuid | `pos_sessions_id_salon_key` | sí | sesión de caja. `opening_float_cents`; cierre: `expected/counted_cash_cents`, `cash_variance_cents` (descuadre, puede ser negativo), `closing_totals jsonb` (snapshot por método). Índice único parcial: 1 sesión `open` por `(salon_id,location_id)`. |
+| `pos_sales` | `id` uuid | `pos_sales_id_salon_key` | sí | cabecera de ticket. FKs opcionales a session/appointment/customer/professional. Totales snapshot: `subtotal/discount/tax/total_cents`. |
+| `pos_sale_lines` | `id` uuid | — | sí | líneas. ≤1 de `service_id`/`product_id` (check `pos_sale_lines_item_exclusive`; ninguno = cargo manual). `item_kind` **GENERATED** (`service|product|manual`). Snapshot `description`/`unit_price_cents`/`vat_rate`. `quantity numeric(12,3)`. |
+| `pos_payments` | `id` uuid | — | sí | pagos. `method` (enum, autoridad de reconciliación) + `payment_method_id` (catálogo, opcional). `amount_cents > 0`. Casi inmutable (sin `updated_at` ni UPDATE en RLS, como `visits`). |
+
+### 12.3 FKs compuestas `(fk_id, salon_id) → tabla(id, salon_id)`
+
+| Origen | Columnas | Destino | ON DELETE |
+|---|---|---|---|
+| `pos_sessions` | `(location_id, salon_id)` | `locations(id,salon_id)` | set null (location_id) |
+| `pos_sales` | `(session_id, salon_id)` | `pos_sessions(id,salon_id)` | set null (session_id) |
+| `pos_sales` | `(appointment_id, salon_id)` | `appointments(id,salon_id)` | set null (appointment_id) |
+| `pos_sales` | `(customer_id, salon_id)` | `customers(id,salon_id)` | set null (customer_id) |
+| `pos_sales` | `(professional_id, salon_id)` | `professionals(id,salon_id)` | set null (professional_id) |
+| `pos_sale_lines` | `(sale_id, salon_id)` | `pos_sales(id,salon_id)` | cascade |
+| `pos_sale_lines` | `(service_id, salon_id)` | `services(id,salon_id)` | set null (service_id) |
+| `pos_sale_lines` | `(product_id, salon_id)` | `products(id,salon_id)` | set null (product_id) |
+| `pos_payments` | `(sale_id, salon_id)` | `pos_sales(id,salon_id)` | cascade |
+| `pos_payments` | `(session_id, salon_id)` | `pos_sessions(id,salon_id)` | set null (session_id) |
+| `pos_payments` | `(payment_method_id, salon_id)` | `pos_payment_methods(id,salon_id)` | set null (payment_method_id) |
+
+> Todas las FKs opcionales usan `SET NULL (columna)` para preservar el registro
+> financiero (venta/pago sobrevive al borrado de sus referencias); nunca anulan
+> `salon_id`. `pos_sale_lines`/`pos_payments` mueren en cascada con su venta.
+
+### 12.4 RLS (matriz)
+
+| Tabla | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `pos_payment_methods` | miembro | owner/manager | owner/manager | owner/manager |
+| `pos_sessions` | miembro | miembro | miembro | owner/manager |
+| `pos_sales` | miembro | miembro | miembro | owner/manager |
+| `pos_sale_lines` | miembro | miembro | miembro | miembro |
+| `pos_payments` | miembro | miembro | — (inmutable) | owner/manager |
+
+> Patrón: cobrar/editar carrito = operativo (miembro); configurar métodos y
+> anular pagos/ventas = owner/manager. El TPV no tiene flujo anónimo.
+
+### 12.5 Trigger nuevo
+
+| Trigger | Tabla / evento | Función | Efecto |
+|---|---|---|---|
+| `trg_salons_register_payment_methods` | AFTER INSERT salons | `app.register_salon_payment_methods()` | crea 3 métodos por defecto (efectivo, tarjeta, bizum) del nuevo salón. `SECURITY DEFINER` (bypasa RLS). |
+
+> Convive con `trg_salons_register_owner` en el mismo evento AFTER INSERT de
+> `salons` (independientes). Además, `updated_at` automático en
+> `pos_payment_methods`, `pos_sessions`, `pos_sales`, `pos_sale_lines`.
