@@ -82,6 +82,50 @@ export interface Database {
         };
         Relationships: [];
       };
+      locations: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          slug: string;
+          address: string | null;
+          phone: string | null;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          slug: string;
+          address?: string | null;
+          phone?: string | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          slug?: string;
+          address?: string | null;
+          phone?: string | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "locations_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       salon_members: {
         Row: {
           id: string;
@@ -802,6 +846,7 @@ export type TablesUpdate<T extends keyof PublicSchema["Tables"]> =
 // Alias de dominio (evitan repetir Tables<"..."> por toda la app)
 export type Salon = Tables<"salons">;
 export type SalonMember = Tables<"salon_members">;
+export type Location = Tables<"locations">;
 export type Service = Tables<"services">;
 export type Professional = Tables<"professionals">;
 export type Customer = Tables<"customers">;
