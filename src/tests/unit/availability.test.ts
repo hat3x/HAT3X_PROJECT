@@ -196,6 +196,104 @@ describe("generateSlots", () => {
   });
 });
 
+describe("generateSlots — modelo de fases (appointment_blocks)", () => {
+  // Servicio de 3 fases: aplicación 30 / exposición 60 / post 15.
+  // Bloqueo efectivo del profesional = 30 + 15 = 45 min (la exposición NO bloquea).
+  // Duración total de la cita = 105 min.
+  const APPLICATION = 30;
+  const EXPOSURE = 60;
+  const POST = 15;
+  const BLOCKING = APPLICATION + POST; // 45
+  const TOTAL = APPLICATION + EXPOSURE + POST; // 105
+  const MIDNIGHT = new Date("2025-06-09T00:00:00.000Z");
+
+  it("permite reservar en el hueco de exposición de otra cita del profesional", () => {
+    // Otra cita ocupa SOLO sus bloques físicos (lo que hay en appointment_blocks):
+    //   · application:   10:00–10:30 Madrid = 08:00–08:30 UTC
+    //   · post_exposure: 11:30–11:45 Madrid = 09:30–09:45 UTC
+    // Su exposición 10:30–11:30 queda LIBRE y no aparece como bloque ocupado.
+    const busy: BusyInterval[] = [
+      { starts_at: "2025-06-09T08:00:00.000Z", ends_at: "2025-06-09T08:30:00.000Z" },
+      { starts_at: "2025-06-09T09:30:00.000Z", ends_at: "2025-06-09T09:45:00.000Z" },
+    ];
+
+    // Nueva cita corta (solo aplicación, 30 min) que cabe en el hueco de exposición.
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30, // bloqueo = aplicación
+      appointmentDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE,
+      busy,
+      slotIntervalMinutes: 30,
+      now: MIDNIGHT,
+    });
+
+    // 10:30 Madrid = 08:30 UTC cae en la exposición ajena y debe estar disponible.
+    const has1030 = slots.some(
+      (s) =>
+        new Date(s.startsAt).getUTCHours() === 8 &&
+        new Date(s.startsAt).getUTCMinutes() === 30,
+    );
+    expect(has1030).toBe(true);
+  });
+
+  it("usa la duración total para endsAt y el encaje en horario", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: BLOCKING, // 45 → ventana de solape
+      appointmentDurationMinutes: TOTAL, // 105 → endsAt y lastStart
+      schedules: MONDAY_SCHEDULE, // 09:00–17:00
+      busy: [],
+      slotIntervalMinutes: 15,
+      now: MIDNIGHT,
+    });
+
+    // endsAt refleja la duración total (105 min), no la de bloqueo.
+    slots.forEach((s) => {
+      const diff = new Date(s.endsAt).getTime() - new Date(s.startsAt).getTime();
+      expect(diff).toBe(TOTAL * 60 * 1000);
+    });
+
+    // El último inicio deja sitio a la cita completa: 17:00 − 105 min = 15:15 Madrid = 13:15 UTC.
+    const last = slots[slots.length - 1];
+    expect(last).toBeDefined();
+    expect(new Date(last!.startsAt).getUTCHours()).toBe(13);
+    expect(new Date(last!.startsAt).getUTCMinutes()).toBe(15);
+  });
+
+  it("la ventana de solape usa la duración de bloqueo, no la total", () => {
+    // Bloque ocupado a las 09:50–10:00 Madrid = 07:50–08:00 UTC.
+    const busy: BusyInterval[] = [
+      { starts_at: "2025-06-09T07:50:00.000Z", ends_at: "2025-06-09T08:00:00.000Z" },
+    ];
+
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: BLOCKING, // 45
+      appointmentDurationMinutes: TOTAL, // 105
+      schedules: MONDAY_SCHEDULE,
+      busy,
+      slotIntervalMinutes: 15,
+      now: MIDNIGHT,
+    });
+
+    // 09:15 Madrid = 07:15 UTC: ventana de bloqueo [09:15, 10:00) toca el bloque → descartado.
+    const has0915 = slots.some(
+      (s) => new Date(s.startsAt).getUTCHours() === 7 && new Date(s.startsAt).getUTCMinutes() === 15,
+    );
+    expect(has0915).toBe(false);
+
+    // 09:00 Madrid = 07:00 UTC: ventana [09:00, 09:45) no llega al bloque → disponible.
+    const has0900 = slots.some(
+      (s) => new Date(s.startsAt).getUTCHours() === 7 && new Date(s.startsAt).getUTCMinutes() === 0,
+    );
+    expect(has0900).toBe(true);
+  });
+});
+
 describe("mergeSlotsByProfessional", () => {
   const slotA = {
     startsAt: "2025-06-09T09:00:00.000Z",
