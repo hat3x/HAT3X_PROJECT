@@ -15,11 +15,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { idToEmail } from "@/lib/auth/id-email";
 
 export function LoginForm(): React.ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
+  const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,12 +32,12 @@ export function LoginForm(): React.ReactElement {
 
     const supabase = createClient();
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+      email: idToEmail(loginId),
       password,
     });
 
     if (signInError) {
-      setError("Credenciales incorrectas. Comprueba tu email y contraseña.");
+      setError("Credenciales incorrectas. Comprueba tu ID y contraseña.");
       setIsLoading(false);
       return;
     }
@@ -50,20 +51,22 @@ export function LoginForm(): React.ReactElement {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Salon OS</CardTitle>
-        <CardDescription>Accede con tu cuenta de equipo</CardDescription>
+        <CardDescription>Accede con tu ID y contraseña</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="loginId">ID de acceso</Label>
             <Input
-              id="email"
-              type="email"
-              autoComplete="email"
+              id="loginId"
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@salon.com"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              placeholder="tu-id"
             />
           </div>
           <div className="grid gap-2">
