@@ -104,7 +104,19 @@ export async function analyzeTask(
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error("Invalid LLM response: not valid JSON")
+    // El modelo a veces envuelve el array en prosa ("Aquí tienes: [...]. Espero...").
+    // Extraer el array desde el primer '[' hasta el último ']'.
+    const start = raw.indexOf("[")
+    const end = raw.lastIndexOf("]")
+    if (start >= 0 && end > start) {
+      try {
+        parsed = JSON.parse(raw.slice(start, end + 1))
+      } catch {
+        throw new Error("Invalid LLM response: not valid JSON")
+      }
+    } else {
+      throw new Error("Invalid LLM response: not valid JSON")
+    }
   }
 
   const result = SubtasksSchema.safeParse(parsed)
