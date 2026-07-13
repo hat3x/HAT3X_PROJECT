@@ -11,6 +11,7 @@ import { runAgent } from "./agent-runner.js"
 import { prepareWorkspace } from "./workspace.js"
 import { executePlan, type RunSubtaskFn, type ExecutePlanResult } from "./queue.js"
 import { loadRoster, findRosterAgent } from "../intelligence/capability-map/roster.js"
+import { skillsForVertical } from "./vertical-skills.js"
 
 export interface ExecutorDeps {
   loadTask(taskId: string): Promise<HatTask>
@@ -119,8 +120,10 @@ export async function executeTask(taskId: string, overrides: Partial<ExecutorDep
     const rosterConfig = rosterAgent !== null && existsSync(join(repoRoot, rosterAgent.configPath))
       ? readFileSync(join(repoRoot, rosterAgent.configPath), "utf8")
       : null
+    // Skills reales invocables por vertical (el task-analyzer LLM inventa nombres que no cargan)
+    const realSkills = skillsForVertical(subtask.vertical)
     const r = await runAgent({
-      subtask,
+      subtask: realSkills.length > 0 ? { ...subtask, skills: realSkills } : subtask,
       agentId,
       agentConfig: rosterConfig ?? loadAgentConfig(agentId, subtask.vertical),
       clientContext: task.clientId !== null ? `Cliente: ${task.clientId}` : "",
