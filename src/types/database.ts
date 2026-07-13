@@ -49,6 +49,10 @@ export interface Database {
           phone: string | null;
           email: string | null;
           address: string | null;
+          // Datos fiscales del emisor (facturación)
+          tax_id: string | null; // NIF/CIF
+          legal_name: string | null; // razón social
+          fiscal_address: string | null; // domicilio fiscal
           settings: Json;
           active: boolean;
           created_at: string;
@@ -62,6 +66,9 @@ export interface Database {
           phone?: string | null;
           email?: string | null;
           address?: string | null;
+          tax_id?: string | null;
+          legal_name?: string | null;
+          fiscal_address?: string | null;
           settings?: Json;
           active?: boolean;
           created_at?: string;
@@ -75,6 +82,9 @@ export interface Database {
           phone?: string | null;
           email?: string | null;
           address?: string | null;
+          tax_id?: string | null;
+          legal_name?: string | null;
+          fiscal_address?: string | null;
           settings?: Json;
           active?: boolean;
           created_at?: string;
@@ -336,6 +346,9 @@ export interface Database {
           birth_date: string | null;
           notes: string | null;
           marketing_consent: boolean;
+          // Datos fiscales del receptor (opcionales, para factura completa)
+          tax_id: string | null; // NIF/CIF
+          address: string | null; // dirección postal/fiscal
           created_at: string;
           updated_at: string;
         };
@@ -348,6 +361,8 @@ export interface Database {
           birth_date?: string | null;
           notes?: string | null;
           marketing_consent?: boolean;
+          tax_id?: string | null;
+          address?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -360,12 +375,64 @@ export interface Database {
           birth_date?: string | null;
           notes?: string | null;
           marketing_consent?: boolean;
+          tax_id?: string | null;
+          address?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Relationships: [
           {
             foreignKeyName: "customers_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      products: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          description: string | null;
+          price_cents: number;
+          currency: string;
+          vat_rate: number; // tipo de IVA en porcentaje (p. ej. 21.00)
+          stock: number | null; // null = producto no inventariado
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          description?: string | null;
+          price_cents?: number;
+          currency?: string;
+          vat_rate?: number;
+          stock?: number | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          description?: string | null;
+          price_cents?: number;
+          currency?: string;
+          vat_rate?: number;
+          stock?: number | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "products_salon_id_fkey";
             columns: ["salon_id"];
             isOneToOne: false;
             referencedRelation: "salons";
@@ -860,6 +927,7 @@ export type Location = Tables<"locations">;
 export type Service = Tables<"services">;
 export type Professional = Tables<"professionals">;
 export type Customer = Tables<"customers">;
+export type Product = Tables<"products">;
 export type Appointment = Tables<"appointments">;
 export type Visit = Tables<"visits">;
 export type ProfessionalSchedule = Tables<"professional_schedules">;

@@ -5,7 +5,7 @@
 > migraciones sin romper las invariantes existentes. Auditoría de solo lectura;
 > ninguna migración se ha modificado.
 >
-> Fuente: 10 migraciones (`20260711100000` … `20260713160000`) + tipos generados
+> Fuente: 11 migraciones (`20260711100000` … `20260713170000`) + tipos generados
 > a mano en `src/types/database.ts`. Estado: **proyecto en desarrollo, sin datos
 > de producción** (las migraciones de evolución añaden columnas NOT NULL sin
 > fase de backfill; ver `locations`, `services_phase_duration`).
@@ -58,7 +58,7 @@
 
 ---
 
-## 2. Tablas (13 en `public`)
+## 2. Tablas (14 en `public`)
 
 | Tabla | PK | Clave `(id,salon_id)` | RLS | Notas |
 |---|---|---|---|---|
@@ -68,7 +68,8 @@
 | `services` | `id` uuid | `services_id_salon_key` | sí | `unique(salon_id,name)`. Duración por fases (§4). |
 | `professionals` | `id` uuid | `professionals_id_salon_key` | sí | `location_id` NOT NULL (FK compuesta a `locations`). `user_id` opcional. `specialties text[]`. `color` regex `#rrggbb`. |
 | `professional_services` | `(professional_id, service_id)` | — | sí | N:M profesional↔servicio. Lleva `salon_id`. FKs compuestas. |
-| `customers` | `id` uuid | `customers_id_salon_key` | sí | NO son usuarios de auth. email único por salón (parcial, `lower(email)`). |
+| `customers` | `id` uuid | `customers_id_salon_key` | sí | NO son usuarios de auth. email único por salón (parcial, `lower(email)`). Datos fiscales opcionales `tax_id` (NIF/CIF) + `address` (§11). |
+| `products` | `id` uuid | `products_id_salon_key` | sí | catálogo retail (§11). `unique(salon_id,name)`. Dinero `price_cents`+`currency`; `vat_rate` %; `stock` opcional (null = no inventariado). RLS = `services`. |
 | `appointments` | `id` uuid | `appointments_id_salon_key` | sí | núcleo de agenda. `check(ends_at>starts_at)`. Snapshot de precio. |
 | `visits` | `id` uuid | — | sí | histórico de negocio. `appointment_id` **unique** (1:1 con cita). Casi inmutable (sin UPDATE en RLS). |
 | `professional_schedules` | `id` uuid | — | sí | horario semanal. `weekday 0..6` (0=domingo, = JS `getUTCDay()`). `time` en zona del salón. |
@@ -94,6 +95,7 @@
 | `professionals` | `user_id` | `auth.users(id)` | set null |
 | `professional_services` | `salon_id` | `salons(id)` | cascade |
 | `customers` | `salon_id` | `salons(id)` | cascade |
+| `products` | `salon_id` | `salons(id)` | cascade |
 | `appointments` | `salon_id` | `salons(id)` | cascade |
 | `appointments` | `created_by` | `auth.users(id)` | set null |
 | `visits` | `salon_id` | `salons(id)` | cascade |
@@ -290,3 +292,35 @@ y `STABLE` para que el planner las evalúe una vez por consulta (patrón
 - [ ] ¿Toco la agenda? Recordar que el anti-solape vive en `appointment_blocks` vía trigger, no en `appointments`.
 - [ ] ¿Preservo nombres de constraint al recrearlos (PostgREST + tipos a mano)?
 - [ ] ¿Actualizar `src/types/database.ts` a mano (o regenerar con `supabase gen types`) tras el cambio?
+
+---
+
+## 11. Base fiscal (migración `fiscal_base`, `20260713170000`)
+
+Soporte para facturación española. **Convención de nombres respetada:**
+identificadores en inglés, comentarios en español; concepto fiscal → columna:
+`NIF/CIF → tax_id`, `razón social → legal_name`, `dirección fiscal →
+fiscal_address`, `IVA → vat_rate`, `dirección → address`. El dinero sigue la
+invariante `price_cents (integer) + currency` (§1.6), **no** `precio_cents`.
+
+- **`salons`** (emisor) += `tax_id varchar(20)`, `legal_name varchar(200)`,
+  `fiscal_address text`. Todos nullable (aún sin datos; el nombre comercial es
+  `salons.name`, distinto de la razón social).
+- **`customers`** (receptor) += `tax_id varchar(20)`, `address text`. Opcionales:
+  solo se rellenan para factura nominativa/completa (el ticket simplificado no
+  los exige).
+- **`products`** — catálogo retail, independiente de `services` (agenda):
+  - `price_cents integer >=0` + `currency char(3)` (default `EUR`); `vat_rate
+    numeric(5,2)` en % (default 21, check 0–100); `stock integer >=0` **nullable**
+    (null = no inventariado, 0 = agotado); `active boolean` (soft-delete).
+  - `unique(salon_id,name)`; índices `idx_products_salon_id` y parcial
+    `idx_products_salon_active (salon_id,name) where active` (espejo de services).
+  - Clave de apoyo `products_id_salon_key unique(id,salon_id)` para futuras FKs
+    compuestas (líneas de venta/factura). Trigger `trg_products_updated_at`.
+  - RLS idéntica a `services`: SELECT = miembro; INSERT/UPDATE/DELETE = owner/manager.
+
+> Regla de reconciliación aplicada: donde ya existía un equivalente inglés en el
+> esquema (`address`, `name`, `price_cents`) se reutiliza el nombre existente en
+> vez de introducir un sinónimo español, para no fragmentar el vocabulario ni los
+> helpers de dinero. El contrato para el resto de subtareas es
+> `src/types/database.ts` (tipos regenerados a mano).
