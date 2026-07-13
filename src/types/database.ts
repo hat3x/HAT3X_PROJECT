@@ -676,3 +676,97 @@ export type ProfessionalSchedule = Tables<"professional_schedules">;
 export type ScheduleException = Tables<"schedule_exceptions">;
 export type AppointmentHistoryEntry = Tables<"appointment_history">;
 export type CustomerHistoryEntry = Tables<"customer_history">;
+
+// Phase helpers -----------------------------------------------------------------
+
+/** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
+export interface ServicePhaseRange {
+  label: "application" | "exposure" | "post_exposure";
+  /** Minutos desde el inicio de la cita en que comienza la fase. */
+  startMin: number;
+  /** Minutos desde el inicio de la cita en que termina la fase. */
+  endMin: number;
+  /** Duración de la fase en minutos. */
+  durationMin: number;
+}
+
+/** Los tres tramos de tiempo relativos de un servicio con fases. */
+export interface ServicePhases {
+  application: ServicePhaseRange;
+  exposure: ServicePhaseRange;
+  postExposure: ServicePhaseRange;
+  /** Duración total (suma de las tres fases), en minutos. */
+  totalMin: number;
+}
+
+/**
+ * Devuelve los tres tramos de tiempo como rangos relativos (en minutos desde
+ * el inicio de la cita) a partir de las columnas de fase de un servicio.
+ *
+ * Las fases se encadenan sin solapamiento:
+ *   [0, application_min) → [application_min, application_min+exposure_min) → …
+ */
+export function getServicePhases(service: Service): ServicePhases {
+  const { application_min, exposure_min, post_exposure_min } = service;
+
+  const appEnd = application_min;
+  const expEnd = appEnd + exposure_min;
+  const postEnd = expEnd + post_exposure_min;
+
+  return {
+    application: {
+      label: "application",
+      startMin: 0,
+      endMin: appEnd,
+      durationMin: application_min,
+    },
+    exposure: {
+      label: "exposure",
+      startMin: appEnd,
+      endMin: expEnd,
+      durationMin: exposure_min,
+    },
+    postExposure: {
+      label: "post_exposure",
+      startMin: expEnd,
+      endMin: postEnd,
+      durationMin: post_exposure_min,
+    },
+    totalMin: postEnd,
+  };
+}
+
+/** Fases de una cita concreta expresadas como timestamps absolutos (Date). */
+export interface AppointmentPhases {
+  application: { start: Date; end: Date };
+  exposure: { start: Date; end: Date };
+  postExposure: { start: Date; end: Date };
+}
+
+/**
+ * Proyecta los rangos relativos de `getServicePhases` sobre el `starts_at`
+ * de una cita, devolviendo timestamps absolutos para cada fase.
+ */
+export function getAppointmentPhases(
+  appointment: Pick<Appointment, "starts_at">,
+  service: Service,
+): AppointmentPhases {
+  const base = new Date(appointment.starts_at).getTime();
+  const ms = 60_000;
+  const { application, exposure, postExposure } = getServicePhases(service);
+
+  return {
+    application: {
+      start: new Date(base + application.startMin * ms),
+      end: new Date(base + application.endMin * ms),
+    },
+    exposure: {
+      start: new Date(base + exposure.startMin * ms),
+      end: new Date(base + exposure.endMin * ms),
+    },
+    postExposure: {
+      start: new Date(base + postExposure.startMin * ms),
+      end: new Date(base + postExposure.endMin * ms),
+    },
+  };
+}
