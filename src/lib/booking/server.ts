@@ -375,7 +375,9 @@ export async function createBooking(
 
   const { data: service, error: serviceError } = await admin
     .from("services")
-    .select("id, name, duration_minutes, price_cents, currency, active")
+    .select(
+      "id, name, application_min, exposure_min, post_exposure_min, price_cents, currency, active",
+    )
     .eq("salon_id", salon.id)
     .eq("id", input.serviceId)
     .maybeSingle();
@@ -396,8 +398,16 @@ export async function createBooking(
   }
 
   const professionalId = match.professionalId;
+
+  // ends_at cubre la cita completa: aplicación + exposición + post-exposición.
+  // Coincide con `match.endsAt` (el motor de disponibilidad usa el mismo total),
+  // pero lo derivamos aquí explícitamente de las fases del servicio para no
+  // depender de la forma del hueco. El trigger sync_appointment_blocks calcula
+  // los rangos de bloqueo por fase a partir del servicio, no de este ends_at.
+  const totalMinutes =
+    service.application_min + service.exposure_min + service.post_exposure_min;
   const endsAt = new Date(
-    new Date(input.startsAt).getTime() + service.duration_minutes * 60_000,
+    new Date(input.startsAt).getTime() + totalMinutes * 60_000,
   ).toISOString();
 
   const customerId = await findOrCreateCustomer(admin, salon.id, input.customer);
