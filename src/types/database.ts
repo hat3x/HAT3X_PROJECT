@@ -111,7 +111,13 @@ export interface Database {
           name: string;
           description: string | null;
           category: string | null;
-          duration_minutes: number;
+          // Duración por fases (editables)
+          application_min: number;
+          exposure_min: number;
+          post_exposure_min: number;
+          // Columnas generadas (read-only)
+          duration_minutes_total: number;
+          duration_minutes: number; // alias generado de duration_minutes_total
           price_cents: number;
           currency: string;
           active: boolean;
@@ -124,7 +130,10 @@ export interface Database {
           name: string;
           description?: string | null;
           category?: string | null;
-          duration_minutes: number;
+          application_min: number;    // requerido, sin default
+          exposure_min?: number;      // default 0
+          post_exposure_min?: number; // default 0
+          // duration_minutes y duration_minutes_total son generadas: omitir en Insert
           price_cents?: number;
           currency?: string;
           active?: boolean;
@@ -137,7 +146,10 @@ export interface Database {
           name?: string;
           description?: string | null;
           category?: string | null;
-          duration_minutes?: number;
+          application_min?: number;
+          exposure_min?: number;
+          post_exposure_min?: number;
+          // duration_minutes y duration_minutes_total son generadas: omitir en Update
           price_cents?: number;
           currency?: string;
           active?: boolean;
@@ -458,6 +470,108 @@ export interface Database {
           },
         ];
       };
+      professional_schedules: {
+        Row: {
+          id: string;
+          salon_id: string;
+          professional_id: string;
+          weekday: number;
+          start_time: string;
+          end_time: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          professional_id: string;
+          weekday: number;
+          start_time: string;
+          end_time: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          professional_id?: string;
+          weekday?: number;
+          start_time?: string;
+          end_time?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "professional_schedules_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "professional_schedules_professional_id_fkey";
+            columns: ["professional_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "professionals";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      schedule_exceptions: {
+        Row: {
+          id: string;
+          salon_id: string;
+          professional_id: string;
+          exception_date: string;
+          is_available: boolean;
+          start_time: string | null;
+          end_time: string | null;
+          reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          professional_id: string;
+          exception_date: string;
+          is_available?: boolean;
+          start_time?: string | null;
+          end_time?: string | null;
+          reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          professional_id?: string;
+          exception_date?: string;
+          is_available?: boolean;
+          start_time?: string | null;
+          end_time?: string | null;
+          reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "schedule_exceptions_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "schedule_exceptions_professional_id_fkey";
+            columns: ["professional_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "professionals";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
       appointment_history: {
         Row: {
           id: number;
@@ -527,13 +641,13 @@ export interface Database {
         Relationships: [];
       };
     };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Views: Record<never, never>;
+    Functions: Record<never, never>;
     Enums: {
       member_role: MemberRole;
       appointment_status: AppointmentStatus;
     };
-    CompositeTypes: Record<string, never>;
+    CompositeTypes: Record<never, never>;
   };
 }
 
@@ -558,5 +672,7 @@ export type Professional = Tables<"professionals">;
 export type Customer = Tables<"customers">;
 export type Appointment = Tables<"appointments">;
 export type Visit = Tables<"visits">;
+export type ProfessionalSchedule = Tables<"professional_schedules">;
+export type ScheduleException = Tables<"schedule_exceptions">;
 export type AppointmentHistoryEntry = Tables<"appointment_history">;
 export type CustomerHistoryEntry = Tables<"customer_history">;
