@@ -9,7 +9,10 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      // Radio generoso (rounded-xl), borde fino y sombra difusa. La transición
+      // de sombra (200ms) hace que cualquier elevación al hover que añada el
+      // consumidor (p. ej. hover:shadow-md) se sienta fluida.
+      "rounded-xl border border-border/70 bg-card text-card-foreground shadow-sm transition-shadow duration-200 ease-apple-out",
       className,
     )}
     {...props}
