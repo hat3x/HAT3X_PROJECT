@@ -30,8 +30,16 @@ export default async function BookingPage({
   try {
     const bootstrap = await getBootstrap(params.slug);
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-8 md:py-12">
-        <BookingWizard slug={params.slug} bootstrap={bootstrap} />
+      <main className="relative min-h-dvh overflow-hidden">
+        {/* Fondo decorativo: halo violeta cálido en la parte superior. Sutil,
+            contenido y sin capturar eventos; refuerza la marca sin distraer. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[22rem] bg-[radial-gradient(70%_100%_at_50%_0%,hsl(var(--primary)/0.10),transparent_72%)]"
+        />
+        <div className="relative mx-auto w-full max-w-xl px-4 py-10 md:py-16">
+          <BookingWizard slug={params.slug} bootstrap={bootstrap} />
+        </div>
       </main>
     );
   } catch (error) {
