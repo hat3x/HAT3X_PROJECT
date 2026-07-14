@@ -46,6 +46,12 @@ export default async function DashboardLayout({
               Caja
             </Link>
             <Link
+              href="/arqueo"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Arqueo
+            </Link>
+            <Link
               href="/customers"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >

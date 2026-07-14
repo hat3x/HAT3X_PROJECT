@@ -94,9 +94,25 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
     reference: tender.reference ?? null,
   }));
 
+  // Caja abierta del salón (si la hay): la venta y sus cobros cuelgan de ella
+  // para que el arqueo (cierre de caja) agregue los totales por método. Sin
+  // sesión abierta, la venta se registra igual con `session_id` NULL.
+  const { data: openSession, error: openSessionError } = await supabase
+    .from("pos_sessions")
+    .select("id")
+    .eq("salon_id", salonId)
+    .eq("status", "open")
+    .limit(1)
+    .maybeSingle();
+  if (openSessionError !== null) {
+    return { ok: false, error: openSessionError.message };
+  }
+  const sessionId = openSession?.id ?? null;
+
   // 3) Cabecera de la venta.
   const saleInsert: TablesInsert<"pos_sales"> = {
     salon_id: salonId,
+    session_id: sessionId,
     appointment_id: values.appointmentId ?? null,
     customer_id: values.customerId ?? null,
     professional_id: values.professionalId ?? null,
@@ -156,6 +172,7 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
     const result = await gateway.registerPayment({
       salonId,
       saleId,
+      sessionId,
       totalCents: totals.totalCents,
       tenders,
     });
