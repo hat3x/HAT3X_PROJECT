@@ -107,7 +107,7 @@ export function ExceptionsEditor({
         </p>
       ) : null}
 
-      <div className="rounded-md border">
+      <div className="overflow-hidden rounded-xl border border-border/70 shadow-xs">
         <Table>
           <TableHeader>
             <TableRow>
@@ -138,8 +138,10 @@ export function ExceptionsEditor({
               </TableRow>
             ) : !data || data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="py-10 text-center">
-                  <CalendarOff className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                <TableCell colSpan={4} className="py-12 text-center">
+                  <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <CalendarOff className="h-6 w-6" />
+                  </span>
                   <p className="text-sm text-muted-foreground">
                     Sin excepciones. El profesional sigue su horario semanal.
                   </p>
@@ -263,7 +265,7 @@ function ExceptionForm({
     createMutation.error instanceof Error ? createMutation.error.message : null;
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
+    <form onSubmit={handleSubmit} className="grid gap-5 pt-1">
       <div className="grid gap-2">
         <Label htmlFor="exception_date">Fecha *</Label>
         <Input

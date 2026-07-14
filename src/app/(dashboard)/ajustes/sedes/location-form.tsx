@@ -84,7 +84,7 @@ export function LocationForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
+    <form onSubmit={handleSubmit} className="grid gap-5 pt-1">
       <div className="grid gap-2">
         <Label htmlFor="name">Nombre de la sede *</Label>
         <Input

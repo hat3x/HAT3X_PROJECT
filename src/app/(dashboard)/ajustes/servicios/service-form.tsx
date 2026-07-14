@@ -94,7 +94,7 @@ export function ServiceForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
+    <form onSubmit={handleSubmit} className="grid gap-5 pt-1">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="name">Nombre *</Label>
@@ -127,8 +127,8 @@ export function ServiceForm({
         />
       </div>
 
-      <fieldset className="grid gap-3 rounded-md border p-4">
-        <legend className="px-1 text-sm font-medium">Duración por fases</legend>
+      <fieldset className="grid gap-4 rounded-lg border border-border/70 bg-muted/30 p-4">
+        <legend className="px-1.5 text-sm font-medium">Duración por fases</legend>
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="grid gap-2">
             <Label htmlFor="application_min">Aplicación (min) *</Label>
@@ -172,10 +172,10 @@ export function ServiceForm({
           </div>
         </div>
         <p
-          className="flex items-center gap-2 text-sm text-muted-foreground"
+          className="flex items-center gap-2 rounded-md border border-border/70 bg-background px-3 py-2 text-sm text-muted-foreground"
           aria-live="polite"
         >
-          <Clock className="h-4 w-4" />
+          <Clock className="h-4 w-4 text-primary" />
           Duración total:{" "}
           <span className="font-semibold text-foreground">
             {totalMinutes} min
@@ -196,10 +196,10 @@ export function ServiceForm({
         />
       </div>
 
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5 text-sm transition-colors duration-150 ease-apple-out hover:bg-accent/40">
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-input"
+          className="h-4 w-4 rounded border-input accent-primary"
           checked={values.active}
           onChange={(e) => update("active", e.target.checked)}
         />

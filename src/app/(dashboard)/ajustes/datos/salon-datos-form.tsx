@@ -1,16 +1,12 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Store } from "lucide-react";
 
+import { SaveStatus } from "@/app/(dashboard)/ajustes/save-status";
+import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -93,16 +89,15 @@ export function SalonDatosForm({ salon }: SalonDatosFormProps): React.ReactEleme
     fieldError ?? (mutation.isError ? mutation.error.message : null);
 
   return (
-    <Card>
+    <div>
+      <SectionHeader
+        icon={Store}
+        title="Datos del salón"
+        description="Nombre, zona horaria y datos de contacto de tu salón."
+      />
+      <Card className="animate-fade-up [animation-delay:60ms]">
       <form onSubmit={handleSubmit}>
-        <CardHeader>
-          <CardTitle>Datos del salón</CardTitle>
-          <CardDescription>
-            Nombre, zona horaria y datos de contacto de tu salón.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="grid gap-4">
+        <CardContent className="grid gap-5 pt-6">
           <div className="grid gap-2">
             <Label htmlFor="name">Nombre *</Label>
             <Input
@@ -169,25 +164,16 @@ export function SalonDatosForm({ salon }: SalonDatosFormProps): React.ReactEleme
             />
           </div>
 
-          {errorMessage !== null ? (
-            <p role="alert" className="text-sm text-destructive">
-              {errorMessage}
-            </p>
-          ) : null}
-
-          {saved ? (
-            <p role="status" className="text-sm text-emerald-600">
-              Cambios guardados.
-            </p>
-          ) : null}
+          <SaveStatus error={errorMessage} saved={saved} />
         </CardContent>
 
-        <CardFooter className="justify-end">
+        <CardFooter className="justify-end border-t border-border/60 pt-6">
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? "Guardando…" : "Guardar cambios"}
           </Button>
         </CardFooter>
       </form>
-    </Card>
+      </Card>
+    </div>
   );
 }

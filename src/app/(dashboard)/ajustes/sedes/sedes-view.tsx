@@ -1,21 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Plus } from "lucide-react";
+import { Building2, MapPin, Plus } from "lucide-react";
 
+import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import {
   LocationForm,
   type LocationFormDefaults,
 } from "@/app/(dashboard)/ajustes/sedes/location-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -101,53 +95,52 @@ export function SedesView({ salonId }: SedesViewProps): React.ReactElement {
   const activeMutation = useSetLocationActive(salonId);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div>
-          <CardTitle>Sedes</CardTitle>
-          <CardDescription>
-            Gestiona las ubicaciones físicas de tu salón.
-          </CardDescription>
-        </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva sede
-          </Button>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Nueva sede</DialogTitle>
-              <DialogDescription>
-                Añade una ubicación física al salón.
-              </DialogDescription>
-            </DialogHeader>
-            <LocationForm
-              submitLabel="Crear sede"
-              pending={createMutation.isPending}
-              error={
-                createMutation.error instanceof Error
-                  ? createMutation.error.message
-                  : null
-              }
-              onCancel={() => setCreateOpen(false)}
-              onSubmit={(input) => {
-                createMutation.mutate(input, {
-                  onSuccess: () => setCreateOpen(false),
-                });
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      </CardHeader>
+    <div>
+      <SectionHeader
+        icon={Building2}
+        title="Sedes"
+        description="Gestiona las ubicaciones físicas de tu salón."
+        action={
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva sede
+            </Button>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nueva sede</DialogTitle>
+                <DialogDescription>
+                  Añade una ubicación física al salón.
+                </DialogDescription>
+              </DialogHeader>
+              <LocationForm
+                submitLabel="Crear sede"
+                pending={createMutation.isPending}
+                error={
+                  createMutation.error instanceof Error
+                    ? createMutation.error.message
+                    : null
+                }
+                onCancel={() => setCreateOpen(false)}
+                onSubmit={(input) => {
+                  createMutation.mutate(input, {
+                    onSuccess: () => setCreateOpen(false),
+                  });
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
-      <CardContent>
+      <div className="animate-fade-up [animation-delay:60ms]">
         {activeMutation.error instanceof Error ? (
           <p role="alert" className="mb-4 text-sm text-destructive">
             {activeMutation.error.message}
           </p>
         ) : null}
 
-        <div className="rounded-md border">
+        <div className="overflow-hidden rounded-xl border border-border/70 shadow-xs">
           <Table>
             <TableHeader>
               <TableRow>
@@ -175,8 +168,10 @@ export function SedesView({ salonId }: SedesViewProps): React.ReactElement {
                 </TableRow>
               ) : !locations || locations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center">
-                    <MapPin className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                  <TableCell colSpan={5} className="py-12 text-center">
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <MapPin className="h-6 w-6" />
+                    </span>
                     <p className="text-sm text-muted-foreground">
                       Aún no hay sedes. Crea la primera.
                     </p>
@@ -232,7 +227,7 @@ export function SedesView({ salonId }: SedesViewProps): React.ReactElement {
             </TableBody>
           </Table>
         </div>
-      </CardContent>
+      </div>
 
       {editing !== null ? (
         <EditLocationDialog
@@ -241,6 +236,6 @@ export function SedesView({ salonId }: SedesViewProps): React.ReactElement {
           onClose={() => setEditing(null)}
         />
       ) : null}
-    </Card>
+    </div>
   );
 }

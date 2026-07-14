@@ -1,16 +1,12 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Receipt } from "lucide-react";
 
+import { SaveStatus } from "@/app/(dashboard)/ajustes/save-status";
+import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,17 +76,15 @@ export function SalonFiscalForm({
     fieldError ?? (mutation.isError ? mutation.error.message : null);
 
   return (
-    <Card>
+    <div>
+      <SectionHeader
+        icon={Receipt}
+        title="Datos fiscales"
+        description="Identificación fiscal del salón como emisor de facturas. Aparecerán en las facturas completas que emitas."
+      />
+      <Card className="animate-fade-up [animation-delay:60ms]">
       <form onSubmit={handleSubmit}>
-        <CardHeader>
-          <CardTitle>Datos fiscales</CardTitle>
-          <CardDescription>
-            Identificación fiscal del salón como emisor de facturas. Aparecerán
-            en las facturas completas que emitas.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="grid gap-4">
+        <CardContent className="grid gap-5 pt-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="tax_id">NIF / CIF</Label>
@@ -137,25 +131,16 @@ export function SalonFiscalForm({
             </p>
           </div>
 
-          {errorMessage !== null ? (
-            <p role="alert" className="text-sm text-destructive">
-              {errorMessage}
-            </p>
-          ) : null}
-
-          {saved ? (
-            <p role="status" className="text-sm text-emerald-600">
-              Cambios guardados.
-            </p>
-          ) : null}
+          <SaveStatus error={errorMessage} saved={saved} />
         </CardContent>
 
-        <CardFooter className="justify-end">
+        <CardFooter className="justify-end border-t border-border/60 pt-6">
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? "Guardando…" : "Guardar cambios"}
           </Button>
         </CardFooter>
       </form>
-    </Card>
+      </Card>
+    </div>
   );
 }

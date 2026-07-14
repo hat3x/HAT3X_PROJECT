@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Pencil, Plus, Scissors, Search, Trash2 } from "lucide-react";
 
+import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import {
   ServiceForm,
   type ServiceFormDefaults,
@@ -73,57 +74,57 @@ export function ServicesView({ salonId }: ServicesViewProps): React.ReactElement
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight">Servicios</h2>
-          <p className="text-sm text-muted-foreground">
-            Catálogo, duración por fases y precios de tu salón.
-          </p>
+      <SectionHeader
+        icon={Scissors}
+        title="Servicios"
+        description="Catálogo, duración por fases y precios de tu salón."
+        action={
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo servicio
+            </Button>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Nuevo servicio</DialogTitle>
+                <DialogDescription>
+                  Añade un servicio al catálogo del salón.
+                </DialogDescription>
+              </DialogHeader>
+              <ServiceForm
+                submitLabel="Crear servicio"
+                pending={createMutation.isPending}
+                error={
+                  createMutation.error instanceof Error
+                    ? createMutation.error.message
+                    : null
+                }
+                onCancel={() => setCreateOpen(false)}
+                onSubmit={(input) => {
+                  createMutation.mutate(input, {
+                    onSuccess: () => setCreateOpen(false),
+                  });
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        }
+      />
+
+      <div className="animate-fade-up [animation-delay:60ms]">
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Buscar por nombre o categoría…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Buscar servicios"
+          />
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo servicio
-          </Button>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Nuevo servicio</DialogTitle>
-              <DialogDescription>
-                Añade un servicio al catálogo del salón.
-              </DialogDescription>
-            </DialogHeader>
-            <ServiceForm
-              submitLabel="Crear servicio"
-              pending={createMutation.isPending}
-              error={
-                createMutation.error instanceof Error
-                  ? createMutation.error.message
-                  : null
-              }
-              onCancel={() => setCreateOpen(false)}
-              onSubmit={(input) => {
-                createMutation.mutate(input, {
-                  onSuccess: () => setCreateOpen(false),
-                });
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
 
-      <div className="relative mb-4 max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Buscar por nombre o categoría…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Buscar servicios"
-        />
-      </div>
-
-      <div className="rounded-md border">
-        <Table>
+        <div className="overflow-hidden rounded-xl border border-border/70 shadow-xs">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nombre</TableHead>
@@ -153,8 +154,10 @@ export function ServicesView({ salonId }: ServicesViewProps): React.ReactElement
               </TableRow>
             ) : !services || services.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center">
-                  <Scissors className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                <TableCell colSpan={6} className="py-12 text-center">
+                  <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Scissors className="h-6 w-6" />
+                  </span>
                   <p className="text-sm text-muted-foreground">
                     {search.trim() === ""
                       ? "Aún no hay servicios. Crea el primero."
@@ -205,6 +208,7 @@ export function ServicesView({ salonId }: ServicesViewProps): React.ReactElement
             )}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       {editing !== null ? (

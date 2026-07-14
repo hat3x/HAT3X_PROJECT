@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Clock, Plus, Save, Trash2 } from "lucide-react";
 
+import { SaveStatus } from "@/app/(dashboard)/ajustes/save-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -164,10 +165,10 @@ export function ScheduleEditor({
           return (
             <div
               key={weekday}
-              className="grid gap-3 rounded-md border p-3 sm:grid-cols-[8rem_1fr] sm:items-start sm:gap-4"
+              className="grid gap-3 rounded-lg border border-border/70 p-3.5 transition-colors duration-150 ease-apple-out hover:border-border sm:grid-cols-[8rem_1fr] sm:items-start sm:gap-4"
             >
               <div className="flex items-center justify-between sm:block">
-                <span className="text-sm font-medium">
+                <span className="text-sm font-semibold">
                   {WEEKDAY_LABELS[weekday]}
                 </span>
                 {daySlots.length === 0 ? (
@@ -230,18 +231,12 @@ export function ScheduleEditor({
         })}
       </div>
 
-      {formError !== null ? (
-        <p role="alert" className="text-sm text-destructive">
-          {formError}
-        </p>
-      ) : mutationError !== null ? (
-        <p role="alert" className="text-sm text-destructive">
-          {mutationError}
-        </p>
-      ) : saved ? (
-        <p role="status" className="text-sm text-emerald-600">
-          Horario guardado.
-        </p>
+      {formError !== null || mutationError !== null || saved ? (
+        <SaveStatus
+          error={formError ?? mutationError}
+          saved={saved}
+          savedLabel="Horario guardado."
+        />
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Clock className="h-3.5 w-3.5" />

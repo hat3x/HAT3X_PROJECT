@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, Clock } from "lucide-react";
 
 import { ExceptionsEditor } from "@/app/(dashboard)/ajustes/horarios/exceptions-editor";
 import { ScheduleEditor } from "@/app/(dashboard)/ajustes/horarios/schedule-editor";
+import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import {
   Card,
   CardContent,
@@ -58,13 +59,11 @@ export function HorariosView({
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold tracking-tight">Horarios</h2>
-        <p className="text-sm text-muted-foreground">
-          Define el horario semanal de cada profesional y sus excepciones
-          puntuales.
-        </p>
-      </div>
+      <SectionHeader
+        icon={Clock}
+        title="Horarios"
+        description="Define el horario semanal de cada profesional y sus excepciones puntuales."
+      />
 
       {isPending ? (
         <div className="grid gap-4">
@@ -78,15 +77,17 @@ export function HorariosView({
             : "Error al cargar el personal"}
         </p>
       ) : !professionals || professionals.length === 0 ? (
-        <div className="rounded-md border py-12 text-center">
-          <CalendarClock className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
+        <div className="rounded-xl border border-border/70 bg-muted/20 px-6 py-14 text-center shadow-xs">
+          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <CalendarClock className="h-6 w-6" />
+          </span>
+          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
             Aún no hay personal. Da de alta profesionales en Ajustes → Personal
             para configurar sus horarios.
           </p>
         </div>
       ) : (
-        <div className="grid gap-6">
+        <div className="grid gap-6 animate-fade-up [animation-delay:60ms]">
           <div className="grid max-w-sm gap-2">
             <Label htmlFor="professional">Profesional</Label>
             <Select value={selectedId} onValueChange={setSelectedId}>

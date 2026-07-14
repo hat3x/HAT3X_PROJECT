@@ -39,17 +39,19 @@ export default async function AjustesLayout({
   }
 
   return (
-    <main className="container py-8">
-      <div className="mb-6">
+    <main className="container py-8 md:py-10">
+      <div className="mb-8 animate-fade-up">
         <h1 className="text-3xl font-bold tracking-tight">Ajustes</h1>
-        <p className="text-muted-foreground">
+        <p className="mt-1.5 max-w-prose text-muted-foreground">
           Configura las sedes, servicios, personal, horarios y los datos de tu salón.
         </p>
       </div>
 
-      <div className="flex flex-col gap-6 md:flex-row md:gap-10">
+      <div className="flex flex-col gap-8 md:flex-row md:gap-10">
         <aside className="md:w-56 md:shrink-0">
-          <AjustesNav />
+          <div className="md:sticky md:top-8">
+            <AjustesNav />
+          </div>
         </aside>
         <div className="min-w-0 flex-1">{children}</div>
       </div>

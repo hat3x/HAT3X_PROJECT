@@ -34,7 +34,7 @@ export function AjustesNav(): React.ReactElement {
   return (
     <nav
       aria-label="Secciones de ajustes"
-      className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-2 md:mx-0 md:flex-col md:gap-0.5 md:overflow-x-visible md:px-0 md:pb-0"
+      className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2 md:mx-0 md:flex-col md:gap-1 md:overflow-x-visible md:px-0 md:pb-0"
     >
       {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
@@ -45,14 +45,22 @@ export function AjustesNav(): React.ReactElement {
             href={href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "group flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ease-apple-out",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               isActive
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                ? "bg-accent text-accent-foreground shadow-xs"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
             )}
           >
-            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <Icon
+              className={cn(
+                "h-4 w-4 shrink-0 transition-colors duration-200 ease-apple-out",
+                isActive
+                  ? "text-primary"
+                  : "text-muted-foreground group-hover:text-foreground",
+              )}
+              aria-hidden="true"
+            />
             <span className="whitespace-nowrap">{label}</span>
           </Link>
         );

@@ -109,7 +109,7 @@ export function ProfessionalForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
+    <form onSubmit={handleSubmit} className="grid gap-5 pt-1">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="full_name">Nombre *</Label>
@@ -223,16 +223,16 @@ export function ProfessionalForm({
             Aún no hay servicios en el catálogo. Créalos en Ajustes → Servicios.
           </p>
         ) : (
-          <div className="max-h-48 overflow-y-auto rounded-md border p-3">
-            <div className="grid gap-2 sm:grid-cols-2">
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-border/70 bg-muted/30 p-3">
+            <div className="grid gap-1 sm:grid-cols-2">
               {services.map((service) => (
                 <label
                   key={service.id}
-                  className="flex items-center gap-2 text-sm"
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors duration-150 ease-apple-out hover:bg-accent/50"
                 >
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-input"
+                    className="h-4 w-4 rounded border-input accent-primary"
                     checked={values.service_ids.includes(service.id)}
                     onChange={() => toggleService(service.id)}
                   />
@@ -250,10 +250,10 @@ export function ProfessionalForm({
         </p>
       </fieldset>
 
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5 text-sm transition-colors duration-150 ease-apple-out hover:bg-accent/40">
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-input"
+          className="h-4 w-4 rounded border-input accent-primary"
           checked={values.active}
           onChange={(e) => update("active", e.target.checked)}
         />
