@@ -17,6 +17,8 @@ Sistema de gestión integral para salones de belleza con soporte multi-sede.
 - [Funcionalidades](#funcionalidades)
 - [Autenticación](#autenticación)
 - [API pública de reservas](#api-pública-de-reservas)
+- [Capa de pagos y facturación](#capa-de-pagos-y-facturación)
+- [Aviso de conformidad fiscal (Veri\*factu)](#aviso-de-conformidad-fiscal-veri-factu)
 - [WhatsApp / Twilio](#whatsapp--twilio)
 - [Testing](#testing)
 - [Despliegue](#despliegue)
@@ -95,6 +97,14 @@ El esquema se gestiona con migraciones SQL en `supabase/migrations/`. Se aplican
 | `20260712120000_tenant_integrity.sql` | Constraints de integridad cruzada entre tablas del tenant |
 | `20260712130000_availability.sql` | Tablas y funciones de disponibilidad horaria |
 | `20260712140000_locations.sql` | Soporte multi-sede (`locations`); profesionales por sede |
+| `20260713000000_services_phase_duration.sql` | Duración por fases del servicio (aplicación / exposición / post) |
+| `20260713150000_reminder_queue.sql` | Cola persistente de recordatorios WhatsApp |
+| `20260713150100_reminder_rpc.sql` | RPCs `SECURITY DEFINER` para la Edge Function de recordatorios |
+| `20260713160000_appointment_blocks.sql` | Bloques de agenda para solapamiento por fases |
+| `20260713170000_fiscal_base.sql` | **Base fiscal:** datos fiscales del emisor (`salons`) y receptor (`customers`) + catálogo `products` |
+| `20260713180000_pos_base.sql` | **TPV:** `pos_sales`, `pos_sale_lines`, `pos_payments`, `pos_payment_methods`, `pos_sessions` (caja) |
+| `20260714100000_verifactu_invoices.sql` | **Facturación Veri\*factu:** `pos_invoices` — registro inmutable y encadenado por huella SHA-256 |
+| `20260714110000_rls_multitenant_guard.sql` | Guardián RLS multi-tenant sobre TPV, facturación y productos |
 
 ### Regenerar tipos TypeScript
 
@@ -137,15 +147,21 @@ salon-os/
 │   │   ├── (dashboard)/              # Panel de gestión (protegido por middleware)
 │   │   │   ├── appointments/         # Agenda: ver, crear, cancelar, reschedule
 │   │   │   ├── customers/            # Fichas de cliente + timeline de visitas
+│   │   │   ├── tpv/                  # Terminal Punto de Venta: carrito, cobro, emisión de factura
+│   │   │   ├── arqueo/               # Caja: apertura/cierre de sesión con descuadres
+│   │   │   ├── ajustes/fiscal/       # Datos fiscales del salón (emisor de facturas)
 │   │   │   └── dashboard/            # Panel resumen
 │   │   ├── (public)/reservar/[slug]/ # Asistente de reserva online (público)
 │   │   ├── api/public/booking/[slug] # API REST pública de reservas
+│   │   ├── api/facturacion/          # Libro registro (export CSV/JSON) y documento imprimible
 │   │   ├── auth/callback/            # Intercambio de código OAuth / magic link
 │   │   └── auth/signout/             # Cierre de sesión (POST)
 │   ├── components/ui/                # Componentes shadcn/ui
 │   ├── hooks/                        # Custom hooks de dominio
 │   ├── lib/
 │   │   ├── booking/                  # Disponibilidad, esquemas Zod, formatos de fecha/precio
+│   │   ├── payments/                  # Capa de pagos: totales/IVA + PaymentGateway abstracto (README propio)
+│   │   ├── invoicing/                 # Motor Veri*factu: emisión, huella, QR, export (README propio)
 │   │   ├── queries/                  # Queries de Supabase (customers, appointments)
 │   │   ├── react-query/              # Provider y query keys de TanStack Query
 │   │   ├── supabase/                 # Clientes Supabase: browser, server, admin, middleware
@@ -184,6 +200,29 @@ salon-os/
 - Un negocio puede operar en varias sedes físicas (`locations`)
 - Profesionales asignados por sede; catálogo de servicios compartido a nivel de salón
 
+### TPV (Terminal Punto de Venta)
+- «Pasar por caja» desde una cita o venta libre de mostrador (`/tpv`)
+- Carrito con líneas de **servicio**, **producto** (retail) o **cargo manual**; descuentos por línea
+- **Pago mixto**: varios medios de pago sobre un mismo ticket (efectivo + tarjeta + Bizum…)
+- Cobro mediante la **capa de pagos abstraída** (`@/lib/payments`) — hoy en modo **registro manual**, sin datáfono ni pasarela real conectada (ver [Capa de pagos](#capa-de-pagos-y-facturación))
+- Emisión opcional de **factura** (ticket simplificado F2 o factura completa F1) al cobrar
+
+### Caja y arqueo
+- Apertura/cierre de **sesión de caja** por salón/sede (`/arqueo`) con fondo inicial
+- El cierre recalcula **en servidor** los totales por método, el efectivo esperado y el **descuadre** frente al contado
+- Snapshot de totales por método guardado en la sesión para el informe de arqueo
+
+### Facturación Veri\*factu (modo NO VERI\*FACTU)
+- Registro de facturación **inmutable** y **encadenado por huella SHA-256** (`pos_invoices`)
+- **Numeración correlativa por serie y sin huecos**; desglose de IVA por tipo
+- **Documento imprimible** (HTML → PDF) con **QR de cotejo AEAT**, sello de tiempo y aviso NO VERI\*FACTU
+- **Exportación del libro registro** de facturas expedidas a CSV/JSON para la gestoría
+
+> ⚠️ **Antes de facturar de cara al público, lee el [Aviso de conformidad fiscal](#aviso-de-conformidad-fiscal-veri-factu).**
+> El detalle técnico del modelo de datos, la caja, la capa de pagos y el troubleshooting está en
+> [MANTENIMIENTO.md](./MANTENIMIENTO.md#tpv-caja-y-facturación) y en los README de
+> [`src/lib/payments`](./src/lib/payments/README.md) y [`src/lib/invoicing`](./src/lib/invoicing/README.md).
+
 ### WhatsApp / Recordatorios
 - Recordatorio 24 h y 2 h antes de la cita
 - Confirmación inmediata al reservar
@@ -211,6 +250,41 @@ salon-os/
 | `POST` | `/api/public/booking/[slug]` | Crea una reserva (estado `pending`) |
 
 La API valida con Zod y usa el cliente admin de Supabase con validaciones de dominio explícitas (salón, servicio y profesional deben pertenecer al mismo tenant).
+
+---
+
+## Capa de pagos y facturación
+
+El TPV, la caja y la facturación se apoyan en dos capas de dominio puras (sin React ni Supabase), cada una con su propio README:
+
+| Capa | Responsabilidad | Estado |
+|---|---|---|
+| [`@/lib/payments`](./src/lib/payments/README.md) | Cálculo de **totales e IVA** (fuente única de caja y facturación) y **abstracción de pasarela** (`PaymentGateway`) | Pasarela **manual** (registro sin cobro real). SumUp/Stripe/Redsys pendientes |
+| [`@/lib/invoicing`](./src/lib/invoicing/README.md) | Motor **Veri\*factu**: emisión, numeración sin huecos, huella SHA-256, QR de cotejo, documento imprimible y export del libro registro | Operativo en modo **NO VERI\*FACTU** |
+
+**Principios clave (resumen; detalle en MANTENIMIENTO.md):**
+
+- **Dinero en enteros de céntimos** en todo el sistema (nunca `float`). Los precios unitarios son **PVP con IVA incluido** (bruto): base y cuota se *extraen* del bruto.
+- La **pasarela de pago está abstraída** tras la interfaz `PaymentGateway`. Hoy `getPaymentGateway()` devuelve siempre la implementación **manual**, que solo registra el método elegido y **no procesa ningún cobro real** (no habla con datáfono ni API). Enchufar un proveedor real (SumUp, Stripe, Redsys) es un **TODO**: se añade una clase que implemente `PaymentGateway` y un `case` en el selector, **sin tocar el TPV**.
+- La factura genera un **registro inmutable** (`pos_invoices`): un trigger de base de datos bloquea `UPDATE`/`DELETE` incluso para `service_role`. Correcciones = **factura rectificativa**, nunca edición.
+
+---
+
+## Aviso de conformidad fiscal (Veri\*factu)
+
+> 🛑 **ANTES DE USO REAL — LEER OBLIGATORIAMENTE**
+>
+> **1. La conformidad Veri\*factu debe validarla una gestoría/asesoría fiscal antes de emitir facturas con validez legal.**
+> Este sistema implementa los mecanismos técnicos del Reglamento Veri\*factu (RD 1007/2023 y Orden HAC/1177/2024): registro de facturación de alta **inmutable**, **numeración correlativa sin huecos por serie**, **encadenamiento por huella SHA-256**, **desglose de IVA**, **sello de tiempo** y **QR de cotejo de la AEAT**. Aun así, **la conformidad de un sistema informático de facturación (SIF) depende de la configuración fiscal concreta del negocio** (series, tipos de IVA aplicables, recargo de equivalencia, exenciones, factura rectificativa, datos del emisor, etc.). **HAT3X no presta asesoramiento fiscal.** El titular del salón debe **validar la puesta en marcha con su gestoría** y asumir la responsabilidad legal de lo emitido.
+>
+> **2. El sistema opera en modo NO VERI\*FACTU (conserva pero NO remite).**
+> Todos los documentos se rotulan **«NO VERI\*FACTU»** (banner y leyenda del QR). El sistema **conserva** la cadena de registros inalterable, pero **no los remite a la AEAT en tiempo real**. Es una modalidad prevista por el reglamento, no un envío automático.
+>
+> **3. El modo VERI\*FACTU (transmisión a la AEAT con certificado electrónico) es FASE FUTURA.**
+> La remisión automática de cada registro a la AEAT mediante **certificado electrónico** (y el rotulado «VERI\*FACTU») **no está implementada**. Requiere certificado del obligado tributario, firma y envío al servicio web de la AEAT, gestión de respuestas/errores y almacenamiento de acuses. **No prometer transmisión a la AEAT al cliente hasta que esta fase se desarrolle y se valide.**
+>
+> **4. La pasarela de cobro es de registro manual (no cobra de verdad).**
+> El TPV **registra** el medio de pago, pero **no ejecuta cobros** contra ningún datáfono ni proveedor. Integrar SumUp/Stripe/Redsys es un TODO (ver [Capa de pagos y facturación](#capa-de-pagos-y-facturación)).
 
 ---
 
@@ -247,9 +321,9 @@ npm run dev &
 npm run test:e2e
 ```
 
-Los tests unitarios cubren: disponibilidad horaria, zonas horarias, formateo de fechas/precios, esquemas Zod y validaciones de cliente.
+Los tests unitarios cubren: disponibilidad horaria, zonas horarias, formateo de fechas/precios, esquemas Zod y validaciones de cliente, además de la **capa de pagos** (totales/IVA, cuadre de tenders) y el **motor de facturación** (cadena canónica y huella SHA-256, desglose de IVA, ticket F2 vs completa F1, export CSV/JSON del libro registro, QR y documento imprimible).
 
-Los tests de integración cubren los Route Handlers de booking con mocks de Supabase.
+Los tests de integración cubren los Route Handlers de booking y la **suite de emisión Veri\*factu** (numeración sin huecos por serie, aislamiento multi-tenant y cascada de hash) con mocks de Supabase.
 
 ---
 
@@ -267,7 +341,9 @@ Para activar WhatsApp en producción, seguir la guía completa en [MANTENIMIENTO
 ## Mantenimiento
 
 Ver [MANTENIMIENTO.md](./MANTENIMIENTO.md) para:
-- Troubleshooting de errores comunes
+- Troubleshooting de errores comunes (incluye TPV, caja/arqueo y facturación)
+- Modelo de datos TPV/facturación, flujo de caja y capa de pagos abstraída
+- Conformidad fiscal Veri\*factu: validación por gestoría y fase futura VERI\*FACTU
 - Guía de configuración Twilio paso a paso
 - Procedimientos de actualización de dependencias
 - Rotación de credenciales Supabase y Twilio
