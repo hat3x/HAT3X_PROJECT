@@ -20,6 +20,7 @@ import {
 
 import type { MemberRole } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface NavItem {
   href: string;
@@ -157,6 +158,7 @@ export function DashboardNav({
               {ROLE_LABEL[role]}
             </span>
           )}
+          <ThemeToggle />
           <form action="/auth/signout" method="post">
             <button
               type="submit"
@@ -224,6 +226,11 @@ export function DashboardNav({
               })}
 
               <div className="my-2 h-px bg-border/70" />
+
+              <div className="flex items-center justify-between px-3 py-1">
+                <span className="text-sm text-muted-foreground">Tema</span>
+                <ThemeToggle />
+              </div>
 
               <div className="flex items-center justify-between px-3">
                 {role !== null && (

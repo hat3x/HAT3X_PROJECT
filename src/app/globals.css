@@ -35,7 +35,8 @@
     --secondary-foreground: 30 12% 22%;
 
     --muted: 40 20% 95.5%;
-    --muted-foreground: 30 6% 44%;
+    /* L42% (antes 44%) para alcanzar AA 4.5:1 también sobre --muted */
+    --muted-foreground: 30 6% 42%;
 
     /* Acento sutil: lavado violeta para hover/estados suaves */
     --accent: 262 60% 96%;
@@ -45,7 +46,8 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 40 40% 99%;
 
-    --success: 145 60% 38%;
+    /* L32% (antes 38%) para que el texto blanco pase AA 4.5:1 en badges */
+    --success: 145 63% 32%;
     --success-foreground: 40 40% 99%;
 
     --warning: 38 92% 48%;
@@ -108,7 +110,8 @@
     --accent-foreground: 262 80% 88%;
 
     /* ---- Semánticos ---- */
-    --destructive: 0 62% 52%;
+    /* L50% (antes 52%) para superar con holgura AA 4.5:1 con texto claro */
+    --destructive: 0 62% 50%;
     --destructive-foreground: 40 22% 96%;
 
     --success: 145 52% 52%;
@@ -149,6 +152,15 @@
     @apply border-border;
   }
 
+  /* Sincroniza controles nativos (scrollbars, inputs de fecha, autofill)
+   * con el tema activo. Evita scrollbars blancos en modo oscuro. */
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-background text-foreground;
     /* Renderizado tipográfico nítido estilo Apple */
@@ -168,5 +180,19 @@
   :focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
+  }
+
+  /* Respeta a quien prefiere menos movimiento (WCAG 2.3.3): anula las
+   * animaciones de entrada/reveal y las transiciones largas sin perder
+   * la interactividad. El foco y los cambios de estado siguen visibles. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
