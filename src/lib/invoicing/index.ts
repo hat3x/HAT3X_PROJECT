@@ -54,3 +54,26 @@ export {
   type InvoiceExportRecord,
   type InvoiceExportDocument,
 } from "./export";
+
+// ── URL de cotejo AEAT + modo NO VERI*FACTU ───────────────────────────────────
+export {
+  buildVerifactuUrl,
+  VERIFACTU_LEGEND,
+  VERIFACTU_MODE,
+  type VerifactuEnvironment,
+  type VerifactuQrParams,
+} from "./verifactu-url";
+
+// ── Generador de códigos QR (puro, sin dependencias) ──────────────────────────
+export { encodeQrSvg, QrCode, type QrEcc } from "./qr";
+
+// ── Documento imprimible (ticket y factura completa) ──────────────────────────
+export {
+  buildInvoiceDocumentHtml,
+  type InvoiceDocumentData,
+  type InvoiceDocumentOptions,
+  type DocumentIssuer,
+  type DocumentRecipient,
+  type DocumentTaxRow,
+  type DocumentLineItem,
+} from "./document";

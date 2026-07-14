@@ -32,6 +32,8 @@
  */
 import { createHash } from "node:crypto";
 
+import { centsToSpecAmount, formatSpecDate } from "./spec-format";
+
 /** Tipo de factura Veri*factu según el tipo interno del registro. */
 export type VerifactuInvoiceCode = "F1" | "F2";
 
@@ -55,27 +57,6 @@ export interface HashableInvoiceRecord {
   generatedAt: Date;
 }
 
-/** Céntimos enteros → euros con 2 decimales y punto decimal ("2100" → "21.00"). */
-function centsToAmount(cents: number): string {
-  if (!Number.isInteger(cents)) {
-    throw new RangeError(`Importe no entero para la huella: ${cents}`);
-  }
-  // División entera + resto para no introducir ruido de coma flotante.
-  const sign = cents < 0 ? "-" : "";
-  const abs = Math.abs(cents);
-  const euros = Math.trunc(abs / 100);
-  const remainder = abs % 100;
-  return `${sign}${euros}.${remainder.toString().padStart(2, "0")}`;
-}
-
-/** `Date` → `dd-mm-yyyy` en UTC (calendario de la fecha de expedición). */
-function formatIssueDate(date: Date): string {
-  const day = date.getUTCDate().toString().padStart(2, "0");
-  const month = (date.getUTCMonth() + 1).toString().padStart(2, "0");
-  const year = date.getUTCFullYear().toString().padStart(4, "0");
-  return `${day}-${month}-${year}`;
-}
-
 /**
  * Construye la cadena canónica (pares `Clave=valor` unidos por `&`) sobre la que
  * se calcula la huella. Aislada de {@link computeInvoiceHash} para poder auditar
@@ -85,10 +66,10 @@ export function buildCanonicalString(record: HashableInvoiceRecord): string {
   const fields: Array<[string, string]> = [
     ["IDEmisorFactura", record.issuerTaxId],
     ["NumSerieFactura", record.invoiceNumber],
-    ["FechaExpedicionFactura", formatIssueDate(record.issuedAt)],
+    ["FechaExpedicionFactura", formatSpecDate(record.issuedAt)],
     ["TipoFactura", record.invoiceCode],
-    ["CuotaTotal", centsToAmount(record.taxCents)],
-    ["ImporteTotal", centsToAmount(record.totalCents)],
+    ["CuotaTotal", centsToSpecAmount(record.taxCents)],
+    ["ImporteTotal", centsToSpecAmount(record.totalCents)],
     // El primer registro de la cadena firma Huella vacía (convención AEAT).
     ["Huella", record.previousHash ?? ""],
     ["FechaHoraHusoGenRegistro", record.generatedAt.toISOString()],
