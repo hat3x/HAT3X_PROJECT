@@ -40,6 +40,12 @@ export default async function DashboardLayout({
               Citas
             </Link>
             <Link
+              href="/tpv"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Caja
+            </Link>
+            <Link
               href="/customers"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >
