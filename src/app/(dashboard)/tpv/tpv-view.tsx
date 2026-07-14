@@ -4,10 +4,13 @@ import { useMemo, useState } from "react";
 import {
   CalendarClock,
   CheckCircle2,
+  Minus,
   Package,
   Plus,
+  Receipt,
   Scissors,
   Search,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -29,13 +32,7 @@ import {
 import { PaymentDialog } from "@/app/(dashboard)/tpv/payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -83,8 +80,9 @@ interface TpvViewProps {
 }
 
 /**
- * Pantalla "pasar por caja": catálogo (servicios/productos) a la izquierda,
- * ticket con totales a la derecha. Arranca una venta libre o desde una cita del
+ * Pantalla "pasar por caja", pensada para cobrar desde tablet: catálogo
+ * (servicios/productos) con botonera amplia a la izquierda y ticket con
+ * totales fijo a la derecha. Arranca una venta libre o desde una cita del
  * día; el cobro se registra vía la capa de pagos (diálogo de cobro).
  */
 export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement {
@@ -194,18 +192,25 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
     });
   }
 
+  const activeCatalog = tab === "services" ? services : products;
+  const catalogItems = activeCatalog.data ?? [];
+  const lineCount = completeLines.length;
+
   return (
-    <main className="container py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">Caja</h1>
-        <p className="text-muted-foreground">
-          Pasa por caja una cita o crea una venta libre.
-        </p>
+    <main className="container py-6 lg:py-8">
+      {/* ── Cabecera ─────────────────────────────────────────────────────── */}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Caja</h1>
+          <p className="text-sm text-muted-foreground">
+            Pasa por caja una cita o crea una venta libre.
+          </p>
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_24rem]">
+      <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
         {/* ── Catálogo ──────────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <AppointmentPicker
             appointments={appointments.data ?? []}
             loading={appointments.isPending}
@@ -214,32 +219,31 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
             onPick={startFromAppointment}
           />
 
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={tab === "services" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setTab("services")}
-                >
-                  <Scissors className="mr-2 h-4 w-4" />
-                  Servicios
-                </Button>
-                <Button
-                  variant={tab === "products" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setTab("products")}
-                >
-                  <Package className="mr-2 h-4 w-4" />
-                  Productos
-                </Button>
+          <Card className="overflow-hidden">
+            <CardContent className="p-4 sm:p-5">
+              {/* Control segmentado servicios / productos */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="inline-flex items-center rounded-xl border border-border/70 bg-muted/50 p-1 shadow-xs">
+                  <SegmentTab
+                    active={tab === "services"}
+                    icon={<Scissors className="h-4 w-4" />}
+                    label="Servicios"
+                    onClick={() => setTab("services")}
+                  />
+                  <SegmentTab
+                    active={tab === "products"}
+                    icon={<Package className="h-4 w-4" />}
+                    label="Productos"
+                    onClick={() => setTab("products")}
+                  />
+                </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+              {/* Buscador */}
+              <div className="relative mt-4">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  className="pl-9"
+                  className="h-11 rounded-xl pl-10 text-base"
                   placeholder={
                     tab === "services" ? "Buscar servicio…" : "Buscar producto…"
                   }
@@ -249,32 +253,35 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
                 />
               </div>
 
-              <div className="grid max-h-[24rem] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
-                {tab === "services" ? (
-                  services.isPending ? (
-                    <CatalogSkeleton />
-                  ) : (services.data ?? []).length === 0 ? (
-                    <EmptyCatalog label="No hay servicios activos." />
-                  ) : (
-                    (services.data ?? []).map((service) => (
-                      <CatalogButton
-                        key={service.id}
-                        title={service.name}
-                        priceCents={service.price_cents}
-                        onClick={() => addLine(lineFromService(service))}
-                      />
-                    ))
-                  )
-                ) : products.isPending ? (
+              {/* Rejilla de botones táctiles */}
+              <div className="mt-4 grid max-h-[28rem] grid-cols-2 gap-2.5 overflow-y-auto pr-0.5 sm:grid-cols-3 xl:grid-cols-4">
+                {activeCatalog.isPending ? (
                   <CatalogSkeleton />
-                ) : (products.data ?? []).length === 0 ? (
-                  <EmptyCatalog label="No hay productos activos." />
+                ) : catalogItems.length === 0 ? (
+                  <EmptyCatalog
+                    label={
+                      tab === "services"
+                        ? "No hay servicios activos."
+                        : "No hay productos activos."
+                    }
+                  />
+                ) : tab === "services" ? (
+                  (services.data ?? []).map((service) => (
+                    <CatalogButton
+                      key={service.id}
+                      title={service.name}
+                      priceCents={service.price_cents}
+                      kind="services"
+                      onClick={() => addLine(lineFromService(service))}
+                    />
+                  ))
                 ) : (
                   (products.data ?? []).map((product) => (
                     <CatalogButton
                       key={product.id}
                       title={product.name}
                       priceCents={product.price_cents}
+                      kind="products"
                       onClick={() => addLine(lineFromProduct(product))}
                     />
                   ))
@@ -285,19 +292,35 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
         </div>
 
         {/* ── Ticket ────────────────────────────────────────────────────── */}
-        <Card className="lg:sticky lg:top-6 lg:h-fit">
-          <CardHeader className="pb-3">
-            <CardTitle>Ticket</CardTitle>
+        <Card className="flex flex-col overflow-hidden lg:sticky lg:top-6 lg:h-fit lg:max-h-[calc(100vh-3rem)]">
+          {/* Cabecera del ticket */}
+          <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-muted/30 px-5 py-4">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Receipt className="h-[1.15rem] w-[1.15rem]" />
+              </span>
+              <div className="leading-tight">
+                <p className="text-sm font-semibold text-foreground">Ticket</p>
+                <p className="text-xs text-muted-foreground">
+                  {lineCount > 0
+                    ? `${lineCount} concepto${lineCount !== 1 ? "s" : ""}`
+                    : "Vacío"}
+                </p>
+              </div>
+            </div>
             {context !== null ? (
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="gap-1">
-                  <CalendarClock className="h-3 w-3" />
-                  {context.label}
+              <div className="flex items-center gap-1">
+                <Badge
+                  variant="secondary"
+                  className="max-w-[11rem] gap-1 truncate"
+                >
+                  <CalendarClock className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{context.label}</span>
                 </Badge>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6"
+                  className="h-7 w-7 shrink-0"
                   aria-label="Quitar cita del ticket"
                   onClick={() => setContext(null)}
                 >
@@ -305,16 +328,24 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
                 </Button>
               </div>
             ) : (
-              <CardDescription>Venta libre</CardDescription>
+              <span className="text-xs font-medium text-muted-foreground">
+                Venta libre
+              </span>
             )}
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+          </div>
+
+          <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
             {lines.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Añade servicios o productos al ticket.
-              </p>
+              <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 px-4 py-10 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+                  <Sparkles className="h-6 w-6" />
+                </span>
+                <p className="max-w-[16rem] text-sm text-muted-foreground">
+                  Toca un servicio o producto del catálogo para empezar el ticket.
+                </p>
+              </div>
             ) : (
-              <ul className="flex flex-col divide-y">
+              <ul className="flex flex-col gap-2.5">
                 {lines.map((line) => (
                   <TicketRow
                     key={line.localId}
@@ -328,8 +359,7 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
 
             <Button
               variant="outline"
-              size="sm"
-              className="justify-start"
+              className="h-10 justify-start rounded-lg"
               onClick={() => setLines((prev) => [...prev, blankManualLine()])}
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -341,10 +371,14 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Nota del ticket (opcional)"
               rows={2}
+              className="resize-none rounded-lg"
               aria-label="Nota del ticket"
             />
+          </CardContent>
 
-            <dl className="grid gap-1 border-t pt-3 text-sm">
+          {/* Totales + acción de cobro (fijo al pie) */}
+          <div className="border-t border-border/70 bg-muted/30 p-5">
+            <dl className="grid gap-1.5 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <dt>Base imponible</dt>
                 <dd className="tabular-nums">
@@ -360,20 +394,25 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
                   <dd className="tabular-nums">{formatMoney(entry.taxCents)}</dd>
                 </div>
               ))}
-              <div className="mt-1 flex justify-between border-t pt-2 text-base font-semibold">
-                <dt>Total</dt>
-                <dd className="tabular-nums">{formatMoney(totals.totalCents)}</dd>
+              <div className="mt-1.5 flex items-baseline justify-between border-t border-border/70 pt-3">
+                <dt className="text-base font-semibold">Total</dt>
+                <dd className="text-2xl font-bold tabular-nums tracking-tight">
+                  {formatMoney(totals.totalCents)}
+                </dd>
               </div>
             </dl>
 
             <Button
               size="lg"
+              className="mt-4 h-14 w-full rounded-xl text-base font-semibold"
               disabled={!canCharge}
               onClick={() => setPayOpen(true)}
             >
-              Cobrar {formatMoney(totals.totalCents)}
+              {canCharge
+                ? `Cobrar ${formatMoney(totals.totalCents)}`
+                : "Añade conceptos para cobrar"}
             </Button>
-          </CardContent>
+          </div>
         </Card>
       </div>
 
@@ -403,17 +442,17 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              Venta registrada
-            </DialogTitle>
+            <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-success/10 text-success">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <DialogTitle>Venta registrada</DialogTitle>
             <DialogDescription>
               Se han registrado {receipt?.lineCount} línea(s) y{" "}
               {receipt?.tenderCount} cobro(s).
             </DialogDescription>
           </DialogHeader>
           {receipt !== null ? (
-            <dl className="grid gap-1 rounded-md bg-muted p-3 text-sm">
+            <dl className="grid gap-1.5 rounded-xl border border-border/70 bg-muted/40 p-4 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <dt>Base</dt>
                 <dd className="tabular-nums">
@@ -424,16 +463,18 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
                 <dt>IVA</dt>
                 <dd className="tabular-nums">{formatMoney(receipt.taxCents)}</dd>
               </div>
-              <div className="flex justify-between font-semibold">
-                <dt>Total cobrado</dt>
-                <dd className="tabular-nums">
+              <div className="mt-1 flex items-baseline justify-between border-t border-border/70 pt-2.5">
+                <dt className="font-semibold">Total cobrado</dt>
+                <dd className="text-lg font-bold tabular-nums">
                   {formatMoney(receipt.totalCents)}
                 </dd>
               </div>
             </dl>
           ) : null}
           <DialogFooter>
-            <Button onClick={() => setReceipt(null)}>Nueva venta</Button>
+            <Button className="h-11" onClick={() => setReceipt(null)}>
+              Nueva venta
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -443,25 +484,68 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
 
 // ── Subcomponentes ──────────────────────────────────────────────────────────
 
-/** Botón de un ítem del catálogo (servicio o producto). */
-function CatalogButton({
-  title,
-  priceCents,
+/** Pestaña de un control segmentado (servicios / productos). */
+function SegmentTab({
+  active,
+  icon,
+  label,
   onClick,
 }: {
-  title: string;
-  priceCents: number;
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
   onClick: () => void;
 }): React.ReactElement {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex h-20 flex-col items-start justify-between rounded-md border p-2 text-left transition-colors hover:border-primary hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-pressed={active}
+      className={[
+        "inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium transition-all duration-200 ease-apple-out active:scale-[0.98]",
+        active
+          ? "bg-card text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      ].join(" ")}
     >
-      <span className="line-clamp-2 text-xs font-medium">{title}</span>
-      <span className="text-sm font-semibold tabular-nums">
-        {formatMoney(priceCents)}
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+/** Botón de un ítem del catálogo (servicio o producto), táctil y amplio. */
+function CatalogButton({
+  title,
+  priceCents,
+  kind,
+  onClick,
+}: {
+  title: string;
+  priceCents: number;
+  kind: "services" | "products";
+  onClick: () => void;
+}): React.ReactElement {
+  const Icon = kind === "services" ? Scissors : Package;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group relative flex h-24 flex-col items-start justify-between overflow-hidden rounded-xl border border-border/70 bg-card p-3 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.98]"
+    >
+      <span className="flex w-full items-start justify-between gap-1.5">
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary opacity-0 transition-all duration-200 ease-apple-out group-hover:opacity-100">
+          <Plus className="h-3.5 w-3.5" />
+        </span>
+      </span>
+      <span className="w-full space-y-0.5">
+        <span className="line-clamp-2 text-xs font-medium leading-tight text-foreground">
+          {title}
+        </span>
+        <span className="block text-sm font-semibold tabular-nums text-foreground">
+          {formatMoney(priceCents)}
+        </span>
       </span>
     </button>
   );
@@ -470,8 +554,8 @@ function CatalogButton({
 function CatalogSkeleton(): React.ReactElement {
   return (
     <>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <Skeleton key={i} className="h-20 w-full" />
+      {Array.from({ length: 8 }).map((_, i) => (
+        <Skeleton key={i} className="h-24 w-full rounded-xl" />
       ))}
     </>
   );
@@ -479,9 +563,12 @@ function CatalogSkeleton(): React.ReactElement {
 
 function EmptyCatalog({ label }: { label: string }): React.ReactElement {
   return (
-    <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
-      {label}
-    </p>
+    <div className="col-span-full flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 py-12 text-center">
+      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+        <Package className="h-5 w-5" />
+      </span>
+      <p className="text-sm text-muted-foreground">{label}</p>
+    </div>
   );
 }
 
@@ -500,31 +587,47 @@ function AppointmentPicker({
   onPick: (appt: AppointmentWithDetails) => void;
 }): React.ReactElement | null {
   if (loading) {
-    return <Skeleton className="h-10 w-full" />;
+    return <Skeleton className="h-11 w-full rounded-xl" />;
   }
   if (appointments.length === 0) {
     return null;
   }
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-muted-foreground">Desde cita:</span>
-      {appointments.map((appt) => (
-        <Button
-          key={appt.id}
-          variant={activeId === appt.id ? "default" : "outline"}
-          size="sm"
-          onClick={() => onPick(appt)}
-        >
-          <CalendarClock className="mr-2 h-4 w-4" />
-          {formatTimeInZone(appt.starts_at, timezone)} ·{" "}
-          {appt.customer?.full_name ?? "Cliente"}
-        </Button>
-      ))}
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+      <span className="inline-flex items-center gap-1.5 pl-1 pr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <CalendarClock className="h-3.5 w-3.5" />
+        Desde cita
+      </span>
+      {appointments.map((appt) => {
+        const active = activeId === appt.id;
+        return (
+          <button
+            key={appt.id}
+            type="button"
+            onClick={() => onPick(appt)}
+            aria-pressed={active}
+            className={[
+              "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all duration-200 ease-apple-out active:scale-[0.98]",
+              active
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border/70 bg-background text-foreground hover:border-primary/30 hover:bg-accent",
+            ].join(" ")}
+          >
+            <span className="tabular-nums">
+              {formatTimeInZone(appt.starts_at, timezone)}
+            </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="max-w-[9rem] truncate">
+              {appt.customer?.full_name ?? "Cliente"}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-/** Una fila editable del ticket. */
+/** Una fila editable del ticket, con controles táctiles amplios. */
 function TicketRow({
   line,
   onChange,
@@ -538,52 +641,81 @@ function TicketRow({
   const unit = parseEuroToCents(line.unitPrice);
   const lineTotalCents = qty !== null && unit !== null ? Math.round(unit * qty) : 0;
 
+  function stepQty(delta: number): void {
+    const next = Math.max(1, (parseQuantity(line.quantity) ?? 0) + delta);
+    onChange({ quantity: String(next) });
+  }
+
   return (
-    <li className="grid gap-2 py-3">
+    <li className="grid gap-2.5 rounded-xl border border-border/70 bg-card p-3 shadow-xs">
       <div className="flex items-start justify-between gap-2">
         {line.kind === "manual" ? (
           <Input
             value={line.description}
             onChange={(e) => onChange({ description: e.target.value })}
             placeholder="Concepto"
-            className="h-8"
+            className="h-9"
             aria-label="Concepto"
           />
         ) : (
-          <span className="text-sm font-medium">{line.description}</span>
+          <span className="pt-1 text-sm font-medium leading-tight text-foreground">
+            {line.description}
+          </span>
         )}
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 shrink-0"
+          className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           aria-label={`Quitar ${line.description || "línea"}`}
           onClick={onRemove}
         >
-          <Trash2 className="h-4 w-4 text-destructive" />
+          <Trash2 className="h-4 w-4" />
         </Button>
       </div>
       <div className="flex items-center gap-2">
-        <Input
-          inputMode="decimal"
-          value={line.quantity}
-          onChange={(e) => onChange({ quantity: e.target.value })}
-          className="h-8 w-14 text-center tabular-nums"
-          aria-label="Cantidad"
-        />
-        <span className="text-muted-foreground">×</span>
+        {/* Stepper de cantidad, cómodo para tablet */}
+        <div className="inline-flex items-center rounded-lg border border-border/70 bg-background">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-r-none text-muted-foreground"
+            aria-label="Restar una unidad"
+            onClick={() => stepQty(-1)}
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+          <Input
+            inputMode="decimal"
+            value={line.quantity}
+            onChange={(e) => onChange({ quantity: e.target.value })}
+            className="h-9 w-12 rounded-none border-x border-y-0 border-border/70 px-0 text-center tabular-nums focus-visible:ring-0 focus-visible:ring-offset-0"
+            aria-label="Cantidad"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-l-none text-muted-foreground"
+            aria-label="Sumar una unidad"
+            onClick={() => stepQty(1)}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
         <Input
           inputMode="decimal"
           value={line.unitPrice}
           onChange={(e) => onChange({ unitPrice: e.target.value })}
           placeholder="0,00"
-          className="h-8 w-20 text-right tabular-nums"
+          className="h-9 w-20 text-right tabular-nums"
           aria-label="Precio unitario"
         />
         <Select
           value={line.vatRate}
           onValueChange={(value) => onChange({ vatRate: value })}
         >
-          <SelectTrigger className="h-8 w-20" aria-label="IVA">
+          <SelectTrigger className="h-9 w-[4.5rem]" aria-label="IVA">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -594,7 +726,7 @@ function TicketRow({
             ))}
           </SelectContent>
         </Select>
-        <span className="ml-auto text-sm font-semibold tabular-nums">
+        <span className="ml-auto text-sm font-semibold tabular-nums text-foreground">
           {formatMoney(lineTotalCents)}
         </span>
       </div>

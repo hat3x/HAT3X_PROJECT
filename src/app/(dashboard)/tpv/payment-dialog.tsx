@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Coins, Plus, Trash2 } from "lucide-react";
 
 import {
   centsToEuroInput,
@@ -156,11 +156,20 @@ export function PaymentDialog({
     );
   }
 
+  // Estado del reparto: cuadrado, falta por cobrar o cambio a devolver.
+  const status: "settled" | "due" | "change" =
+    remainingCents === 0 ? "settled" : remainingCents > 0 ? "due" : "change";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Cobrar {formatMoney(totalCents)}</DialogTitle>
+          <DialogDescription className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Importe a cobrar
+          </DialogDescription>
+          <DialogTitle className="text-3xl font-bold tabular-nums tracking-tight">
+            {formatMoney(totalCents)}
+          </DialogTitle>
           <DialogDescription>
             Reparte el total en uno o varios medios de pago.
           </DialogDescription>
@@ -168,7 +177,10 @@ export function PaymentDialog({
 
         <div className="grid gap-3">
           {tenders.map((tender, index) => (
-            <div key={index} className="flex items-end gap-2">
+            <div
+              key={index}
+              className="flex items-end gap-2 rounded-xl border border-border/70 bg-muted/30 p-3"
+            >
               <div className="grid flex-1 gap-1.5">
                 <Label htmlFor={`method-${index}`} className="text-xs">
                   Medio de pago
@@ -177,7 +189,7 @@ export function PaymentDialog({
                   value={tender.optionValue}
                   onValueChange={(value) => chooseMethod(index, value)}
                 >
-                  <SelectTrigger id={`method-${index}`}>
+                  <SelectTrigger id={`method-${index}`} className="h-11">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -199,18 +211,19 @@ export function PaymentDialog({
                   value={tender.amount}
                   onChange={(e) => updateTender(index, { amount: e.target.value })}
                   placeholder="0,00"
-                  className="text-right tabular-nums"
+                  className="h-11 text-right text-base tabular-nums"
                 />
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
+                className="h-11 w-11 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
                 aria-label={`Quitar medio de pago ${index + 1}`}
                 disabled={tenders.length === 1}
                 onClick={() => removeTender(index)}
               >
-                <Trash2 className="h-4 w-4 text-destructive" />
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           ))}
@@ -218,34 +231,48 @@ export function PaymentDialog({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="justify-start"
+            className="h-10 justify-start rounded-lg"
             onClick={addTender}
           >
             <Plus className="mr-2 h-4 w-4" />
             Añadir otro medio de pago
           </Button>
 
-          <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm">
-            <span className="text-muted-foreground">
-              {remainingCents === 0
+          <div
+            className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition-colors ${
+              status === "settled"
+                ? "border-success/25 bg-success/10 text-success"
+                : status === "change"
+                  ? "border-info/25 bg-info/10 text-info"
+                  : "border-warning/30 bg-warning/10 text-warning"
+            }`}
+          >
+            <span className="inline-flex items-center gap-2 font-medium">
+              {status === "settled" ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : status === "change" ? (
+                <Coins className="h-4 w-4" />
+              ) : (
+                <AlertCircle className="h-4 w-4" />
+              )}
+              {status === "settled"
                 ? "Cobro cuadrado"
-                : remainingCents > 0
+                : status === "due"
                   ? "Falta por cobrar"
-                  : "Exceso"}
+                  : "Cambio a devolver"}
             </span>
-            <span
-              className={`font-semibold tabular-nums ${
-                covered ? "text-foreground" : "text-destructive"
-              }`}
-            >
+            <span className="text-base font-bold tabular-nums">
               {formatMoney(Math.abs(remainingCents))}
             </span>
           </div>
         </div>
 
         {error !== null ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p
+            role="alert"
+            className="flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" />
             {error}
           </p>
         ) : null}
@@ -254,6 +281,7 @@ export function PaymentDialog({
           <Button
             type="button"
             variant="outline"
+            className="h-11"
             onClick={() => onOpenChange(false)}
             disabled={pending}
           >
@@ -261,6 +289,7 @@ export function PaymentDialog({
           </Button>
           <Button
             type="button"
+            className="h-11 font-semibold"
             disabled={!covered || pending}
             onClick={handleConfirm}
           >
