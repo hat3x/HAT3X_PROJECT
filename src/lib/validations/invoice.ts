@@ -86,3 +86,36 @@ export type InvoiceEmissionInput = z.input<typeof invoiceEmissionSchema>;
 export type InvoiceEmissionValues = z.output<typeof invoiceEmissionSchema>;
 /** Receptor validado. */
 export type RecipientValues = z.output<typeof recipientSchema>;
+
+/**
+ * Esquema de los parámetros de la EXPORTACIÓN del libro registro de facturas
+ * (Route Handler `GET /api/facturacion/export`). Filtra por serie y periodo y
+ * elige el formato descargable. Todos son opcionales: sin filtros exporta el
+ * libro completo del salón activo.
+ */
+const isoDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha debe tener el formato YYYY-MM-DD")
+  .refine((value) => !Number.isNaN(Date.parse(value)), "Fecha no válida");
+
+export const invoiceExportQuerySchema = z
+  .object({
+    /** Serie concreta a exportar; ausente = todas las series. */
+    series: seriesSchema.optional(),
+    /** Fecha de expedición desde (inclusive). */
+    from: isoDateSchema.optional(),
+    /** Fecha de expedición hasta (inclusive). */
+    to: isoDateSchema.optional(),
+    /** Formato de descarga; por defecto CSV (libro registro para gestoría). */
+    format: z.enum(["csv", "json"]).default("csv"),
+  })
+  .refine(
+    (value) => value.from === undefined || value.to === undefined || value.from <= value.to,
+    { message: "La fecha 'desde' no puede ser posterior a 'hasta'", path: ["from"] },
+  );
+
+/** Entrada de los parámetros de exportación (antes de aplicar defaults). */
+export type InvoiceExportQueryInput = z.input<typeof invoiceExportQuerySchema>;
+/** Parámetros de exportación ya validados (con `format` resuelto). */
+export type InvoiceExportQueryValues = z.output<typeof invoiceExportQuerySchema>;

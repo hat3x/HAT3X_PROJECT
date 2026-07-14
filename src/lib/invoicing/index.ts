@@ -36,3 +36,21 @@ export {
   type EmitInvoiceParams,
   type EmittedInvoice,
 } from "./emit";
+
+// ── Exportación del libro registro (AEAT / gestoría) — puro, sin I/O ──────────
+export {
+  EXPORT_FORMATS,
+  buildInvoicesCsv,
+  buildInvoicesJson,
+  toExportRecord,
+  mapInvoiceTypeToAeat,
+  centsToAmount,
+  parseTaxBreakdown,
+  exportFilename,
+  exportContentType,
+  type ExportFormat,
+  type ExportableInvoice,
+  type ExportFilters,
+  type InvoiceExportRecord,
+  type InvoiceExportDocument,
+} from "./export";
