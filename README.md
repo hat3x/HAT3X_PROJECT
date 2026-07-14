@@ -14,6 +14,7 @@ Sistema de gestión integral para salones de belleza con soporte multi-sede.
 - [Base de datos](#base-de-datos)
 - [Scripts disponibles](#scripts-disponibles)
 - [Estructura del proyecto](#estructura-del-proyecto)
+- [Sistema de diseño](#sistema-de-diseño)
 - [Funcionalidades](#funcionalidades)
 - [Autenticación](#autenticación)
 - [API pública de reservas](#api-pública-de-reservas)
@@ -176,6 +177,22 @@ salon-os/
 ├── vitest.config.ts
 └── playwright.config.ts
 ```
+
+---
+
+## Sistema de diseño
+
+Lenguaje visual **premium estilo Apple**: base neutra cálida, acento violeta
+(`#7c3aed`), tipografía de sistema con *tracking* calibrado, radios generosos,
+sombras suaves y modo claro/oscuro con auditoría de accesibilidad AA.
+
+La referencia completa —tokens de color, escalas de tipografía/espaciado/radios/
+sombras, uso del acento violeta, guía de modo claro/oscuro y resumen de cambios
+por pantalla— está en **[DESIGN.md](./DESIGN.md)**.
+
+> Fuente de verdad técnica: variables CSS de `src/app/globals.css`, mapeadas a
+> Tailwind y al tema shadcn en `tailwind.config.ts`. Los componentes consumen
+> tokens; no *hardcodees* colores.
 
 ---
 
