@@ -1,13 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Phone,
+  Plus,
+  Scissors,
+  User,
+} from "lucide-react";
 
 import { AppointmentForm } from "@/app/(dashboard)/appointments/appointment-form";
 import { RescheduleDialog } from "@/app/(dashboard)/appointments/reschedule-dialog";
-import { Badge } from "@/components/ui/badge";
+import {
+  AppointmentStatusBadge,
+  appointmentStatusAccent,
+} from "@/components/appointments/appointment-status";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { formatLongDate, formatPrice, formatSlotTime } from "@/lib/booking/format";
 import { localDateInZone } from "@/lib/booking/timezone";
 import {
@@ -33,25 +45,6 @@ interface AppointmentsViewProps {
   salonSlug: string;
   timezone: string;
 }
-
-const STATUS_LABELS: Record<AppointmentStatus, string> = {
-  pending: "Pendiente",
-  confirmed: "Confirmada",
-  completed: "Completada",
-  cancelled: "Cancelada",
-  no_show: "No presentado",
-};
-
-const STATUS_VARIANTS: Record<
-  AppointmentStatus,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  pending: "outline",
-  confirmed: "default",
-  completed: "secondary",
-  cancelled: "destructive",
-  no_show: "destructive",
-};
 
 function addDays(date: string, delta: number): string {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
@@ -104,15 +97,15 @@ export function AppointmentsView({
   }
 
   return (
-    <main className="container py-10">
+    <main className="container max-w-4xl py-10 sm:py-12">
       {/* Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Citas</h1>
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Citas</h1>
           <p className="text-muted-foreground">Agenda del salón</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => setCreateOpen(true)} className="shadow-brand">
             <Plus className="mr-2 h-4 w-4" />
             Nueva cita
           </Button>
@@ -135,39 +128,52 @@ export function AppointmentsView({
       </div>
 
       {/* Navegación de fecha */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="icon" onClick={() => setDate(addDays(date, -1))}>
-          <ChevronLeft className="h-4 w-4" />
-          <span className="sr-only">Día anterior</span>
-        </Button>
-        <Button
-          variant={date === today ? "default" : "outline"}
-          size="sm"
-          onClick={() => setDate(today)}
-        >
-          Hoy
-        </Button>
-        <Button variant="outline" size="icon" onClick={() => setDate(addDays(date, 1))}>
-          <ChevronRight className="h-4 w-4" />
-          <span className="sr-only">Día siguiente</span>
-        </Button>
-        <span className="ml-2 text-sm font-medium capitalize">
+      <div className="mb-5 flex flex-wrap items-center gap-3 animate-fade-in">
+        <div className="inline-flex items-center gap-1 rounded-full border bg-card p-1 shadow-sm">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            onClick={() => setDate(addDays(date, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span className="sr-only">Día anterior</span>
+          </Button>
+          <Button
+            variant={date === today ? "default" : "ghost"}
+            size="sm"
+            className="h-8 rounded-full px-4"
+            onClick={() => setDate(today)}
+          >
+            Hoy
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            onClick={() => setDate(addDays(date, 1))}
+          >
+            <ChevronRight className="h-4 w-4" />
+            <span className="sr-only">Día siguiente</span>
+          </Button>
+        </div>
+        <span className="text-sm font-medium capitalize text-foreground/80">
           {formatLongDate(date, timezone)}
         </span>
       </div>
 
       {/* Filtro por profesional */}
       {professionalsQuery.data && professionalsQuery.data.length > 1 && (
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-7 flex flex-wrap gap-2 animate-fade-in">
           <button
             type="button"
             onClick={() => setFilterProfessionalId(null)}
-            className={
-              "rounded-full border px-3 py-1 text-xs font-medium transition-colors " +
-              (filterProfessionalId === null
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-muted-foreground/30 text-muted-foreground hover:border-primary")
-            }
+            className={cn(
+              "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 ease-apple-out",
+              filterProfessionalId === null
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-accent-foreground",
+            )}
           >
             Todos
           </button>
@@ -176,16 +182,16 @@ export function AppointmentsView({
               key={p.id}
               type="button"
               onClick={() => setFilterProfessionalId(p.id)}
-              className={
-                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors " +
-                (filterProfessionalId === p.id
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-muted-foreground/30 text-muted-foreground hover:border-primary")
-              }
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 ease-apple-out",
+                filterProfessionalId === p.id
+                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                  : "border-border text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-accent-foreground",
+              )}
             >
               {p.color && (
                 <span
-                  className="inline-block h-2.5 w-2.5 rounded-full"
+                  className="inline-block h-2.5 w-2.5 rounded-full ring-1 ring-inset ring-black/10"
                   style={{ backgroundColor: p.color }}
                 />
               )}
@@ -199,38 +205,47 @@ export function AppointmentsView({
       {appointmentsQuery.isPending && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-lg" />
+            <Skeleton key={i} className="h-28 w-full rounded-xl" />
           ))}
         </div>
       )}
 
       {appointmentsQuery.isError && (
-        <p className="text-sm text-destructive">
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           {(appointmentsQuery.error as Error).message}
-        </p>
+        </div>
       )}
 
       {appointmentsQuery.isSuccess && appointmentsQuery.data.length === 0 && (
-        <div className="rounded-lg border border-dashed p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            No hay citas programadas para este día.
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-muted/30 px-6 py-16 text-center animate-fade-up">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <CalendarRange className="h-6 w-6" />
+          </span>
+          <p className="text-sm font-medium text-foreground">Sin citas este día</p>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            No hay citas programadas. Crea una nueva o cambia de fecha.
           </p>
         </div>
       )}
 
       {appointmentsQuery.isSuccess && appointmentsQuery.data.length > 0 && (
         <div className="space-y-3">
-          {appointmentsQuery.data.map((appt) => (
-            <AppointmentCard
+          {appointmentsQuery.data.map((appt, i) => (
+            <div
               key={appt.id}
-              appointment={appt}
-              timezone={timezone}
-              onStatusChange={handleStatusChange}
-              onReschedule={(a) =>
-                setRescheduleState({ open: true, appointment: a })
-              }
-              mutating={statusMutation.isPending}
-            />
+              className="animate-fade-up"
+              style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}
+            >
+              <AppointmentCard
+                appointment={appt}
+                timezone={timezone}
+                onStatusChange={handleStatusChange}
+                onReschedule={(a) =>
+                  setRescheduleState({ open: true, appointment: a })
+                }
+                mutating={statusMutation.isPending}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -320,45 +335,75 @@ function AppointmentCard({
   const isPending = appt.status === "pending";
   const isConfirmed = appt.status === "confirmed";
   const isActive = isPending || isConfirmed;
+  const isMuted = appt.status === "cancelled" || appt.status === "no_show";
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold tabular-nums">
+    <article
+      className={cn(
+        "group relative overflow-hidden rounded-xl border bg-card shadow-sm transition-all duration-200 ease-apple-out",
+        isActive && "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md",
+        isMuted && "opacity-70",
+      )}
+    >
+      {/* Franja de acento por estado */}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-y-0 left-0 w-1",
+          appointmentStatusAccent(appt.status),
+        )}
+      />
+
+      <div className="flex flex-col gap-4 py-4 pl-6 pr-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="flex items-center gap-1.5 text-sm font-semibold tabular-nums">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
               {formatSlotTime(appt.starts_at, timezone)}
-              {" – "}
+              <span className="text-muted-foreground">–</span>
               {formatSlotTime(appt.ends_at, timezone)}
             </span>
-            <Badge variant={STATUS_VARIANTS[appt.status]}>
-              {STATUS_LABELS[appt.status]}
-            </Badge>
+            <AppointmentStatusBadge status={appt.status} />
           </div>
-          <p className="font-medium">{appt.service?.name ?? "—"}</p>
-          <p className="text-sm text-muted-foreground">
-            {appt.customer?.full_name ?? "—"}
+
+          <p className="flex items-center gap-2 text-base font-semibold tracking-tight">
+            <Scissors className="h-4 w-4 shrink-0 text-primary/70" />
+            {appt.service?.name ?? "—"}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5" />
+              {appt.customer?.full_name ?? "—"}
+            </span>
             {appt.customer?.phone && (
-              <span className="ml-2 tabular-nums">{appt.customer.phone}</span>
+              <span className="flex items-center gap-1.5 tabular-nums">
+                <Phone className="h-3.5 w-3.5" />
+                {appt.customer.phone}
+              </span>
             )}
-          </p>
+          </div>
+
           <p className="text-xs text-muted-foreground">
-            {appt.professional?.full_name ?? "—"} ·{" "}
-            {formatPrice(appt.price_cents, appt.currency)}
+            {appt.professional?.full_name ?? "—"}
+            <span className="mx-1.5 text-muted-foreground/50">·</span>
+            <span className="font-medium text-foreground/70 tabular-nums">
+              {formatPrice(appt.price_cents, appt.currency)}
+            </span>
           </p>
+
           {appt.status === "cancelled" && appt.cancelled_reason && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs italic text-muted-foreground">
               Motivo: {appt.cancelled_reason}
             </p>
           )}
         </div>
 
         {isActive && (
-          <div className="flex flex-wrap gap-2 sm:flex-col sm:items-end">
+          <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch">
             {isPending && (
               <Button
                 size="sm"
-                variant="outline"
                 disabled={mutating}
                 onClick={() => onStatusChange(appt.id, "confirmed")}
               >
@@ -368,7 +413,6 @@ function AppointmentCard({
             {isConfirmed && (
               <Button
                 size="sm"
-                variant="outline"
                 disabled={mutating}
                 onClick={() => onStatusChange(appt.id, "completed")}
               >
@@ -393,7 +437,8 @@ function AppointmentCard({
             </Button>
             <Button
               size="sm"
-              variant="destructive"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               disabled={mutating}
               onClick={() => onStatusChange(appt.id, "cancelled")}
             >
@@ -401,7 +446,7 @@ function AppointmentCard({
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </article>
   );
 }
