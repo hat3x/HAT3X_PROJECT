@@ -29,6 +29,7 @@ import {
   type TenderDraft,
   type TicketLine,
 } from "@/app/(dashboard)/tpv/cart";
+import { LoyaltyPanel } from "@/app/(dashboard)/tpv/loyalty-panel";
 import { PaymentDialog } from "@/app/(dashboard)/tpv/payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateSale,
+  useLoyaltyLookup,
   useOpenAppointments,
   useSalePaymentMethods,
   useSaleProducts,
@@ -101,6 +103,9 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
   const paymentMethods = useSalePaymentMethods(salonId);
   const appointments = useOpenAppointments(salonId, today, timezone);
   const createSale = useCreateSale(salonId);
+  // Fidelización: lookup de SOLO LECTURA por QR. Aditivo — no interviene en el
+  // cobro; si no se escanea a nadie, la caja se comporta igual que siempre.
+  const loyalty = useLoyaltyLookup();
 
   const totals = useMemo(() => computeTicketTotals(lines), [lines]);
   const completeLines = lines.filter(isLineComplete);
@@ -211,6 +216,13 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
       <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
         {/* ── Catálogo ──────────────────────────────────────────────────── */}
         <div className="flex flex-col gap-5">
+          <LoyaltyPanel
+            pending={loyalty.isPending}
+            result={loyalty.data}
+            onScan={(qrToken) => loyalty.mutate(qrToken)}
+            onClear={() => loyalty.reset()}
+          />
+
           <AppointmentPicker
             appointments={appointments.data ?? []}
             loading={appointments.isPending}

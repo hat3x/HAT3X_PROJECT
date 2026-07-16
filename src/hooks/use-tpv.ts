@@ -7,7 +7,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 
-import { createSale, type SaleReceipt } from "@/app/(dashboard)/tpv/actions";
+import {
+  createSale,
+  lookupLoyaltyByQr,
+  type LoyaltyLookupActionResult,
+  type SaleReceipt,
+} from "@/app/(dashboard)/tpv/actions";
 import {
   fetchOpenAppointments,
   fetchSalePaymentMethods,
@@ -40,6 +45,21 @@ export function useSalePaymentMethods(salonId: string) {
   return useQuery({
     queryKey: posKeys.paymentMethods(salonId),
     queryFn: () => fetchSalePaymentMethods(salonId),
+  });
+}
+
+/**
+ * Consulta de SOLO LECTURA del estado de fidelización de un cliente a partir del
+ * QR escaneado en el TPV. `lookupLoyaltyByQr` NUNCA lanza (devuelve un resultado
+ * controlado), así que la mutación siempre "resuelve": el desenlace `ok`/error
+ * vive en `data` y se pinta sin romper la caja cuando no hay cliente escaneado.
+ * Es una mutación (no `useQuery`) porque la dispara un gesto explícito —el
+ * escaneo— y no debe reejecutarse ni cachearse por `queryKey`.
+ */
+export function useLoyaltyLookup() {
+  return useMutation({
+    mutationFn: (qrToken: string): Promise<LoyaltyLookupActionResult> =>
+      lookupLoyaltyByQr(qrToken),
   });
 }
 
