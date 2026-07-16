@@ -2,7 +2,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+}
+
+// SHA-256 hex — para validar la API key de servicio contra api_keys.key_hash
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 const PLAN_BENEFITS: Record<string, { key: string; label: string; limit: number }[]> = {
@@ -24,39 +30,60 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
     const supabaseAuth = createClient(supabaseUrl, serviceRoleKey)
 
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user: staffUser }, error: authError } = await supabaseAuth.auth.getUser(token)
-    if (authError || !staffUser) {
-      return new Response(JSON.stringify({ error: 'Invalid token' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    // ── Autorización: API key de servicio (Salón OS) O token de staff ────────
+    let staffUser: { id: string } | null = null
+    let viaService = false
+
+    const apiKey = req.headers.get('x-api-key')
+    if (apiKey) {
+      const keyHash = await sha256Hex(apiKey)
+      const { data: keyRow } = await supabaseAuth
+        .from('api_keys')
+        .select('id')
+        .eq('key_hash', keyHash)
+        .eq('is_active', true)
+        .maybeSingle()
+      if (keyRow) viaService = true
     }
 
-    // Check staff has role
-    const { data: roleData } = await supabaseAuth
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', staffUser.id)
-      .in('role', ['staff', 'manager', 'admin'])
-      .limit(1)
+    if (!viaService) {
+      const authHeader = req.headers.get('Authorization')
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: 'No authorization header' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const token = authHeader.replace('Bearer ', '')
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: 'Invalid token' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      // Check staff has role
+      const { data: roleData } = await supabaseAuth
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .in('role', ['staff', 'manager', 'admin'])
+        .limit(1)
 
-    if (!roleData || roleData.length === 0) {
-      return new Response(JSON.stringify({ error: 'Unauthorized: staff role required' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      if (!roleData || roleData.length === 0) {
+        return new Response(JSON.stringify({ error: 'Unauthorized: staff role required' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      staffUser = user
     }
+
+    // Actor para auditoría: staff real, o SYSTEM si viene por API key de servicio
+    const actorId: string | null = staffUser?.id ?? null
+    const actorRole: 'STAFF' | 'SYSTEM' = staffUser ? 'STAFF' : 'SYSTEM'
 
     const { qr_token, location_id, appointment_id, service_prices, redeem_coupon } = await req.json()
 
@@ -173,7 +200,7 @@ Deno.serve(async (req) => {
         .update({
           points_awarded: true,
           verified_at: now,
-          verified_by_staff_id: staffUser.id,
+          verified_by_staff_id: actorId,
           status: 'COMPLETED',
           final_total_points: pointsToAdd,
           final_total_price: finalTotalPrice,
@@ -258,8 +285,8 @@ Deno.serve(async (req) => {
       .from('audit_logs')
       .insert({
         action: 'VERIFY_VISIT',
-        actor_id: staffUser.id,
-        actor_role: 'STAFF',
+        actor_id: actorId,
+        actor_role: actorRole,
         entity: 'loyalty_accounts',
         entity_id: customer.id,
         location_id,
@@ -372,8 +399,8 @@ Deno.serve(async (req) => {
         .from('audit_logs')
         .insert({
           action: 'REDEEM_COUPON',
-          actor_id: staffUser.id,
-          actor_role: 'STAFF',
+          actor_id: actorId,
+          actor_role: actorRole,
           entity: 'welcome_coupons',
           entity_id: activeCoupon.id,
           location_id,
