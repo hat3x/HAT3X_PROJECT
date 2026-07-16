@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import type { LoyaltyLookupActionResult } from "@/app/(dashboard)/tpv/actions";
+import { CameraScanButton } from "@/app/(dashboard)/tpv/camera-scan-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -119,6 +120,16 @@ export function LoyaltyPanel({
               <span className="ml-2">Buscar</span>
             </Button>
           </div>
+
+          {/* Alternativa por cámara: entrega el token al MISMO lookup, así el
+              resultado se pinta una sola vez (abajo). */}
+          <div
+            className="flex items-center gap-3 text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground"
+            aria-hidden
+          >
+            <span className="h-px flex-1 bg-border" />o<span className="h-px flex-1 bg-border" />
+          </div>
+          <CameraScanButton onToken={onScan} disabled={pending} />
         </form>
 
         {/* Región de resultado: se anuncia a lectores de pantalla al escanear. */}
