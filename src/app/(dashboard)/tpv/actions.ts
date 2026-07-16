@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  LoyaltyActionError,
+  lookupByQr,
+  type LoyaltyActionErrorCode,
+} from "@/lib/loyalty/server";
+import type { LoyaltyLookupResult } from "@/lib/loyalty/types";
+import {
   computeLineTotals,
   computeSaleTotals,
   getPaymentGateway,
@@ -210,4 +216,64 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
       tenderCount: tenders.length,
     },
   };
+}
+
+// -----------------------------------------------------------------------------
+// Fidelización — lectura del estado de un cliente por su QR (§1.9)
+// -----------------------------------------------------------------------------
+
+/**
+ * Resultado del lookup de fidelización para el TPV. A diferencia de
+ * {@link ActionResult}, la rama de error transporta el `code` de dominio para que
+ * el TPV distinga un escaneo "sin resultado" (QR ajeno/inexistente) de un fallo
+ * real (sesión caducada, permiso, error interno) y reaccione de forma distinta.
+ */
+export type LoyaltyLookupActionResult =
+  | { ok: true; data: LoyaltyLookupResult }
+  | { ok: false; code: LoyaltyActionErrorCode; error: string };
+
+/**
+ * Server Action de SOLO LECTURA: resuelve el estado de fidelización (puntos,
+ * visitas, cupones y recompensas activas) de un cliente a partir del `qrToken`
+ * escaneado en el TPV. Envuelve {@link lookupByQr} de `@/lib/loyalty/server`.
+ *
+ * ── Seguridad ────────────────────────────────────────────────────────────────
+ * La consulta se ejecuta en servidor (`"use server"`). El aislamiento multi-tenant
+ * lo garantiza `lookupByQr`, que resuelve el salón activo del usuario por su
+ * SESIÓN (`requireActiveSalonId`) y lee con el cliente RLS: un miembro solo ve
+ * clientes de SU salón. Para una LECTURA, RLS es más seguro que el service role
+ * (no hay que acotar `salon_id` a mano ni exponer una vía que omita RLS); por eso
+ * la ruta de escritura sensible usa el cliente admin, pero esta NO. No se crea
+ * ningún route handler `/api`: el `SUPABASE_SERVICE_ROLE_KEY` jamás sale a la red.
+ *
+ * ── Resiliencia (§ "sin romper el TPV") ──────────────────────────────────────
+ * NUNCA lanza: cualquier {@link LoyaltyActionError} (o error inesperado) se
+ * degrada a un resultado controlado. En particular, `not_found` (QR que no
+ * corresponde a ningún cliente del salón) es un desenlace NORMAL del escaneo y se
+ * devuelve como `{ ok: false, code: "not_found", error: "Cliente no encontrado" }`,
+ * de modo que el TPV muestre un aviso sin caer.
+ */
+export async function lookupLoyaltyByQr(
+  qrToken: string,
+): Promise<LoyaltyLookupActionResult> {
+  try {
+    const data = await lookupByQr(qrToken);
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof LoyaltyActionError) {
+      // `not_found` recibe un mensaje pensado para el TPV; el resto conserva el
+      // mensaje de dominio (401/403/400/500) para que la UI lo muestre tal cual.
+      const message =
+        error.code === "not_found" ? "Cliente no encontrado" : error.message;
+      return { ok: false, code: error.code, error: message };
+    }
+    // Error NO de dominio: se registra en servidor (sin volcar el qrToken, dato
+    // sensible del cliente) y se degrada a un `internal` controlado.
+    console.error("[tpv/lookupLoyaltyByQr] error inesperado", error);
+    return {
+      ok: false,
+      code: "internal",
+      error: "No se pudo consultar la fidelización.",
+    };
+  }
 }
