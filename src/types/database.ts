@@ -58,6 +58,16 @@ export type PosSaleLineItemKind = "service" | "product" | "manual";
  */
 export type PosInvoiceType = "ticket" | "completa";
 
+// Fidelización (add-on premium) — valores en MAYÚSCULAS por contrato denueveanueve
+/** Movimiento del libro mayor de puntos. */
+export type PointsMovementType = "EARN" | "REDEEM" | "ADJUST" | "EXPIRE";
+
+/** Estado del cupón de bienvenida. */
+export type CouponStatus = "ACTIVE" | "USED" | "EXPIRED";
+
+/** Estado de una recompensa de hito. */
+export type RewardStatus = "AVAILABLE" | "REDEEMED" | "EXPIRED";
+
 export interface Database {
   public: {
     Tables: {
@@ -370,6 +380,8 @@ export interface Database {
           // Datos fiscales del receptor (opcionales, para factura completa)
           tax_id: string | null; // NIF/CIF
           address: string | null; // dirección postal/fiscal
+          // Fidelización: token del cliente (QR), único global, generado por DEFAULT
+          qr_token: string;
           created_at: string;
           updated_at: string;
         };
@@ -384,6 +396,7 @@ export interface Database {
           marketing_consent?: boolean;
           tax_id?: string | null;
           address?: string | null;
+          qr_token?: string; // lo genera el DEFAULT si se omite
           created_at?: string;
           updated_at?: string;
         };
@@ -398,6 +411,7 @@ export interface Database {
           marketing_consent?: boolean;
           tax_id?: string | null;
           address?: string | null;
+          qr_token?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -1348,6 +1362,213 @@ export interface Database {
           },
         ];
       };
+      loyalty_accounts: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          points_balance: number;
+          visits_total: number;
+          last_visit_at: string | null;
+          last_activity_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          points_balance?: number;
+          visits_total?: number;
+          last_visit_at?: string | null;
+          last_activity_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          points_balance?: number;
+          visits_total?: number;
+          last_visit_at?: string | null;
+          last_activity_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_accounts_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "loyalty_accounts_customer_id_fkey";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: true;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      points_movements: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          type: PointsMovementType;
+          points: number;
+          reason: string | null;
+          ref_type: string | null;
+          ref_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          type: PointsMovementType;
+          points: number;
+          reason?: string | null;
+          ref_type?: string | null;
+          ref_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          type?: PointsMovementType;
+          points?: number;
+          reason?: string | null;
+          ref_type?: string | null;
+          ref_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "points_movements_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "points_movements_customer_id_fkey";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      welcome_coupons: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          percent_off: number;
+          status: CouponStatus;
+          expires_at: string;
+          used_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          percent_off: number;
+          status?: CouponStatus;
+          expires_at: string;
+          used_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          percent_off?: number;
+          status?: CouponStatus;
+          expires_at?: string;
+          used_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "welcome_coupons_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "welcome_coupons_customer_id_fkey";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: true;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      rewards: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          type: string;
+          code: string;
+          status: RewardStatus;
+          expires_at: string;
+          redeemed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          type: string;
+          code: string;
+          status?: RewardStatus;
+          expires_at: string;
+          redeemed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          type?: string;
+          code?: string;
+          status?: RewardStatus;
+          expires_at?: string;
+          redeemed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "rewards_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "rewards_customer_id_fkey";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;
@@ -1360,6 +1581,9 @@ export interface Database {
       pos_payment_method: PosPaymentMethod;
       pos_session_status: PosSessionStatus;
       pos_invoice_type: PosInvoiceType;
+      points_movement_type: PointsMovementType;
+      coupon_status: CouponStatus;
+      reward_status: RewardStatus;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -1400,6 +1624,11 @@ export type PosSale = Tables<"pos_sales">;
 export type PosSaleLine = Tables<"pos_sale_lines">;
 export type PosPayment = Tables<"pos_payments">;
 export type PosInvoice = Tables<"pos_invoices">;
+// Fidelización (add-on premium)
+export type LoyaltyAccount = Tables<"loyalty_accounts">;
+export type PointsMovement = Tables<"points_movements">;
+export type WelcomeCoupon = Tables<"welcome_coupons">;
+export type Reward = Tables<"rewards">;
 
 // Phase helpers -----------------------------------------------------------------
 
