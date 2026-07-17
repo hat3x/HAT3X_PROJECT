@@ -4,12 +4,13 @@ import { revalidatePath } from "next/cache";
 
 import { computeCouponDiscountCents } from "@/lib/loyalty/points";
 import {
+  awardVisit,
   LoyaltyActionError,
   lookupByQr,
   resolveActiveCouponPercentOff,
   type LoyaltyActionErrorCode,
 } from "@/lib/loyalty/server";
-import type { LoyaltyLookupResult } from "@/lib/loyalty/types";
+import type { LoyaltyLookupResult, LoyaltyRewardView } from "@/lib/loyalty/types";
 import {
   computeLineTotals,
   computeSaleTotals,
@@ -29,6 +30,21 @@ export type ActionResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
+/**
+ * Fidelización acreditada al cerrar la venta (§sub-6). Se devuelve al cajero para
+ * confirmarle en el mismo ticket los puntos ganados, el nuevo saldo y —si la
+ * visita alcanzó un hito— la recompensa generada. Es `null` cuando no se escaneó a
+ * ningún cliente o cuando la acreditación falló (best-effort: el cobro no se toca).
+ */
+export interface SaleLoyaltyOutcome {
+  /** Puntos sumados en esta venta. */
+  pointsEarned: number;
+  /** Saldo de puntos resultante del cliente. */
+  pointsBalance: number;
+  /** Recompensa de hito generada en esta visita, o `null`. */
+  reward: LoyaltyRewardView | null;
+}
+
 /** Datos devueltos al registrar una venta con éxito. */
 export interface SaleReceipt {
   saleId: string;
@@ -39,6 +55,11 @@ export interface SaleReceipt {
   discountCents: number;
   lineCount: number;
   tenderCount: number;
+  /**
+   * Fidelización acreditada tras el cobro, o `null` si no se escaneó a nadie o la
+   * acreditación falló (no bloquea la venta). Ver {@link SaleLoyaltyOutcome}.
+   */
+  loyalty: SaleLoyaltyOutcome | null;
 }
 
 function firstIssue(error: import("zod").ZodError): string {
@@ -247,6 +268,47 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
     };
   }
 
+  // 6) Fidelización (best-effort, §sub-6). Si se escaneó a un cliente, la visita se
+  //    acredita DESPUÉS de que el cobro ya esté firme. La IDEMPOTENCIA la ancla
+  //    `ref = { pos_sale, saleId }`: reintentar/duplicar esta venta NO vuelve a
+  //    sumar puntos ni a canjear el cupón. Un fallo aquí NUNCA bloquea ni revierte
+  //    el cobro —la venta ya está cobrada—; se registra y se devuelve `loyalty:
+  //    null`, de modo que la caja se comporta igual que sin fidelización.
+  let loyalty: SaleLoyaltyOutcome | null = null;
+  const loyaltyCustomerId =
+    values.loyaltyCustomerId ?? values.coupon?.customerId ?? null;
+  if (loyaltyCustomerId !== null) {
+    try {
+      const award = await awardVisit({
+        salon_id: salonId,
+        customer_id: loyaltyCustomerId,
+        // Puntos sobre lo REALMENTE cobrado: líneas efectivas (con el descuento del
+        // cupón ya prorrateado), coherentes con el `line_total_cents` persistido. La
+        // regla por defecto de `awardVisit` es ceil(price_cents / 200) por línea.
+        line_items: values.lines.map((line, i) => ({
+          price_cents: computeLineTotals(effectiveLines[i]!).grossCents,
+          label: line.description,
+        })),
+        // El cupón se transiciona a USED AQUÍ (createSale solo lo resuelve en
+        // lectura para descontar): así el canje y la acreditación van juntos.
+        redeem_coupon: values.coupon != null,
+        ref: { type: "pos_sale", id: saleId },
+      });
+      loyalty = {
+        pointsEarned: award.points_earned,
+        pointsBalance: award.points_balance,
+        reward: award.reward,
+      };
+    } catch (error) {
+      // Best-effort: el cobro ya está firme y NO se revierte. Se registra sin volcar
+      // datos del cliente (el saldo de puntos es sensible) para poder reconciliar.
+      console.error("[tpv/createSale] awardVisit falló; el cobro NO se ve afectado", {
+        saleId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   revalidatePath("/tpv");
   return {
     ok: true,
@@ -258,6 +320,7 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
       discountCents: totals.discountCents,
       lineCount: lineInserts.length,
       tenderCount: tenders.length,
+      loyalty,
     },
   };
 }

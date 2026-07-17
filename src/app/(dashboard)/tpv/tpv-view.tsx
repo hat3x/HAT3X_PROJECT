@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import {
+  Award,
   CalendarClock,
   CheckCircle2,
+  Coins,
   Minus,
   Package,
   Plus,
@@ -63,12 +65,21 @@ import {
 } from "@/hooks/use-tpv";
 import { formatTimeInZone, localDateInZone } from "@/lib/booking/timezone";
 import { formatMoney } from "@/lib/format";
-import type { LoyaltyCouponView } from "@/lib/loyalty/types";
+import { LOYALTY_MILESTONES, type LoyaltyCouponView } from "@/lib/loyalty/types";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
 import type { SaleInput } from "@/lib/validations/sale";
 
 /** Tipos de IVA vigentes en España (porcentaje). */
 const VAT_RATES = ["21", "10", "4", "0"] as const;
+
+/**
+ * Etiqueta humana de cada tipo de recompensa de hito, derivada del catálogo de
+ * hitos. Se usa en el recibo para nombrar la recompensa que la visita desbloqueó
+ * (mismo criterio que la tarjeta de fidelización del panel de escaneo).
+ */
+const REWARD_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  LOYALTY_MILESTONES.map((milestone) => [milestone.rewardType, milestone.label]),
+);
 
 /** Contexto de venta cuando arranca desde una cita. */
 interface SaleContext {
@@ -181,6 +192,10 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
   }
 
   function submitSale(tenders: TenderDraft[]): void {
+    // Cliente escaneado por QR (si lo hay): el servidor le acredita la visita de
+    // fidelización tras cobrar. Es independiente del `customerId` de la cita.
+    const scannedCustomerId =
+      loyalty.data?.ok === true ? loyalty.data.data.customer.id : null;
     const input: SaleInput = {
       appointmentId: context?.appointmentId ?? null,
       customerId: context?.customerId ?? null,
@@ -191,6 +206,8 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
       coupon: appliedCoupon
         ? { id: appliedCoupon.coupon.id, customerId: appliedCoupon.customerId }
         : null,
+      // Cliente escaneado al que acreditar los puntos de la visita (o `null`).
+      loyaltyCustomerId: scannedCustomerId,
       lines: completeLines.map((l) => ({
         kind: l.kind,
         refId: l.refId,
@@ -546,6 +563,44 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
                 </dd>
               </div>
             </dl>
+          ) : null}
+
+          {/* Fidelización acreditada (solo si se escaneó a un cliente y no falló). */}
+          {receipt?.loyalty != null ? (
+            <div className="rounded-xl border border-primary/25 bg-primary/[0.06] p-4">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <Coins className="h-[1.15rem] w-[1.15rem]" />
+                </span>
+                <div className="min-w-0 leading-tight">
+                  <p className="text-sm font-semibold text-primary">
+                    +{receipt.loyalty.pointsEarned}{" "}
+                    {receipt.loyalty.pointsEarned === 1 ? "punto" : "puntos"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Saldo: {receipt.loyalty.pointsBalance}{" "}
+                    {receipt.loyalty.pointsBalance === 1 ? "punto" : "puntos"}
+                  </p>
+                </div>
+              </div>
+              {receipt.loyalty.reward != null ? (
+                <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-primary/20 bg-card/70 p-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Award className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold leading-tight">
+                      ¡Recompensa desbloqueada!{" "}
+                      {REWARD_TYPE_LABELS[receipt.loyalty.reward.type] ??
+                        receipt.loyalty.reward.type}
+                    </p>
+                    <p className="truncate font-mono text-xs text-muted-foreground">
+                      {receipt.loyalty.reward.code}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <DialogFooter>
             <Button className="h-11" onClick={() => setReceipt(null)}>

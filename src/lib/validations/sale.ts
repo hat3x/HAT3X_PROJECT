@@ -103,6 +103,14 @@ export const saleSchema = z.object({
   notes: z.string().trim().max(500).optional(),
   /** Cupón de bienvenida aplicado (opcional); el servidor valida su vigencia. */
   coupon: saleCouponSchema.nullable().optional(),
+  /**
+   * Cliente ESCANEADO por QR al que acreditar la visita de fidelización tras el
+   * cobro. Es independiente de `customerId` (que puede venir de la cita): la
+   * fidelización SIEMPRE se acredita al cliente escaneado en el TPV. Ausente/`null`
+   * ⇒ no se escaneó a nadie y no se acredita ninguna visita (aditivo: la caja se
+   * comporta igual que sin fidelización).
+   */
+  loyaltyCustomerId: z.string().uuid().nullable().optional(),
   /** Al menos una línea; el ticket vacío no se cobra. */
   lines: z.array(saleLineSchema).min(1, "Añade al menos una línea al ticket"),
   /** Al menos un medio de pago; deben cubrir exactamente el total. */
