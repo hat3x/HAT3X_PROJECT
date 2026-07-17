@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import {
   Award,
   CalendarClock,
+  Check,
   Coins,
   Loader2,
   ScanLine,
@@ -21,7 +22,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useScannerFocus } from "@/hooks/use-scanner-focus";
 import { formatDate } from "@/lib/format";
-import { LOYALTY_MILESTONES, type LoyaltyLookupResult } from "@/lib/loyalty/types";
+import {
+  LOYALTY_MILESTONES,
+  type LoyaltyCouponView,
+  type LoyaltyLookupResult,
+} from "@/lib/loyalty/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -48,6 +53,12 @@ interface LoyaltyPanelProps {
   onScan: (qrToken: string) => void;
   /** Descarta el cliente escaneado y vuelve al estado de reposo. */
   onClear: () => void;
+  /** id del cupón aplicado al ticket, o `null` si ninguno. */
+  appliedCouponId: string | null;
+  /** Aplica un cupón del cliente como descuento del ticket. */
+  onApplyCoupon: (coupon: LoyaltyCouponView, customerId: string) => void;
+  /** Retira el cupón aplicado al ticket. */
+  onRemoveCoupon: () => void;
 }
 
 /**
@@ -69,6 +80,9 @@ export function LoyaltyPanel({
   result,
   onScan,
   onClear,
+  appliedCouponId,
+  onApplyCoupon,
+  onRemoveCoupon,
 }: LoyaltyPanelProps): React.ReactElement {
   const [token, setToken] = useState("");
   // Captura del lector físico (HID): el input permanece SIEMPRE enfocado —sin que
@@ -149,7 +163,13 @@ export function LoyaltyPanel({
           {pending ? (
             <ScanningHint />
           ) : scanned !== null ? (
-            <ScannedCustomer data={scanned} onClear={handleClear} />
+            <ScannedCustomer
+              data={scanned}
+              onClear={handleClear}
+              appliedCouponId={appliedCouponId}
+              onApplyCoupon={onApplyCoupon}
+              onRemoveCoupon={onRemoveCoupon}
+            />
           ) : error !== null ? (
             <ScanError code={error.code} message={error.error} />
           ) : (
@@ -216,9 +236,15 @@ function ScanError({
 function ScannedCustomer({
   data,
   onClear,
+  appliedCouponId,
+  onApplyCoupon,
+  onRemoveCoupon,
 }: {
   data: LoyaltyLookupResult;
   onClear: () => void;
+  appliedCouponId: string | null;
+  onApplyCoupon: (coupon: LoyaltyCouponView, customerId: string) => void;
+  onRemoveCoupon: () => void;
 }): React.ReactElement {
   const { customer, points_balance, visits_total, last_visit_at } = data;
   const coupons = data.welcome_coupons;
@@ -274,7 +300,7 @@ function ScannedCustomer({
           : "Aún sin visitas registradas"}
       </p>
 
-      {/* Cupones de bienvenida ACTIVE */}
+      {/* Cupones de bienvenida ACTIVE — aplicables como descuento del ticket */}
       {coupons.length > 0 ? (
         <RewardSection
           icon={<TicketPercent className="h-4 w-4 text-primary" />}
@@ -282,12 +308,12 @@ function ScannedCustomer({
           count={coupons.length}
         >
           {coupons.map((coupon) => (
-            <RewardRow
+            <CouponRow
               key={coupon.id}
-              icon={<TicketPercent className="h-4 w-4" />}
-              title={`${coupon.percent_off}% de descuento`}
-              subtitle="Cupón de bienvenida"
-              expiresAt={coupon.expires_at}
+              coupon={coupon}
+              applied={appliedCouponId === coupon.id}
+              onApply={() => onApplyCoupon(coupon, customer.id)}
+              onRemove={onRemoveCoupon}
             />
           ))}
         </RewardSection>
@@ -440,5 +466,79 @@ function ExpiresHint({ iso }: { iso: string }): React.ReactElement {
     <span className="shrink-0 text-[0.7rem] text-muted-foreground">
       {formatDate(iso)}
     </span>
+  );
+}
+
+/** Caducidad del cupón como texto compacto para el subtítulo. */
+function expiryLabel(iso: string): string {
+  const days = daysUntil(iso);
+  if (days <= 0) return "caduca hoy";
+  if (days <= 7) return `caduca en ${days} ${days === 1 ? "día" : "días"}`;
+  return `caduca el ${formatDate(iso)}`;
+}
+
+/**
+ * Fila de un cupón de bienvenida con acción de aplicar/quitar como descuento del
+ * ticket. El estado "aplicado" no se comunica solo por color (WCAG 1.4.1): lleva
+ * icono ✓ + texto "Aplicado". El botón de quitar es icon-only con `aria-label`.
+ */
+function CouponRow({
+  coupon,
+  applied,
+  onApply,
+  onRemove,
+}: {
+  coupon: LoyaltyCouponView;
+  applied: boolean;
+  onApply: () => void;
+  onRemove: () => void;
+}): React.ReactElement {
+  return (
+    <li
+      className={cn(
+        "flex items-center gap-3 rounded-lg border p-2.5 transition-colors",
+        applied ? "border-success/40 bg-success/[0.06]" : "border-border/70",
+      )}
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+        <TicketPercent className="h-4 w-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold tabular-nums leading-tight">
+          {coupon.percent_off}% de descuento
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          Cupón de bienvenida · {expiryLabel(coupon.expires_at)}
+        </p>
+      </div>
+      {applied ? (
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[0.7rem] font-medium text-success">
+            <Check className="h-3 w-3" aria-hidden />
+            Aplicado
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            aria-label={`Quitar el cupón del ${coupon.percent_off}% del ticket`}
+            onClick={onRemove}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-8 shrink-0 rounded-lg font-medium"
+          onClick={onApply}
+        >
+          Aplicar
+        </Button>
+      )}
+    </li>
   );
 }

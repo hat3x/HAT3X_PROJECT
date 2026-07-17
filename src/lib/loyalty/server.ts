@@ -319,6 +319,47 @@ export async function lookupByQr(qrToken: string): Promise<LoyaltyLookupResult> 
   };
 }
 
+/**
+ * Re-resuelve el `percent_off` AUTORITATIVO de un cupón de bienvenida para
+ * aplicarlo como descuento en el TPV. El cliente NUNCA fija el porcentaje: envía
+ * el `couponId` (+ su `customerId`) y aquí se comprueba, con el cliente RLS de la
+ * sesión (aislamiento multi-tenant), que el cupón EXISTE en el salón activo,
+ * pertenece a ese cliente, está `ACTIVE` y no ha caducado.
+ *
+ * Devuelve el `percent_off` del cupón vigente, o `null` si no cumple (caducado,
+ * ya usado, ajeno o inexistente) —el llamador debe entonces cobrar SIN descuento
+ * o pedir que se retire el cupón, nunca inventarse un porcentaje—.
+ *
+ * De solo lectura: NO transiciona el cupón a `USED` (ese canje, junto con la
+ * acreditación de puntos de la venta, es responsabilidad de {@link awardVisit}).
+ *
+ * @throws {LoyaltyActionError} `unauthorized` sin sesión/pertenencia; `internal`
+ *   ante un fallo de consulta.
+ */
+export async function resolveActiveCouponPercentOff(
+  couponId: string,
+  customerId: string,
+): Promise<number | null> {
+  const salonId = await requireActiveSalonId();
+  const supabase = createClient(); // RLS: solo cupones del salón del usuario
+  const nowIso = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("welcome_coupons")
+    .select("percent_off")
+    .eq("salon_id", salonId)
+    .eq("id", couponId)
+    .eq("customer_id", customerId)
+    .eq("status", "ACTIVE")
+    .gt("expires_at", nowIso)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new LoyaltyActionError("internal", 500, "No se pudo validar el cupón.");
+  }
+  return data?.percent_off ?? null;
+}
+
 // -----------------------------------------------------------------------------
 // 2. ensureLoyaltyAccount — asegura la cuenta (idempotente)
 // -----------------------------------------------------------------------------

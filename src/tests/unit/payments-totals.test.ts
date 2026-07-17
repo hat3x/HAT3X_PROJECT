@@ -14,7 +14,9 @@ import { describe, it, expect } from "vitest";
 import {
   computeLineTotals,
   computeSaleTotals,
+  distributeProportionally,
   multiplyCents,
+  prorateDiscountAcrossLines,
   roundHalfAwayFromZero,
   splitVatFromGross,
   type SaleLineInput,
@@ -129,5 +131,103 @@ describe("computeSaleTotals — agregación de la venta", () => {
       totalCents: 0,
       vatBreakdown: [],
     });
+  });
+});
+
+describe("distributeProportionally — reparto por mayor resto", () => {
+  it("reparte proporcionalmente cuando divide exacto", () => {
+    expect(distributeProportionally(150, [1000, 500])).toEqual([100, 50]);
+  });
+
+  it("asigna el céntimo sobrante a la cesta de mayor resto (desempate por índice)", () => {
+    // 3 entre pesos iguales: 1 y 1 con resto idéntico → el sobrante va al primero.
+    expect(distributeProportionally(3, [500, 500])).toEqual([2, 1]);
+  });
+
+  it("la suma del reparto es SIEMPRE exactamente el importe (no pierde céntimos)", () => {
+    const weights = [333, 667, 1000, 1];
+    for (const amount of [0, 1, 2, 7, 99, 100, 1234, 1999]) {
+      const parts = distributeProportionally(amount, weights);
+      expect(parts.reduce((a, b) => a + b, 0)).toBe(amount);
+      parts.forEach((p) => expect(p).toBeGreaterThanOrEqual(0));
+    }
+  });
+
+  it("con importe 0 o pesos que suman 0 devuelve todo ceros", () => {
+    expect(distributeProportionally(0, [10, 20])).toEqual([0, 0]);
+    expect(distributeProportionally(0, [0, 0])).toEqual([0, 0]);
+  });
+
+  it("una cesta de peso 0 nunca recibe céntimos", () => {
+    const parts = distributeProportionally(10, [0, 100]);
+    expect(parts[0]).toBe(0);
+    expect(parts[1]).toBe(10);
+  });
+
+  it("rechaza importes/pesos no enteros o negativos", () => {
+    expect(() => distributeProportionally(10.5, [1])).toThrow();
+    expect(() => distributeProportionally(-1, [1])).toThrow();
+    expect(() => distributeProportionally(10, [1, -2])).toThrow();
+    expect(() => distributeProportionally(10, [1, 2.5])).toThrow();
+  });
+});
+
+describe("prorateDiscountAcrossLines — descuento de ticket coherente", () => {
+  const lines: SaleLineInput[] = [
+    { quantity: 1, unitPriceCents: 1000, vatRate: 21 }, // bruto 1000
+    { quantity: 1, unitPriceCents: 500, vatRate: 10 }, //  bruto 500
+  ];
+
+  it("prorratea el descuento manteniendo base + IVA === total y Σ bruto === total", () => {
+    const discounted = computeSaleTotals(prorateDiscountAcrossLines(lines, 150));
+    // 1500 − 150 = 1350; la identidad contable se conserva EXACTA en céntimos.
+    expect(discounted.totalCents).toBe(1350);
+    expect(discounted.subtotalCents + discounted.taxCents).toBe(discounted.totalCents);
+    // El descuento total se arrastra como agregado informativo.
+    expect(discounted.discountCents).toBe(150);
+    // Se reparte por tipo de IVA (21 y 10 siguen presentes y cuadrados).
+    for (const entry of discounted.vatBreakdown) {
+      expect(entry.baseCents + entry.taxCents).toBe(entry.grossCents);
+    }
+    expect(
+      discounted.vatBreakdown.reduce((acc, e) => acc + e.grossCents, 0),
+    ).toBe(discounted.totalCents);
+  });
+
+  it("un descuento indivisible no pierde ni inventa céntimos entre líneas", () => {
+    const odd: SaleLineInput[] = [
+      { quantity: 1, unitPriceCents: 500, vatRate: 21 },
+      { quantity: 1, unitPriceCents: 500, vatRate: 21 },
+    ];
+    const prorated = prorateDiscountAcrossLines(odd, 3); // 3 céntimos entre dos
+    const sumShares = prorated.reduce((acc, l) => acc + (l.discountCents ?? 0), 0);
+    expect(sumShares).toBe(3);
+    const discounted = computeSaleTotals(prorated);
+    expect(discounted.totalCents).toBe(997); // 1000 − 3
+    expect(discounted.subtotalCents + discounted.taxCents).toBe(997);
+  });
+
+  it("satura el descuento al bruto total (nunca deja el ticket en negativo)", () => {
+    const discounted = computeSaleTotals(prorateDiscountAcrossLines(lines, 999_999));
+    expect(discounted.totalCents).toBe(0);
+    expect(discounted.taxCents).toBe(0);
+    expect(discounted.subtotalCents).toBe(0);
+  });
+
+  it("descuento 0 devuelve las líneas equivalentes (sin descuento)", () => {
+    const prorated = prorateDiscountAcrossLines(lines, 0);
+    expect(computeSaleTotals(prorated).totalCents).toBe(1500);
+    prorated.forEach((l) => expect(l.discountCents ?? 0).toBe(0));
+  });
+
+  it("no muta las líneas de entrada", () => {
+    const snapshot = JSON.parse(JSON.stringify(lines));
+    prorateDiscountAcrossLines(lines, 150);
+    expect(lines).toEqual(snapshot);
+  });
+
+  it("rechaza descuentos negativos o no enteros", () => {
+    expect(() => prorateDiscountAcrossLines(lines, -1)).toThrow();
+    expect(() => prorateDiscountAcrossLines(lines, 1.5)).toThrow();
   });
 });

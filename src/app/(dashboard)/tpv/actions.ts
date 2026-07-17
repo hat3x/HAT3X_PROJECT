@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
+import { computeCouponDiscountCents } from "@/lib/loyalty/points";
 import {
   LoyaltyActionError,
   lookupByQr,
+  resolveActiveCouponPercentOff,
   type LoyaltyActionErrorCode,
 } from "@/lib/loyalty/server";
 import type { LoyaltyLookupResult } from "@/lib/loyalty/types";
@@ -13,6 +15,7 @@ import {
   computeSaleTotals,
   getPaymentGateway,
   PaymentValidationError,
+  prorateDiscountAcrossLines,
   type PaymentTender,
   type SaleLineInput,
 } from "@/lib/payments";
@@ -32,6 +35,8 @@ export interface SaleReceipt {
   totalCents: number;
   subtotalCents: number;
   taxCents: number;
+  /** Descuento total aplicado (cupón incluido), en céntimos. 0 si no hubo. */
+  discountCents: number;
   lineCount: number;
   tenderCount: number;
 }
@@ -87,7 +92,42 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
   }
 
   // 1) Totales e IVA — fuente única (misma que usa la facturación).
-  const totals = computeSaleTotals(values.lines.map(toLineInput));
+  const lineInputs = values.lines.map(toLineInput);
+
+  // Cupón de bienvenida: el servidor re-resuelve el % AUTORITATIVO (nunca se fía
+  // del porcentaje del cliente) y PRORRATEA el descuento entre las líneas, de modo
+  // que el total cobrado, la base imponible y el IVA persistidos ya incluyen el
+  // descuento —no es un parche visual—. Si el cupón ya no es válido (caducado, ya
+  // usado o ajeno), se aborta ANTES de cobrar en vez de cobrar un importe distinto.
+  let effectiveLines = lineInputs;
+  if (values.coupon != null) {
+    let percentOff: number | null;
+    try {
+      percentOff = await resolveActiveCouponPercentOff(
+        values.coupon.id,
+        values.coupon.customerId,
+      );
+    } catch (error) {
+      // Fallo de dominio (sesión/permiso): mensaje limpio en vez de reventar.
+      if (error instanceof LoyaltyActionError) {
+        return { ok: false, error: error.message };
+      }
+      throw error;
+    }
+    if (percentOff === null) {
+      return {
+        ok: false,
+        error:
+          "El cupón de bienvenida ya no es válido. Quítalo del ticket e inténtalo de nuevo.",
+      };
+    }
+    const grossTotalCents = computeSaleTotals(lineInputs).totalCents;
+    const discountCents =
+      grossTotalCents > 0 ? computeCouponDiscountCents(grossTotalCents, percentOff) : 0;
+    effectiveLines = prorateDiscountAcrossLines(lineInputs, discountCents);
+  }
+
+  const totals = computeSaleTotals(effectiveLines);
   if (totals.totalCents <= 0) {
     return { ok: false, error: "El total de la venta debe ser mayor que 0" };
   }
@@ -149,9 +189,12 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
     await supabase.from("pos_sales").delete().eq("id", saleId).eq("salon_id", salonId!);
   }
 
-  // 4) Líneas del ticket (snapshot de importes por línea).
-  const lineInserts: TablesInsert<"pos_sale_lines">[] = values.lines.map((line) => {
-    const lineTotals = computeLineTotals(toLineInput(line));
+  // 4) Líneas del ticket (snapshot de importes por línea). Se usan las líneas
+  //    EFECTIVAS (con el descuento del cupón ya prorrateado), así el snapshot por
+  //    línea guarda su parte del descuento y `Σ line_total_cents === total_cents`.
+  const lineInserts: TablesInsert<"pos_sale_lines">[] = values.lines.map((line, i) => {
+    const effective = effectiveLines[i]!;
+    const lineTotals = computeLineTotals(effective);
     return {
       salon_id: salonId,
       sale_id: saleId,
@@ -160,7 +203,7 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
       description: line.description,
       quantity: line.quantity,
       unit_price_cents: line.unitPrice,
-      discount_cents: 0,
+      discount_cents: effective.discountCents ?? 0,
       vat_rate: line.vatRate,
       line_total_cents: lineTotals.grossCents,
     };
@@ -212,6 +255,7 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
       totalCents: totals.totalCents,
       subtotalCents: totals.subtotalCents,
       taxCents: totals.taxCents,
+      discountCents: totals.discountCents,
       lineCount: lineInserts.length,
       tenderCount: tenders.length,
     },

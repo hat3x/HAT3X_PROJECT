@@ -1,4 +1,9 @@
-import { computeSaleTotals, type SaleTotals } from "@/lib/payments";
+import { computeCouponDiscountCents } from "@/lib/loyalty/points";
+import {
+  computeSaleTotals,
+  prorateDiscountAcrossLines,
+  type SaleTotals,
+} from "@/lib/payments";
 import type { PosPaymentMethod, Product, Service } from "@/types/database";
 
 /**
@@ -70,17 +75,67 @@ export function isLineComplete(line: TicketLine): boolean {
 }
 
 /**
+ * Totales del ticket con el detalle del cupón aplicado. Superconjunto de
+ * {@link SaleTotals}: base/IVA/total ya son POST-descuento (coherentes en
+ * céntimos enteros), y estos campos añaden la "foto" del cupón para pintarlo.
+ */
+export interface TicketTotals extends SaleTotals {
+  /** % del cupón aplicado al ticket, o `null` si no hay cupón. */
+  couponPercentOff: number | null;
+  /** Descuento bruto del cupón ya aplicado (céntimos). 0 si no hay cupón. */
+  couponDiscountCents: number;
+  /** Bruto del ticket ANTES del cupón (para el total tachado / "subtotal"). */
+  grossTotalCents: number;
+}
+
+/**
  * Totales del ticket, tolerante a líneas incompletas (se ignoran). Reutiliza
  * `computeSaleTotals` de la capa de pagos: misma aritmética que persiste el
  * Server Action y que usa la facturación.
+ *
+ * Con un `couponPercentOff` (cupón de bienvenida aplicado), el descuento se
+ * calcula con `computeCouponDiscountCents` sobre el bruto del ticket y se
+ * PRORRATEA entre las líneas (`prorateDiscountAcrossLines`) antes de reagregar,
+ * de modo que la base imponible, el IVA por tipo y el total quedan cuadrados en
+ * céntimos enteros (no es un descuento "pintado" sobre el total). Retirar el
+ * cupón es, simplemente, volver a llamar sin `couponPercentOff`.
  */
-export function computeTicketTotals(lines: readonly TicketLine[]): SaleTotals {
+export function computeTicketTotals(
+  lines: readonly TicketLine[],
+  couponPercentOff?: number | null,
+): TicketTotals {
   const inputs = lines.filter(isLineComplete).map((line) => ({
     quantity: parseQuantity(line.quantity)!,
     unitPriceCents: parseEuroToCents(line.unitPrice)!,
     vatRate: Number.parseFloat(line.vatRate.replace(",", ".")) || 0,
   }));
-  return computeSaleTotals(inputs);
+
+  const base = computeSaleTotals(inputs);
+
+  // Sin cupón (o ticket a cero): totales tal cual, sin descuento.
+  if (
+    couponPercentOff === undefined ||
+    couponPercentOff === null ||
+    couponPercentOff <= 0 ||
+    base.totalCents <= 0
+  ) {
+    return {
+      ...base,
+      couponPercentOff: null,
+      couponDiscountCents: 0,
+      grossTotalCents: base.totalCents,
+    };
+  }
+
+  const couponDiscountCents = computeCouponDiscountCents(base.totalCents, couponPercentOff);
+  const discounted = computeSaleTotals(prorateDiscountAcrossLines(inputs, couponDiscountCents));
+
+  return {
+    ...discounted,
+    couponPercentOff,
+    couponDiscountCents,
+    grossTotalCents: base.totalCents,
+  };
 }
 
 /** Convierte un importe en céntimos a euros con coma (para prellenar campos). */

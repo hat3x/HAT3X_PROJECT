@@ -26,6 +26,7 @@
  */
 import {
   assertIntegerCents,
+  distributeProportionally,
   multiplyCents,
   splitVatFromGross,
 } from "./money";
@@ -156,4 +157,48 @@ export function computeSaleTotals(lines: readonly SaleLineInput[]): SaleTotals {
   const vatBreakdown = [...byRate.values()].sort((a, b) => b.vatRate - a.vatRate);
 
   return { subtotalCents, discountCents, taxCents, totalCents, vatBreakdown };
+}
+
+/**
+ * Aplica un descuento de TICKET (p. ej. el cupón de bienvenida) prorrateándolo
+ * entre las líneas en proporción a su bruto, y devuelve NUEVAS líneas con ese
+ * reparto acumulado en `discountCents`.
+ *
+ * ── Por qué así y no "restando al total" ─────────────────────────────────────
+ * El descuento del cupón es un % sobre el bruto del ticket, pero el ticket mezcla
+ * tipos de IVA (21/10/4/0). Restarlo del total dejaría la base y la cuota sin
+ * cuadrar (un "parche visual"). En su lugar se reparte a nivel de LÍNEA por el
+ * método del mayor resto ({@link distributeProportionally}), de modo que al pasar
+ * el resultado por {@link computeSaleTotals} la base imponible, el IVA por tipo y
+ * el total se recalculan solos y siguen cumpliendo, EXACTOS en céntimos enteros:
+ *   · `subtotal + IVA === total`  (por construcción de `splitVatFromGross`)
+ *   · `Σ bruto de línea === total`  (no se pierde ni se inventa un céntimo)
+ *   · `Σ descuento de línea === descuento aplicado`
+ *
+ * El descuento se satura al bruto total (nunca deja el ticket en negativo). Las
+ * líneas se ponderan por su bruto TRAS su propio descuento de línea, así el cupón
+ * reparte sobre lo que realmente se cobra. Devuelve copias (no muta la entrada).
+ */
+export function prorateDiscountAcrossLines(
+  lines: readonly SaleLineInput[],
+  discountCents: number,
+): SaleLineInput[] {
+  assertIntegerCents(discountCents, "discountCents");
+  if (discountCents < 0) {
+    throw new RangeError(`discountCents no puede ser negativo: ${discountCents}`);
+  }
+  if (discountCents === 0) {
+    return lines.map((line) => ({ ...line }));
+  }
+
+  const grossPerLine = lines.map((line) => computeLineTotals(line).grossCents);
+  const totalGross = grossPerLine.reduce((acc, gross) => acc + gross, 0);
+  // El cupón nunca descuenta más que el bruto disponible.
+  const applied = Math.min(discountCents, totalGross);
+  const shares = distributeProportionally(applied, grossPerLine);
+
+  return lines.map((line, i) => ({
+    ...line,
+    discountCents: (line.discountCents ?? 0) + shares[i]!,
+  }));
 }

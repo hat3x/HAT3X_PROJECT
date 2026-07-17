@@ -69,3 +69,55 @@ export function assertIntegerCents(value: number, label = "value"): void {
     throw new RangeError(`${label} debe ser un entero de céntimos, recibido: ${value}`);
   }
 }
+
+/**
+ * Reparte un importe entero (céntimos) entre varias "cestas" en proporción a sus
+ * `weights`, con el MÉTODO DEL MAYOR RESTO (Hamilton): cada cesta recibe la parte
+ * entera de su cuota y los céntimos sobrantes por redondeo se asignan uno a uno a
+ * las cestas de mayor resto (desempate por índice ascendente → determinista).
+ *
+ * Garantía: `Σ resultado === amount` EXACTO — no se pierde ni se inventa un
+ * céntimo. Es la primitiva sobre la que se prorratea un descuento de ticket entre
+ * sus líneas sin descuadrar la identidad `base + IVA === total` (ver totals.ts).
+ *
+ * Casos borde: con `amount === 0` o pesos que suman 0 devuelve todo ceros (una
+ * cesta de peso 0 nunca recibe céntimos). Rechaza importes/pesos no enteros o
+ * negativos.
+ */
+export function distributeProportionally(
+  amount: number,
+  weights: readonly number[],
+): number[] {
+  assertIntegerCents(amount, "amount");
+  if (amount < 0) {
+    throw new RangeError(`amount no puede ser negativo: ${amount}`);
+  }
+  weights.forEach((weight, i) => {
+    assertIntegerCents(weight, `weights[${i}]`);
+    if (weight < 0) {
+      throw new RangeError(`weights[${i}] no puede ser negativo: ${weight}`);
+    }
+  });
+
+  const totalWeight = weights.reduce((acc, w) => acc + w, 0);
+  if (amount === 0 || totalWeight === 0) {
+    return weights.map(() => 0);
+  }
+
+  // Parte entera de cada cuota + resto (en unidades de `totalWeight`, sin coma
+  // flotante: `amount * weight` es un entero seguro para importes de ticket).
+  const floors = weights.map((weight) => Math.floor((amount * weight) / totalWeight));
+  const distributed = floors.reduce((acc, part) => acc + part, 0);
+  let remaining = amount - distributed;
+
+  const byRemainderDesc = weights
+    .map((weight, i) => ({ i, remainder: amount * weight - floors[i]! * totalWeight }))
+    .sort((a, b) => b.remainder - a.remainder || a.i - b.i);
+
+  const result = floors.slice();
+  for (let k = 0; k < byRemainderDesc.length && remaining > 0; k++) {
+    result[byRemainderDesc[k]!.i]! += 1;
+    remaining -= 1;
+  }
+  return result;
+}

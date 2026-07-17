@@ -67,6 +67,19 @@ export const saleLineSchema = z.object({
     .refine((rate) => rate >= 0 && rate <= 100, "Tipo de IVA no válido"),
 });
 
+/**
+ * Cupón de bienvenida aplicado al ticket. El cliente envía SOLO las referencias
+ * (`id` del cupón + `customerId` a quien pertenece), NUNCA el porcentaje: el
+ * servidor re-resuelve el `percent_off` autoritativo y comprueba que el cupón
+ * sigue vigente antes de descontar (ver `resolveActiveCouponPercentOff`).
+ */
+export const saleCouponSchema = z.object({
+  /** id del cupón de bienvenida escaneado. */
+  id: z.string().uuid(),
+  /** Cliente dueño del cupón (el escaneado por QR en el TPV). */
+  customerId: z.string().uuid(),
+});
+
 /** Un medio de pago aplicado a la venta. Varios tenders = pago mixto. */
 export const tenderSchema = z.object({
   method: paymentMethodEnum,
@@ -88,6 +101,8 @@ export const saleSchema = z.object({
   professionalId: z.string().uuid().nullable().optional(),
   /** Nota libre del ticket. */
   notes: z.string().trim().max(500).optional(),
+  /** Cupón de bienvenida aplicado (opcional); el servidor valida su vigencia. */
+  coupon: saleCouponSchema.nullable().optional(),
   /** Al menos una línea; el ticket vacío no se cobra. */
   lines: z.array(saleLineSchema).min(1, "Añade al menos una línea al ticket"),
   /** Al menos un medio de pago; deben cubrir exactamente el total. */

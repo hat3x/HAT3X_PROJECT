@@ -11,6 +11,7 @@ import {
   Scissors,
   Search,
   Sparkles,
+  TicketPercent,
   Trash2,
   X,
 } from "lucide-react";
@@ -62,6 +63,7 @@ import {
 } from "@/hooks/use-tpv";
 import { formatTimeInZone, localDateInZone } from "@/lib/booking/timezone";
 import { formatMoney } from "@/lib/format";
+import type { LoyaltyCouponView } from "@/lib/loyalty/types";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
 import type { SaleInput } from "@/lib/validations/sale";
 
@@ -97,6 +99,12 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null);
+  // Cupón de bienvenida aplicado al ticket (dueño + cupón). Retirar = ponerlo a
+  // null; el descuento desaparece de los totales al instante (antes de cobrar).
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    coupon: LoyaltyCouponView;
+    customerId: string;
+  } | null>(null);
 
   const services = useSaleServices(salonId, tab === "services" ? search : "");
   const products = useSaleProducts(salonId, tab === "products" ? search : "");
@@ -107,7 +115,10 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
   // cobro; si no se escanea a nadie, la caja se comporta igual que siempre.
   const loyalty = useLoyaltyLookup();
 
-  const totals = useMemo(() => computeTicketTotals(lines), [lines]);
+  const totals = useMemo(
+    () => computeTicketTotals(lines, appliedCoupon?.coupon.percent_off ?? null),
+    [lines, appliedCoupon],
+  );
   const completeLines = lines.filter(isLineComplete);
   const canCharge = completeLines.length > 0 && totals.totalCents > 0;
 
@@ -164,6 +175,8 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
     setContext(null);
     setNotes("");
     setSearch("");
+    setAppliedCoupon(null);
+    loyalty.reset(); // vuelve el panel de fidelización a reposo tras la venta
     createSale.reset();
   }
 
@@ -173,6 +186,11 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
       customerId: context?.customerId ?? null,
       professionalId: context?.professionalId ?? null,
       notes: notes.trim() === "" ? undefined : notes.trim(),
+      // El servidor re-valida el cupón y recalcula el descuento; aquí solo se
+      // envían sus referencias (nunca el porcentaje).
+      coupon: appliedCoupon
+        ? { id: appliedCoupon.coupon.id, customerId: appliedCoupon.customerId }
+        : null,
       lines: completeLines.map((l) => ({
         kind: l.kind,
         refId: l.refId,
@@ -219,8 +237,19 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
           <LoyaltyPanel
             pending={loyalty.isPending}
             result={loyalty.data}
-            onScan={(qrToken) => loyalty.mutate(qrToken)}
-            onClear={() => loyalty.reset()}
+            onScan={(qrToken) => {
+              setAppliedCoupon(null); // un nuevo escaneo descarta el cupón anterior
+              loyalty.mutate(qrToken);
+            }}
+            onClear={() => {
+              setAppliedCoupon(null);
+              loyalty.reset();
+            }}
+            appliedCouponId={appliedCoupon?.coupon.id ?? null}
+            onApplyCoupon={(coupon, customerId) =>
+              setAppliedCoupon({ coupon, customerId })
+            }
+            onRemoveCoupon={() => setAppliedCoupon(null)}
           />
 
           <AppointmentPicker
@@ -391,6 +420,33 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
           {/* Totales + acción de cobro (fijo al pie) */}
           <div className="border-t border-border/70 bg-muted/30 p-5">
             <dl className="grid gap-1.5 text-sm">
+              {totals.couponDiscountCents > 0 ? (
+                <>
+                  <div className="flex justify-between text-muted-foreground">
+                    <dt>Subtotal</dt>
+                    <dd className="tabular-nums">
+                      {formatMoney(totals.grossTotalCents)}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between text-success">
+                    <dt className="flex items-center gap-1.5">
+                      <TicketPercent className="h-3.5 w-3.5" aria-hidden />
+                      <span>Cupón −{totals.couponPercentOff}%</span>
+                      <button
+                        type="button"
+                        onClick={() => setAppliedCoupon(null)}
+                        aria-label="Quitar el cupón del ticket"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-success/80 transition-colors hover:bg-success/10 hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </dt>
+                    <dd className="font-medium tabular-nums">
+                      −{formatMoney(totals.couponDiscountCents)}
+                    </dd>
+                  </div>
+                </>
+              ) : null}
               <div className="flex justify-between text-muted-foreground">
                 <dt>Base imponible</dt>
                 <dd className="tabular-nums">
@@ -475,6 +531,14 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
                 <dt>IVA</dt>
                 <dd className="tabular-nums">{formatMoney(receipt.taxCents)}</dd>
               </div>
+              {receipt.discountCents > 0 ? (
+                <div className="flex justify-between text-success">
+                  <dt>Descuento (cupón)</dt>
+                  <dd className="tabular-nums">
+                    −{formatMoney(receipt.discountCents)}
+                  </dd>
+                </div>
+              ) : null}
               <div className="mt-1 flex items-baseline justify-between border-t border-border/70 pt-2.5">
                 <dt className="font-semibold">Total cobrado</dt>
                 <dd className="text-lg font-bold tabular-nums">

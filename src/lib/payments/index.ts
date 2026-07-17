@@ -10,6 +10,7 @@
 export {
   computeLineTotals,
   computeSaleTotals,
+  prorateDiscountAcrossLines,
   type SaleLineInput,
   type SaleLineTotals,
   type SaleTotals,
@@ -19,6 +20,7 @@ export {
 // ── Primitivas de dinero (por si el consumidor necesita operar céntimos) ──────
 export {
   assertIntegerCents,
+  distributeProportionally,
   multiplyCents,
   roundHalfAwayFromZero,
   splitVatFromGross,

@@ -100,6 +100,56 @@ describe("computeTicketTotals", () => {
     const totals = computeTicketTotals([]);
     expect(totals.totalCents).toBe(0);
     expect(totals.vatBreakdown).toEqual([]);
+    expect(totals.couponDiscountCents).toBe(0);
+    expect(totals.couponPercentOff).toBeNull();
+  });
+});
+
+describe("computeTicketTotals con cupón de bienvenida", () => {
+  it("aplica el cupón como descuento COHERENTE (base + IVA === total)", () => {
+    const totals = computeTicketTotals(
+      [line({ unitPrice: "10,00", vatRate: "21" })],
+      10,
+    );
+    expect(totals.grossTotalCents).toBe(1000); // bruto antes del cupón
+    expect(totals.couponPercentOff).toBe(10);
+    expect(totals.couponDiscountCents).toBe(100); // 10% de 1000
+    expect(totals.totalCents).toBe(900); // total ya descontado (no un parche)
+    expect(totals.subtotalCents + totals.taxCents).toBe(totals.totalCents);
+  });
+
+  it("sin cupón (o null) no descuenta nada — retirar el cupón = no pasar %", () => {
+    const conCupon = computeTicketTotals([line({ unitPrice: "10,00" })], 10);
+    expect(conCupon.totalCents).toBe(900);
+    const retirado = computeTicketTotals([line({ unitPrice: "10,00" })], null);
+    expect(retirado.couponPercentOff).toBeNull();
+    expect(retirado.couponDiscountCents).toBe(0);
+    expect(retirado.totalCents).toBe(1000);
+  });
+
+  it("un ticket a cero con cupón no descuenta (no hay sobre qué aplicar)", () => {
+    const totals = computeTicketTotals([], 10);
+    expect(totals.totalCents).toBe(0);
+    expect(totals.couponDiscountCents).toBe(0);
+    expect(totals.couponPercentOff).toBeNull();
+  });
+
+  it("reparte el descuento entre varios tipos de IVA sin descuadrar", () => {
+    const totals = computeTicketTotals(
+      [
+        line({ localId: "a", unitPrice: "10,00", vatRate: "21" }),
+        line({ localId: "b", unitPrice: "5,00", vatRate: "10" }),
+      ],
+      10,
+    );
+    expect(totals.grossTotalCents).toBe(1500);
+    expect(totals.couponDiscountCents).toBe(150);
+    expect(totals.totalCents).toBe(1350);
+    expect(totals.subtotalCents + totals.taxCents).toBe(totals.totalCents);
+    expect(totals.vatBreakdown.map((v) => v.vatRate)).toEqual([21, 10]);
+    for (const entry of totals.vatBreakdown) {
+      expect(entry.baseCents + entry.taxCents).toBe(entry.grossCents);
+    }
   });
 });
 
