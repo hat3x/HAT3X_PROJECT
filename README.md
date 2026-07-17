@@ -106,6 +106,11 @@ El esquema se gestiona con migraciones SQL en `supabase/migrations/`. Se aplican
 | `20260713180000_pos_base.sql` | **TPV:** `pos_sales`, `pos_sale_lines`, `pos_payments`, `pos_payment_methods`, `pos_sessions` (caja) |
 | `20260714100000_verifactu_invoices.sql` | **Facturación Veri\*factu:** `pos_invoices` — registro inmutable y encadenado por huella SHA-256 |
 | `20260714110000_rls_multitenant_guard.sql` | Guardián RLS multi-tenant sobre TPV, facturación y productos |
+| `20260716120000_loyalty_base.sql` | **Fidelización nativa:** `loyalty_accounts`, `points_movements`, `welcome_coupons`, `rewards` + bootstrap de cuenta/cupón al crear cliente |
+| `20260717100000_customers_user_id.sql` | **Identidad (A):** `customers.user_id` (nullable, FK a `auth.users`) + único parcial `(salon_id, user_id)` — enlace ficha ↔ cuenta |
+| `20260717110000_customers_phone_e164.sql` | **Identidad (B):** `app.normalize_phone()` + columna **generada** `customers.phone_e164` + único parcial `(salon_id, phone_e164)` — dedup por teléfono |
+| `20260717120000_rls_self_customer.sql` | **Identidad (C):** RLS **SELF** (autoservicio del cliente) sobre `customers` y fidelización + candado de columnas |
+| `20260717130000_rls_self_guard.sql` | **Identidad (D):** guardián que aborta si una migración futura debilita el aislamiento del autoservicio |
 
 ### Regenerar tipos TypeScript
 
@@ -207,6 +212,12 @@ por pantalla— está en **[DESIGN.md](./DESIGN.md)**.
 ### Fichas de clientes
 - CRUD completo de clientes con búsqueda en tiempo real
 - Timeline de visitas con historial de servicios y profesionales
+- **Identidad por teléfono (un cliente = una ficha):** el teléfono es la clave con la
+  que se reconoce a la persona, entre por el **salón**, la **app de cliente** o la
+  **recepcionista IA**. Se normaliza a **E.164** y un único por salón evita duplicados;
+  la **cuenta de auth** (`user_id`) es un enlace **opcional** sobre la ficha. Detalle en
+  [`src/lib/customers/README.md`](./src/lib/customers/README.md) y
+  [MANTENIMIENTO.md](./MANTENIMIENTO.md#identidad-del-cliente--cuenta-teléfono-y-dedup).
 
 ### Reservas online (público)
 - Asistente multi-paso en `/reservar/[slug]` sin necesidad de cuenta
@@ -359,6 +370,7 @@ Para activar WhatsApp en producción, seguir la guía completa en [MANTENIMIENTO
 
 Ver [MANTENIMIENTO.md](./MANTENIMIENTO.md) para:
 - Troubleshooting de errores comunes (incluye TPV, caja/arqueo y facturación)
+- Identidad del cliente por teléfono: modelo de cuenta, normalización E.164 y resolución de duplicados
 - Modelo de datos TPV/facturación, flujo de caja y capa de pagos abstraída
 - Conformidad fiscal Veri\*factu: validación por gestoría y fase futura VERI\*FACTU
 - Guía de configuración Twilio paso a paso

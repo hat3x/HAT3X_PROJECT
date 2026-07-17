@@ -75,6 +75,24 @@ npm run typecheck
 - El efectivo esperado se recalcula **en servidor** = `opening_float_cents` + Σ cobros en **efectivo** de la sesión (`pos_payments.session_id` con `method = 'efectivo'`). No cuenta tarjeta/Bizum (no mueven el cajón).
 - Comprueba que los cobros llevan `session_id` de la caja correcta y que el método base (`pos_payments.method`) es el esperado. `cash_variance_cents` negativo = **falta** dinero en el cajón.
 
+### Cliente — «Este teléfono ya está vinculado a otra cuenta en este salón» (409)
+- Lo lanza `linkOrCreateCustomerAccount` (`@/lib/customers/account`) cuando el teléfono ya normalizado (`phone_e164`) pertenece a una ficha con **otra** `user_id` en ese salón. **Es intencionado:** el teléfono es la identidad, y una cuenta no puede apropiarse de la ficha de otra persona.
+- Si de verdad es la misma persona (p. ej. cambió de cuenta), la fusión es una operación de **staff/soporte**, no de autoservicio: ver «resolución de duplicados» en [Identidad del cliente](#identidad-del-cliente--cuenta-teléfono-y-dedup).
+- Recordatorio de seguridad: `linkOrCreateCustomerAccount` **confía** en que el teléfono se verificó (OTP) **antes** de llamar. Sin esa verificación aguas arriba, este 409 es la última barrera contra un robo de ficha.
+
+### Cliente — «could not create unique index "idx_customers_salon_phone_e164" … duplicate key value»
+- La migración `20260717110000_customers_phone_e164.sql` corre en una **transacción**: si al crear el índice único dos fichas del mismo salón normalizan al **mismo** `phone_e164`, el `CREATE UNIQUE INDEX` falla y **aborta toda la migración** (no deja el esquema a medias). Es lo correcto: un duplicado se resuelve a mano, no se oculta.
+- **No es un caso vivo hoy** (`customers` está a 0 filas en desarrollo), pero será el fallo típico el día que haya datos reales. El procedimiento completo de detección (query `group by … having count(*) > 1`) y resolución (reasignar `appointments`/`visits`, volcar datos, borrar la redundante) está en [Identidad del cliente → resolución de un duplicado previo](#identidad-del-cliente--cuenta-teléfono-y-dedup).
+
+### Cliente — dos formas del mismo teléfono crean fichas duplicadas (o el índice rechaza un número que la app dio por «nuevo»)
+- Síntoma de **divergencia entre las dos normalizaciones**: la SQL `app.normalize_phone` (que alimenta la columna generada y el índice) y la TS `normalizePhone` (`src/lib/customers/normalize-phone.ts`, que valida/busca antes de escribir) **deben producir el mismo resultado byte a byte**.
+- Si alguien tocó una sin replicar el cambio en la otra: la app cree que un número es nuevo y la BD lo rechaza al insertar (`23505`), o al revés, dos variantes pasan el control de la app y colisionan en la BD.
+- Arréglalo dejando **idénticas** ambas implementaciones (mismo orden de reglas). La paridad la cubre `src/tests/unit/normalize-phone.test.ts`: si diverge, ese test debe fallar — actualízalo junto al cambio.
+
+### Cliente — cambié `app.normalize_phone` y `phone_e164` no se recalcula en las filas existentes
+- `phone_e164` es una **columna generada `STORED`**: se calcula al **escribir**. Un `CREATE OR REPLACE FUNCTION app.normalize_phone` **no** recalcula las filas ya guardadas.
+- Para propagar el cambio: **recrear la columna generada** (drop + add `generated always as … stored`, que reescribe la tabla) o hacer un **backfill** equivalente. Ojo con la **dependencia**: no se puede `DROP FUNCTION app.normalize_phone` sin quitar antes la columna (o con `CASCADE`). Contexto y contrapartida en [`src/lib/customers/README.md`](./src/lib/customers/README.md#phone_e164-columna-generada-no-trigger).
+
 ## Base de datos (Supabase)
 
 ### Aplicar migraciones
@@ -202,6 +220,111 @@ Motor de emisión de **registros de facturación de alta** en modo **NO VERI\*FA
 > 2. **Modo NO VERI\*FACTU (conserva, no remite).** Los documentos se rotulan **«NO VERI\*FACTU»** (banner + leyenda del QR). El sistema conserva la cadena inalterable pero **no la envía a la AEAT en tiempo real**.
 > 3. **VERI\*FACTU (transmisión a la AEAT con certificado) = FASE FUTURA.** La remisión automática con **certificado electrónico** del obligado tributario (firma, envío al servicio web de la AEAT, gestión de acuses/errores) **no está implementada**. No prometer transmisión a la AEAT al cliente hasta desarrollarla y validarla.
 > 4. **Cobro no real.** La pasarela `manual` registra el pago pero **no cobra** contra ningún proveedor (ver la sección **Capa de pagos** y su TODO más arriba).
+
+## Identidad del cliente — cuenta, teléfono y dedup
+
+Modelo de **quién es un cliente** en Salón OS (FASE 3 del roadmap). Migraciones
+`20260717100000_customers_user_id.sql` (A), `20260717110000_customers_phone_e164.sql`
+(B), `20260717120000_rls_self_customer.sql` (C) y `20260717130000_rls_self_guard.sql`
+(D). Lógica de servidor en `@/lib/customers/account`. **Detalle exhaustivo (API,
+seguridad, tests) en [`src/lib/customers/README.md`](./src/lib/customers/README.md).**
+
+### Principio: un cliente = una ficha, entre por donde entre
+
+El **teléfono es la clave natural** con la que se reconoce a una persona, venga del
+**salón** (alta manual), la **app de cliente** (autoservicio) o la **recepcionista IA**
+(nombre + teléfono en la llamada). Toda alta **busca por teléfono primero**: si ya
+existe la ficha, se **enlaza** el nuevo canal; **no** se crea un duplicado. Caso
+concreto: cliente dado de alta por la recepcionista que luego se crea cuenta en la app
+→ se enlaza a su ficha existente.
+
+### Modelo de datos (mapa rápido)
+
+| Elemento | Rol | Notas clave |
+|---|---|---|
+| `customers.user_id` | Enlace **opcional** a la cuenta de auth (`auth.users`) | **Nullable a propósito:** la mayoría de fichas no tienen cuenta. `on delete set null` (al borrar la cuenta, la ficha sobrevive). Único parcial `(salon_id, user_id)` |
+| `customers.phone` | Teléfono **crudo**, tal como se tecleó/dictó | Se conserva para mostrarlo/buscarlo tal cual; índice no único `idx_customers_salon_phone` |
+| `customers.phone_e164` | Teléfono **canónico** E.164 (p. ej. `+34612345678`) | **Columna GENERADA** `= app.normalize_phone(phone)`, no escribible. Único parcial `idx_customers_salon_phone_e164 (salon_id, phone_e164)` = **dedup** |
+
+- **El único es por salón, no global** (`(salon_id, phone_e164)` / `(salon_id, user_id)`):
+  Salón OS es multi-tenant → la misma persona puede ser cliente de **varios salones**
+  (una ficha por salón, mismo teléfono / misma cuenta), pero **no dos fichas del mismo
+  teléfono dentro de un salón**. Los índices son **parciales** (`where … is not null`):
+  fichas sin teléfono o sin cuenta quedan fuera y pueden coexistir.
+- **Al crear una ficha, la BD hace el resto sola:** el `DEFAULT` rellena `qr_token`, la
+  columna generada calcula `phone_e164` y el trigger `trg_customers_bootstrap_loyalty`
+  crea la cuenta de puntos + el cupón de bienvenida.
+
+### Normalización a E.164 — SQL y TS deben coincidir
+
+`app.normalize_phone(text)` (SQL, alimenta la columna generada e índice) y
+`normalizePhone` (`src/lib/customers/normalize-phone.ts`, valida/busca antes de
+escribir) son **espejos byte a byte**. Reglas: quedarse con dígitos + `+`; prefijo
+internacional (`+`/`00`) se respeta, **sin prefijo se antepone `34`** (España);
+**6–15 dígitos** o `null` (`''`, `'sin tel'`, `'()'` → `null`, nunca un `+34` fantasma).
+`'612 34 56 78'`, `'+34 612 345 678'`, `'0034612345678'` → **`+34612345678`**. Si tocas
+una, replica el cambio en la otra (ver troubleshooting arriba).
+
+### Por qué `phone_e164` es columna GENERADA y no un trigger
+
+- **No se puede saltar:** `GENERATED ALWAYS … STORED` lo aplica el **motor** en cada
+  escritura (app, `COPY`, SQL manual, seed). Un trigger `BEFORE` se desactiva y la
+  **replicación lógica** (`session_replication_role = 'replica'`) **omite los triggers**
+  → `phone_e164` se desincronizaría. La columna generada no.
+- **Siempre coherente** con `phone` (es *exactamente* `app.normalize_phone(phone)`, no
+  escribible) y **declarativa** (visible en `\d customers`). Requiere que la función sea
+  `IMMUTABLE` — lo es.
+- **Contrapartida:** al ser `STORED`, cambiar la normalización **no** recalcula filas
+  existentes (recrear columna o backfill) y crea una **dependencia** que impide
+  `DROP FUNCTION` sin quitar antes la columna. Preferible a un trigger frágil.
+
+### Resolución de un duplicado previo (al aplicar el dedup por teléfono)
+
+Hoy `customers` está a **0 filas**, así que las migraciones B/C son instantáneas y
+seguras. El día que haya datos reales, si dos fichas del mismo salón normalizan al mismo
+teléfono, el `CREATE UNIQUE INDEX` **aborta la migración**. Procedimiento:
+
+1. **Detectar** los grupos duplicados (idempotente, no cambia nada — requiere que la
+   función `app.normalize_phone` ya exista):
+
+   ```sql
+   select salon_id,
+          app.normalize_phone(phone) as phone_e164,
+          count(*)                    as fichas,
+          array_agg(id order by created_at) as customer_ids
+   from public.customers
+   where app.normalize_phone(phone) is not null
+   group by salon_id, app.normalize_phone(phone)
+   having count(*) > 1;
+   ```
+
+2. **Fusionar** cada grupo (misma persona, fichas repetidas): elegir la **superviviente**
+   (normalmente la más antigua/completa), reasignar las referencias de las redundantes
+   (`update public.appointments set customer_id = <superv> where customer_id = <redund>;`
+   e igual para `public.visits` y cualquier otra tabla que referencie `customers`),
+   volcar a la superviviente los datos que solo tuviera la redundante (`email`, `notes`,
+   `marketing_consent`, `user_id`…) según criterio de negocio, y finalmente
+   `delete from public.customers where id = <redund>;`.
+3. Repetir hasta que la query de detección **no devuelva filas** y reaplicar la migración.
+   **Alternativa** sin fusionar: corregir el teléfono erróneo de una de las fichas para
+   que dejen de colisionar.
+
+### Rollback manual (forward-only; por si hubiera que revertir)
+
+En este orden (la columna depende de la función):
+
+```sql
+-- Parte B (dedup por teléfono)
+drop index    if exists public.idx_customers_salon_phone_e164;
+alter table   public.customers drop column if exists phone_e164;
+drop function if exists app.normalize_phone(text);
+-- Parte A (enlace ficha ↔ cuenta)
+drop index    if exists public.idx_customers_salon_user;
+alter table   public.customers drop column if exists user_id;
+```
+
+El rollback de la parte C (RLS SELF + candado de columnas) está documentado al pie de
+`20260717120000_rls_self_customer.sql`.
 
 ## Tareas periódicas
 
