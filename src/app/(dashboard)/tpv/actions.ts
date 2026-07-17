@@ -22,7 +22,13 @@ import {
 } from "@/lib/payments";
 import { getActiveSalonId } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
-import { saleSchema, type SaleInput, type SaleLineValues } from "@/lib/validations/sale";
+import {
+  retrySaleLoyaltySchema,
+  saleSchema,
+  type RetrySaleLoyaltyInput,
+  type SaleInput,
+  type SaleLineValues,
+} from "@/lib/validations/sale";
 import type { TablesInsert } from "@/types/database";
 
 /** Resultado tipado de un Server Action de caja. */
@@ -45,6 +51,32 @@ export interface SaleLoyaltyOutcome {
   reward: LoyaltyRewardView | null;
 }
 
+/**
+ * Ancla de REINTENTO manual de la acreditación (§sub-7). Se devuelve en el recibo
+ * SOLO cuando se escaneó a un cliente pero el best-effort de `awardVisit` falló al
+ * cerrar el cobro (`loyalty` será entonces `null`). Lleva lo justo para reacreditar
+ * sobre la MISMA venta —sin re-cobrar y sin poder duplicar, porque `awardVisit` es
+ * idempotente por `ref = { pos_sale, saleId }`—. Ver {@link retrySaleLoyalty}.
+ */
+export interface SaleLoyaltyRetryRef {
+  /** Venta ya cobrada sobre la que reacreditar. */
+  saleId: string;
+  /** Cliente escaneado al que acreditar la visita. */
+  customerId: string;
+  /** Si el ticket llevaba cupón: reintentar también su canje. */
+  redeemCoupon: boolean;
+}
+
+/**
+ * Desenlace de un reintento manual. Extiende {@link SaleLoyaltyOutcome} con
+ * `alreadyAwarded`, `true` cuando la visita YA constaba acreditada (p. ej. un
+ * fallo parcial previo que sí llegó a sumar): en ese caso `pointsEarned` es 0 y
+ * `pointsBalance` refleja el saldo ya vigente (nunca se duplica).
+ */
+export interface RetryLoyaltyOutcome extends SaleLoyaltyOutcome {
+  alreadyAwarded: boolean;
+}
+
 /** Datos devueltos al registrar una venta con éxito. */
 export interface SaleReceipt {
   saleId: string;
@@ -60,6 +92,14 @@ export interface SaleReceipt {
    * acreditación falló (no bloquea la venta). Ver {@link SaleLoyaltyOutcome}.
    */
   loyalty: SaleLoyaltyOutcome | null;
+  /**
+   * Ancla de reintento manual, presente SOLO si se escaneó a un cliente pero la
+   * acreditación best-effort falló (`loyalty` será `null`). Permite al cajero
+   * reacreditar la visita sobre esta venta sin re-cobrar. `null` en el resto de
+   * casos (no se escaneó a nadie, o la acreditación fue bien). Ver
+   * {@link SaleLoyaltyRetryRef} y {@link retrySaleLoyalty}.
+   */
+  loyaltyRetry: SaleLoyaltyRetryRef | null;
 }
 
 function firstIssue(error: import("zod").ZodError): string {
@@ -275,9 +315,14 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
   //    el cobro —la venta ya está cobrada—; se registra y se devuelve `loyalty:
   //    null`, de modo que la caja se comporta igual que sin fidelización.
   let loyalty: SaleLoyaltyOutcome | null = null;
+  let loyaltyRetry: SaleLoyaltyRetryRef | null = null;
   const loyaltyCustomerId =
     values.loyaltyCustomerId ?? values.coupon?.customerId ?? null;
   if (loyaltyCustomerId !== null) {
+    // El cupón se transiciona a USED AQUÍ (createSale solo lo resuelve en lectura
+    // para descontar): así el canje y la acreditación van juntos. El mismo flag se
+    // conserva para un eventual reintento manual.
+    const redeemCoupon = values.coupon != null;
     try {
       const award = await awardVisit({
         salon_id: salonId,
@@ -289,9 +334,7 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
           price_cents: computeLineTotals(effectiveLines[i]!).grossCents,
           label: line.description,
         })),
-        // El cupón se transiciona a USED AQUÍ (createSale solo lo resuelve en
-        // lectura para descontar): así el canje y la acreditación van juntos.
-        redeem_coupon: values.coupon != null,
+        redeem_coupon: redeemCoupon,
         ref: { type: "pos_sale", id: saleId },
       });
       loyalty = {
@@ -306,6 +349,9 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
         saleId,
         error: error instanceof Error ? error.message : String(error),
       });
+      // Se ofrece al cajero un REINTENTO manual sobre esta misma venta (ref
+      // idempotente): reacreditar no re-cobra ni duplica los puntos.
+      loyaltyRetry = { saleId, customerId: loyaltyCustomerId, redeemCoupon };
     }
   }
 
@@ -321,8 +367,108 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
       lineCount: lineInserts.length,
       tenderCount: tenders.length,
       loyalty,
+      loyaltyRetry,
     },
   };
+}
+
+// -----------------------------------------------------------------------------
+// Fidelización — reintento manual de la acreditación (§sub-7)
+// -----------------------------------------------------------------------------
+
+/**
+ * Reacredita la visita de fidelización de una venta YA COBRADA cuando el
+ * best-effort de `awardVisit` falló al cerrar el cobro (ver {@link createSale}).
+ *
+ * Es un REINTENTO manual disparado por el cajero: NO vuelve a cobrar, NO crea otra
+ * venta y —crucialmente— NUNCA revierte nada (ni ante un fallo del propio
+ * reintento). Los importes se reconstruyen desde las líneas PERSISTIDAS
+ * (`pos_sale_lines.line_total_cents`, con el descuento del cupón ya prorrateado),
+ * la única fuente autoritativa; el cliente solo aporta a quién acreditar. La
+ * idempotencia la ancla `awardVisit` por `ref = { pos_sale, saleId }`: si la venta
+ * ya se había acreditado (p. ej. un fallo parcial que sí sumó), el reintento NO
+ * duplica y devuelve `alreadyAwarded: true` con `pointsEarned: 0`.
+ */
+export async function retrySaleLoyalty(
+  input: RetrySaleLoyaltyInput,
+): Promise<ActionResult<RetryLoyaltyOutcome>> {
+  const parsed = retrySaleLoyaltySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: firstIssue(parsed.error) };
+  }
+  const { saleId, customerId, redeemCoupon } = parsed.data;
+
+  const salonId = await getActiveSalonId();
+  if (salonId === null) {
+    return { ok: false, error: "No tienes un salón asignado" };
+  }
+
+  const supabase = createClient();
+
+  // La venta debe existir en el salón activo: defensa multi-tenant y evita
+  // acreditar sobre un `saleId` inventado desde el navegador.
+  const { data: sale, error: saleError } = await supabase
+    .from("pos_sales")
+    .select("id")
+    .eq("id", saleId)
+    .eq("salon_id", salonId)
+    .maybeSingle();
+  if (saleError !== null) {
+    return { ok: false, error: saleError.message };
+  }
+  if (sale === null) {
+    return { ok: false, error: "La venta no existe en este salón." };
+  }
+
+  // Líneas persistidas = importes autoritativos (mismo `line_total_cents` que se
+  // usó al cerrar, con el cupón ya prorrateado). Reconstruye las MISMAS líneas que
+  // la acreditación original, de modo que los puntos coinciden.
+  const { data: lines, error: linesError } = await supabase
+    .from("pos_sale_lines")
+    .select("description, line_total_cents")
+    .eq("sale_id", saleId)
+    .eq("salon_id", salonId);
+  if (linesError !== null) {
+    return { ok: false, error: linesError.message };
+  }
+  if (lines === null || lines.length === 0) {
+    return { ok: false, error: "La venta no tiene líneas que acreditar." };
+  }
+
+  try {
+    const award = await awardVisit({
+      salon_id: salonId,
+      customer_id: customerId,
+      line_items: lines.map((line) => ({
+        price_cents: line.line_total_cents,
+        label: line.description,
+      })),
+      redeem_coupon: redeemCoupon,
+      ref: { type: "pos_sale", id: saleId },
+    });
+    return {
+      ok: true,
+      data: {
+        pointsEarned: award.points_earned,
+        pointsBalance: award.points_balance,
+        reward: award.reward,
+        alreadyAwarded: award.already_awarded,
+      },
+    };
+  } catch (error) {
+    // El reintento tampoco toca el cobro: la venta queda EXACTAMENTE igual.
+    if (error instanceof LoyaltyActionError) {
+      return { ok: false, error: error.message };
+    }
+    console.error("[tpv/retrySaleLoyalty] awardVisit falló en el reintento manual", {
+      saleId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      ok: false,
+      error: "No se pudieron acreditar los puntos. Inténtalo de nuevo.",
+    };
+  }
 }
 
 // -----------------------------------------------------------------------------

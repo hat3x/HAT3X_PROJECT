@@ -174,6 +174,8 @@ describe("createSale · integración de fidelización (sub-6)", () => {
         expires_at: "2026-10-15T00:00:00.000Z",
       },
     });
+    // Acreditación correcta ⇒ no se ofrece reintento (§sub-7).
+    expect(result.data.loyaltyRetry).toBeNull();
   });
 
   it("es BEST-EFFORT: si awardVisit falla, la venta ni se bloquea ni se revierte", async () => {

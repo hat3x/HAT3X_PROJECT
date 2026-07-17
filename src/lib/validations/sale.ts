@@ -117,9 +117,31 @@ export const saleSchema = z.object({
   tenders: z.array(tenderSchema).min(1, "Selecciona al menos un medio de pago"),
 });
 
+/**
+ * Reintento MANUAL de la acreditación de fidelización sobre una venta YA cobrada
+ * (§sub-7). Solo se usa cuando el best-effort de `awardVisit` falló al cerrar el
+ * cobro: el cajero reacredita la visita sin volver a cobrar. La idempotencia la
+ * ancla `awardVisit` por `ref = { pos_sale, saleId }`, de modo que reintentar NO
+ * duplica puntos, recompensas ni el canje del cupón. NUNCA revierte la venta.
+ *
+ * El cliente aporta SOLO a quién acreditar (`customerId`) y si el ticket llevaba
+ * cupón (`redeemCoupon`); los importes NO viajan (el servidor los reconstruye
+ * desde las líneas persistidas, la única fuente autoritativa).
+ */
+export const retrySaleLoyaltySchema = z.object({
+  /** Venta ya cobrada sobre la que reacreditar (ancla idempotente). */
+  saleId: z.string().uuid(),
+  /** Cliente escaneado al que acreditar la visita. */
+  customerId: z.string().uuid(),
+  /** Si el ticket llevaba cupón: reintentar también su canje (→ USED). */
+  redeemCoupon: z.boolean(),
+});
+
 /** Tipo de entrada (lo que envía el cliente, con importes como texto). */
 export type SaleInput = z.input<typeof saleSchema>;
 /** Tipo de salida (validado, con importes en céntimos). */
 export type SaleValues = z.output<typeof saleSchema>;
 /** Una línea validada (importes en céntimos). */
 export type SaleLineValues = z.output<typeof saleLineSchema>;
+/** Payload del reintento manual de acreditación de fidelización (§sub-7). */
+export type RetrySaleLoyaltyInput = z.infer<typeof retrySaleLoyaltySchema>;

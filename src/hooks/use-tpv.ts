@@ -10,7 +10,9 @@ import {
 import {
   createSale,
   lookupLoyaltyByQr,
+  retrySaleLoyalty,
   type LoyaltyLookupActionResult,
+  type RetryLoyaltyOutcome,
   type SaleReceipt,
 } from "@/app/(dashboard)/tpv/actions";
 import {
@@ -20,7 +22,7 @@ import {
   fetchSaleServices,
   posKeys,
 } from "@/lib/queries/pos";
-import type { SaleInput } from "@/lib/validations/sale";
+import type { RetrySaleLoyaltyInput, SaleInput } from "@/lib/validations/sale";
 
 /** Servicios activos para añadir al ticket; mantiene datos previos al teclear. */
 export function useSaleServices(salonId: string, search: string) {
@@ -85,6 +87,32 @@ export function useCreateSale(salonId: string) {
   return useMutation({
     mutationFn: async (input: SaleInput): Promise<SaleReceipt> => {
       const result = await createSale(input);
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: posKeys.all(salonId) });
+    },
+  });
+}
+
+/**
+ * Reintento MANUAL de la acreditación de fidelización de una venta ya cobrada
+ * (§sub-7). Se usa solo cuando el best-effort de `createSale` falló: el cajero
+ * reacredita sobre la MISMA venta sin re-cobrar. `retrySaleLoyalty` es idempotente
+ * por la `ref` de la venta, así que reintentar no duplica los puntos. Al lograrlo,
+ * invalida las consultas del TPV (el saldo del cliente ha cambiado). Es una
+ * mutación (no `useQuery`) porque la dispara un gesto explícito —pulsar el botón—.
+ */
+export function useRetrySaleLoyalty(salonId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      input: RetrySaleLoyaltyInput,
+    ): Promise<RetryLoyaltyOutcome> => {
+      const result = await retrySaleLoyalty(input);
       if (!result.ok) {
         throw new Error(result.error);
       }
