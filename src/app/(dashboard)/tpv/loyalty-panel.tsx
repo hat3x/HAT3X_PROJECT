@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Award,
   CalendarClock,
@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useScannerFocus } from "@/hooks/use-scanner-focus";
 import { formatDate } from "@/lib/format";
 import { LOYALTY_MILESTONES, type LoyaltyLookupResult } from "@/lib/loyalty/types";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,10 @@ interface LoyaltyPanelProps {
  *
  * Aditiva por diseño: mientras no haya cliente escaneado, no altera en absoluto
  * el flujo de cobro —solo muestra el campo de escaneo—.
+ *
+ * El campo se mantiene SIEMPRE enfocado ({@link useScannerFocus}) para que el
+ * lector físico (HID) aterrice sin que el cajero haga clic, cediendo el foco al
+ * buscador, a las cantidades, al IVA o al diálogo de cobro cuando el cajero los usa.
  */
 export function LoyaltyPanel({
   pending,
@@ -66,6 +71,11 @@ export function LoyaltyPanel({
   onClear,
 }: LoyaltyPanelProps): React.ReactElement {
   const [token, setToken] = useState("");
+  // Captura del lector físico (HID): el input permanece SIEMPRE enfocado —sin que
+  // el cajero haga clic en él— y se re-arma tras cada interacción, cediendo el foco
+  // al resto del TPV cuando corresponde. Ver `useScannerFocus`.
+  const inputRef = useRef<HTMLInputElement>(null);
+  const refocusScanner = useScannerFocus({ inputRef });
 
   const scanned = result?.ok === true ? result.data : null;
   const error = result !== undefined && !result.ok ? result : null;
@@ -77,6 +87,7 @@ export function LoyaltyPanel({
     if (trimmed === "" || pending) return;
     onScan(trimmed);
     setToken(""); // Deja el campo listo para el siguiente escaneo.
+    refocusScanner(); // Re-arma el foco por si el envío partió del botón "Buscar".
   }
 
   function handleClear(): void {
@@ -96,6 +107,7 @@ export function LoyaltyPanel({
             <div className="relative flex-1">
               <ScanLine className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={inputRef}
                 value={token}
                 onChange={(event) => setToken(event.target.value)}
                 placeholder="Escanea o teclea el carné…"
