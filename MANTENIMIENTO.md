@@ -32,6 +32,24 @@ npm run typecheck
 - `getPaymentGateway()` solo tiene implementada la pasarela `'manual'`. Los demás identificadores son objetivos del roadmap y lanzan error a propósito.
 - Mientras no se desarrolle la integración real, usar `'manual'` (registro sin cobro). Ver la sección **Capa de pagos (`@/lib/payments`)** más abajo.
 
+### TPV — el lector de carné (QR) no "escribe" en el campo / hay que pinchar cada vez
+- El lector físico es un **HID "keyboard-wedge"**: teclea el `qr_token` del carné y pulsa **Enter** en el campo enfocado. El TPV mantiene el `<input>` de fidelización **siempre enfocado** (`useScannerFocus`, `src/hooks/use-scanner-focus.ts`) para que el escaneo aterrice sin clic. Si no ocurre:
+  1. Configura el lector (con los códigos de setup de su manual) en modo **HID / emulación de teclado** (no "serie/COM") y con **sufijo Enter (CR/LF)**.
+  2. Si el token sale con caracteres cambiados, fija el **layout de teclado ES** en el lector.
+  3. El foco se **cede a propósito** mientras el cajero escribe (buscador, cantidad, precio, IVA, nota) o hay un diálogo/popover abierto (`src/lib/loyalty/scanner-focus.ts`): es lo esperado. En reposo debe recuperarse solo tras `SCANNER_RECLAIM_DELAY_MS` (80 ms).
+  4. Sin lector, usa **la cámara** (*Escanear con cámara*, `camera-scan-button.tsx`) — requiere **HTTPS**.
+
+### TPV — el ticket sale en blanco, en tamaño A4 o no imprime
+- El ticket se imprime cargando un documento HTML autónomo en un **iframe oculto** y llamando a `window.print()` (`printTicketDocument`, `src/app/(dashboard)/tpv/print-ticket.ts`). Va contra el **driver del sistema** de la impresora, como cualquier impresora.
+  1. Selecciona el **ancho de rollo** correcto (**80/58 mm**) en el diálogo *Venta registrada* **antes** de imprimir; el `@page` se dimensiona a ese ancho.
+  2. En el diálogo de impresión del sistema, elige la impresora térmica y pon **márgenes = ninguno** y **escala 100%** (evita que recorte o reescale a A4).
+  3. Si sale en blanco, suele ser bloqueo de pop-ups/iframes o impresora equivocada: reintenta y revisa que la térmica es la predeterminada del navegador del mostrador.
+
+### TPV — «No se pudieron acreditar los puntos» al cerrar el cobro
+- **El cobro SÍ quedó registrado.** La fidelización es **best-effort**: se acredita *después* de cerrar la venta y un fallo **nunca** revierte el cobro (`createSale`, `src/app/(dashboard)/tpv/actions.ts`).
+- Pulsa **«Reintentar puntos»** en el recibo: reacredita sobre la **misma** venta sin volver a cobrar. Es **idempotente** (`ref = { pos_sale, saleId }`): si los puntos ya se habían sumado, muestra **«Fidelización ya acreditada»** y no duplica.
+- Si el reintento persiste en fallar, revisa la conexión con Supabase y los logs `[tpv/createSale]` / `[tpv/retrySaleLoyalty]`. Es seguro reintentar las veces que haga falta.
+
 ### Facturación — "pos_invoices es un registro fiscal inmutable (Veri*factu)"
 - Lo lanza el trigger `trg_pos_invoices_immutable` ante cualquier `UPDATE`/`DELETE` sobre `pos_invoices`, incluso desde `service_role`. **Es intencionado** (requisito legal).
 - Para corregir una factura, **emite una factura rectificativa**; nunca edites ni borres el registro original.
@@ -111,6 +129,40 @@ Prefijo común `pos_` (Point of Sale). Dinero **siempre** en enteros de céntimo
    - `cash_variance_cents` = **contado − esperado** (negativo = falta dinero);
    - `closing_totals` = snapshot jsonb de totales por método para el informe.
    El cierre está condicionado a `status = 'open'` (evita doble cierre por carrera). La lógica pura de sumas vive en `src/app/(dashboard)/arqueo/session-totals.ts`.
+
+### Periféricos del TPV — lector de carné (HID) e impresora térmica
+
+El TPV está pensado para un **mostrador con hardware de tienda**: un lector de códigos QR y una impresora de tickets térmica. **Ninguno necesita drivers propios de la app ni variables en `.env`**; se conectan en el sistema operativo del equipo del mostrador.
+
+**Lector de carné (escáner HID, "keyboard-wedge").**
+- Un lector QR/código de barras físico se comporta como un **teclado**: al escanear teclea el `qr_token` del carné y termina con **Enter**. No hay integración especial: basta un `<input>` que reciba ese texto.
+- Para que un escaneo **aterrice siempre** sin que el cajero pinche el campo, el input de fidelización se mantiene **siempre enfocado** con el hook `useScannerFocus` (`src/hooks/use-scanner-focus.ts`) y la política **pura** `src/lib/loyalty/scanner-focus.ts`. El **Enter** envía el `<form>` → `onScan(qrToken)` → *lookup* del cliente.
+- **Cede el foco** deliberadamente cuando el cajero escribe (buscador, cantidad, precio, IVA, nota) o hay un diálogo/popover abierto; lo **recupera** en reposo tras `SCANNER_RECLAIM_DELAY_MS` (80 ms). Así el escáner nunca interrumpe el resto del TPV.
+- **Configuración del lector** (una vez, con los códigos de setup de su manual): modo **HID / teclado** (no serie/COM), **sufijo Enter (CR)** y layout **ES** si cambia caracteres.
+- **Alternativa sin lector:** botón *Escanear con cámara* (`camera-scan-button.tsx` + normalización pura en `src/lib/loyalty/scan.ts`). Requiere **HTTPS** (`getUserMedia`).
+- **El carné** codifica el token **en crudo** (`customer-qr.tsx`); `normalizeScannedToken` además tolera que venga envuelto en una URL (`?token=` / `?t=` / último segmento de ruta).
+
+**Impresora térmica de tickets (58/80 mm).**
+- Se imprime con `window.print()` sobre un **documento HTML autónomo** cargado en un **iframe oculto** (`printTicketDocument`, `src/app/(dashboard)/tpv/print-ticket.ts`); el documento lo genera la función **pura** `buildTicketDocumentHtml` (`src/lib/tpv/ticket-document.ts`).
+- **No requiere driver propio de la app:** imprime contra el **driver del sistema** de la impresora (ESC/POS), igual que cualquier impresora. Conecta la térmica en el SO (USB/red/Bluetooth) y déjala como predeterminada del navegador del mostrador.
+- **Ancho de rollo** seleccionable **80 mm (por defecto) o 58 mm** en el diálogo *Venta registrada*: ajusta el `@page` y el tipo de letra.
+- El **porqué** del iframe oculto (aísla el tamaño de página de la app, sin pop-ups, generador puro y testeable) y el detalle del contenido del ticket están en **[`src/lib/tpv/README.md`](./src/lib/tpv/README.md)**.
+
+**Mejora futura (NO implementada): impresión directa ESC/POS por WebUSB.**
+- Hoy la impresión pasa por el **diálogo del sistema** (`window.print()`): universal, pero requiere una interacción y depende del driver instalado. Para un flujo "un toque → sale el ticket" se puede hablar **directamente** con la impresora por **[WebUSB](https://developer.mozilla.org/docs/Web/API/WebUSB_API)** enviando comandos **ESC/POS** (una util pura `buildTicketEscPos(data): Uint8Array` espejo del HTML, reutilizando el mismo `TicketDocumentData` como fuente de verdad).
+- Es **Chromium-only** (Chrome/Edge/Android; **Safari/iOS no**) ⇒ debe **convivir** con `window.print()` como alternativa universal; requiere **gesto de usuario + HTTPS** y **emparejar el dispositivo por salón** (`vendorId`/`productId`/endpoint). Boceto completo, comandos y límites en **[`src/lib/tpv/README.md` → "Mejora futura … WebUSB"](./src/lib/tpv/README.md)**.
+
+### Fidelización en el TPV — núcleo NATIVO y LOCAL (sin API externa)
+
+- **Sin servicio externo ni claves.** La fidelización del TPV corre **íntegramente sobre el Supabase del propio proyecto** (módulo nativo `@/lib/loyalty/server`, esquema de la migración `20260716120000_loyalty_base.sql`). **No hay API HTTP externa que llamar ni variable `LOYALTY_API_KEY`** (ni ninguna otra credencial de fidelización): buscar `LOYALTY_API_KEY` en el repo **no** da resultados, y es lo correcto. Detalle del núcleo en **[`src/lib/loyalty/README.md`](./src/lib/loyalty/README.md)**.
+- *(Nota de migración: convive un fichero proxy heredado `@/lib/loyalty` —`loyalty.ts`— hacia Edge Functions externas; los flujos del TPV **no** lo usan, van al módulo nativo `@/lib/loyalty/server`.)*
+- **Flujos que toca el TPV** (todos en `src/app/(dashboard)/tpv/actions.ts`): *lookup* del cliente al escanear (`lookupLoyaltyByQr`), **acreditación de la visita al cerrar el cobro** (`awardVisit`) y **reintento manual** (`retrySaleLoyalty`).
+
+**Acreditación best-effort + reintento (§sub-6/§sub-7).**
+- La visita se acredita **después** de que el cobro esté firme. Un fallo aquí **nunca bloquea ni revierte** la venta: se registra en logs y la caja se comporta **igual que sin fidelización** (`loyalty: null`). El dinero manda; los puntos son secundarios.
+- Cuando había cliente escaneado pero la acreditación falló, el recibo ofrece **«Reintentar puntos»** (tarjeta `LoyaltyRetryCard`). El reintento **no vuelve a cobrar** ni crea otra venta: reconstruye los importes desde las **líneas persistidas** (`pos_sale_lines.line_total_cents`, autoritativas, con el descuento del cupón ya prorrateado) y reacredita sobre la **misma** venta.
+- **Idempotencia:** anclada en `ref = { pos_sale, saleId }`. Reintentar (o duplicar la venta) **no** vuelve a sumar puntos ni a canjear el cupón; si ya constaba acreditada, `awardVisit` devuelve `already_awarded` y el recibo muestra **«Fidelización ya acreditada»** en vez de un engañoso "+0 puntos".
+- **Puntos:** por defecto `ceil(price_cents / 200)` por línea (~1 punto por cada 2 €), sobre lo **realmente cobrado**. Hitos (3/5/8/10) y recompensas: ver el README del núcleo.
 
 ### Capa de pagos (`@/lib/payments`)
 

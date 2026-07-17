@@ -7,6 +7,15 @@ Genera e imprime el **ticket de compra** de una venta de caja en una impresora
 > simplificada F2 o completa F1, con QR de cotejo y encadenamiento SHA-256) es un
 > flujo aparte en `src/lib/invoicing/` + `tpv/invoice-actions.ts`. Ambos coexisten.
 
+> 🔌 **Otros periféricos y fidelización del TPV.** La guía operativa de
+> **conexión/instalación** de la impresora y del **lector de carné (escáner HID)**,
+> junto con el **modelo de fidelización nativo y local** (sin API externa ni
+> `LOYALTY_API_KEY`) y la **acreditación best-effort + reintento**, está en
+> **[`MANTENIMIENTO.md` → "TPV, caja y facturación"](../../../MANTENIMIENTO.md#tpv-caja-y-facturación)**.
+> El foco del escáner (input siempre enfocado + Enter) vive en
+> `src/hooks/use-scanner-focus.ts` + `src/lib/loyalty/scanner-focus.ts`; el núcleo
+> de fidelización, en [`src/lib/loyalty/README.md`](../loyalty/README.md).
+
 ## Piezas
 
 | Archivo | Qué contiene |
