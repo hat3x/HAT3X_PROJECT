@@ -32,5 +32,7 @@ export default async function TpvPage(): Promise<React.ReactElement> {
     );
   }
 
-  return <TpvView salonId={salon.id} timezone={salon.timezone} />;
+  return (
+    <TpvView salonId={salon.id} salonName={salon.name} timezone={salon.timezone} />
+  );
 }

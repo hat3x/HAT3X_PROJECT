@@ -2,14 +2,18 @@
 
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
   Award,
   CalendarClock,
   CheckCircle2,
   Coins,
+  Loader2,
   Minus,
   Package,
   Plus,
+  Printer,
   Receipt,
+  RotateCcw,
   Scissors,
   Search,
   Sparkles,
@@ -18,7 +22,11 @@ import {
   X,
 } from "lucide-react";
 
-import type { SaleReceipt } from "@/app/(dashboard)/tpv/actions";
+import type {
+  RetryLoyaltyOutcome,
+  SaleLoyaltyOutcome,
+  SaleReceipt,
+} from "@/app/(dashboard)/tpv/actions";
 import {
   blankManualLine,
   centsToEuroInput,
@@ -34,6 +42,11 @@ import {
 } from "@/app/(dashboard)/tpv/cart";
 import { LoyaltyPanel } from "@/app/(dashboard)/tpv/loyalty-panel";
 import { PaymentDialog } from "@/app/(dashboard)/tpv/payment-dialog";
+import {
+  buildTicketData,
+  PAYMENT_METHOD_LABELS,
+  printTicketDocument,
+} from "@/app/(dashboard)/tpv/print-ticket";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,6 +72,7 @@ import {
   useCreateSale,
   useLoyaltyLookup,
   useOpenAppointments,
+  useRetrySaleLoyalty,
   useSalePaymentMethods,
   useSaleProducts,
   useSaleServices,
@@ -67,6 +81,11 @@ import { formatTimeInZone, localDateInZone } from "@/lib/booking/timezone";
 import { formatMoney } from "@/lib/format";
 import { LOYALTY_MILESTONES, type LoyaltyCouponView } from "@/lib/loyalty/types";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
+import type {
+  TicketDocumentLoyalty,
+  TicketDocumentTender,
+  TicketRollWidth,
+} from "@/lib/tpv/ticket-document";
 import type { SaleInput } from "@/lib/validations/sale";
 
 /** Tipos de IVA vigentes en España (porcentaje). */
@@ -81,6 +100,43 @@ const REWARD_TYPE_LABELS: Record<string, string> = Object.fromEntries(
   LOYALTY_MILESTONES.map((milestone) => [milestone.rewardType, milestone.label]),
 );
 
+/**
+ * "Foto" inmutable de la venta recién cerrada para poder imprimir su ticket
+ * DESPUÉS de que el carrito se haya vaciado. La fidelización NO se congela aquí:
+ * se resuelve al imprimir con el desenlace más fresco (acreditación al cobrar o
+ * reintento manual correcto), de modo que un ticket impreso tras reintentar sí
+ * refleja los puntos.
+ */
+interface TicketSaleSnapshot {
+  args: Omit<Parameters<typeof buildTicketData>[0], "loyalty">;
+  /** Nombre del cliente escaneado (o `null`), para el bloque de fidelización. */
+  customerName: string | null;
+}
+
+/**
+ * Adapta el desenlace de fidelización (del cobro o de un reintento) al bloque
+ * imprimible del ticket, resolviendo la etiqueta humana de la recompensa. `null`
+ * si no hubo cliente/acreditación (el ticket se imprime sin bloque de puntos).
+ */
+function toTicketLoyalty(
+  outcome: SaleLoyaltyOutcome | RetryLoyaltyOutcome | null,
+  customerName: string | null,
+): TicketDocumentLoyalty | null {
+  if (outcome == null) return null;
+  return {
+    customerName,
+    pointsEarned: outcome.pointsEarned,
+    pointsBalance: outcome.pointsBalance,
+    reward:
+      outcome.reward != null
+        ? {
+            label: REWARD_TYPE_LABELS[outcome.reward.type] ?? outcome.reward.type,
+            code: outcome.reward.code,
+          }
+        : null,
+  };
+}
+
 /** Contexto de venta cuando arranca desde una cita. */
 interface SaleContext {
   appointmentId: string | null;
@@ -91,6 +147,8 @@ interface SaleContext {
 
 interface TpvViewProps {
   salonId: string;
+  /** Nombre comercial del salón; cabecera del ticket impreso. */
+  salonName: string;
   timezone: string;
 }
 
@@ -100,7 +158,11 @@ interface TpvViewProps {
  * totales fijo a la derecha. Arranca una venta libre o desde una cita del
  * día; el cobro se registra vía la capa de pagos (diálogo de cobro).
  */
-export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement {
+export function TpvView({
+  salonId,
+  salonName,
+  timezone,
+}: TpvViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
   const [lines, setLines] = useState<TicketLine[]>([]);
@@ -110,6 +172,9 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null);
+  // "Foto" de la venta cerrada para imprimir su ticket, y ancho de rollo elegido.
+  const [ticketSale, setTicketSale] = useState<TicketSaleSnapshot | null>(null);
+  const [rollWidth, setRollWidth] = useState<TicketRollWidth>(80);
   // Cupón de bienvenida aplicado al ticket (dueño + cupón). Retirar = ponerlo a
   // null; el descuento desaparece de los totales al instante (antes de cobrar).
   const [appliedCoupon, setAppliedCoupon] = useState<{
@@ -125,6 +190,9 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
   // Fidelización: lookup de SOLO LECTURA por QR. Aditivo — no interviene en el
   // cobro; si no se escanea a nadie, la caja se comporta igual que siempre.
   const loyalty = useLoyaltyLookup();
+  // Reintento MANUAL de la acreditación cuando el best-effort falló al cobrar
+  // (§sub-7). Reacredita sobre la MISMA venta (ref idempotente); nunca re-cobra.
+  const retryLoyalty = useRetrySaleLoyalty(salonId);
 
   const totals = useMemo(
     () => computeTicketTotals(lines, appliedCoupon?.coupon.percent_off ?? null),
@@ -225,11 +293,64 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
     };
     createSale.mutate(input, {
       onSuccess: (data) => {
+        // Congela la "foto" de la venta para el ticket ANTES de vaciar el carrito
+        // (`resetSale`). Las líneas y totales ya no cambiarán; la fidelización se
+        // resuelve al imprimir con el desenlace más fresco (cobro o reintento).
+        const scannedName =
+          loyalty.data?.ok === true ? loyalty.data.data.customer.full_name : null;
+        const ticketTenders: TicketDocumentTender[] = tenders.map((t) => ({
+          label:
+            (t.paymentMethodId !== null
+              ? (paymentMethods.data ?? []).find((m) => m.id === t.paymentMethodId)
+                  ?.name
+              : undefined) ?? PAYMENT_METHOD_LABELS[t.method],
+          amountCents: parseEuroToCents(t.amount) ?? 0,
+        }));
+        setTicketSale({
+          args: {
+            salonName,
+            ticketRef: data.saleId.slice(0, 8).toUpperCase(),
+            issuedAt: new Date(),
+            lines: completeLines,
+            totals,
+            tenders: ticketTenders,
+            notes: notes.trim() === "" ? null : notes.trim(),
+          },
+          customerName: scannedName,
+        });
+
         setReceipt(data);
         setPayOpen(false);
+        // Arranca el recibo sin arrastrar el desenlace de un reintento anterior.
+        retryLoyalty.reset();
         resetSale();
       },
     });
+  }
+
+  /**
+   * Imprime el ticket de la venta cerrada en la impresora térmica del sistema.
+   * Toma la fidelización más fresca (acreditación al cobrar o reintento correcto)
+   * y usa el ancho de rollo seleccionado.
+   */
+  function handlePrintTicket(): void {
+    if (ticketSale === null) return;
+    const outcome: SaleLoyaltyOutcome | RetryLoyaltyOutcome | null =
+      receipt?.loyalty ?? retryLoyalty.data ?? null;
+    printTicketDocument(
+      buildTicketData({
+        ...ticketSale.args,
+        loyalty: toTicketLoyalty(outcome, ticketSale.customerName),
+      }),
+      { rollWidthMm: rollWidth },
+    );
+  }
+
+  /** Cierra el recibo y descarta el estado asociado (reintento y ticket). */
+  function closeReceipt(): void {
+    setReceipt(null);
+    retryLoyalty.reset();
+    setTicketSale(null);
   }
 
   const activeCatalog = tab === "services" ? services : products;
@@ -522,7 +643,7 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
       <Dialog
         open={receipt !== null}
         onOpenChange={(open) => {
-          if (!open) setReceipt(null);
+          if (!open) closeReceipt();
         }}
       >
         <DialogContent>
@@ -565,45 +686,71 @@ export function TpvView({ salonId, timezone }: TpvViewProps): React.ReactElement
             </dl>
           ) : null}
 
-          {/* Fidelización acreditada (solo si se escaneó a un cliente y no falló). */}
-          {receipt?.loyalty != null ? (
-            <div className="rounded-xl border border-primary/25 bg-primary/[0.06] p-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                  <Coins className="h-[1.15rem] w-[1.15rem]" />
-                </span>
-                <div className="min-w-0 leading-tight">
-                  <p className="text-sm font-semibold text-primary">
-                    +{receipt.loyalty.pointsEarned}{" "}
-                    {receipt.loyalty.pointsEarned === 1 ? "punto" : "puntos"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Saldo: {receipt.loyalty.pointsBalance}{" "}
-                    {receipt.loyalty.pointsBalance === 1 ? "punto" : "puntos"}
-                  </p>
-                </div>
-              </div>
-              {receipt.loyalty.reward != null ? (
-                <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-primary/20 bg-card/70 p-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Award className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold leading-tight">
-                      ¡Recompensa desbloqueada!{" "}
-                      {REWARD_TYPE_LABELS[receipt.loyalty.reward.type] ??
-                        receipt.loyalty.reward.type}
-                    </p>
-                    <p className="truncate font-mono text-xs text-muted-foreground">
-                      {receipt.loyalty.reward.code}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
+          {/* Fidelización tras el cobro: el resumen de éxito se muestra tanto si se
+              acreditó al cobrar (`receipt.loyalty`) como tras un reintento correcto
+              (`retryLoyalty.data`). Si el best-effort falló, se ofrece el reintento
+              manual sobre la MISMA venta. La región `aria-live` anuncia el desenlace
+              del reintento a lectores de pantalla sin recargar el diálogo. */}
+          <div aria-live="polite">
+            {receipt?.loyalty != null ? (
+              <LoyaltyReceiptSummary outcome={receipt.loyalty} />
+            ) : retryLoyalty.data != null ? (
+              <LoyaltyReceiptSummary outcome={retryLoyalty.data} />
+            ) : receipt?.loyaltyRetry != null ? (
+              <LoyaltyRetryCard
+                pending={retryLoyalty.isPending}
+                error={
+                  retryLoyalty.error instanceof Error
+                    ? retryLoyalty.error.message
+                    : null
+                }
+                onRetry={() => {
+                  if (receipt.loyaltyRetry != null) {
+                    retryLoyalty.mutate(receipt.loyaltyRetry);
+                  }
+                }}
+              />
+            ) : null}
+          </div>
+          {/* Impresión del ticket en la impresora térmica del sistema. El ancho de
+              rollo (80/58 mm) se elige aquí; el ticket sale por window.print(). */}
+          <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-muted/30 p-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 flex-1"
+              disabled={ticketSale === null}
+              onClick={handlePrintTicket}
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimir ticket
+            </Button>
+            <div
+              role="group"
+              aria-label="Ancho del rollo"
+              className="inline-flex items-center rounded-lg border border-border/70 bg-background p-1"
+            >
+              {([80, 58] as const).map((width) => (
+                <button
+                  key={width}
+                  type="button"
+                  onClick={() => setRollWidth(width)}
+                  aria-pressed={rollWidth === width}
+                  className={[
+                    "h-9 rounded-md px-2.5 text-xs font-medium tabular-nums transition-colors",
+                    rollWidth === width
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  ].join(" ")}
+                >
+                  {width} mm
+                </button>
+              ))}
             </div>
-          ) : null}
+          </div>
+
           <DialogFooter>
-            <Button className="h-11" onClick={() => setReceipt(null)}>
+            <Button className="h-11" onClick={closeReceipt}>
               Nueva venta
             </Button>
           </DialogFooter>
@@ -862,5 +1009,116 @@ function TicketRow({
         </span>
       </div>
     </li>
+  );
+}
+
+/**
+ * Resumen de fidelización acreditada del recibo: puntos ganados, saldo resultante
+ * y —si la visita alcanzó un hito— la recompensa desbloqueada. Sirve tanto al
+ * cobro (§sub-6) como al reintento manual (§sub-7): cuando la acreditación YA
+ * constaba (`alreadyAwarded`), no se suma nada y la copia lo refleja en lugar de
+ * mostrar un engañoso "+0 puntos".
+ */
+function LoyaltyReceiptSummary({
+  outcome,
+}: {
+  outcome: SaleLoyaltyOutcome | RetryLoyaltyOutcome;
+}): React.ReactElement {
+  const alreadyAwarded = "alreadyAwarded" in outcome && outcome.alreadyAwarded;
+  const { pointsEarned, pointsBalance, reward } = outcome;
+  return (
+    <div className="rounded-xl border border-primary/25 bg-primary/[0.06] p-4">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+          <Coins className="h-[1.15rem] w-[1.15rem]" />
+        </span>
+        <div className="min-w-0 leading-tight">
+          <p className="text-sm font-semibold text-primary">
+            {alreadyAwarded
+              ? "Fidelización ya acreditada"
+              : `+${pointsEarned} ${pointsEarned === 1 ? "punto" : "puntos"}`}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Saldo: {pointsBalance} {pointsBalance === 1 ? "punto" : "puntos"}
+          </p>
+        </div>
+      </div>
+      {reward != null ? (
+        <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-primary/20 bg-card/70 p-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Award className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold leading-tight">
+              ¡Recompensa desbloqueada!{" "}
+              {REWARD_TYPE_LABELS[reward.type] ?? reward.type}
+            </p>
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {reward.code}
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Aviso de que la acreditación best-effort falló al cerrar el cobro, con la acción
+ * de REINTENTO manual (§sub-7). Deja claro que el cobro SÍ quedó registrado: solo
+ * faltan los puntos, que se reacreditan sobre la misma venta sin volver a cobrar
+ * (la `ref` idempotente evita duplicar). Durante el reintento el botón muestra
+ * spinner + "Acreditando…"; si el reintento falla, el error se anuncia con
+ * `role="alert"` para lectores de pantalla.
+ */
+function LoyaltyRetryCard({
+  pending,
+  error,
+  onRetry,
+}: {
+  pending: boolean;
+  error: string | null;
+  onRetry: () => void;
+}): React.ReactElement {
+  return (
+    <div className="rounded-xl border border-warning/30 bg-warning/[0.07] p-4">
+      <div className="flex items-start gap-2.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-warning/15 text-warning">
+          <AlertTriangle className="h-[1.15rem] w-[1.15rem]" />
+        </span>
+        <div className="min-w-0 leading-tight">
+          <p className="text-sm font-semibold text-foreground">
+            No se pudieron acreditar los puntos
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            El cobro se registró correctamente. Reintenta la acreditación sin
+            volver a cobrar.
+          </p>
+        </div>
+      </div>
+
+      {error !== null ? (
+        <p
+          role="alert"
+          className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-foreground"
+        >
+          {error}
+        </p>
+      ) : null}
+
+      <Button
+        variant="outline"
+        className="mt-3 h-11 w-full rounded-lg border-warning/40 font-semibold"
+        onClick={onRetry}
+        disabled={pending}
+      >
+        {pending ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <RotateCcw className="mr-2 h-4 w-4" />
+        )}
+        {pending ? "Acreditando…" : "Reintentar puntos"}
+      </Button>
+    </div>
   );
 }
