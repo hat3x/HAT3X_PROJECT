@@ -382,6 +382,12 @@ export interface Database {
           address: string | null; // dirección postal/fiscal
           // Fidelización: token del cliente (QR), único global, generado por DEFAULT
           qr_token: string;
+          // Enlace OPCIONAL ficha ↔ cuenta de auth (app de cliente). NULL = sin cuenta.
+          // Único parcial (salon_id, user_id). Migración 20260717100000_customers_user_id.
+          user_id: string | null;
+          // Teléfono canónico E.164, GENERADO (stored) desde phone vía app.normalize_phone().
+          // No escribible; único parcial (salon_id, phone_e164). Migración 20260717110000.
+          phone_e164: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -397,6 +403,8 @@ export interface Database {
           tax_id?: string | null;
           address?: string | null;
           qr_token?: string; // lo genera el DEFAULT si se omite
+          user_id?: string | null; // NULL por defecto: la mayoría de fichas no tienen cuenta
+          // phone_e164 NO va en Insert: es una columna GENERATED ALWAYS (no escribible).
           created_at?: string;
           updated_at?: string;
         };
@@ -412,6 +420,8 @@ export interface Database {
           tax_id?: string | null;
           address?: string | null;
           qr_token?: string;
+          user_id?: string | null;
+          // phone_e164 NO va en Update: columna GENERATED (se recalcula sola desde phone).
           created_at?: string;
           updated_at?: string;
         };
