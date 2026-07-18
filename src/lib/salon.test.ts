@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSalonSlug, mapSalonBrandingRow } from './salon';
+import {
+  resolveSalonSlug,
+  mapSalonBrandingRow,
+  type SalonBrandingRow,
+} from './salon';
 
 // Base domain of the production white-label deploy: <slug>.salonos.app
 describe('resolveSalonSlug — priority: subdomain > ?salon > env fallback', () => {
@@ -205,5 +209,31 @@ describe('mapSalonBrandingRow', () => {
         secondary_color: null,
       })
     ).toBeNull();
+  });
+});
+
+describe('slug inexistente → branding nulo (alimenta la pantalla "salón no encontrado")', () => {
+  // El <SalonProvider> pinta la pantalla de error 'not-found' en DOS casos, y ambos
+  // nacen de estas funciones PURAS: (a) no se resuelve ningún slug, y (b) el slug se
+  // resuelve pero la RPC no devuelve salón (inexistente/inactivo). Aquí fijamos ese
+  // contrato en el límite puro; el render del <SalonError> se cubre en integración.
+
+  it('(a) sin subdominio, sin ?salon y sin env ⇒ slug null (Provider → not-found)', () => {
+    // Sin ninguna vía de resolución, no hay salón que montar: el árbol cae a la
+    // pantalla "salón no encontrado", nunca a un pantallazo en blanco.
+    expect(resolveSalonSlug({ hostname: 'localhost' })).toEqual({ slug: null, source: 'none' });
+    expect(resolveSalonSlug({ hostname: '', search: '?salon=', envSlug: '  ' })).toEqual({
+      slug: null,
+      source: 'none',
+    });
+  });
+
+  it('(b) la RPC RETURNS TABLE vacía ([]) para un slug resuelto ⇒ branding null', () => {
+    // fetchSalonBranding toma la PRIMERA fila de la RPC: para un slug inexistente la
+    // RPC devuelve [], data[0] es undefined y el mapper puro devuelve null → not-found.
+    const rpcEmpty: SalonBrandingRow[] = [];
+    expect(mapSalonBrandingRow(rpcEmpty[0])).toBeNull();
+    expect(mapSalonBrandingRow(null)).toBeNull();
+    expect(mapSalonBrandingRow(undefined)).toBeNull();
   });
 });
