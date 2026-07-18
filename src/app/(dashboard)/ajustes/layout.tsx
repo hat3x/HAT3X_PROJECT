@@ -43,7 +43,7 @@ export default async function AjustesLayout({
       <div className="mb-8 animate-fade-up">
         <h1 className="text-3xl font-bold tracking-tight">Ajustes</h1>
         <p className="mt-1.5 max-w-prose text-muted-foreground">
-          Configura las sedes, servicios, personal, horarios y los datos de tu salón.
+          Configura las sedes, servicios, personal, horarios, los datos y la marca de tu salón.
         </p>
       </div>
 
