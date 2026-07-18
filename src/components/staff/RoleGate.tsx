@@ -1,9 +1,8 @@
 import { useAuth } from '@/lib/auth';
-
-type AppRole = 'admin' | 'manager' | 'staff' | 'customer';
+import type { MemberRole } from '@/lib/auth';
 
 interface RoleGateProps {
-  allowed: AppRole[];
+  allowed: MemberRole[];
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }

@@ -1,14 +1,18 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SALON_ID } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
+import type { Database } from '@/types/database';
 
-type AppRole = 'admin' | 'manager' | 'staff' | 'customer';
-const STAFF_ROLES: AppRole[] = ['staff', 'manager', 'admin'];
+// Rol del staff dentro de un salón (Salón OS es multi-tenant).
+export type MemberRole = Database['public']['Enums']['member_role']; // 'owner' | 'manager' | 'staff'
+
+// Mensaje mostrado cuando el usuario se autentica pero NO pertenece a este salón.
+const NO_ACCESS_ERROR = 'Sin acceso a este salón';
 
 interface AuthState {
   user: User | null;
   session: Session | null;
-  roles: AppRole[];
+  roles: MemberRole[];
   isStaff: boolean;
   isManager: boolean;
   isAdmin: boolean;
@@ -17,12 +21,19 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  // Login por ID de acceso (se mapea a un email sintético) + contraseña.
+  signIn: (id: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   hasStaffAccess: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+// Convierte el ID de acceso introducido por el usuario en el email sintético con
+// el que se autentica contra Supabase Auth: `<id>@salonos.app`.
+function idToEmail(id: string): string {
+  return `${id.trim().toLowerCase()}@salonos.app`;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -31,49 +42,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true, error: null,
   });
 
-  // Cache roles per user to avoid re-fetching on token refresh
-  const rolesCache = useRef<{ userId: string; roles: AppRole[] } | null>(null);
+  // Cache de la pertenencia al salón por usuario, para no re-consultar en cada
+  // refresco de token. `role: null` = usuario autenticado pero no miembro.
+  const membershipCache = useRef<{ userId: string; role: MemberRole | null } | null>(null);
 
-  const fetchRoles = useCallback(async (userId: string): Promise<AppRole[]> => {
-    // Return cached roles if same user
-    if (rolesCache.current?.userId === userId) {
-      console.log('[Auth] Using cached roles for user:', userId);
-      return rolesCache.current.roles;
+  // Devuelve el rol del usuario en ESTE salón (VITE_SALON_ID) o null si no es miembro.
+  const fetchMembership = useCallback(async (userId: string): Promise<MemberRole | null> => {
+    if (membershipCache.current?.userId === userId) {
+      return membershipCache.current.role;
     }
 
-    console.log('[Auth] Fetching roles for user:', userId);
     try {
       const { data, error } = await supabase
-        .from('user_roles')
+        .from('salon_members')
         .select('role')
-        .eq('user_id', userId);
+        .eq('salon_id', SALON_ID)
+        .eq('user_id', userId)
+        .maybeSingle();
 
-      console.log('[Auth] Roles result:', { data, error });
-      if (error) return [];
+      if (error) {
+        console.error('[Auth] Error consultando salon_members:', error.message);
+        return null;
+      }
 
-      const roles = (data?.map((r) => r.role) ?? []) as AppRole[];
-      rolesCache.current = { userId, roles };
-      return roles;
+      const role = (data?.role ?? null) as MemberRole | null;
+      membershipCache.current = { userId, role };
+      return role;
     } catch (err) {
-      console.error('[Auth] Failed fetching roles:', err);
-      return [];
+      console.error('[Auth] Fallo consultando salon_members:', err);
+      return null;
     }
   }, []);
 
-  const applyState = useCallback((session: Session | null, roles: AppRole[]) => {
+  const applyState = useCallback((session: Session | null, role: MemberRole | null) => {
     if (!session?.user) {
-      rolesCache.current = null;
+      membershipCache.current = null;
       setState({ user: null, session: null, roles: [], isStaff: false, isManager: false, isAdmin: false, loading: false, error: null });
       return;
     }
-    const hasStaff = roles.some((r) => STAFF_ROLES.includes(r));
+    if (!role) {
+      // Sesión válida pero el usuario NO pertenece a este salón.
+      setState({ user: session.user, session, roles: [], isStaff: false, isManager: false, isAdmin: false, loading: false, error: NO_ACCESS_ERROR });
+      return;
+    }
     setState({
-      user: session.user, session, roles,
-      isStaff: hasStaff,
-      isManager: roles.includes('manager') || roles.includes('admin'),
-      isAdmin: roles.includes('admin'),
+      user: session.user, session, roles: [role],
+      isStaff: true, // owner/manager/staff son todos personal del salón
+      isManager: role === 'owner' || role === 'manager',
+      isAdmin: role === 'owner',
       loading: false,
-      error: hasStaff ? null : 'No tienes permisos de staff',
+      error: null,
     });
   }, []);
 
@@ -87,17 +105,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleSession = async (session: Session | null) => {
       if (!mounted) return;
       if (!session?.user) {
-        applyState(null, []);
+        applyState(null, null);
         return;
       }
-      const roles = await fetchRoles(session.user.id);
-      if (mounted) applyState(session, roles);
+      const role = await fetchMembership(session.user.id);
+      if (!mounted) return;
+      if (!role) {
+        // La sesión pertenece a alguien que no es miembro de este salón: se revoca
+        // para no dejar una sesión válida sin acceso (Salón OS es multi-tenant).
+        setState((s) => ({ ...s, loading: true }));
+        await supabase.auth.signOut();
+        if (mounted) applyState(null, null);
+        return;
+      }
+      applyState(session, role);
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        // IMPORTANT: don't await Supabase calls directly inside this callback
-        // to avoid auth deadlocks (can block signIn/signOut resolution)
+        // IMPORTANTE: no hagas await de llamadas a Supabase directamente dentro de
+        // este callback para evitar deadlocks de auth (pueden bloquear signIn/signOut).
         setTimeout(() => {
           void handleSession(session);
         }, 0);
@@ -115,10 +142,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timeout);
       subscription.unsubscribe();
     };
-  }, [fetchRoles, applyState]);
+  }, [fetchMembership, applyState]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (id: string, password: string) => {
     setState((s) => ({ ...s, loading: true, error: null }));
+
+    const normalizedId = id.trim();
+    if (!normalizedId) {
+      const msg = 'Introduce tu ID de acceso';
+      setState((s) => ({ ...s, loading: false, error: msg }));
+      return { error: msg };
+    }
+
+    const email = idToEmail(normalizedId);
 
     try {
       const authPromise = supabase.auth.signInWithPassword({ email, password });
@@ -126,28 +162,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setTimeout(() => reject(new Error('Tiempo de espera agotado al iniciar sesión')), 8000);
       });
 
-      const { error } = await Promise.race([authPromise, timeoutPromise]) as Awaited<typeof authPromise>;
+      const { data, error } = await Promise.race([authPromise, timeoutPromise]) as Awaited<typeof authPromise>;
 
       if (error) {
-        setState((s) => ({ ...s, loading: false, error: error.message }));
-        return { error: error.message };
+        // Mensaje genérico: no revelamos si el ID existe (evita enumeración de usuarios).
+        const msg = 'ID o contraseña incorrectos';
+        setState((s) => ({ ...s, loading: false, error: msg }));
+        return { error: msg };
       }
 
+      // Tras autenticar, verificar que el usuario es miembro de ESTE salón.
+      const userId = data.user?.id;
+      const role = userId ? await fetchMembership(userId) : null;
+      if (!role) {
+        // No pertenece al salón: cerramos sesión y avisamos.
+        membershipCache.current = null;
+        await supabase.auth.signOut();
+        setState((s) => ({ ...s, loading: false, error: NO_ACCESS_ERROR }));
+        return { error: NO_ACCESS_ERROR };
+      }
+
+      // Éxito: onAuthStateChange completará el estado (sesión + rol).
       return { error: null };
-    } catch (err: any) {
-      const message = err?.message || 'Error al iniciar sesión';
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al iniciar sesión';
       setState((s) => ({ ...s, loading: false, error: message }));
       return { error: message };
     }
   };
 
   const signOut = async () => {
+    membershipCache.current = null;
     await supabase.auth.signOut();
     setState({ user: null, session: null, roles: [], isStaff: false, isManager: false, isAdmin: false, loading: false, error: null });
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signOut, hasStaffAccess: state.roles.some((r) => STAFF_ROLES.includes(r)) }}>
+    <AuthContext.Provider value={{ ...state, signIn, signOut, hasStaffAccess: state.isStaff }}>
       {children}
     </AuthContext.Provider>
   );

@@ -8,7 +8,7 @@ import { Loader2, Eye, EyeOff } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(loginId, password);
     setLoading(false);
     if (error) {
       setError(error);
@@ -51,15 +51,19 @@ export default function Login() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
           <div className="space-y-2 text-left">
-            <Label htmlFor="email" className="text-gold-light text-xs uppercase tracking-widest">
-              Email
+            <Label htmlFor="loginId" className="text-gold-light text-xs uppercase tracking-widest">
+              ID de acceso
             </Label>
             <Input
-              id="email"
-              type="email"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="loginId"
+              type="text"
+              inputMode="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="username"
+              placeholder="tu ID"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
               required
               className="h-12 bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-gold focus:ring-ring"
             />
@@ -76,6 +80,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
                 className="h-12 bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-gold focus:ring-ring pr-12"
               />
               <button

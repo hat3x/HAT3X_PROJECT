@@ -13,10 +13,9 @@ export default function Settings() {
   };
 
   const roleBadges: Record<string, string> = {
-    admin: 'Admin',
+    owner: 'Propietario',
     manager: 'Manager',
     staff: 'Staff',
-    customer: 'Cliente',
   };
 
   return (
