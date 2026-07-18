@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { CalendarPlus, Star, Crown, Tag, ChevronRight, Gift, Clock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import BottomNav from '@/components/BottomNav';
-import logoImg from '@/assets/logo.png';
+import SalonWordmark from '@/components/SalonWordmark';
 import { FEATURES } from '@/config/features';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -27,8 +27,8 @@ const Home = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
-  // salon_id derivado del salón resuelto en runtime (no de VITE_SALON_ID).
-  const { id: salonId } = useSalon();
+  // salon_id y nombre derivados del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId, name: salonName } = useSalon();
   const [loading, setLoading] = useState(true);
   const [points, setPoints] = useState(0);
   const [visits, setVisits] = useState(0);
@@ -117,7 +117,10 @@ const Home = () => {
               <h1 className="font-display text-xl text-foreground">{greetingName}</h1>
             </div>
           </div>
-          <img src={logoImg} alt="denueveanueve" className="h-5 w-auto opacity-70" />
+          <SalonWordmark
+            imgClassName="h-5 w-auto opacity-70"
+            textClassName="font-display text-base text-foreground opacity-70"
+          />
         </div>
       </div>
 
@@ -132,7 +135,7 @@ const Home = () => {
           >
             <Crown className="h-5 w-5 text-primary-foreground" />
             <span className="font-display text-base text-primary-foreground tracking-wide">
-              de<span className="opacity-90">nueve</span>a<span className="opacity-90">nueve</span> Premium
+              {salonName} Premium
             </span>
           </motion.button>
         </div>

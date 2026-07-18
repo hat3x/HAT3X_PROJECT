@@ -16,6 +16,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { resolveSalonSlug, type SalonBranding } from '@/lib/salon';
 import { fetchSalonBranding } from '@/lib/salon-branding';
+import { resolveBrandTheme } from '@/lib/salon-theme';
 
 const SalonContext = createContext<SalonBranding | null>(null);
 
@@ -88,9 +89,10 @@ export const SalonProvider = ({ children }: { children: ReactNode }) => {
       resolveSalonSlug({
         hostname: window.location.hostname,
         search: window.location.search,
-        // Fallback mono-salón: VITE_SALON_SLUG (o el slug histórico del cliente),
-        // para que localhost/dev sigan funcionando sin subdominio ni ?salon.
-        envSlug: (import.meta.env.VITE_SALON_SLUG as string | undefined) ?? 'denueveanueve',
+        // Fallback de último recurso: VITE_SALON_SLUG. Sin cablear ningún salón por
+        // defecto — si no hay subdominio, ni ?salon, ni esta variable, el árbol cae
+        // a la pantalla "salón no encontrado" (comportamiento white-label correcto).
+        envSlug: (import.meta.env.VITE_SALON_SLUG as string | undefined) ?? null,
       }).slug,
     []
   );
@@ -104,13 +106,36 @@ export const SalonProvider = ({ children }: { children: ReactNode }) => {
     retry: 1,
   });
 
-  // Tema white-label: expone los colores del salón como CSS custom properties
-  // (sin pisar los tokens HSL del tema base) y titula la pestaña con su nombre.
+  // Tema white-label: deriva el color de marca del salón a los tokens de acento del
+  // tema (familia --gold/--primary/--ring, --accent, gradiente y sombra) y ELIGE el
+  // color de texto sobre el acento por CONTRASTE WCAG AA real (--primary-foreground /
+  // --accent-foreground), de modo que un acento claro u oscuro siempre quede legible.
+  // También titula la pestaña con el nombre del salón. Así el acento es el del salón
+  // resuelto en runtime, no un color cableado. Si el primario no es un hex válido,
+  // resolveBrandTheme devuelve null ⇒ no tocamos ninguna variable y manda el tema
+  // dorado por defecto de index.css (fallback limpio, sin pantallazos ni regresión).
   useEffect(() => {
     if (!data) return;
     const root = document.documentElement;
-    root.style.setProperty('--salon-primary', data.primaryColor);
-    if (data.secondaryColor) root.style.setProperty('--salon-secondary', data.secondaryColor);
+    const theme = resolveBrandTheme(data);
+    if (theme) {
+      // Espeja el acento en los tokens del sidebar (back-office) para que, si se
+      // reactiva el área admin, también siga a la marca del salón resuelto.
+      const vars = {
+        ...theme,
+        '--sidebar-primary': theme['--primary'],
+        '--sidebar-ring': theme['--primary'],
+      };
+      for (const [token, value] of Object.entries(vars)) {
+        root.style.setProperty(token, value);
+      }
+    }
+    // Alinea el color de la barra del navegador/PWA con la marca del salón.
+    if (data.primaryColor) {
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', data.primaryColor);
+    }
     if (data.name) document.title = data.name;
   }, [data]);
 

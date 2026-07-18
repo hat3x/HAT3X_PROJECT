@@ -145,3 +145,8 @@ export function mapSalonBrandingRow(
     secondaryColor: row.secondary_color,
   };
 }
+
+// La derivación del tema white-label (color de marca → tokens de acento, con el
+// foreground elegido por CONTRASTE WCAG AA) vive ahora en salon-theme.ts
+// (resolveBrandTheme). Este módulo se queda solo con la resolución del slug y el
+// mapeo de la fila de branding: una única fuente de verdad para el tema.

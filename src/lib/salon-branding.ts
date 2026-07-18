@@ -22,3 +22,22 @@ export async function fetchSalonBranding(slug: string): Promise<SalonBranding | 
   const row = Array.isArray(data) ? data[0] : data;
   return mapSalonBrandingRow(row ?? null);
 }
+
+/**
+ * Resuelve la URL mostrable del logo del salón a partir de `logoUrl` del branding.
+ * `logo_url` puede llegar de dos formas y ambas se soportan:
+ *   · URL absoluta (`http(s):`, `data:`, `blob:`) → se usa tal cual.
+ *   · ruta de objeto dentro del bucket público `salon-logos` (p.ej.
+ *     `jotabarber/logo.png`) → se construye su URL pública con supabase.storage.
+ * Devuelve `null` si no hay logo, para que la UI caiga limpiamente al wordmark con
+ * el nombre del salón (nunca crashea ni muestra el logo de otro salón).
+ */
+export function resolveSalonLogoUrl(logoUrl: string | null | undefined): string | null {
+  if (!logoUrl) return null;
+  const value = logoUrl.trim();
+  if (!value) return null;
+  if (/^(?:https?:|data:|blob:)/i.test(value)) return value;
+  const path = value.replace(/^\/+/, '');
+  const { data } = supabase.storage.from('salon-logos').getPublicUrl(path);
+  return data?.publicUrl ?? null;
+}
