@@ -12,6 +12,7 @@ import {
 } from "@/lib/booking/availability";
 import { normalizeEmail, type CreateBookingInput } from "@/lib/booking/schema";
 import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
+import { normalizePhone } from "@/lib/customers/normalize-phone";
 import type {
   BookingBootstrap,
   BookingConfirmation,
@@ -315,7 +316,68 @@ export async function getAvailability(
 // Creación de reserva
 // -----------------------------------------------------------------------------
 
-/** Busca un cliente existente por email/teléfono en el salón, o lo crea. */
+/**
+ * Ficha del salón cuyo teléfono canónico (E.164) coincide, o `null`. Consulta el
+ * índice único parcial `(salon_id, phone_e164)` — la clave de dedup por teléfono —
+ * SIEMPRE acotada por `salon_id` (el cliente admin omite RLS: aislamiento a mano).
+ */
+async function findCustomerIdByPhoneE164(
+  admin: AdminClient,
+  salonId: string,
+  phoneE164: string,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from("customers")
+    .select("id")
+    .eq("salon_id", salonId)
+    .eq("phone_e164", phoneE164)
+    .maybeSingle();
+  if (error) throw new BookingError(500, "Error al buscar el cliente por teléfono.");
+  return data?.id ?? null;
+}
+
+/**
+ * Resuelve la ficha existente de la persona: primero por TELÉFONO (clave natural
+ * de identidad, FASE 3) y, si no hay, por email (índice único `(salon_id, email)`,
+ * para no chocar con él al insertar). Acotado siempre por `salon_id`.
+ */
+async function findExistingCustomerId(
+  admin: AdminClient,
+  salonId: string,
+  phoneE164: string,
+  email: string | null,
+): Promise<string | null> {
+  const byPhone = await findCustomerIdByPhoneE164(admin, salonId, phoneE164);
+  if (byPhone) return byPhone;
+
+  if (email) {
+    const { data, error } = await admin
+      .from("customers")
+      .select("id")
+      .eq("salon_id", salonId)
+      .eq("email", email)
+      .maybeSingle();
+    if (error) throw new BookingError(500, "Error al buscar el cliente por email.");
+    if (data) return data.id;
+  }
+  return null;
+}
+
+/**
+ * Resuelve la ficha del cliente de la reserva por su TELÉFONO —identidad por
+ * teléfono (FASE 3)— dentro del salón, reutilizándola si ya existe o creándola.
+ *
+ * El teléfono es la CLAVE NATURAL: se canonicaliza a E.164 con `normalizePhone`
+ * (espejo exacto de la función SQL `app.normalize_phone` que alimenta la columna
+ * GENERADA `customers.phone_e164`) y se busca por `phone_e164` SIEMPRE acotado por
+ * `salon_id` (índice único parcial `(salon_id, phone_e164)`). Si la ficha ya
+ * existe, se REUTILIZA tal cual: nunca se pisa su `user_id` (enlace con la cuenta
+ * de la app de cliente) ni su nombre. Si no existe, se crea.
+ *
+ * El teléfono es obligatorio en la reserva pública. Si no contiene un número real
+ * (no normaliza), se rechaza con un error de validación claro (400) en vez de
+ * crear una ficha con `phone_e164` NULL que quedaría fuera del dedup por teléfono.
+ */
 async function findOrCreateCustomer(
   admin: AdminClient,
   salonId: string,
@@ -323,26 +385,17 @@ async function findOrCreateCustomer(
 ): Promise<string> {
   const email = normalizeEmail(customer.email);
   const phone = customer.phone.trim();
+  const phoneE164 = normalizePhone(phone);
 
-  // Coincidencia por email (índice único por salón) y, si no, por teléfono.
-  if (email) {
-    const { data } = await admin
-      .from("customers")
-      .select("id")
-      .eq("salon_id", salonId)
-      .eq("email", email)
-      .maybeSingle();
-    if (data) return data.id;
-  } else {
-    const { data } = await admin
-      .from("customers")
-      .select("id")
-      .eq("salon_id", salonId)
-      .eq("phone", phone)
-      .limit(1)
-      .maybeSingle();
-    if (data) return data.id;
+  // Sin número real no hay clave de identidad por teléfono: rechazo claro (400),
+  // no una ficha con phone_e164 NULL que rompería el dedup.
+  if (phoneE164 === null) {
+    throw new BookingError(400, "El teléfono no es válido. Revísalo e inténtalo de nuevo.");
   }
+
+  // ¿Ya existe la persona (por teléfono, o por email) en ESTE salón? Reutilizar.
+  const existingId = await findExistingCustomerId(admin, salonId, phoneE164, email);
+  if (existingId) return existingId;
 
   const { data: created, error } = await admin
     .from("customers")
@@ -356,8 +409,17 @@ async function findOrCreateCustomer(
     .select("id")
     .single();
 
-  if (error || !created) throw new BookingError(500, "No se pudo registrar el cliente.");
-  return created.id;
+  if (error === null && created !== null) return created.id;
+
+  // Carrera (p. ej. doble envío del formulario): el índice único `(salon_id,
+  // phone_e164)`/`(salon_id, email)` rechazó la segunda inserción. Re-resolvemos
+  // y reutilizamos la ficha ganadora en lugar de devolver un 500 espurio.
+  if (error !== null && error.code === "23505") {
+    const raced = await findExistingCustomerId(admin, salonId, phoneE164, email);
+    if (raced) return raced;
+  }
+
+  throw new BookingError(500, "No se pudo registrar el cliente.");
 }
 
 export async function createBooking(
