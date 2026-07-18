@@ -105,6 +105,22 @@ function addLocalDays(dateStr: string, n: number): string {
   return next.toISOString().slice(0, 10);
 }
 
+/**
+ * Error de una petición a la API pública que preserva el `status` HTTP. Permite a
+ * la UI distinguir el conflicto de hueco (409) —recuperable eligiendo otra hora—
+ * del resto de errores (datos no válidos, salón o servicio no disponible…), que se
+ * muestran con el mensaje legible tal cual lo devuelve el servidor.
+ */
+class BookingRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "BookingRequestError";
+  }
+}
+
 export function BookingWizard({
   slug,
   bootstrap,
@@ -147,7 +163,10 @@ export function BookingWizard({
       );
       const json = (await res.json()) as AvailabilityResponse | { error: string };
       if (!res.ok) {
-        throw new Error("error" in json ? json.error : "Error de disponibilidad.");
+        throw new BookingRequestError(
+          res.status,
+          "error" in json ? json.error : "Error de disponibilidad.",
+        );
       }
       return (json as AvailabilityResponse).slots;
     },
@@ -174,7 +193,10 @@ export function BookingWizard({
       });
       const json = (await res.json()) as BookingConfirmation | { error: string };
       if (!res.ok) {
-        throw new Error("error" in json ? json.error : "No se pudo reservar.");
+        throw new BookingRequestError(
+          res.status,
+          "error" in json ? json.error : "No se pudo reservar.",
+        );
       }
       return json as BookingConfirmation;
     },
@@ -206,6 +228,19 @@ export function BookingWizard({
       const previous = STEP_ORDER[index - 1];
       if (previous) setStep(previous);
     }
+  }
+
+  /**
+   * Recuperación tras un conflicto de hueco (409): descarta la hora elegida,
+   * limpia el error del envío y vuelve al paso de fecha refrescando la
+   * disponibilidad (la caché es de 30 s: sin refetch se reofrecería la hora ya
+   * ocupada). `refetch` fuerza la recarga aunque la query esté deshabilitada.
+   */
+  function backToSlots(): void {
+    setSlot(null);
+    createMutation.reset();
+    setStep("datetime");
+    void availabilityQuery.refetch();
   }
 
   const contactValid =
@@ -632,8 +667,9 @@ export function BookingWizard({
                 </label>
 
                 {createMutation.isError && (
-                  <ErrorState
-                    message={(createMutation.error as Error).message}
+                  <BookingErrorBlock
+                    error={createMutation.error}
+                    onPickAnother={backToSlots}
                   />
                 )}
 
@@ -874,6 +910,56 @@ function ErrorState({
           Reintentar
         </Button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Traduce el error del envío de la reserva a un bloque legible. El conflicto de
+ * hueco (409) —la hora se ocupó entre que se cargó y se envió— es recuperable:
+ * se ofrece volver a elegir hora. El resto (datos no válidos 400, salón o
+ * servicio no disponible 404, error inesperado 500) muestran su mensaje tal cual.
+ */
+function BookingErrorBlock({
+  error,
+  onPickAnother,
+}: {
+  error: Error | null;
+  onPickAnother: () => void;
+}): React.ReactElement {
+  if (error instanceof BookingRequestError && error.status === 409) {
+    return <SlotTakenNotice message={error.message} onPickAnother={onPickAnother} />;
+  }
+  return (
+    <ErrorState
+      message={error?.message ?? "No se pudo reservar. Inténtalo de nuevo."}
+    />
+  );
+}
+
+/** Aviso recuperable de hueco ocupado, con acción para elegir otra hora. */
+function SlotTakenNotice({
+  message,
+  onPickAnother,
+}: {
+  message: string;
+  onPickAnother: () => void;
+}): React.ReactElement {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center gap-3 rounded-xl border border-warning/30 bg-warning/5 p-6 text-center"
+    >
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-warning/15 text-warning">
+        <CalendarX className="h-5 w-5" />
+      </span>
+      <div className="space-y-1">
+        <p className="font-semibold text-foreground">Esa hora acaba de ocuparse</p>
+        <p className="mx-auto max-w-xs text-sm text-muted-foreground">{message}</p>
+      </div>
+      <Button size="sm" onClick={onPickAnother}>
+        <Clock className="mr-1.5 h-4 w-4" /> Elegir otra hora
+      </Button>
     </div>
   );
 }
