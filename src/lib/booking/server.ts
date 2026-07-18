@@ -411,9 +411,13 @@ async function findOrCreateCustomer(
 
   if (error === null && created !== null) return created.id;
 
-  // Carrera (p. ej. doble envío del formulario): el índice único `(salon_id,
-  // phone_e164)`/`(salon_id, email)` rechazó la segunda inserción. Re-resolvemos
-  // y reutilizamos la ficha ganadora en lugar de devolver un 500 espurio.
+  // Carrera (p. ej. doble envío del formulario): entre la re-lectura previa y este
+  // INSERT, otra petición creó la ficha y el índice único parcial `(salon_id,
+  // phone_e164)` —o `(salon_id, email)`— rechazó la segunda inserción con `23505`.
+  // RE-RESOLVEMOS por teléfono (clave natural) acotado al salón —y, si no, por
+  // email— y REUTILIZAMOS la ficha ganadora en lugar de propagar un 500 espurio.
+  // Mismo criterio que `linkOrCreateCustomerAccount` (@/lib/customers/account) para
+  // el `23505`. Si aun así no se re-resuelve, el error es real: se propaga (500).
   if (error !== null && error.code === "23505") {
     const raced = await findExistingCustomerId(admin, salonId, phoneE164, email);
     if (raced) return raced;

@@ -17,6 +17,13 @@
  *   2. Ficha EXISTENTE con el mismo teléfono canónico → se REUTILIZA (la cita
  *      apunta a su id) y NO se inserta un cliente nuevo (no se pisa user_id/nombre).
  *   3. Sin ficha previa → se CREA la ficha y la cita apunta a la nueva.
+ *   4. CARRERA: la pre-lectura no ve ficha, pero el INSERT choca con el índice
+ *      único parcial `(salon_id, phone_e164)` (23505) porque un rival la creó a la
+ *      vez → se RE-RESUELVE por teléfono y se REUTILIZA la ficha ganadora (la cita
+ *      apunta a ella), sin duplicar ni propagar un 500. Espejo del blindaje de
+ *      `linkOrCreateCustomerAccount`.
+ *   5. 23505 que NO se puede re-resolver (la ficha no aparece) → el error es real:
+ *      se propaga como BookingError 500 y NO se inserta la cita.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
@@ -58,6 +65,13 @@ interface Fixtures {
   customers?: unknown;
   professionals?: unknown;
   onInsert?: (table: string, payload: Record<string, unknown>) => unknown;
+  /**
+   * Simula que el INSERT de `customers` choca con un índice único (carrera): si
+   * devuelve un error, el doble resuelve ese insert como `{ data: null, error }`.
+   * Es el espejo de un `23505` de Postgres para ejercitar el blindaje de la
+   * carrera en `findOrCreateCustomer` sin base de datos real.
+   */
+  customerInsertError?: () => { code: string } | null;
 }
 
 function makeAdminMock(fx: Fixtures) {
@@ -66,10 +80,21 @@ function makeAdminMock(fx: Fixtures) {
 
     function currentData(): { data: unknown; error: unknown } {
       if (pendingInsert) {
-        return { data: fx.onInsert?.(table, pendingInsert) ?? null, error: null };
+        // Se registra SIEMPRE el intento (aunque luego choque): así el test puede
+        // afirmar que hubo un INSERT y que no se duplicó.
+        const row = fx.onInsert?.(table, pendingInsert) ?? null;
+        // Carrera: el INSERT de customers choca con el índice único parcial → 23505.
+        if (table === "customers") {
+          const error = fx.customerInsertError?.();
+          if (error) return { data: null, error };
+        }
+        return { data: row, error: null };
       }
+      // Fixture dinámico: una FUNCIÓN modela una fila que APARECE tras la carrera
+      // (p. ej. la ficha ganadora, visible solo una vez el rival la ha insertado).
       const raw = (fx as Record<string, unknown>)[table];
-      return { data: raw ?? [], error: null };
+      const resolved = typeof raw === "function" ? (raw as () => unknown)() : raw;
+      return { data: resolved ?? [], error: null };
     }
 
     function resolveSingle() {
@@ -233,5 +258,47 @@ describe("reserva pública — identidad por teléfono (integración)", () => {
     expect(customerInsert?.payload.phone).toBe("600123456");
     // …y la cita apunta a la ficha recién creada.
     expect(appointmentCustomerId(inserts)).toBe("cust-nuevo");
+  });
+
+  it("(4) carrera: 23505 en el INSERT → re-resuelve por teléfono y reutiliza la ficha ganadora", async () => {
+    // La pre-lectura NO ve ficha (winner aún no visible) → intenta INSERT. El rival
+    // gana la carrera: el índice único parcial `(salon_id, phone_e164)` rechaza el
+    // insert (23505) y, a partir de ahí, la ficha ganadora ya es visible.
+    let winnerVisible = false;
+    const { inserts } = setup({
+      customers: () => (winnerVisible ? { id: "cust-ganadora" } : null),
+      customerInsertError: () => {
+        winnerVisible = true; // el rival ya insertó SU ficha: ahora la vemos
+        return { code: "23505" }; // unique_violation en (salon_id, phone_e164)
+      },
+    });
+
+    const confirmation = await createBooking(SLUG, bookingInput("612 34 56 78"));
+
+    // La reserva SALE ADELANTE reutilizando la ficha ganadora (no un 500 espurio)…
+    expect(confirmation.appointmentId).toBe("appt-1");
+    expect(appointmentCustomerId(inserts)).toBe("cust-ganadora");
+    // …hubo UN intento de INSERT de cliente (el que chocó) y ni uno más (no duplica).
+    expect(inserts.filter((i) => i.table === "customers")).toHaveLength(1);
+  });
+
+  it("(5) 23505 irresoluble (la ficha no aparece) → propaga BookingError 500 y no crea la cita", async () => {
+    // El INSERT choca con 23505 pero la re-resolución no encuentra ninguna ficha
+    // (la winner nunca aparece): el error es real y NO se debe tragar en silencio.
+    const { inserts } = setup({
+      customers: null, // ni antes ni después del choque hay ficha que reutilizar
+      customerInsertError: () => ({ code: "23505" }),
+    });
+
+    await expect(createBooking(SLUG, bookingInput("612 34 56 78"))).rejects.toMatchObject({
+      status: 500,
+    });
+    await expect(createBooking(SLUG, bookingInput("612 34 56 78"))).rejects.toBeInstanceOf(
+      BookingError,
+    );
+
+    // Se intentó insertar el cliente, pero al no resolverse NO se llega a la cita.
+    expect(inserts.some((i) => i.table === "customers")).toBe(true);
+    expect(inserts.some((i) => i.table === "appointments")).toBe(false);
   });
 });
