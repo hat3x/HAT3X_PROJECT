@@ -1634,6 +1634,45 @@ export interface Database {
           },
         ];
       };
+      // Marca (white-label) del salón: logo + colores. 1:1 con salons (salon_id es
+      // PK y FK). Escritura solo owner/manager (RLS); lectura para cualquier miembro.
+      // primary_color es NOT NULL con default '#111827'. Ver migración
+      // 20260718110000_salon_branding.
+      salon_branding: {
+        Row: {
+          salon_id: string;
+          logo_url: string | null;
+          primary_color: string;
+          secondary_color: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          salon_id: string;
+          logo_url?: string | null;
+          primary_color?: string;
+          secondary_color?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          salon_id?: string;
+          logo_url?: string | null;
+          primary_color?: string;
+          secondary_color?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "salon_branding_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: true;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;
@@ -1697,6 +1736,8 @@ export type WelcomeCoupon = Tables<"welcome_coupons">;
 export type Reward = Tables<"rewards">;
 // Entitlements (productización)
 export type SalonFeatureRow = Tables<"salon_features">;
+// Marca (white-label) — logo + colores por salón (1:1 con salons)
+export type SalonBranding = Tables<"salon_branding">;
 
 // Phase helpers -----------------------------------------------------------------
 
