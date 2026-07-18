@@ -72,12 +72,14 @@ export function AdminShell() {
 
 // Employee bottom nav
 import { NavLink } from 'react-router-dom';
-import { Calendar, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function EmployeeBottomNav() {
+  // "Mi Calendario" is out of scope in the Salón OS build (disabled screen),
+  // so this nav only exposes in-scope destinations.
   const items = [
-    { to: '/employee/calendar', icon: Calendar, label: 'Mi Calendario' },
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
     { to: '/employee/settings', icon: Settings, label: 'Ajustes' },
   ];
 
@@ -103,10 +105,12 @@ function EmployeeBottomNav() {
 import { LayoutDashboard, Users, ScanLine, Clock } from 'lucide-react';
 
 function AdminBottomNav() {
+  // Employee management (/admin/employees) is out of scope in the Salón OS
+  // build, so it is replaced here by the in-scope customers destination.
   const items = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
     { to: '/scan', icon: ScanLine, label: 'Escanear' },
-    { to: '/admin/employees', icon: Users, label: 'Empleados' },
+    { to: '/customers', icon: Users, label: 'Clientes' },
     { to: '/history', icon: Clock, label: 'Historial' },
     { to: '/settings', icon: Settings, label: 'Ajustes' },
   ];

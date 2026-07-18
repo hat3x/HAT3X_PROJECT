@@ -3,24 +3,17 @@ import { Navigate } from 'react-router-dom';
 import { LoadingState } from '@/components/staff/LoadingState';
 
 /**
- * Redirects user based on their role:
- * - admin → /admin/employees
- * - staff (with staff_member link) → /employee/calendar
- * - staff (common, no link) → /dashboard
- * - no user → /login
+ * Entry redirect after auth resolves.
+ *
+ * The role-specific landing pages (employee calendar / admin employees) are
+ * out of scope in the Salón OS build and are disabled, so every authenticated
+ * staff user lands on the in-scope dashboard.
  */
 export default function RoleRedirect() {
-  const { user, loading, isAdmin, isStaff, roles } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) return <LoadingState />;
   if (!user) return <Navigate to="/login" replace />;
 
-  // Admin gets admin panel
-  if (isAdmin) return <Navigate to="/admin/employees" replace />;
-
-  // Staff/manager without admin → employee calendar (they can also access /dashboard)
-  if (isStaff) return <Navigate to="/employee/calendar" replace />;
-
-  // Fallback
   return <Navigate to="/dashboard" replace />;
 }

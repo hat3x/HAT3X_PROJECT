@@ -1,17 +1,15 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ScanLine, Users, Clock, Settings, UserCircle } from 'lucide-react';
+import { LayoutDashboard, ScanLine, Users, Clock, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/lib/auth';
 
 export function BottomNav() {
-  const { isAdmin } = useAuth();
-
+  // The employee-calendar ("Mi Ficha") and employee-management ("Empleados")
+  // screens are out of scope in the Salón OS build, so the nav links only to
+  // in-scope destinations for every staff role.
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
     { to: '/scan', icon: ScanLine, label: 'Escanear' },
-    isAdmin
-      ? { to: '/admin/employees', icon: Users, label: 'Empleados' }
-      : { to: '/employee/calendar', icon: UserCircle, label: 'Mi Ficha' },
+    { to: '/customers', icon: Users, label: 'Clientes' },
     { to: '/history', icon: Clock, label: 'Historial' },
     { to: '/settings', icon: Settings, label: 'Ajustes' },
   ];
