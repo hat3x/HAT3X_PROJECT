@@ -8,6 +8,7 @@ import {
   CalendarClock,
   CalendarHeart,
   ClipboardList,
+  Gift,
   Mail,
   Pencil,
   Phone,
@@ -49,12 +50,19 @@ interface CustomerDetailViewProps {
   salonId: string;
   customerId: string;
   initialCustomer: Customer;
+  /**
+   * Si el salón tiene contratado el add-on de fidelización. Resuelto en servidor
+   * (`activeSalonHasFeature("loyalty")`). Cuando es `false` ocultamos el acceso a
+   * la ficha de fidelización: sin add-on, esa ruta redirige y `lookupByQr` da 403.
+   */
+  loyaltyEnabled: boolean;
 }
 
 export function CustomerDetailView({
   salonId,
   customerId,
   initialCustomer,
+  loyaltyEnabled,
 }: CustomerDetailViewProps): React.ReactElement {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -110,6 +118,14 @@ export function CustomerDetailView({
           </div>
         </div>
         <div className="flex gap-2">
+          {loyaltyEnabled ? (
+            <Button variant="outline" asChild>
+              <Link href={`/customers/${customerId}/loyalty`}>
+                <Gift className="mr-2 h-4 w-4" aria-hidden="true" />
+                Fidelización
+              </Link>
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={() => setEditOpen(true)}>
             <Pencil className="mr-2 h-4 w-4" />
             Editar

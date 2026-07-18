@@ -150,6 +150,12 @@ interface TpvViewProps {
   /** Nombre comercial del salón; cabecera del ticket impreso. */
   salonName: string;
   timezone: string;
+  /**
+   * Si el salón tiene contratado el add-on de fidelización. Cuando es `false`
+   * ocultamos la tarjeta de escaneo (el gate real de `lookupByQr` ya devolvería
+   * 403); el resto del cobro funciona igual, la fidelización es aditiva.
+   */
+  loyaltyEnabled: boolean;
 }
 
 /**
@@ -162,6 +168,7 @@ export function TpvView({
   salonId,
   salonName,
   timezone,
+  loyaltyEnabled,
 }: TpvViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
@@ -372,23 +379,25 @@ export function TpvView({
       <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
         {/* ── Catálogo ──────────────────────────────────────────────────── */}
         <div className="flex flex-col gap-5">
-          <LoyaltyPanel
-            pending={loyalty.isPending}
-            result={loyalty.data}
-            onScan={(qrToken) => {
-              setAppliedCoupon(null); // un nuevo escaneo descarta el cupón anterior
-              loyalty.mutate(qrToken);
-            }}
-            onClear={() => {
-              setAppliedCoupon(null);
-              loyalty.reset();
-            }}
-            appliedCouponId={appliedCoupon?.coupon.id ?? null}
-            onApplyCoupon={(coupon, customerId) =>
-              setAppliedCoupon({ coupon, customerId })
-            }
-            onRemoveCoupon={() => setAppliedCoupon(null)}
-          />
+          {loyaltyEnabled ? (
+            <LoyaltyPanel
+              pending={loyalty.isPending}
+              result={loyalty.data}
+              onScan={(qrToken) => {
+                setAppliedCoupon(null); // un nuevo escaneo descarta el cupón anterior
+                loyalty.mutate(qrToken);
+              }}
+              onClear={() => {
+                setAppliedCoupon(null);
+                loyalty.reset();
+              }}
+              appliedCouponId={appliedCoupon?.coupon.id ?? null}
+              onApplyCoupon={(coupon, customerId) =>
+                setAppliedCoupon({ coupon, customerId })
+              }
+              onRemoveCoupon={() => setAppliedCoupon(null)}
+            />
+          ) : null}
 
           <AppointmentPicker
             appointments={appointments.data ?? []}

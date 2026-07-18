@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { TpvView } from "@/app/(dashboard)/tpv/tpv-view";
-import { getActiveSalon } from "@/lib/salon";
+import { activeSalonHasFeature, getActiveSalon } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -32,7 +32,17 @@ export default async function TpvPage(): Promise<React.ReactElement> {
     );
   }
 
+  // Gating BARATO de UI: la tarjeta de escaneo de fidelización del TPV solo se
+  // muestra si el salón tiene el add-on. Sin él, `lookupByQr` daría 403 en cada
+  // escaneo, así que ni siquiera ofrecemos el campo.
+  const loyaltyEnabled = await activeSalonHasFeature("loyalty");
+
   return (
-    <TpvView salonId={salon.id} salonName={salon.name} timezone={salon.timezone} />
+    <TpvView
+      salonId={salon.id}
+      salonName={salon.name}
+      timezone={salon.timezone}
+      loyaltyEnabled={loyaltyEnabled}
+    />
   );
 }

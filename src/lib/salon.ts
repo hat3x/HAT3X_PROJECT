@@ -1,5 +1,6 @@
+import { salonHasFeature } from "@/lib/salon-features";
 import { createClient } from "@/lib/supabase/server";
-import type { MemberRole } from "@/types/database";
+import type { MemberRole, SalonFeature } from "@/types/database";
 
 export interface ActiveSalon {
   id: string;
@@ -112,4 +113,29 @@ export async function getActiveSalon(): Promise<ActiveSalon | null> {
 
   if (error !== null) throw new Error(`No se pudo cargar el salón: ${error.message}`);
   return data ?? null;
+}
+
+/**
+ * ¿El salón activo del usuario tiene contratado Y activo el add-on `feature`?
+ *
+ * Lectura BARATA de `public.salon_features` para el GATING DE UI en servidor:
+ * resuelve el salón activo (sesión) y delega en {@link salonHasFeature} con el
+ * cliente RLS (un miembro solo ve los entitlements de SU salón). Sin sesión ni
+ * salón ⇒ `false` (deny-by-default de negocio, igual que el gate SQL).
+ *
+ * Envoltorio de conveniencia para componentes de servidor que solo deciden
+ * "muestro u oculto este acceso" (p. ej. el enlace de fidelización de la ficha o
+ * la tarjeta de escaneo del TPV). Es SOLO presentación: ocultar un acceso NUNCA
+ * sustituye al gate real de datos, que ya vive en el servidor de cada dominio
+ * (p. ej. `lookupByQr`/`awardVisit` devuelven `feature_not_enabled`). Así, un
+ * cliente que fuerce la URL sigue topándose con el 403 del servidor.
+ */
+export async function activeSalonHasFeature(
+  feature: SalonFeature,
+): Promise<boolean> {
+  const salonId = await getActiveSalonId();
+  if (salonId === null) return false;
+
+  const supabase = createClient();
+  return salonHasFeature(supabase, salonId, feature);
 }
