@@ -25,14 +25,21 @@ Nunca se cruzan. Es el cimiento y ya funciona.
 3. **FASE 3 — Re-apuntar apps** cliente+staff a la BD de Salón OS. Sin migración de
    datos (los de denueveanueve eran de prueba). **Incluye identidad-por-teléfono
    (ver abajo).**
-4. **PRODUCTIZACIÓN — Planes + white-label.** En dos tramos:
+4. **PRODUCTIZACIÓN — Planes + white-label.** En tres tramos:
    - **FASE 4A — Backend de productización** (✅ construido, 2026-07-18): catálogo de
      add-ons (`salon_features`), tabla de marca (`salon_branding`), bucket de logos
      (`salon-logos`), lectura pública del branding por slug (`get_salon_branding`) y
      feature-gating de las RPC de fidelización. Ver §"Productización" y el README.
-   - **FASE 4B — Re-apuntar las apps a branding dinámico (white-label)** (⏳ pendiente):
-     hacer que panel y apps cliente/staff carguen la marca del salón en runtime (hoy
-     cableadas a denueveanueve). El backend (4A) ya expone todo lo necesario.
+   - **FASE 4B-1 — Panel white-label dinámico** (✅ construido, 2026-07-18): el panel de
+     gestión carga la marca del salón activo **en runtime** y se re-tinta con ella
+     (variables CSS acotadas al subárbol del panel); owner/manager configura logo y colores
+     en *Ajustes → Marca*, con fallback limpio al tema por defecto y contraste WCAG AA. Ver
+     §"Productización" y el README.
+   - **FASE 4B-2 — Re-apuntar las apps cliente/staff a branding dinámico** (⏳ pendiente):
+     hacer que las PWA cliente/staff (un solo código, servidas por subdominio) carguen la
+     marca del salón por slug/subdominio **en runtime** (hoy cableadas a denueveanueve),
+     consumiendo `get_salon_branding` y el bucket `salon-logos`. El backend (4A) ya expone
+     todo lo necesario.
 5. **ADD-ON — Recepcionista IA** (Retell + Twilio).
 
 ## Identidad-por-teléfono (dedup de clientes) — bakear en FASE 3
@@ -72,7 +79,8 @@ Decisión tomada: **tablas dedicadas** (no `salons.settings` jsonb) para ambas c
 ### Estado de implementación (2026-07-18)
 
 **FASE 4A — Backend de productización: ✅ construido.** Ya existe todo el andamiaje de
-datos y seguridad; falta el trabajo de front (4B).
+datos y seguridad; el front del panel (4B-1) ya lo consume y queda pendiente el de las
+apps cliente/staff (4B-2).
 
 | Pieza | Migración | Qué hace |
 |---|---|---|
@@ -90,11 +98,32 @@ branding, convención de ruta del bucket) en el **README →
 `docs/salon-branding-design.md`, `docs/salon-logos-storage-design.md` y
 `docs/salon-branding-public-read-design.md`.
 
-**FASE 4B — Re-apuntar las apps a branding dinámico: ⏳ pendiente.** Hoy panel y apps
-cliente/staff siguen cableadas a denueveanueve (nombre/colores/logo fijos).
-Convertirlas en white-label dinámico —cargar la marca por slug/subdominio **en
-runtime**, consumiendo `get_salon_branding` y el bucket `salon-logos`— es el trabajo de
-esta fase. El backend (4A) ya expone todo lo necesario; 4B es puramente front.
+**FASE 4B-1 — Panel white-label dinámico: ✅ construido (2026-07-18).** El panel de gestión
+ya carga la marca del salón activo **en runtime** (`getActiveSalonBranding`, cliente RLS de
+la sesión) y se re-tinta con ella; el logo sustituye a la marca genérica en la cabecera.
+
+- **Configuración (owner/manager):** *Ajustes → Marca* (`/ajustes/marca`) sube/reemplaza/
+  quita el logo (a `salon-logos/{salon_id}/logo.<ext>`, ≤ 2 MiB) y edita color principal
+  (obligatorio) + acento (opcional), con vista previa en vivo. Capa de datos en
+  `@/lib/salon-branding/server`; validación de hex, MIME y tamaño **en servidor**.
+- **Tematizado (variables CSS):** `resolveBrandTheme` traduce los colores hex a tripletes
+  HSL shadcn y deriva los tokens de acento (`--primary`, `--ring`, `--info`, `--accent`…)
+  para claro y oscuro; `buildBrandThemeCss` los emite en un `<style>` acotado a
+  `[data-salon-brand]` (subárbol del panel), sin tocar `:root` → login y páginas sin salón
+  conservan el tema premium. Renderizado en servidor ⇒ sin FOUC.
+- **Fallback limpio:** sin marca válida (sin fila o primario inválido) el módulo devuelve
+  `null` y no se inyecta nada — manda el tema por defecto (violeta `#7c3aed`; primario
+  `#111827` cuando no hay fila).
+- **Contraste WCAG AA:** el texto sobre el color de marca se elige por **contraste real**
+  (WCAG 2.1 §1.4.3), tomando el foreground que lo maximiza (nunca un botón ilegible);
+  *Ajustes → Marca* avisa —sin bloquear— si un color no alcanza AA (4.5:1). Lógica pura en
+  `@/lib/salon-branding/theme` (tests en `src/tests/unit/salon-branding-theme.test.ts`).
+
+**FASE 4B-2 — Re-apuntar las apps cliente/staff a branding dinámico: ⏳ pendiente.** Hoy las
+PWA cliente/staff siguen cableadas a denueveanueve (nombre/colores/logo fijos). Convertirlas
+en white-label dinámico —cargar la marca por **slug/subdominio** en runtime, consumiendo
+`get_salon_branding` y el bucket `salon-logos`— es el trabajo de esta fase. El backend (4A)
+ya expone todo lo necesario; 4B-2 es puramente front.
 
 ## Add-on Recepcionista IA (Retell + Twilio)
 

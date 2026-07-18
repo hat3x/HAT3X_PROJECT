@@ -296,9 +296,10 @@ La API valida con Zod y usa el cliente admin de Supabase con validaciones de dom
 Salón OS es multi-tenant: un mismo backend sirve a muchos salones. La **productización**
 añade dos capas por salón —**qué módulos ha contratado** (entitlements/add-ons) y **con
 qué marca se pinta** (white-label)— como **tablas dedicadas** con RLS, no como flags
-sueltos en `salons.settings`. El backend de esta capa (**FASE 4A**) ya está construido; re-apuntar
-las apps a la marca dinámica (**FASE 4B**) queda pendiente
-(ver [Estado (FASE 4B)](#estado-fase-4b-re-apuntar-las-apps-a-white-label-dinámico)).
+sueltos en `salons.settings`. El backend de esta capa (**FASE 4A**) y el **panel white-label
+dinámico** (**FASE 4B-1**) ya están construidos; re-apuntar las **apps cliente/staff** a la
+marca dinámica (**FASE 4B-2**) queda pendiente
+(ver [Estado del white-label](#estado-panel-hecho-fase-4b-1-apps-pendientes-fase-4b-2)).
 
 > Diseño y justificación completa: [`docs/roadmap-productizacion.md`](./docs/roadmap-productizacion.md),
 > [`docs/salon-branding-design.md`](./docs/salon-branding-design.md),
@@ -420,16 +421,69 @@ salon-logos/{salon_id}/logo.<ext>
 - **URL pública del logo:**
   `{SUPABASE_URL}/storage/v1/object/public/salon-logos/{salon_id}/logo.png`.
 
-### Estado (FASE 4B): re-apuntar las apps a white-label dinámico
+### Configurar la marca desde el panel
+
+Owner/manager de cada salón personaliza su marca en **Ajustes → Marca** (`/ajustes/marca`).
+La página está gateada a owner/manager por el layout y por la capa de datos
+(`@/lib/salon-branding/server`), que valida **en servidor** y opera con el cliente RLS de la
+sesión (las políticas de FASE 4A ya restringen la escritura de `salon_branding` y del bucket
+a owner/manager; nunca se usa `service_role`).
+
+- **Logotipo** — *subir / reemplazar / quitar* como acciones inmediatas. Se acepta **PNG,
+  JPG, WEBP, SVG, AVIF**, hasta **2 MiB** (validado en cliente para feedback y **revalidado
+  en servidor**). El fichero se sube al bucket `salon-logos` bajo la clave canónica
+  `{salon_id}/logo.<ext>` (`upsert`; se limpian logos previos con otra extensión) y su **URL
+  pública** se guarda en `salon_branding.logo_url`. Un logo por salón (relación 1:1).
+- **Colores** — *principal* (**obligatorio**; default `#111827`) y *acento* (**opcional**;
+  vaciarlo = sin acento). Cada uno con muestrario nativo (`input[type=color]`) sincronizado
+  con un campo hex `#RRGGBB` validado. Un **aviso de contraste AA** (ver abajo) señala —sin
+  bloquear el guardado— si un color quedaría por debajo del mínimo legible.
+- **Vista previa en vivo** — una maqueta (cabecera + botón de reserva) refleja logo y colores,
+  **incluidos los cambios aún sin guardar**, con el mismo criterio de contraste que el panel.
+
+### Tematizado dinámico del panel
+
+El panel de gestión se **re-tinta con la marca del salón activo en runtime** (FASE 4B-1). El
+layout del panel carga `getActiveSalonBranding()` en servidor e inyecta `<SalonBrandStyle>`;
+el nav sustituye la marca genérica por el logo del salón. La lógica es pura y testeable:
+`@/lib/salon-branding/theme` (sin red ni React; tests en
+`src/tests/unit/salon-branding-theme.test.ts`).
+
+- **Variables CSS acotadas.** `resolveBrandTheme` traduce los colores hex de la marca a
+  **tripletes HSL en formato shadcn** (`H S% L%`) y deriva los tokens de acento —`--primary`,
+  `--ring`, `--info`, `--accent`…— para tema **claro y oscuro**, emulando las relaciones ya
+  calibradas del default violeta. `buildBrandThemeCss` los emite en un `<style>` inline
+  **acotado a `[data-salon-brand]`** (el wrapper del panel): la marca **no** toca `:root`, así
+  el login y las páginas sin salón conservan intacto el tema premium por defecto. Al
+  renderizarse en servidor, las variables están en el primer pintado → **sin FOUC**.
+- **Fallback limpio.** Si el salón no tiene marca válida (sin fila, o color primario
+  inválido), `resolveBrandTheme` devuelve `null`, `SalonBrandStyle` no inyecta nada y **manda
+  el tema por defecto** (acento violeta `#7c3aed`; el primario cae a `#111827` cuando aún no
+  hay fila, igual que el `coalesce` de `get_salon_branding`).
+- **Contraste WCAG AA.** El texto sobre el color de marca se elige por **contraste real**
+  (fórmula WCAG 2.1 §1.4.3), no asumiendo blanco: se toma el foreground del sistema (claro u
+  oscuro) que **maximiza** el contraste, de modo que una elección de color nunca deja un botón
+  con texto ilegible. El umbral AA para texto normal es **4.5:1** (`WCAG_AA_TEXT`); en
+  *Ajustes → Marca*, `assessFillLegibility` **avisa sin bloquear** cuando el mejor texto no
+  llega a AA, y la vista previa usa `readableForegroundHex` para no divergir del panel real.
+
+### Estado: panel hecho (FASE 4B-1), apps pendientes (FASE 4B-2)
 
 El **backend** de productización (**FASE 4A**) está construido: entitlements, marca, bucket
 de logos, lectura pública, feature-gating y el guardián de aislamiento (migraciones
 `20260718100000`–`20260718160000`).
-Lo que **falta** —re-apuntar el panel y las apps cliente/staff, hoy cableadas a
-denueveanueve (nombre/colores/logo fijos), para que carguen la marca del salón **en
-runtime** por slug/subdominio (consumiendo `get_salon_branding` y el bucket
-`salon-logos`)— es la **FASE 4B** del roadmap. El backend ya expone todo lo necesario; 4B
-es trabajo de front. Ver [`docs/roadmap-productizacion.md`](./docs/roadmap-productizacion.md).
+
+El **panel de gestión** (**FASE 4B-1**) ya es white-label dinámico: carga la marca del salón
+activo en runtime y se re-tinta con ella, el logo sustituye a la marca genérica en la
+cabecera, y owner/manager la configura en
+[Ajustes → Marca](#configurar-la-marca-desde-el-panel) (ver
+[Tematizado dinámico del panel](#tematizado-dinámico-del-panel)).
+
+Lo que **falta** (**FASE 4B-2**) es re-apuntar las **apps cliente/staff** —hoy cableadas a
+denueveanueve (nombre/colores/logo fijos)—, un solo código servido por subdominio, para que
+carguen la marca del salón **en runtime** por slug/subdominio (consumiendo
+`get_salon_branding` y el bucket `salon-logos`). El backend (4A) ya expone todo lo necesario;
+**4B-2 es trabajo de front**. Ver [`docs/roadmap-productizacion.md`](./docs/roadmap-productizacion.md).
 
 ---
 
