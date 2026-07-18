@@ -160,3 +160,8 @@ futura degrada el aislamiento. Comprueba sobre `salon_branding`:
   se crea *lazy* desde la UI. No se implementa aquí: la tabla admite ambos (el
   default de `primary_color` permite insertar solo con `salon_id`).
 - **Lectura pública** para el PWA anónimo: ver §3.
+- **Hosting del logo en Storage:** el fichero del logo (los bytes) vive en el bucket
+  `salon-logos` (público en lectura, escritura owner/manager por `salon_id`), creado
+  en `supabase/migrations/20260718130000_storage_salon_logos.sql` (sub-6). `logo_url`
+  guarda su URL pública. Convención de ruta y políticas: ver
+  `docs/salon-logos-storage-design.md`.
