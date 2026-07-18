@@ -68,9 +68,9 @@ const Home = () => {
           .from('appointments')
           .select('*, locations(name)')
           .eq('customer_id', customer.id)
-          .in('status', ['CONFIRMED', 'RESCHEDULED'])
-          .gte('start_at', now)
-          .order('start_at', { ascending: true })
+          .in('status', ['pending', 'confirmed'])
+          .gte('starts_at', now)
+          .order('starts_at', { ascending: true })
           .limit(1)
           .maybeSingle(),
         supabase
@@ -89,7 +89,7 @@ const Home = () => {
       }
 
       if (aptRes.data) {
-        const apt = aptRes.data as Appointment & { locations: { name: string } | null };
+        const apt = aptRes.data as unknown as Appointment & { locations: { name: string } | null };
         setNextAppointment({ ...apt, location_name: apt.locations?.name });
       } else {
         setNextAppointment(null);
@@ -180,12 +180,12 @@ const Home = () => {
           ) : nextAppointment ? (
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">
-                {new Date(nextAppointment.start_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                {new Date(nextAppointment.starts_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
               </p>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Clock size={11} />
-                  {new Date(nextAppointment.start_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(nextAppointment.starts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
                 </span>
                 {nextAppointment.location_name && (
                   <span className="flex items-center gap-1">
