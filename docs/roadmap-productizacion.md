@@ -25,7 +25,14 @@ Nunca se cruzan. Es el cimiento y ya funciona.
 3. **FASE 3 — Re-apuntar apps** cliente+staff a la BD de Salón OS. Sin migración de
    datos (los de denueveanueve eran de prueba). **Incluye identidad-por-teléfono
    (ver abajo).**
-4. **PRODUCTIZACIÓN — Planes + white-label.**
+4. **PRODUCTIZACIÓN — Planes + white-label.** En dos tramos:
+   - **FASE 4A — Backend de productización** (✅ construido, 2026-07-18): catálogo de
+     add-ons (`salon_features`), tabla de marca (`salon_branding`), bucket de logos
+     (`salon-logos`), lectura pública del branding por slug (`get_salon_branding`) y
+     feature-gating de las RPC de fidelización. Ver §"Productización" y el README.
+   - **FASE 4B — Re-apuntar las apps a branding dinámico (white-label)** (⏳ pendiente):
+     hacer que panel y apps cliente/staff carguen la marca del salón en runtime (hoy
+     cableadas a denueveanueve). El backend (4A) ya expone todo lo necesario.
 5. **ADD-ON — Recepcionista IA** (Retell + Twilio).
 
 ## Identidad-por-teléfono (dedup de clientes) — bakear en FASE 3
@@ -46,16 +53,48 @@ Va en FASE 3, donde se rehace el flujo de alta/registro de clientes.
 
 ## Productización — planes + white-label
 
+Decisión tomada: **tablas dedicadas** (no `salons.settings` jsonb) para ambas capas.
+
 - **Planes/entitlements**: qué ha contratado cada salón (base / +apps / +loyalty /
-  +recepcionista). Guardar en `salons.settings` (jsonb) o columnas dedicadas. La UI
-  muestra/oculta cada módulo según el plan. Sin contratar el add-on → el módulo ni aparece.
-- **White-label**: logo + color de marca por salón (en `salons.settings` o tabla
-  `salon_branding`). Panel y apps se pintan con la identidad del salón en runtime.
+  +recepcionista / +TPV). Se guarda en la tabla **`public.salon_features`** (una fila
+  por add-on; enum `salon_feature`). Modelo **opt-in**: sin fila = no contratado → el
+  módulo ni aparece. La UI muestra/oculta cada módulo según sus entitlements; la
+  **escritura la hace HAT3X** (`service_role`/backoffice), nunca el propio salón.
+- **White-label**: logo + colores de marca por salón en la tabla **`public.salon_branding`**
+  (1:1 con `salons`); el **fichero** del logo vive en el bucket de Storage
+  **`salon-logos`**. Panel y apps se pintan con la identidad del salón en runtime.
   Las apps cliente/staff son **UN solo código** que carga el branding del salón por
   BD (no una app por peluquería). Servidas por subdominio (`jotabarber.salonos.app`)
-  para que el PWA instalado muestre la marca del salón.
-- Estado actual: las apps están cableadas a denueveanueve (nombre/colores/logo
-  fijos). Convertirlas en white-label dinámico es trabajo real de esta fase.
+  para que el PWA instalado muestre la marca del salón. La lectura pública para el
+  **visitante anónimo** (tema por subdominio antes del login) entra por la RPC
+  **`get_salon_branding(slug)`**, nunca por la tabla (que guarda datos fiscales).
+
+### Estado de implementación (2026-07-18)
+
+**FASE 4A — Backend de productización: ✅ construido.** Ya existe todo el andamiaje de
+datos y seguridad; falta el trabajo de front (4B).
+
+| Pieza | Migración | Qué hace |
+|---|---|---|
+| Catálogo de add-ons | `20260718100000_salon_features.sql` | enum `salon_feature` + tabla `salon_features` (opt-in; RLS de solo-lectura para miembros) + gate `app.salon_has_feature()` |
+| Backfill de arranque | `20260718120000_backfill_salon_features.sql` | da de alta los add-ons **ya en uso** (denueveanueve + salones con actividad real) para no ocultar módulos vivos |
+| Feature-gating | `20260718150000_rpc_feature_gate.sql` | `register_my_customer_account` exige `client_app`+`loyalty`; `staff_award_visit` exige `staff_app`+`loyalty` (`FEATURE_NOT_ENABLED`) |
+| Marca (white-label) | `20260718110000_salon_branding.sql` | tabla `salon_branding` (logo + colores, 1:1; escritura owner/manager) |
+| Logo (bytes) | `20260718130000_storage_salon_logos.sql` | bucket `salon-logos` (lectura pública; escritura owner/manager por `salon_id`) |
+| Lectura pública | `20260718140000_rpc_get_salon_branding.sql` | RPC `get_salon_branding(slug)` — marca por slug para anónimos, sin exponer la tabla |
+| Guardián de aislamiento | `20260718160000_rls_productization_guard.sql` | aserción «última palabra»: RLS activa y sin políticas anon/public en `salons`/`salon_features`/`salon_branding` + integridad de `app.salon_has_feature` |
+
+Detalle operativo (cómo dar de alta un add-on por SQL/`service_role`, cómo leer el
+branding, convención de ruta del bucket) en el **README →
+«Productización: planes (add-ons) y white-label»**. Justificación de diseño en
+`docs/salon-branding-design.md`, `docs/salon-logos-storage-design.md` y
+`docs/salon-branding-public-read-design.md`.
+
+**FASE 4B — Re-apuntar las apps a branding dinámico: ⏳ pendiente.** Hoy panel y apps
+cliente/staff siguen cableadas a denueveanueve (nombre/colores/logo fijos).
+Convertirlas en white-label dinámico —cargar la marca por slug/subdominio **en
+runtime**, consumiendo `get_salon_branding` y el bucket `salon-logos`— es el trabajo de
+esta fase. El backend (4A) ya expone todo lo necesario; 4B es puramente front.
 
 ## Add-on Recepcionista IA (Retell + Twilio)
 

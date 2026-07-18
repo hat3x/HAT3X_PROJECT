@@ -18,6 +18,7 @@ Sistema de gestión integral para salones de belleza con soporte multi-sede.
 - [Funcionalidades](#funcionalidades)
 - [Autenticación](#autenticación)
 - [API pública de reservas](#api-pública-de-reservas)
+- [Productización: planes (add-ons) y white-label](#productización-planes-add-ons-y-white-label)
 - [Capa de pagos y facturación](#capa-de-pagos-y-facturación)
 - [Aviso de conformidad fiscal (Veri\*factu)](#aviso-de-conformidad-fiscal-veri-factu)
 - [WhatsApp / Twilio](#whatsapp--twilio)
@@ -111,6 +112,15 @@ El esquema se gestiona con migraciones SQL en `supabase/migrations/`. Se aplican
 | `20260717110000_customers_phone_e164.sql` | **Identidad (B):** `app.normalize_phone()` + columna **generada** `customers.phone_e164` + único parcial `(salon_id, phone_e164)` — dedup por teléfono |
 | `20260717120000_rls_self_customer.sql` | **Identidad (C):** RLS **SELF** (autoservicio del cliente) sobre `customers` y fidelización + candado de columnas |
 | `20260717130000_rls_self_guard.sql` | **Identidad (D):** guardián que aborta si una migración futura debilita el aislamiento del autoservicio |
+| `20260717140000_rpc_register_customer.sql` | **Autoservicio cliente:** RPC `register_my_customer_account` — enlaza/crea la ficha del usuario autenticado por teléfono (E.164) |
+| `20260717150000_rpc_staff_award_visit.sql` | **App de staff:** RPC `staff_award_visit` — acredita visita (puntos + hito + canje de cupón), idempotente por `(ref_type, ref_id)` |
+| `20260718100000_salon_features.sql` | **Productización (entitlements):** enum `salon_feature` + tabla `salon_features` (opt-in) + gate `app.salon_has_feature()` |
+| `20260718110000_salon_branding.sql` | **White-label:** tabla `salon_branding` (logo + colores, 1:1 con `salons`; escritura owner/manager) |
+| `20260718120000_backfill_salon_features.sql` | **Backfill entitlements:** alta de los add-ons ya en uso (denueveanueve + salones con actividad real) |
+| `20260718130000_storage_salon_logos.sql` | **Storage:** bucket `salon-logos` (lectura pública; escritura owner/manager por `salon_id`) |
+| `20260718140000_rpc_get_salon_branding.sql` | **Branding público:** RPC `get_salon_branding(slug)` — marca por slug para anónimos, sin exponer la tabla `salons` |
+| `20260718150000_rpc_feature_gate.sql` | **Feature-gating:** `register_my_customer_account`/`staff_award_visit` exigen sus add-ons (`FEATURE_NOT_ENABLED`) |
+| `20260718160000_rls_productization_guard.sql` | **Guardián de productización:** aserción «última palabra» — RLS activa y sin políticas anon/public en `salons`/`salon_features`/`salon_branding` + integridad del gate `app.salon_has_feature` |
 
 ### Regenerar tipos TypeScript
 
@@ -278,6 +288,148 @@ por pantalla— está en **[DESIGN.md](./DESIGN.md)**.
 | `POST` | `/api/public/booking/[slug]` | Crea una reserva (estado `pending`) |
 
 La API valida con Zod y usa el cliente admin de Supabase con validaciones de dominio explícitas (salón, servicio y profesional deben pertenecer al mismo tenant).
+
+---
+
+## Productización: planes (add-ons) y white-label
+
+Salón OS es multi-tenant: un mismo backend sirve a muchos salones. La **productización**
+añade dos capas por salón —**qué módulos ha contratado** (entitlements/add-ons) y **con
+qué marca se pinta** (white-label)— como **tablas dedicadas** con RLS, no como flags
+sueltos en `salons.settings`. El backend de esta capa (**FASE 4A**) ya está construido; re-apuntar
+las apps a la marca dinámica (**FASE 4B**) queda pendiente
+(ver [Estado (FASE 4B)](#estado-fase-4b-re-apuntar-las-apps-a-white-label-dinámico)).
+
+> Diseño y justificación completa: [`docs/roadmap-productizacion.md`](./docs/roadmap-productizacion.md),
+> [`docs/salon-branding-design.md`](./docs/salon-branding-design.md),
+> [`docs/salon-logos-storage-design.md`](./docs/salon-logos-storage-design.md) y
+> [`docs/salon-branding-public-read-design.md`](./docs/salon-branding-public-read-design.md).
+
+### Catálogo de add-ons (features)
+
+Los add-ons contratables son un enum tipado, `public.salon_feature`:
+
+| Feature | Módulo |
+|---|---|
+| `loyalty` | Fidelización nativa (puntos, cupones, recompensas) |
+| `client_app` | PWA de cliente (reservas, QR, cartilla de puntos) |
+| `staff_app` | PWA de personal (agenda, check-in, acreditar visita) |
+| `ai_receptionist` | Recepcionista IA (Retell + Twilio + n8n) |
+| `pos` | TPV / punto de venta (tickets, pagos, Veri\*factu) |
+
+Cada salón tiene 0..N filas en `public.salon_features` (una por add-on). Modelo
+**opt-in / deny-by-default de negocio**: un add-on está activo **solo** si existe su fila
+**y** `enabled = true`. La **ausencia de fila = no contratado** → el módulo ni aparece.
+Suspender sin perder histórico = `enabled = false` (p. ej. impago); dar de baja = borrar
+la fila. Ambos dejan el gate en `false`.
+
+- **Lectura (frontend):** RLS deja a los **miembros** del salón leer SUS entitlements —
+  el front gatea la UI con `select feature from salon_features where enabled;`.
+- **Gate de servidor/policy:** `app.salon_has_feature(salon_id, feature) → boolean`
+  (SECURITY DEFINER), reutilizable dentro de otras políticas RLS y RPC. Vive en el
+  esquema `app` (no expuesto por PostgREST) → no es un endpoint del cliente.
+- **Escritura:** ninguna política para `authenticated` — el salón **no** puede
+  auto-concederse add-ons. La provisión la hace HAT3X con `service_role` (ver abajo).
+
+### Dar de alta un add-on a un salón (SQL / `service_role`)
+
+Los entitlements los fija **HAT3X** al vender/activar un plan, con la `service_role`
+(bypasa RLS) o desde el backoffice. Upsert idempotente (SQL Editor de Supabase o `psql`
+con la service key):
+
+```sql
+insert into public.salon_features (salon_id, feature, enabled, notes)
+values ('<SALON_UUID>', 'loyalty', true, 'plan Pro')
+on conflict (salon_id, feature) do update
+  set enabled = excluded.enabled,
+      notes   = excluded.notes;
+```
+
+Activar la app de cliente **y** la de staff (ambas requieren `loyalty`, ver
+[feature-gating](#feature-gating-de-las-rpc-de-fidelización)):
+
+```sql
+insert into public.salon_features (salon_id, feature, enabled)
+values ('<SALON_UUID>', 'loyalty',    true),
+       ('<SALON_UUID>', 'client_app', true),
+       ('<SALON_UUID>', 'staff_app',  true)
+on conflict (salon_id, feature) do update set enabled = excluded.enabled;
+```
+
+> ⚠️ Ejecutar con la **`service_role`**, **nunca** con la anon/authenticated key: RLS no
+> concede escritura de entitlements a los usuarios. El backfill de arranque
+> (`20260718120000`) ya dio de alta los add-ons **ya en uso** (denueveanueve + salones
+> con actividad real), así que no desaparece ningún módulo vivo al activar el opt-in.
+
+### Feature-gating de las RPC de fidelización
+
+Dos RPC de escritura ya están cableadas al catálogo y **rechazan** con
+`FEATURE_NOT_ENABLED` (SQLSTATE `P0001`) si falta el add-on:
+
+| RPC | Add-ons exigidos |
+|---|---|
+| `public.register_my_customer_account` (autoservicio, app de cliente) | `client_app` **y** `loyalty` |
+| `public.staff_award_visit` (acreditar visita, app de staff) | `staff_app` **y** `loyalty` |
+
+La capa cliente distingue este error por el **mensaje** (`FEATURE_NOT_ENABLED`), no por el
+código: es un error de negocio esperado (add-on no contratado), no un bug.
+
+### Branding público por slug — `get_salon_branding`
+
+El PWA de reservas y las apps (un solo código, servido por subdominio) necesitan pintar
+la marca del salón para **visitantes anónimos** (antes del login). La lectura pública entra
+por **una RPC `SECURITY DEFINER`**, no por la tabla: `salons` guarda datos fiscales
+sensibles en la misma fila (`tax_id`, `legal_name`, `fiscal_address`, `email`, `phone`…)
+que **nunca** se exponen a `anon`.
+
+```ts
+// Frontend (anónimo o logueado). Única RPC del esquema abierta a anon.
+const { data } = await supabase.rpc('get_salon_branding', { p_slug: slug })
+// data: [] si el slug no existe o el salón está inactivo (sin error, para no ser un
+//       oráculo de enumeración); si existe → una fila. Tomar data?.[0].
+// fila: { name, slug, logo_url, primary_color, secondary_color }
+```
+
+- Devuelve **solo 5 columnas de marca** (`name`, `slug`, `logo_url`, `primary_color`,
+  `secondary_color`); nunca datos fiscales/PII. El tipo de retorno cierra la superficie.
+- Un salón **activo sin branding** aún se pinta: `logo_url = null` y `primary_color` cae
+  al default `#111827` (LEFT JOIN + coalesce).
+- Es `STABLE` con un único argumento → PostgREST admite también `GET` (cacheable en CDN):
+  `GET /rest/v1/rpc/get_salon_branding?p_slug=mi-salon`.
+
+### Bucket de Storage `salon-logos` (convención de ruta)
+
+El **fichero** del logo (los bytes) vive en el bucket público `salon-logos`;
+`salon_branding.logo_url` guarda su URL. Convención de clave de objeto:
+
+```
+salon-logos/{salon_id}/logo.<ext>
+            └───┬────┘
+      primer segmento = uuid del salón (clave del aislamiento)
+```
+
+- **El primer segmento SIEMPRE es el `salon_id`.** La política de escritura autoriza con
+  `app.has_salon_role(salon_id_de_la_ruta, {owner,manager})`: un manager solo escribe bajo
+  la carpeta de SU salón; no puede subir a `{otro_salon}/…`.
+- **Nombre canónico recomendado:** `logo.png` (un logo por salón; upsert al cambiarlo). La
+  autorización depende solo del primer segmento → valen nombres versionados para
+  cache-busting (`logo-1737200000.webp`) sin tocar políticas.
+- **Lectura pública** (`public = true`): los bytes se sirven sin autenticar, como un
+  favicon. **Escritura** solo owner/manager; `anon` jamás escribe.
+- **Límites:** ≤ 2 MiB; MIME `image/png|jpeg|webp|svg+xml|avif`.
+- **URL pública del logo:**
+  `{SUPABASE_URL}/storage/v1/object/public/salon-logos/{salon_id}/logo.png`.
+
+### Estado (FASE 4B): re-apuntar las apps a white-label dinámico
+
+El **backend** de productización (**FASE 4A**) está construido: entitlements, marca, bucket
+de logos, lectura pública, feature-gating y el guardián de aislamiento (migraciones
+`20260718100000`–`20260718160000`).
+Lo que **falta** —re-apuntar el panel y las apps cliente/staff, hoy cableadas a
+denueveanueve (nombre/colores/logo fijos), para que carguen la marca del salón **en
+runtime** por slug/subdominio (consumiendo `get_salon_branding` y el bucket
+`salon-logos`)— es la **FASE 4B** del roadmap. El backend ya expone todo lo necesario; 4B
+es trabajo de front. Ver [`docs/roadmap-productizacion.md`](./docs/roadmap-productizacion.md).
 
 ---
 
