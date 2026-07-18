@@ -271,6 +271,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'catalog.subtitle': 'Descubre todo lo que podemos hacer por ti',
     'catalog.noServices': 'No hay servicios en esta categoría',
     'catalog.bookNow': 'Reservar cita',
+    // Coming soon (funciones aplazadas a la sub-fase 3B-2)
+    'comingSoon.badge': 'Próximamente',
+    'comingSoon.default': 'Esta función estará disponible muy pronto.',
+    'comingSoon.book': 'Las reservas online estarán disponibles muy pronto. Mientras tanto, puedes reservar tu cita por teléfono o WhatsApp.',
+    'comingSoon.appointments': 'La gestión de tus citas estará disponible muy pronto. Estamos poniéndolo a punto para ti.',
+    'comingSoon.services': 'El catálogo de servicios estará disponible muy pronto. Estamos actualizando toda la información para ti.',
     // General
     'general.loading': 'Cargando...',
     'general.error': 'Ha ocurrido un error',
@@ -553,6 +559,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'catalog.subtitle': 'Discover everything we can do for you',
     'catalog.noServices': 'No services in this category',
     'catalog.bookNow': 'Book appointment',
+    // Coming soon (features deferred to sub-fase 3B-2)
+    'comingSoon.badge': 'Coming soon',
+    'comingSoon.default': 'This feature will be available very soon.',
+    'comingSoon.book': 'Online booking will be available very soon. In the meantime, you can book your appointment by phone or WhatsApp.',
+    'comingSoon.appointments': 'Appointment management will be available very soon. We\'re getting it ready for you.',
+    'comingSoon.services': 'The service catalog will be available very soon. We\'re updating all the information for you.',
     // General
     'general.loading': 'Loading...',
     'general.error': 'An error occurred',
