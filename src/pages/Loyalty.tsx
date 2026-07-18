@@ -5,7 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useI18n } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
-import { SALON_ID } from '@/lib/salon';
+import { useSalon } from '@/lib/salon-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import BottomNav from '@/components/BottomNav';
 import type { Tables } from '@/integrations/supabase/types';
@@ -34,6 +34,8 @@ const Loyalty = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
+  // salon_id derivado del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId } = useSalon();
 
   const [tab, setTab] = useState<'overview' | 'movements' | 'rewards'>('overview');
   const [account, setAccount] = useState<LoyaltyAccount | null>(null);
@@ -56,7 +58,7 @@ const Loyalty = () => {
       .from('customers')
       .select('id, qr_token')
       .eq('user_id', user.id)
-      .eq('salon_id', SALON_ID)
+      .eq('salon_id', salonId)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
@@ -64,7 +66,7 @@ const Loyalty = () => {
           setQrToken(data.qr_token);
         }
       });
-  }, [user]);
+  }, [user, salonId]);
 
   // Realtime: listen for loyalty_accounts and appointments changes to auto-refresh
   useEffect(() => {
@@ -112,20 +114,20 @@ const Loyalty = () => {
           .from('loyalty_accounts')
           .select('points_balance, visits_total, last_visit_at')
           .eq('customer_id', customerId)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .maybeSingle(),
         supabase
           .from('points_movements')
           .select('*')
           .eq('customer_id', customerId)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .order('created_at', { ascending: false })
           .limit(50),
         supabase
           .from('rewards')
           .select('*')
           .eq('customer_id', customerId)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .eq('status', 'AVAILABLE')
           .gt('expires_at', nowIso)
           .order('created_at', { ascending: false }),
@@ -133,7 +135,7 @@ const Loyalty = () => {
           .from('welcome_coupons')
           .select('*')
           .eq('customer_id', customerId)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .eq('status', 'ACTIVE')
           .gt('expires_at', nowIso)
           .maybeSingle(),
@@ -147,7 +149,7 @@ const Loyalty = () => {
       setLoading(false);
     };
     load();
-  }, [customerId, refreshKey]);
+  }, [customerId, refreshKey, salonId]);
 
   const REWARD_STATUS_COLOR: Record<string, string> = {
     AVAILABLE: 'text-success',

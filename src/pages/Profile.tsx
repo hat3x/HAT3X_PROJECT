@@ -4,7 +4,7 @@ import { User, Bell, LogOut, Globe, ChevronRight, Shield, Key } from 'lucide-rea
 import { useI18n } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
-import { SALON_ID } from '@/lib/salon';
+import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -20,6 +20,8 @@ const Profile = () => {
   const navigate = useNavigate();
   const { t, locale, setLocale } = useI18n();
   const { user, signOut } = useAuth();
+  // salon_id derivado del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId } = useSalon();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,7 +42,7 @@ const Profile = () => {
         .from('customers')
         .select('*')
         .eq('user_id', user.id)
-        .eq('salon_id', SALON_ID)
+        .eq('salon_id', salonId)
         .maybeSingle();
 
       if (c) {
@@ -53,7 +55,7 @@ const Profile = () => {
       setLoading(false);
     };
     load();
-  }, [user]);
+  }, [user, salonId]);
 
   const handleSave = async () => {
     if (!customer) return;
@@ -68,7 +70,7 @@ const Profile = () => {
         updated_at: new Date().toISOString(),
       })
       .eq('id', customer.id)
-      .eq('salon_id', SALON_ID);
+      .eq('salon_id', salonId);
 
     setSaving(false);
     if (!error) {

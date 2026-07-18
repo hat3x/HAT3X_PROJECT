@@ -1559,6 +1559,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_salon_branding: {
+        Args: {
+          p_slug: string
+        }
+        Returns: {
+          id: string
+          name: string
+          slug: string
+          logo_url: string | null
+          primary_color: string
+          secondary_color: string | null
+        }[]
+      }
       register_my_customer_account: {
         Args: {
           p_email?: string

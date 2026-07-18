@@ -300,6 +300,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'pin.description': 'Muestra este código al personal',
     'pin.showToStaff': 'El personal verificará tu visita con este PIN',
     'pin.active': 'PIN activo',
+    // Salón (resolución en runtime)
+    'salon.loading': 'Cargando salón…',
+    'salon.error.notFoundTitle': 'Salón no encontrado',
+    'salon.error.notFoundBody': 'No hemos podido cargar este salón. Es posible que el enlace no sea correcto o que el salón ya no esté disponible.',
+    'salon.error.connTitle': 'No se pudo conectar',
+    'salon.error.connBody': 'Ha ocurrido un problema al cargar el salón. Revisa tu conexión e inténtalo de nuevo.',
   },
   en: {
     'nav.home': 'Home',
@@ -594,6 +600,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'pin.description': 'Show this code to staff',
     'pin.showToStaff': 'Staff will verify your visit with this PIN',
     'pin.active': 'PIN active',
+    // Salon (runtime resolution)
+    'salon.loading': 'Loading salon…',
+    'salon.error.notFoundTitle': 'Salon not found',
+    'salon.error.notFoundBody': "We couldn't load this salon. The link may be incorrect or the salon may no longer be available.",
+    'salon.error.connTitle': "Couldn't connect",
+    'salon.error.connBody': 'Something went wrong loading the salon. Check your connection and try again.',
   },
 };
 

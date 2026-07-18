@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/lib/i18n';
 import { useAuth, mapAuthError, mapRegisterError } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
-import { SALON_ID } from '@/lib/salon';
+import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,8 @@ const Register = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { signUp } = useAuth();
+  // salon_id derivado del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId } = useSalon();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
@@ -87,7 +89,7 @@ const Register = () => {
     //   confiar en el enlace, para impedir que alguien reclame la ficha de otra
     //   persona registrándose con un teléfono ajeno.
     const { data: rpcData, error: rpcError } = await supabase.rpc('register_my_customer_account', {
-      p_salon_id: SALON_ID,
+      p_salon_id: salonId,
       p_phone: phone,
       p_full_name: fullName,
       p_email: form.email,

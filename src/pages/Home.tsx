@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
-import { SALON_ID } from '@/lib/salon';
+import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
 import { CalendarPlus, Star, Crown, Tag, ChevronRight, Gift, Clock, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -27,6 +27,8 @@ const Home = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
+  // salon_id derivado del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId } = useSalon();
   const [loading, setLoading] = useState(true);
   const [points, setPoints] = useState(0);
   const [visits, setVisits] = useState(0);
@@ -49,7 +51,7 @@ const Home = () => {
         .from('customers')
         .select('id, full_name')
         .eq('user_id', user.id)
-        .eq('salon_id', SALON_ID)
+        .eq('salon_id', salonId)
         .maybeSingle();
       if (!customer) { setLoading(false); return; }
 
@@ -62,7 +64,7 @@ const Home = () => {
           .from('loyalty_accounts')
           .select('points_balance, visits_total')
           .eq('customer_id', customer.id)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .maybeSingle(),
         supabase
           .from('appointments')
@@ -77,7 +79,7 @@ const Home = () => {
           .from('welcome_coupons')
           .select('status, expires_at')
           .eq('customer_id', customer.id)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .eq('status', 'ACTIVE')
           .gt('expires_at', now)
           .maybeSingle(),
@@ -101,7 +103,7 @@ const Home = () => {
       setLoading(false);
     };
     load();
-  }, [user]);
+  }, [user, salonId]);
 
   return (
     <div className="min-h-screen bg-background pb-24">
