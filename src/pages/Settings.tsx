@@ -1,10 +1,12 @@
 import { useAuth } from '@/lib/auth';
+import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, User, Scissors } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Settings() {
   const { user, roles, signOut } = useAuth();
+  const { name: salonName } = useSalon();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -48,7 +50,7 @@ export default function Settings() {
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Shield className="h-4 w-4" />
-          <span>App Staff · denueveanueve</span>
+          <span>App Staff · {salonName}</span>
         </div>
 
         <Button

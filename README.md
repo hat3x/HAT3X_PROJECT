@@ -1,17 +1,20 @@
-# denueveanueve — App de Staff
+# Salón OS — App de Staff
 
-App interna del personal del salón **denueveanueve**. Es el panel que usa el
-equipo para **escanear el QR del cliente y acreditarle la visita** (fidelización:
-visitas, puntos, recompensas y cupón de bienvenida).
+Panel interno del personal del salón. Es la app que usa el equipo para **escanear
+el QR del cliente y acreditarle la visita** (fidelización: visitas, puntos,
+recompensas y cupón de bienvenida).
 
 Está conectada a la base de datos de **Salón OS**, la plataforma multi-tenant de
 HAT3X. Todos los datos (clientes, fidelización, miembros del salón, RPCs) viven
-en ese Supabase; esta app es un cliente más de ese backend, fijado al salón
-`denueveanueve` mediante variables de entorno.
+en ese Supabase; esta app es un cliente más de ese backend.
 
-> **Salón OS es multi-tenant.** Este despliegue de la app de staff corresponde a
-> **un único salón**, identificado por `VITE_SALON_ID` / `VITE_SALON_SLUG`. Todas
-> las consultas y la RPC de acreditación se filtran por ese `salon_id`.
+> **Salón OS es multi-tenant y la app NO está cableada a ningún salón.** El salón
+> concreto (id, nombre, logo y colores) se **resuelve en runtime** por subdominio /
+> `?salon=` / fallback (ver más abajo). Nombre, logo, colores y el título de la PWA
+> salen del salón resuelto; ya **no** hay valores fijos de un salón en el código.
+> `VITE_SALON_ID` quedó **obsoleto** como fuente de verdad y `VITE_SALON_SLUG` es
+> solo el **fallback** del slug para la resolución en runtime. Este despliegue usa,
+> por defecto, el slug `denueveanueve`.
 
 ---
 
@@ -44,8 +47,8 @@ cp .env.example .env
 | `VITE_SUPABASE_URL` | URL del proyecto Supabase de Salón OS. |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | **Anon key** (`role: anon`) del proyecto. Es pública y segura en el cliente. |
 | `VITE_SUPABASE_PROJECT_ID` | ID del proyecto Supabase de Salón OS. |
-| `VITE_SALON_SLUG` | Slug de reserva por defecto. Es el **fallback** de la resolución en runtime (ver más abajo). |
-| `VITE_SALON_ID` | UUID del salón. **Obsoleto como fuente de verdad**: el `salon_id` se deriva del salón resuelto en runtime. Se conserva como fallback documental. |
+| `VITE_SALON_SLUG` | Slug de reserva por defecto. Es el **fallback** (última prioridad) de la resolución del salón en runtime (ver más abajo). |
+| `VITE_SALON_ID` | **Obsoleto.** Ya **no lo lee ningún código** de la app: el `salon_id` se deriva del salón resuelto en runtime. Se conserva únicamente en `.env` como apunte documental del despliegue mono-salón; puede omitirse. |
 
 La `ANON KEY` puede copiarse desde el panel de Supabase (**Project → API**) o
 desde `salon-os/.env.local` (`NEXT_PUBLIC_SUPABASE_ANON_KEY`).
@@ -121,9 +124,10 @@ El acceso es en **dos comprobaciones**:
    son genéricos («ID o contraseña incorrectos») para evitar la enumeración de
    usuarios.
 2. **Pertenencia al salón.** Tras autenticar, se consulta la tabla
-   `salon_members` filtrando por `salon_id = VITE_SALON_ID` y `user_id`. Si el
-   usuario **no** es miembro de este salón, se cierra la sesión y se muestra «Sin
-   acceso a este salón» (una sesión válida en otro salón no da acceso aquí).
+   `salon_members` filtrando por el `salon_id` **del salón resuelto en runtime**
+   (`useSalon()`, no `VITE_SALON_ID`) y `user_id`. Si el usuario **no** es miembro
+   de este salón, se cierra la sesión y se muestra «Sin acceso a este salón» (una
+   sesión válida en otro salón no da acceso aquí).
 
 El rol proviene del enum `member_role` de Salón OS:
 
@@ -162,8 +166,10 @@ Login ─▶ Dashboard ─▶ Escanear QR ─▶ Verificar cliente ─▶ Selecc
 La acreditación es una única llamada a la RPC (en `ConfirmVisit.tsx`):
 
 ```ts
+const salonId = useSalonId(); // salon_id del salón resuelto en runtime (no VITE_SALON_ID)
+
 await supabase.rpc('staff_award_visit', {
-  p_salon_id: SALON_ID,
+  p_salon_id: salonId,
   // identificación del cliente: por ID si se conoce, si no por el token del QR
   ...(customerId ? { p_customer_id: customerId } : { p_qr_token: qrToken }),
   p_line_items: lines,          // [{ price_cents, label }, ...] (JSON)
@@ -176,8 +182,14 @@ await supabase.rpc('staff_award_visit', {
 - **Idempotencia:** `p_ref_id` es un `crypto.randomUUID()` generado una sola vez
   por visita y reutilizado en cada reintento, de modo que la RPC no acredite la
   visita dos veces si un intento falla a medias.
-- **Errores de negocio** (`FORBIDDEN`, `CUSTOMER_NOT_FOUND`, `NO_LINES`,
-  `UNKNOWN`) se clasifican y traducen a mensajes en español para el personal.
+- **Errores de negocio** (`FEATURE_NOT_ENABLED`, `FORBIDDEN`, `CUSTOMER_NOT_FOUND`,
+  `NO_LINES`, `UNKNOWN`) se clasifican y traducen a mensajes en español para el
+  personal en `src/lib/award-visit-errors.ts` (módulo puro, testeado en
+  `award-visit-errors.test.ts`).
+- **Gating de add-ons (`FEATURE_NOT_ENABLED`).** Si el salón **no tiene contratado**
+  el add-on de fidelización, la RPC responde con `FEATURE_NOT_ENABLED`. El gating vive
+  **en el servidor** (Salón OS); la app **no lo sortea**, solo lo traduce a un mensaje
+  claro: **«Esta peluquería no tiene contratado este servicio.»**
 
 ---
 
@@ -185,13 +197,23 @@ await supabase.rpc('staff_award_visit', {
 
 ```
 src/
-├─ integrations/supabase/client.ts  # Cliente Supabase + SALON_ID / SALON_SLUG
+├─ integrations/supabase/client.ts  # Cliente Supabase (sin salon_id cableado)
 ├─ types/database.ts                # Tipos generados del esquema de Salón OS
+├─ lib/salon.ts                     # Resolución pura del slug + mapeo de marca
+├─ lib/salon-branding.ts            # RPC get_salon_branding (I/O)
+├─ lib/salon-context.tsx            # SalonProvider: resuelve, tematiza y marca la PWA
+├─ lib/theme.ts                     # hex de marca → design tokens de Tailwind
+├─ lib/pwa-manifest.ts              # manifest PWA por-tenant en runtime
+├─ lib/award-visit-errors.ts       # errores de staff_award_visit → mensaje (gating)
 ├─ lib/auth.tsx                     # AuthProvider: login por ID + salon_members
 ├─ pages/                           # Rutas (Login, Dashboard, Scan, VerifyCustomer,
 │                                   #   SelectService, ConfirmVisit, VisitResult, …)
 ├─ components/staff/                # Componentes de dominio (QRScannerCard, ComingSoon, …)
 └─ components/ui/                   # shadcn/ui (Radix + Tailwind)
+public/
+├─ manifest.webmanifest            # manifest PWA NEUTRO (fallback pre-JS, instalable)
+├─ icon.svg                        # icono maskable neutro por defecto
+└─ sw.js                           # service worker mínimo (app-shell offline)
 ```
 
 Rutas definidas en `src/App.tsx`.
@@ -217,8 +239,38 @@ Por eso, tras autenticarse, **todo el personal aterriza en `/dashboard`**
 
 ---
 
+## PWA (manifest, iconos y marca por salón)
+
+La app es instalable como PWA y su marca es **por-tenant**, resuelta en runtime:
+
+- **Manifest estático neutro** — `public/manifest.webmanifest` («Salón OS · Staff»,
+  colores neutros, `public/icon.svg` maskable). Es válido e instalable **por sí mismo**,
+  incluso antes de que corra el JS, sin cablearse a ningún salón.
+- **Marca en runtime** — al resolver el salón, `src/lib/pwa-manifest.ts`
+  (`applySalonPwaBranding`) genera un manifest por-tenant (nombre, `theme_color` = color
+  del salón, iconos = logo del salón con el neutro como respaldo), lo enchufa al
+  `<link rel="manifest">` como `Blob`, y actualiza `theme-color` y `apple-touch-icon`.
+  Los **colores** de la UI también se derivan del salón (`src/lib/theme.ts`).
+- **Service worker** — `public/sw.js` (registrado solo en producción desde `main.tsx`):
+  app-shell offline, network-first en navegaciones y **same-origin únicamente** (nunca
+  intercepta Supabase). Si el navegador no lo soporta, la app funciona igual.
+
+> **Limitación consciente.** Como el build es único y multi-tenant, el manifest del
+> **primer render** (pre-JS) y ciertos flujos de **iOS** no reciben la marca por-tenant:
+> iOS captura icono/nombre de «Añadir a pantalla de inicio» del DOM en ese momento y no
+> los re-lee tras un `Blob` de manifest. Por eso el manifest estático es **neutro** (no
+> el de un salón). Para una instalación 100 % por-salón en **todas** las plataformas
+> haría falta **servir el manifest por subdominio** (endpoint por-tenant) o **builds
+> por-tenant**. La rama actual (manifest neutro + marca runtime best-effort) no rompe la
+> instalabilidad existente y cubre theme-color e iconos donde el navegador lo permite.
+
+---
+
 ## Despliegue
 
 Al ser una app Vite estática, `npm run build` genera `dist/`, que puede servirse
 desde cualquier hosting estático (Vercel, Netlify, etc.). Recuerda configurar las
 variables `VITE_*` en el entorno del proveedor antes de construir.
+
+El despliegue por-tenant se hace **por subdominio** (`<slug>.salonos.app`), que es lo
+que la app usa para resolver el salón en runtime.

@@ -24,16 +24,12 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
   },
 });
 
-// Identidad del salón (Salón OS es multi-tenant): este despliegue = "denueveanueve".
-//
-// NOTA: el salon_id EFECTIVO de la app ya NO sale de aquí. Se resuelve en runtime por
-// subdominio > ?salon= > VITE_SALON_SLUG y se obtiene vía la RPC get_salon_branding
-// (ver src/lib/salon.ts + src/lib/salon-context.tsx). Se derivan del salón resuelto con
-// `useSalon()` / `useSalonId()`. Estas constantes se conservan como fallback documental
-// del entorno (VITE_SALON_ID/VITE_SALON_SLUG); no las importes en pantallas nuevas.
-export const SALON_ID =
-  import.meta.env.VITE_SALON_ID ?? 'abeef620-4fe3-4b29-a17b-6c51a8284f8f';
-export const SALON_SLUG = import.meta.env.VITE_SALON_SLUG ?? 'denueveanueve';
+// Identidad del salón (Salón OS es multi-tenant). El salon_id EFECTIVO de la app se
+// resuelve EN RUNTIME (subdominio > ?salon= > VITE_SALON_SLUG) y se obtiene vía la RPC
+// pública get_salon_branding: se deriva del salón resuelto con `useSalon()` / `useSalonId()`
+// (ver src/lib/salon.ts + src/lib/salon-context.tsx). Ya NO existe un SALON_ID cableado:
+// VITE_SALON_ID quedó OBSOLETO como fuente de verdad y VITE_SALON_SLUG es solo el fallback
+// del slug para la resolución en runtime (no se lee desde aquí).
 
 export const SUPABASE_PROJECT_ID =
   import.meta.env.VITE_SUPABASE_PROJECT_ID ?? 'jztoyekixcziaicrnlce';

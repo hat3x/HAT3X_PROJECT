@@ -6,7 +6,9 @@
 
 @layer base {
   :root {
-    /* denueveanueve brand: gold on dark, luxury salon aesthetic */
+    /* Tema por defecto (fallback): dorado sobre oscuro, estética de salón premium. NO es
+       la marca de ningún salón concreto: al resolver el salón en runtime, deriveSalonTheme
+       (src/lib/theme.ts) sobrescribe los tokens de marca con su color real. */
     --background: 30 10% 6%;
     --foreground: 40 20% 90%;
 

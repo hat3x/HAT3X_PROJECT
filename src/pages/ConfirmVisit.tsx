@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useSalonId } from '@/lib/salon-context';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/types/database';
+import { AWARD_ERROR_MESSAGES, messageForAwardError } from '@/lib/award-visit-errors';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -26,24 +27,8 @@ interface ConfirmVisitState {
   [key: string]: unknown;
 }
 
-// Códigos de error de negocio que devuelve/lanza la RPC staff_award_visit.
-type AwardErrorCode = 'FORBIDDEN' | 'CUSTOMER_NOT_FOUND' | 'NO_LINES' | 'UNKNOWN';
-
-const ERROR_MESSAGES: Record<AwardErrorCode, string> = {
-  FORBIDDEN: 'No tienes permiso para acreditar visitas en este salón.',
-  CUSTOMER_NOT_FOUND: 'No se ha encontrado el cliente. Vuelve a escanear su QR e inténtalo de nuevo.',
-  NO_LINES: 'Añade al menos un servicio antes de acreditar la visita.',
-  UNKNOWN: 'No se ha podido acreditar la visita. Vuelve a intentarlo.',
-};
-
-// Clasifica el error mirando el texto (mensaje/código/detalle) que devuelve Supabase.
-function classifyAwardError(text: string): AwardErrorCode {
-  const t = (text ?? '').toUpperCase();
-  if (t.includes('FORBIDDEN')) return 'FORBIDDEN';
-  if (t.includes('CUSTOMER_NOT_FOUND')) return 'CUSTOMER_NOT_FOUND';
-  if (t.includes('NO_LINES')) return 'NO_LINES';
-  return 'UNKNOWN';
-}
+// La traducción de los códigos de negocio de `staff_award_visit` (incluido el gating
+// FEATURE_NOT_ENABLED del add-on) vive en `@/lib/award-visit-errors` (puro y testeado).
 
 export default function ConfirmVisit() {
   const location = useLocation();
@@ -95,11 +80,11 @@ export default function ConfirmVisit() {
 
   const handleConfirm = async () => {
     if (lines.length === 0) {
-      setError(ERROR_MESSAGES.NO_LINES);
+      setError(AWARD_ERROR_MESSAGES.NO_LINES);
       return;
     }
     if (!customerId && !qrToken) {
-      setError(ERROR_MESSAGES.CUSTOMER_NOT_FOUND);
+      setError(AWARD_ERROR_MESSAGES.CUSTOMER_NOT_FOUND);
       return;
     }
 
@@ -124,7 +109,7 @@ export default function ConfirmVisit() {
         const combined = [rpcError.message, rpcError.details, rpcError.hint, rpcError.code]
           .filter(Boolean)
           .join(' ');
-        setError(ERROR_MESSAGES[classifyAwardError(combined)]);
+        setError(messageForAwardError(combined));
         setSubmitting(false);
         return;
       }
@@ -133,7 +118,7 @@ export default function ConfirmVisit() {
       const result = (data ?? {}) as Record<string, unknown>;
       if (result.ok === false || typeof result.error === 'string') {
         const combined = [result.error, result.code, result.message].filter(Boolean).join(' ');
-        setError(ERROR_MESSAGES[classifyAwardError(String(combined))]);
+        setError(messageForAwardError(String(combined)));
         setSubmitting(false);
         return;
       }
@@ -156,7 +141,7 @@ export default function ConfirmVisit() {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
-      setError(ERROR_MESSAGES[classifyAwardError(message)]);
+      setError(messageForAwardError(message));
       setSubmitting(false);
     }
   };

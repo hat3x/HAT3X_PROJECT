@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
+import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-import logo from '@/assets/logo.png';
 
 export default function Login() {
   const [loginId, setLoginId] = useState('');
@@ -14,6 +14,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { signIn } = useAuth();
+  // Marca del salón resuelto en runtime: logo/nombre reales (nunca cableados a un salón).
+  const { name: salonName, logoUrl } = useSalon();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,7 +44,13 @@ export default function Login() {
           Staff Panel
         </p>
 
-        <img src={logo} alt="denueveanueve" className="mb-8 h-8 w-auto" />
+        {logoUrl ? (
+          <img src={logoUrl} alt={salonName} className="mb-8 h-10 w-auto max-w-[220px] object-contain" />
+        ) : (
+          <h1 className="mb-8 font-display text-2xl font-semibold tracking-wide text-foreground">
+            {salonName}
+          </h1>
+        )}
 
         <p className="mb-12 text-sm tracking-widest uppercase text-muted-foreground">
           Acceso interno del equipo

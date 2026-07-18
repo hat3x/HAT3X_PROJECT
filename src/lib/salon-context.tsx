@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'r
 import { useQuery } from '@tanstack/react-query';
 import { resolveSalonSlugFromLocation, type SalonBranding } from '@/lib/salon';
 import { fetchSalonBranding } from '@/lib/salon-branding';
+import { deriveSalonTheme } from '@/lib/theme';
+import { applySalonPwaBranding } from '@/lib/pwa-manifest';
 import { SalonSplash } from '@/components/staff/SalonSplash';
 import { SalonUnavailable } from '@/components/staff/SalonUnavailable';
 
@@ -37,17 +39,39 @@ export function SalonProvider({ children }: { children: ReactNode }) {
     refetchOnWindowFocus: false,
   });
 
-  // Aplica la marca del salón resuelto (título + variables CSS de color). Efecto
-  // idempotente y guardado: solo actúa cuando hay datos. Restaura el título al salir.
+  // Aplica la marca del salón resuelto: título, tokens de color y marca PWA. Efecto
+  // idempotente y guardado (solo actúa con datos) y REVERSIBLE al desmontar.
   useEffect(() => {
     if (!data) return;
+    const root = document.documentElement;
+
+    // Título del documento.
     const previousTitle = document.title;
     document.title = `${data.name} · Staff`;
-    const root = document.documentElement;
-    root.style.setProperty('--salon-primary', data.primaryColor);
-    if (data.secondaryColor) root.style.setProperty('--salon-secondary', data.secondaryColor);
+
+    // Color de marca → design tokens de Tailwind (primary/accent/gold/…). Si el hex no es
+    // válido, deriveSalonTheme devuelve null y se conserva el tema por defecto de index.css.
+    const themeVars = deriveSalonTheme(data.primaryColor);
+    if (themeVars) {
+      for (const [token, value] of Object.entries(themeVars)) {
+        root.style.setProperty(token, value);
+      }
+    }
+
+    // Marca PWA en runtime (manifest por-tenant + theme-color + apple-touch-icon).
+    const restorePwa = applySalonPwaBranding({
+      name: data.name,
+      primaryColor: data.primaryColor,
+      logoUrl: data.logoUrl,
+    });
+
     return () => {
       document.title = previousTitle;
+      if (themeVars) {
+        // Quita los overrides inline → vuelve al tema por defecto de index.css.
+        for (const token of Object.keys(themeVars)) root.style.removeProperty(token);
+      }
+      restorePwa();
     };
   }, [data]);
 

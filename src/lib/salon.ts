@@ -16,10 +16,14 @@ export const DEFAULT_PRIMARY_COLOR = '#111827';
  * Slug de reserva por defecto, leído de VITE_SALON_SLUG. Es el ÚLTIMO recurso de la
  * cadena de prioridad (tras el subdominio y `?salon=`). En despliegues por subdominio
  * no se usa; sirve en local/preview donde no hay un subdominio de tenant real.
+ *
+ * NEUTRO por diseño: si VITE_SALON_SLUG no está definida queda '' y la app NO asume
+ * ningún salón concreto (no hay slug cableado en el código) → el SalonProvider muestra
+ * la pantalla controlada "salón no disponible". Cada despliegue fija su propio slug en
+ * el `.env` (este usa "denueveanueve").
  */
 export const FALLBACK_SALON_SLUG: string =
-  (import.meta.env.VITE_SALON_SLUG as string | undefined)?.trim().toLowerCase() ||
-  'denueveanueve';
+  (import.meta.env.VITE_SALON_SLUG as string | undefined)?.trim().toLowerCase() ?? '';
 
 export interface SalonSlugSources {
   /** Host de la URL (window.location.hostname), p. ej. "denueveanueve.salonos.app". */
