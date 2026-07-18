@@ -198,6 +198,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => makeClient() }
 
 import {
   awardVisit,
+  ensureLoyaltyAccount,
+  grantWelcomeCoupon,
   lookupByQr,
   LoyaltyActionError,
 } from "@/lib/loyalty/server";
@@ -226,6 +228,12 @@ function seedBase(opts?: { visitsTotal?: number; pointsBalance?: number }) {
     { user_id: USER_A, salon_id: SALON_A, role: "owner", created_at: "2026-01-01T00:00:00Z" },
     { user_id: USER_B, salon_id: SALON_B, role: "owner", created_at: "2026-01-01T00:00:00Z" },
   ]);
+  // Ambos salones tienen contratado y activo el add-on 'loyalty': los escenarios de
+  // comportamiento parten de un salón CON fidelización (el gate, cubierto aparte).
+  holder.store.set("salon_features", [
+    { salon_id: SALON_A, feature: "loyalty", enabled: true },
+    { salon_id: SALON_B, feature: "loyalty", enabled: true },
+  ]);
   holder.store.set("customers", [
     { id: CUSTOMER_A, salon_id: SALON_A, full_name: "Ana (A)", qr_token: QR_A },
     { id: CUSTOMER_B, salon_id: SALON_B, full_name: "Beto (B)", qr_token: QR_B },
@@ -244,6 +252,23 @@ function seedBase(opts?: { visitsTotal?: number; pointsBalance?: number }) {
 
 const rowsOf = (table: string): Row[] => holder.store.get(table) ?? [];
 const accountA = (): Row => rowsOf("loyalty_accounts").find((r) => r.id === "acc-a") as Row;
+
+/**
+ * Deja un salón SIN fidelización activa, en las dos formas que el gate trata igual:
+ *   · "absent"   — no hay fila en salon_features (add-on NO contratado, opt-in).
+ *   · "disabled" — la fila existe pero enabled=false (contratado pero pausado).
+ */
+function disableLoyalty(salonId = SALON_A, mode: "absent" | "disabled" = "absent"): void {
+  const rows = rowsOf("salon_features");
+  if (mode === "absent") {
+    holder.store.set(
+      "salon_features",
+      rows.filter((r) => r.salon_id !== salonId),
+    );
+  } else {
+    for (const r of rows) if (r.salon_id === salonId) r.enabled = false;
+  }
+}
 
 beforeEach(() => {
   seedBase();
@@ -514,5 +539,81 @@ describe("aislamiento multi-tenant — la fidelización no cruza entre salones",
         line_items: [{ price_cents: 2000 }],
       }),
     ).rejects.toBeInstanceOf(LoyaltyActionError);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Gate del add-on 'loyalty' — la fidelización nativa exige tenerlo contratado.
+//    Sin él (fila ausente o enabled=false) toda operación de fidelización responde
+//    feature_not_enabled / 403, sin tocar dato alguno. (sub-8)
+// ─────────────────────────────────────────────────────────────────────────────
+describe("gate del add-on 'loyalty' (feature_not_enabled / 403)", () => {
+  it("lookupByQr → 403 si el salón no tiene contratada la fidelización", async () => {
+    disableLoyalty(SALON_A);
+    await expect(lookupByQr(QR_A)).rejects.toMatchObject({
+      code: "feature_not_enabled",
+      status: 403,
+    });
+  });
+
+  it("awardVisit → 403 y NO acredita puntos ni escribe el libro mayor", async () => {
+    disableLoyalty(SALON_A);
+    await expect(
+      awardVisit({
+        salon_id: SALON_A,
+        customer_id: CUSTOMER_A,
+        line_items: [{ price_cents: 2000 }],
+      }),
+    ).rejects.toMatchObject({ code: "feature_not_enabled", status: 403 });
+
+    // El gate corta antes de cualquier escritura: la cuenta queda intacta.
+    expect(accountA().points_balance).toBe(0);
+    expect(accountA().visits_total).toBe(0);
+    expect(rowsOf("points_movements")).toHaveLength(0);
+  });
+
+  it("ensureLoyaltyAccount → 403 si el salón no tiene el add-on", async () => {
+    disableLoyalty(SALON_A);
+    await expect(ensureLoyaltyAccount(CUSTOMER_A, SALON_A)).rejects.toMatchObject({
+      code: "feature_not_enabled",
+      status: 403,
+    });
+  });
+
+  it("grantWelcomeCoupon → 403 si el salón no tiene el add-on", async () => {
+    disableLoyalty(SALON_A);
+    await expect(
+      grantWelcomeCoupon(CUSTOMER_A, 10, { salonId: SALON_A }),
+    ).rejects.toMatchObject({ code: "feature_not_enabled", status: 403 });
+    expect(rowsOf("welcome_coupons")).toHaveLength(0);
+  });
+
+  it("un add-on contratado pero PAUSADO (enabled=false) también cierra el gate", async () => {
+    disableLoyalty(SALON_A, "disabled");
+    await expect(lookupByQr(QR_A)).rejects.toMatchObject({
+      code: "feature_not_enabled",
+      status: 403,
+    });
+  });
+
+  it("el gate se evalúa TRAS la autorización: sin sesión gana 401, no 403", async () => {
+    disableLoyalty(SALON_A);
+    holder.currentUser = null; // sin sesión: requireActiveSalonId corta antes del gate
+    await expect(lookupByQr(QR_A)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("el fallo es un LoyaltyActionError con el mensaje de dominio exacto", async () => {
+    disableLoyalty(SALON_A);
+    const err = await lookupByQr(QR_A).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(LoyaltyActionError);
+    expect((err as LoyaltyActionError).message).toBe(
+      "Este salón no tiene contratada la fidelización",
+    );
+  });
+
+  it("control positivo: CON el add-on activo, lookupByQr funciona con normalidad", async () => {
+    // Sin tocar el seed (loyalty activo): el gate deja pasar y devuelve el estado.
+    const state = await lookupByQr(QR_A);
+    expect(state.customer.id).toBe(CUSTOMER_A);
   });
 });

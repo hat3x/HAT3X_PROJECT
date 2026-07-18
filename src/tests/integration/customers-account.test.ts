@@ -159,6 +159,23 @@ const PHONE_ANA = "+34612345678"; // forma canónica E.164
 
 const rowsOf = (table: string): Row[] => holder.store.get(table) ?? [];
 
+/**
+ * Deja un salón SIN fidelización activa (el gate trata igual ambas formas):
+ *   · "absent"   — sin fila en salon_features (add-on no contratado, opt-in).
+ *   · "disabled" — fila con enabled=false (contratado pero pausado).
+ */
+function disableLoyalty(salonId = SALON_A, mode: "absent" | "disabled" = "absent"): void {
+  const rows = rowsOf("salon_features");
+  if (mode === "absent") {
+    holder.store.set(
+      "salon_features",
+      rows.filter((r) => r.salon_id !== salonId),
+    );
+  } else {
+    for (const r of rows) if (r.salon_id === salonId) r.enabled = false;
+  }
+}
+
 /** Reinicia la BD en memoria y siembra los dos salones (sin fichas todavía). */
 function seedBase() {
   holder.store = new Map<string, Row[]>();
@@ -168,6 +185,12 @@ function seedBase() {
   holder.store.set("salons", [{ id: SALON_A }, { id: SALON_B }]);
   holder.store.set("salon_members", [
     { user_id: "owner-a", salon_id: SALON_A, role: "owner" },
+  ]);
+  // Ambos salones tienen el add-on 'loyalty' activo (el alta/enlace de ficha lo
+  // exige, por el bootstrap de puntos/cupón); el gate se cubre en su propio bloque.
+  holder.store.set("salon_features", [
+    { salon_id: SALON_A, feature: "loyalty", enabled: true },
+    { salon_id: SALON_B, feature: "loyalty", enabled: true },
   ]);
   holder.store.set("customers", []);
 }
@@ -324,6 +347,66 @@ describe("linkOrCreateCustomerAccount", () => {
       full_name: "Ana",
     }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CustomerAccountError);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// linkOrCreateCustomerAccount — gate del add-on 'loyalty' (sub-8)
+//
+// El alta/enlace de la ficha dispara el bootstrap de fidelización (cuenta de puntos
+// + cupón de bienvenida), así que exige que el salón tenga contratado y activo el
+// add-on 'loyalty'. Sin él ⇒ feature_not_enabled / 403, sin crear ninguna ficha.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("linkOrCreateCustomerAccount — gate del add-on 'loyalty' (feature_not_enabled / 403)", () => {
+  it("→ 403 si el salón existe pero NO tiene contratada la fidelización (y no crea ficha)", async () => {
+    disableLoyalty(SALON_A);
+    await expect(
+      linkOrCreateCustomerAccount({
+        salon_id: SALON_A,
+        user_id: USER_ANA,
+        phone: PHONE_ANA,
+        full_name: "Ana",
+      }),
+    ).rejects.toMatchObject({ code: "feature_not_enabled", status: 403 });
+    // El gate corta antes del alta: no se persistió ninguna ficha.
+    expect(rowsOf("customers")).toHaveLength(0);
+  });
+
+  it("un salón INEXISTENTE gana 404 antes que el gate (assertSalonExists primero)", async () => {
+    await expect(
+      linkOrCreateCustomerAccount({
+        salon_id: "salon-inexistente",
+        user_id: USER_ANA,
+        phone: PHONE_ANA,
+        full_name: "Ana",
+      }),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+  });
+
+  it("un add-on PAUSADO (enabled=false) también cierra el gate", async () => {
+    disableLoyalty(SALON_A, "disabled");
+    await expect(
+      linkOrCreateCustomerAccount({
+        salon_id: SALON_A,
+        user_id: USER_ANA,
+        phone: PHONE_ANA,
+        full_name: "Ana",
+      }),
+    ).rejects.toMatchObject({ code: "feature_not_enabled", status: 403 });
+  });
+
+  it("el fallo del gate es un CustomerAccountError con el mensaje de dominio exacto", async () => {
+    disableLoyalty(SALON_A);
+    const err = await linkOrCreateCustomerAccount({
+      salon_id: SALON_A,
+      user_id: USER_ANA,
+      phone: PHONE_ANA,
+      full_name: "Ana",
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CustomerAccountError);
+    expect((err as CustomerAccountError).message).toBe(
+      "Este salón no tiene contratada la fidelización",
+    );
   });
 });
 

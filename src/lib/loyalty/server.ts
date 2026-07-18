@@ -49,9 +49,14 @@ import {
   type LoyaltyRefType,
   type LoyaltyRewardView,
 } from "@/lib/loyalty/types";
+import {
+  LOYALTY_FEATURE_DISABLED_MESSAGE,
+  salonHasFeature,
+} from "@/lib/salon-features";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { MemberRole } from "@/types/database";
+import type { Database, MemberRole } from "@/types/database";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -59,6 +64,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 export type LoyaltyActionErrorCode =
   | "unauthorized"
   | "forbidden"
+  | "feature_not_enabled"
   | "not_found"
   | "invalid_request"
   | "conflict"
@@ -153,6 +159,40 @@ async function requireMembershipForSalon(
     throw new LoyaltyActionError("forbidden", 403, "Rol sin permiso para esta operación.");
   }
   return data.role;
+}
+
+/**
+ * Gate de negocio (entitlement): exige que el salón tenga contratado Y activo el
+ * add-on de fidelización ('loyalty'). Sin él, la fidelización nativa NO está
+ * disponible para ese salón ⇒ `feature_not_enabled` (403). Se evalúa DESPUÉS de la
+ * autorización (pertenencia/rol), de modo que quien ni siquiera pertenece al salón
+ * recibe antes su 401/403 de acceso —no se filtra el estado del add-on a extraños—.
+ *
+ * `client` puede ser el ADMIN (lectura autoritativa que omite RLS) o el de la SESIÓN
+ * (un miembro solo ve los entitlements de su salón); ambos leen la MISMA verdad de
+ * `public.salon_features`. Ver `@/lib/salon-features`.
+ */
+async function requireLoyaltyFeature(
+  client: SupabaseClient<Database>,
+  salonId: string,
+): Promise<void> {
+  let enabled: boolean;
+  try {
+    enabled = await salonHasFeature(client, salonId, "loyalty");
+  } catch {
+    throw new LoyaltyActionError(
+      "internal",
+      500,
+      "No se pudo verificar el add-on de fidelización.",
+    );
+  }
+  if (!enabled) {
+    throw new LoyaltyActionError(
+      "feature_not_enabled",
+      403,
+      LOYALTY_FEATURE_DISABLED_MESSAGE,
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -263,6 +303,7 @@ export async function lookupByQr(qrToken: string): Promise<LoyaltyLookupResult> 
 
   const salonId = await requireActiveSalonId();
   const supabase = createClient(); // RLS: solo clientes del salón del usuario
+  await requireLoyaltyFeature(supabase, salonId); // 403 si el salón no tiene el add-on
 
   const { data: customer, error: customerError } = await supabase
     .from("customers")
@@ -377,6 +418,7 @@ export async function ensureLoyaltyAccount(
   await requireMembershipForSalon(resolvedSalonId);
 
   const admin = createAdminClient();
+  await requireLoyaltyFeature(admin, resolvedSalonId); // 403 si el salón no tiene el add-on
   await assertCustomerInSalon(admin, customerId, resolvedSalonId);
   return upsertLoyaltyAccount(admin, resolvedSalonId, customerId);
 }
@@ -408,6 +450,7 @@ export async function grantWelcomeCoupon(
   await requireMembershipForSalon(salonId, ["owner", "manager"]);
 
   const admin = createAdminClient();
+  await requireLoyaltyFeature(admin, salonId); // 403 si el salón no tiene el add-on
   await assertCustomerInSalon(admin, customerId, salonId);
 
   const validityDays = options?.validityDays ?? DEFAULT_LOYALTY_CONFIG.couponValidityDays;
@@ -483,6 +526,7 @@ export async function awardVisit(input: AwardVisitInput): Promise<AwardVisitResu
 
   const config: LoyaltyConfig = { ...DEFAULT_LOYALTY_CONFIG, ...input.config };
   const admin = createAdminClient();
+  await requireLoyaltyFeature(admin, salonId); // 403 si el salón no tiene el add-on
   const now = new Date();
   const nowIso = now.toISOString();
 

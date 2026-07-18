@@ -217,6 +217,11 @@ function seedBase() {
   holder.currentUser = { id: USER_ANA };
   holder.hidePhoneOnce = new Set<string>();
   holder.store.set("salons", [{ id: SALON_A }, { id: SALON_B }]);
+  // Add-on 'loyalty' activo en ambos salones: el alta/enlace de ficha lo exige.
+  holder.store.set("salon_features", [
+    { salon_id: SALON_A, feature: "loyalty", enabled: true },
+    { salon_id: SALON_B, feature: "loyalty", enabled: true },
+  ]);
   holder.store.set("customers", []);
 }
 

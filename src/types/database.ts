@@ -68,6 +68,19 @@ export type CouponStatus = "ACTIVE" | "USED" | "EXPIRED";
 /** Estado de una recompensa de hito. */
 export type RewardStatus = "AVAILABLE" | "REDEEMED" | "EXPIRED";
 
+/**
+ * Add-on contratable por salón (entitlement). Espejo TS del enum
+ * `public.salon_feature` (migración 20260718100000_salon_features). En minúsculas,
+ * como el resto de enums de dominio. La AUSENCIA de fila en `salon_features` = no
+ * contratado; el gate exige además `enabled = true`.
+ */
+export type SalonFeature =
+  | "loyalty"
+  | "client_app"
+  | "staff_app"
+  | "ai_receptionist"
+  | "pos";
+
 export interface Database {
   public: {
     Tables: {
@@ -1579,6 +1592,48 @@ export interface Database {
           },
         ];
       };
+      // Entitlements por salón (productización): qué add-ons ha contratado cada
+      // salón. Opt-in: activo solo si existe fila y enabled=true. La escritura la
+      // hace HAT3X (service_role/backoffice), no el salón — ver migración
+      // 20260718100000_salon_features.
+      salon_features: {
+        Row: {
+          id: string;
+          salon_id: string;
+          feature: SalonFeature;
+          enabled: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          feature: SalonFeature;
+          enabled?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          feature?: SalonFeature;
+          enabled?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "salon_features_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;
@@ -1594,6 +1649,7 @@ export interface Database {
       points_movement_type: PointsMovementType;
       coupon_status: CouponStatus;
       reward_status: RewardStatus;
+      salon_feature: SalonFeature;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -1639,6 +1695,8 @@ export type LoyaltyAccount = Tables<"loyalty_accounts">;
 export type PointsMovement = Tables<"points_movements">;
 export type WelcomeCoupon = Tables<"welcome_coupons">;
 export type Reward = Tables<"rewards">;
+// Entitlements (productización)
+export type SalonFeatureRow = Tables<"salon_features">;
 
 // Phase helpers -----------------------------------------------------------------
 

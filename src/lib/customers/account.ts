@@ -38,6 +38,10 @@
 import { z } from "zod";
 
 import { normalizePhone } from "@/lib/customers/normalize-phone";
+import {
+  LOYALTY_FEATURE_DISABLED_MESSAGE,
+  salonHasFeature,
+} from "@/lib/salon-features";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Customer } from "@/types/database";
@@ -48,6 +52,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 export type CustomerAccountErrorCode =
   | "unauthorized"
   | "forbidden"
+  | "feature_not_enabled"
   | "not_found"
   | "invalid_request"
   | "conflict"
@@ -243,6 +248,34 @@ async function assertSalonExists(admin: AdminClient, salonId: string): Promise<v
 }
 
 /**
+ * Gate de negocio (entitlement): exige que el salón tenga contratado Y activo el
+ * add-on de fidelización ('loyalty'). El alta/enlace de la ficha de cliente dispara
+ * el trigger que crea la cuenta de puntos + el cupón de bienvenida, de modo que sin
+ * el add-on no procede ⇒ `feature_not_enabled` (403). Se comprueba tras
+ * `assertSalonExists` (un salón inexistente sigue dando 404 primero). Lee la verdad
+ * de `public.salon_features` con el cliente ADMIN (acotado a mano por `salon_id`).
+ */
+async function requireLoyaltyFeature(admin: AdminClient, salonId: string): Promise<void> {
+  let enabled: boolean;
+  try {
+    enabled = await salonHasFeature(admin, salonId, "loyalty");
+  } catch {
+    throw new CustomerAccountError(
+      "internal",
+      500,
+      "No se pudo verificar el add-on de fidelización.",
+    );
+  }
+  if (!enabled) {
+    throw new CustomerAccountError(
+      "feature_not_enabled",
+      403,
+      LOYALTY_FEATURE_DISABLED_MESSAGE,
+    );
+  }
+}
+
+/**
  * Reconcilia una ficha YA EXISTENTE con la cuenta que se quiere enlazar:
  *   · misma cuenta            → no-op idempotente ("already_linked").
  *   · sin cuenta (user_id null) → la enlaza (UPDATE condicional a `user_id is null`).
@@ -396,6 +429,7 @@ export async function linkOrCreateCustomerAccount(
 
   const admin = createAdminClient();
   await assertSalonExists(admin, salonId);
+  await requireLoyaltyFeature(admin, salonId); // 403 si el salón no tiene el add-on
 
   // ¿Ya existe la persona (por teléfono) en este salón?
   const existing = await findCustomerByPhoneE164(admin, salonId, phoneE164);

@@ -229,6 +229,12 @@ function seed() {
     { user_id: OWNER_A, salon_id: SALON_A, role: "owner", created_at: "2026-01-01T00:00:00Z" },
     // Ana NO es staff de ningún salón: es una clienta de la app, no personal.
   ]);
+  // Ambos salones tienen el add-on 'loyalty' activo: el control positivo (staff sí
+  // acredita) parte de un salón CON fidelización; el rechazo del cliente es por rol.
+  holder.store.set("salon_features", [
+    { salon_id: SALON_A, feature: "loyalty", enabled: true },
+    { salon_id: SALON_B, feature: "loyalty", enabled: true },
+  ]);
   holder.store.set("customers", [
     { id: "cust-ana-a", salon_id: SALON_A, full_name: "Ana", user_id: USER_ANA, qr_token: "QR-ANA-A", created_at: "2026-01-01T00:00:00Z" },
     { id: "cust-ana-b", salon_id: SALON_B, full_name: "Ana", user_id: USER_ANA, qr_token: "QR-ANA-B", created_at: "2026-02-01T00:00:00Z" },
