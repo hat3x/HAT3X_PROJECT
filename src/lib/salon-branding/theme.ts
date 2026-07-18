@@ -112,6 +112,21 @@ function hslToRgb({ h, s, l }: Hsl): [number, number, number] {
 }
 
 /**
+ * HSL → `#rrggbb`. Convierte el foreground elegido (un {@link Hsl} del sistema) al hex
+ * que la VISTA PREVIA del formulario pinta con estilos inline —donde no hay variables
+ * CSS del panel—, para que el texto de la maqueta coincida EXACTAMENTE con la decisión
+ * de contraste real del panel (una sola fuente de verdad para el color de texto legible).
+ */
+export function hslToHex(hsl: Hsl): string {
+  const toByte = (channel: number): string =>
+    clamp(Math.round(channel * 255), 0, 255)
+      .toString(16)
+      .padStart(2, "0");
+  const [r, g, b] = hslToRgb(hsl);
+  return `#${toByte(r)}${toByte(g)}${toByte(b)}`;
+}
+
+/**
  * Luminancia relativa WCAG de un color HSL (0 = negro, 1 = blanco). Se usa para elegir
  * un texto (foreground) que CONTRASTE de verdad con el color de marca, en lugar de
  * asumir blanco: una marca amarilla necesita texto oscuro; una añil, texto claro.
@@ -123,33 +138,75 @@ function relativeLuminance(hsl: Hsl): number {
   return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
 }
 
+/**
+ * Razón de contraste WCAG 2.1 entre dos colores (fórmula 1.4.3): `(L1+0.05)/(L2+0.05)`
+ * con L = luminancia relativa, siempre el más claro sobre el más oscuro. Devuelve un
+ * número en `[1, 21]` (1 = idénticos, 21 = negro↔blanco). Es la MEDIDA REAL que decide
+ * qué texto es legible sobre la marca, en vez de asumir blanco o mirar solo la luminancia.
+ */
+export function contrastRatio(a: Hsl, b: Hsl): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Umbral de contraste WCAG 2.1 nivel AA para TEXTO NORMAL (4.5:1). Es la vara con la que
+ * se decide si el color de marca, usado como relleno de botones/encabezados, es legible;
+ * por debajo de él la UI de marca avisa (sin bloquear el guardado).
+ */
+export const WCAG_AA_TEXT = 4.5;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Derivación de tokens
 // ─────────────────────────────────────────────────────────────────────────────
 
 /*
- * Foregrounds candidatos = los MISMOS tokens que ya usa la paleta base en cada modo,
- * para que el texto sobre la marca se sienta parte del sistema y no un parche.
+ * Foregrounds candidatos = los MISMOS tokens que ya usa la paleta base en cada modo
+ * (espejo de `--primary-foreground` / `--foreground` de globals.css), para que el texto
+ * sobre la marca se sienta parte del sistema y no un parche. Se guardan como {@link Hsl}
+ * —no como triplete— porque necesitamos su luminancia REAL para medir el contraste: no
+ * son blanco/negro puros (`40 40% 99%` es hueso; `30 10% 15%` es casi negro cálido), así
+ * que el punto de corte por luminancia no basta para garantizar AA.
  */
-const LIGHT_TEXT_ON_LIGHT: HslTriple = "40 40% 99%"; // claro sobre marca (tema claro)
-const DARK_TEXT_ON_LIGHT: HslTriple = "30 10% 15%"; // oscuro sobre marca (tema claro)
-const LIGHT_TEXT_ON_DARK: HslTriple = "40 22% 96%"; // claro sobre marca (tema oscuro)
-const DARK_TEXT_ON_DARK: HslTriple = "30 12% 10%"; // oscuro sobre marca (tema oscuro)
+const LIGHT_TEXT_ON_LIGHT: Hsl = { h: 40, s: 40, l: 99 }; // claro sobre marca (tema claro)
+const DARK_TEXT_ON_LIGHT: Hsl = { h: 30, s: 10, l: 15 }; // oscuro sobre marca (tema claro)
+const LIGHT_TEXT_ON_DARK: Hsl = { h: 40, s: 22, l: 96 }; // claro sobre marca (tema oscuro)
+const DARK_TEXT_ON_DARK: Hsl = { h: 30, s: 12, l: 10 }; // oscuro sobre marca (tema oscuro)
 
-/*
- * Umbral de luminancia (~0.179) donde el contraste con blanco iguala al contraste con
- * negro: por debajo, gana el texto claro; por encima, el oscuro. Es el punto de corte
- * clásico derivado de la fórmula de contraste WCAG.
+/** Foreground elegido sobre un relleno: color, su contraste real y si es texto claro/oscuro. */
+interface Foreground {
+  hsl: Hsl;
+  ratio: number;
+  text: "light" | "dark";
+}
+
+/** Entre el texto claro y el oscuro, devuelve el que MÁS contraste da sobre `bg` (empate ⇒ claro). */
+function bestForeground(bg: Hsl, light: Hsl, dark: Hsl): Foreground {
+  const lightRatio = contrastRatio(bg, light);
+  const darkRatio = contrastRatio(bg, dark);
+  return lightRatio >= darkRatio
+    ? { hsl: light, ratio: lightRatio, text: "light" }
+    : { hsl: dark, ratio: darkRatio, text: "dark" };
+}
+
+/**
+ * Elige el foreground legible sobre `color` en el modo dado MAXIMIZANDO el contraste WCAG
+ * (no por un umbral de luminancia aproximado): así el panel SIEMPRE pinta el texto más
+ * legible posible sobre la marca —una elección de color nunca puede dejar un botón con
+ * texto ilegible—, y `ratio` deja además saber si ese máximo alcanza AA.
  */
-const LUMINANCE_PIVOT = 0.179;
+function readableForeground(color: Hsl, mode: "light" | "dark"): Foreground {
+  return mode === "light"
+    ? bestForeground(color, LIGHT_TEXT_ON_LIGHT, DARK_TEXT_ON_LIGHT)
+    : bestForeground(color, LIGHT_TEXT_ON_DARK, DARK_TEXT_ON_DARK);
+}
 
-/** Elige el foreground legible sobre `color` según el modo de tema. */
-function readableForeground(color: Hsl, mode: "light" | "dark"): HslTriple {
-  const preferLight = relativeLuminance(color) <= LUMINANCE_PIVOT;
-  if (mode === "light") {
-    return preferLight ? LIGHT_TEXT_ON_LIGHT : DARK_TEXT_ON_LIGHT;
-  }
-  return preferLight ? LIGHT_TEXT_ON_DARK : DARK_TEXT_ON_DARK;
+/** Formatea un {@link Hsl} como triplete shadcn (`H S% L%`) para inyectarlo como variable. */
+function tripleOf(hsl: Hsl): HslTriple {
+  return triple(hsl.h, hsl.s, hsl.l);
 }
 
 /**
@@ -184,10 +241,10 @@ export function resolveBrandTheme(branding: SalonBranding | null): BrandTheme | 
 
   const light: ThemeVars = {
     "--primary": primaryLight,
-    "--primary-foreground": readableForeground(primary, "light"),
+    "--primary-foreground": tripleOf(readableForeground(primary, "light").hsl),
     "--ring": primaryLight,
     "--info": primaryLight,
-    "--info-foreground": readableForeground(primary, "light"),
+    "--info-foreground": tripleOf(readableForeground(primary, "light").hsl),
     // Lavado claro del acento (paridad con `262 60% 96%` / `262 55% 34%`).
     "--accent": triple(accent.h, clamp(accent.s, 20, 65), 96),
     "--accent-foreground": triple(accent.h, clamp(accent.s, 30, 85), 34),
@@ -195,16 +252,61 @@ export function resolveBrandTheme(branding: SalonBranding | null): BrandTheme | 
 
   const dark: ThemeVars = {
     "--primary": primaryDark,
-    "--primary-foreground": readableForeground(primaryDarkHsl, "dark"),
+    "--primary-foreground": tripleOf(readableForeground(primaryDarkHsl, "dark").hsl),
     "--ring": primaryDark,
     "--info": primaryDark,
-    "--info-foreground": readableForeground(primaryDarkHsl, "dark"),
+    "--info-foreground": tripleOf(readableForeground(primaryDarkHsl, "dark").hsl),
     // Tinte profundo del acento (paridad con `262 40% 22%` / `262 80% 88%`).
     "--accent": triple(accent.h, clamp(accent.s, 20, 55), 22),
     "--accent-foreground": triple(accent.h, clamp(accent.s, 40, 90), 88),
   };
 
   return { light, dark };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Evaluación de contraste (accesibilidad de la UI de marca)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Veredicto de legibilidad de un color de marca usado como RELLENO (botón/encabezado). */
+export interface ContrastAssessment {
+  /** Mejor contraste WCAG alcanzable con el texto claro u oscuro del sistema (`[1, 21]`). */
+  ratio: number;
+  /** `true` si `ratio >= WCAG_AA_TEXT` (4.5:1): el color es legible con AA. */
+  meetsAA: boolean;
+  /** Qué texto gana el contraste: `"light"` (hueso) u `"dark"` (casi negro). */
+  text: "light" | "dark";
+}
+
+/**
+ * Evalúa si un color de marca es legible al usarse como RELLENO (fondo de botones,
+ * encabezados y estados activos del panel) con el mejor texto claro/oscuro del sistema.
+ *
+ * Se mide en TEMA CLARO a propósito: es la restricción vinculante —en oscuro el primario
+ * se aclara a L ≥ 56 % ({@link resolveBrandTheme}), donde el texto oscuro siempre contrasta
+ * de sobra—; solo un tono MEDIO en claro puede quedar por debajo de AA. Devuelve `null`
+ * si el hex no es válido (no hay nada que evaluar). La UI usa `meetsAA` para AVISAR sin
+ * bloquear: aun por debajo del umbral, el panel ya pinta el texto de mayor contraste.
+ */
+export function assessFillLegibility(hex: string): ContrastAssessment | null {
+  const color = hexToHsl(hex);
+  if (color === null) return null;
+  const { ratio, text } = readableForeground(color, "light");
+  return { ratio, meetsAA: ratio >= WCAG_AA_TEXT, text };
+}
+
+/**
+ * Hex del texto legible sobre el relleno `hex` (mejor contraste claro/oscuro), o `null`
+ * si el color no es válido. Comparte la MISMA decisión que el panel para que la vista
+ * previa del formulario no diverja de lo que verá el salón.
+ */
+export function readableForegroundHex(
+  hex: string,
+  mode: "light" | "dark" = "light",
+): string | null {
+  const color = hexToHsl(hex);
+  if (color === null) return null;
+  return hslToHex(readableForeground(color, mode).hsl);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

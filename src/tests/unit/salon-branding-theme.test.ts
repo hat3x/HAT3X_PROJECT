@@ -17,8 +17,12 @@ import { describe, it, expect } from "vitest";
 import { DEFAULT_PRIMARY_COLOR } from "@/lib/salon-branding/branding";
 import {
   BRAND_SCOPE_ATTR,
+  WCAG_AA_TEXT,
+  assessFillLegibility,
   buildBrandThemeCss,
+  contrastRatio,
   hexToHsl,
+  readableForegroundHex,
   resolveBrandTheme,
 } from "@/lib/salon-branding/theme";
 import type { SalonBranding } from "@/types/database";
@@ -104,6 +108,77 @@ describe("resolveBrandTheme — foreground elegido por CONTRASTE (no siempre bla
   it("marca oscura (casi negra) ⇒ texto CLARO en claro", () => {
     const theme = resolveBrandTheme(branding({ primary_color: "#111827" }));
     expect(theme?.light["--primary-foreground"]).toBe("40 40% 99%");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A) COMPORTAMIENTO — accesibilidad WCAG AA del color de marca (sub-4)
+// ─────────────────────────────────────────────────────────────────────────────
+describe("contrastRatio — razón de contraste WCAG 2.1 (1.4.3)", () => {
+  const white = { h: 0, s: 0, l: 100 };
+  const black = { h: 0, s: 0, l: 0 };
+
+  it("negro↔blanco da el máximo 21:1; un color consigo mismo da 1:1", () => {
+    expect(contrastRatio(white, black)).toBeCloseTo(21, 5);
+    expect(contrastRatio({ h: 262, s: 83, l: 58 }, { h: 262, s: 83, l: 58 })).toBe(1);
+  });
+
+  it("es simétrica (el orden de los colores no altera la razón)", () => {
+    const brand = { h: 210, s: 50, l: 45 };
+    expect(contrastRatio(brand, white)).toBeCloseTo(contrastRatio(white, brand), 10);
+  });
+});
+
+describe("assessFillLegibility — ¿el relleno de marca es legible con AA?", () => {
+  it("hex inválido o vacío ⇒ null (no hay nada que evaluar)", () => {
+    expect(assessFillLegibility("#nope")).toBeNull();
+    expect(assessFillLegibility("")).toBeNull();
+  });
+
+  it("marca casi negra ⇒ AA holgado con texto CLARO", () => {
+    const result = assessFillLegibility("#111827");
+    expect(result?.text).toBe("light");
+    expect(result?.meetsAA).toBe(true);
+    expect(result?.ratio).toBeGreaterThan(WCAG_AA_TEXT);
+  });
+
+  it("marca amarilla brillante ⇒ AA holgado con texto OSCURO", () => {
+    const result = assessFillLegibility("#facc15");
+    expect(result?.text).toBe("dark");
+    expect(result?.meetsAA).toBe(true);
+    expect(result?.ratio).toBeGreaterThan(WCAG_AA_TEXT);
+  });
+
+  it("un gris MEDIO (#808080) no alcanza AA con ningún texto ⇒ avisa", () => {
+    const result = assessFillLegibility("#808080");
+    expect(result).not.toBeNull();
+    // El punto más exigente: ni el texto claro ni el oscuro superan 4.5:1.
+    expect(result?.meetsAA).toBe(false);
+    expect(result?.ratio).toBeLessThan(WCAG_AA_TEXT);
+    expect(result?.ratio).toBeGreaterThan(3); // sigue siendo el MEJOR contraste posible
+  });
+
+  it("la evaluación coincide con el foreground que el panel inyecta", () => {
+    // El texto elegido por assessFillLegibility es el mismo que resolveBrandTheme emite.
+    for (const hex of ["#111827", "#facc15", "#7c3aed", "#808080"]) {
+      const assessment = assessFillLegibility(hex);
+      const theme = resolveBrandTheme(branding({ primary_color: hex }));
+      const expected =
+        assessment?.text === "light" ? "40 40% 99%" : "30 10% 15%";
+      expect(theme?.light["--primary-foreground"]).toBe(expected);
+    }
+  });
+});
+
+describe("readableForegroundHex — texto legible en hex para la vista previa", () => {
+  it("devuelve un hex #rrggbb y null ante color inválido", () => {
+    expect(readableForegroundHex("#111827")).toMatch(/^#[0-9a-f]{6}$/);
+    expect(readableForegroundHex("#zzz")).toBeNull();
+  });
+
+  it("elige texto CLARO sobre marca oscura y OSCURO sobre marca clara", () => {
+    expect(readableForegroundHex("#111827")).toMatch(/^#f/); // casi blanco
+    expect(readableForegroundHex("#ffff00")).toMatch(/^#2/); // casi negro
   });
 });
 

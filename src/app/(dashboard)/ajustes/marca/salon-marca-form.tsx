@@ -1,7 +1,14 @@
 "use client";
 
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { ImageOff, Palette, RefreshCw, Trash2, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  ImageOff,
+  Palette,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { SaveStatus } from "@/app/(dashboard)/ajustes/save-status";
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
@@ -23,6 +30,11 @@ import {
   isValidHexColor,
   type SalonBranding,
 } from "@/lib/salon-branding/branding";
+import {
+  WCAG_AA_TEXT,
+  assessFillLegibility,
+  readableForegroundHex,
+} from "@/lib/salon-branding/theme";
 import { cn } from "@/lib/utils";
 
 // Constantes de presentación derivadas del contrato de la marca (espejo del SQL),
@@ -46,22 +58,22 @@ function safeColor(value: string, fallback: string): string {
 }
 
 /**
- * Color de texto legible (negro/blanco) sobre un fondo `#rrggbb`, por luminancia
- * relativa (WCAG). Mantiene el texto de la vista previa contrastado sea cual sea
- * el color de marca elegido. Solo se invoca con un hex ya saneado.
+ * Aviso de contraste AA (WCAG 2.1) para un color de marca usado como RELLENO —fondo de
+ * botones y encabezados—. Devuelve `null` cuando el color es inválido (aún no hay nada
+ * que evaluar) o cuando ALCANZA AA; si no, un mensaje que explica el déficit. No bloquea
+ * el guardado: es una advertencia, porque el panel ya elige el texto MÁS legible posible
+ * ({@link readableForegroundHex}) — la legibilidad nunca se rompe, solo puede quedar por
+ * debajo del ideal. `subject` personaliza a qué color se refiere.
  */
-function readableTextColor(hex: string): string {
-  const value = hex.replace("#", "");
-  if (value.length !== 6) return "#ffffff";
-  const channel = (start: number): number =>
-    parseInt(value.slice(start, start + 2), 16) / 255;
-  const toLinear = (c: number): number =>
-    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  const luminance =
-    0.2126 * toLinear(channel(0)) +
-    0.7152 * toLinear(channel(2)) +
-    0.0722 * toLinear(channel(4));
-  return luminance > 0.45 ? "#111827" : "#ffffff";
+function contrastWarning(hex: string, subject: string): string | null {
+  const assessment = assessFillLegibility(hex);
+  if (assessment === null || assessment.meetsAA) return null;
+  return (
+    `Contraste ${assessment.ratio.toFixed(1)}:1 con el mejor texto disponible, ` +
+    `por debajo del mínimo AA (${WCAG_AA_TEXT.toFixed(1)}:1). ${subject} seguirá ` +
+    `siendo legible con el texto más contrastado, pero un tono más oscuro o más claro ` +
+    `mejorará la lectura.`
+  );
 }
 
 /** Valida un archivo de logo en cliente (feedback inmediato); el servidor revalida. */
@@ -88,6 +100,8 @@ interface ColorFieldProps {
   required?: boolean;
   /** Si se pasa, muestra un botón «Quitar» para vaciar el color (acento opcional). */
   onClear?: () => void;
+  /** Aviso de contraste AA (accesibilidad); `null` ⇒ no se muestra nada. */
+  warning?: string | null;
 }
 
 /**
@@ -104,6 +118,7 @@ function ColorField({
   description,
   required = false,
   onClear,
+  warning = null,
 }: ColorFieldProps): React.ReactElement {
   const trimmed = value.trim();
   const isEmpty = trimmed === "";
@@ -167,6 +182,19 @@ function ColorField({
       {description !== undefined ? (
         <p className="text-xs text-muted-foreground">{description}</p>
       ) : null}
+      {warning !== null ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-medium text-foreground animate-scale-in"
+        >
+          <AlertTriangle
+            className="mt-px h-3.5 w-3.5 shrink-0 text-warning"
+            aria-hidden="true"
+          />
+          <span>{warning}</span>
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -194,7 +222,9 @@ function BrandPreview({
   const safeSecondary = isValidHexColor(secondary.trim())
     ? secondary.trim()
     : null;
-  const onPrimary = readableTextColor(safePrimary);
+  // Mismo criterio de contraste que el panel real: el texto sobre el color de marca es
+  // el que MÁS contraste da (claro u oscuro), no un blanco/negro asumido.
+  const onPrimary = readableForegroundHex(safePrimary, "light") ?? "#ffffff";
   const accent = safeSecondary ?? safePrimary;
   const monogram = salonName.trim().charAt(0).toUpperCase() || "S";
 
@@ -500,6 +530,7 @@ export function SalonMarcaForm({
                 value={primary}
                 onChange={updatePrimary}
                 description="Color base de botones y encabezados."
+                warning={contrastWarning(primary, "El color principal")}
               />
               <ColorField
                 id="secondary_color"
@@ -508,6 +539,7 @@ export function SalonMarcaForm({
                 onChange={updateSecondary}
                 onClear={clearSecondary}
                 description="Opcional. Realza precios y detalles. Déjalo vacío para no usar acento."
+                warning={contrastWarning(secondary, "El color de acento")}
               />
 
               <SaveStatus
