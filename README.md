@@ -45,6 +45,188 @@ de re-activación cuando exista el backend correspondiente.
 
 ---
 
+## Multi-salón (white-label): resolución, marca y contraste
+
+Un **único build** sirve a **todos** los salones. Cada salón se identifica por su
+**slug** (kebab-case: `jotabarber`, `denueveanueve`) y su marca (nombre, logo,
+colores) se resuelve en **runtime**, sin recompilar ni cablear ningún salón. El
+`salon_id` (uuid) **se deriva** del branding resuelto — ya **no** de
+`VITE_SALON_ID`, que queda deprecada.
+
+Toda la lógica vive en cuatro módulos, tres de ellos **puros** (sin React ni
+Supabase, probados en aislamiento):
+
+| Módulo | Responsabilidad | Puro |
+|---|---|:---:|
+| [`src/lib/salon.ts`](src/lib/salon.ts) | Resuelve el **slug** (prioridad) y mapea la fila de la RPC. | ✅ |
+| [`src/lib/salon-branding.ts`](src/lib/salon-branding.ts) | Llama a la RPC `get_salon_branding` y resuelve la URL del logo (bucket `salon-logos`). | — |
+| [`src/lib/salon-theme.ts`](src/lib/salon-theme.ts) | Deriva los tokens de tema desde el color de marca, con **contraste WCAG AA**. | ✅ |
+| [`src/lib/salon-context.tsx`](src/lib/salon-context.tsx) | `<SalonProvider>` / `useSalon()`: orquesta carga, tema, fallbacks. | — |
+
+`<SalonProvider>` se monta **por encima de las rutas** ([`src/App.tsx`](src/App.tsx)),
+de modo que la marca está disponible **antes del login**.
+
+### 1. Cómo se resuelve el salón — `subdominio > ?salon= > env`
+
+`resolveSalonSlug()` ([`salon.ts`](src/lib/salon.ts)) es una función **pura** que
+recibe host + URL + fallback y elige el slug por este orden de prioridad estricto,
+devolviendo también el **origen** (`source`) del que salió:
+
+| Prioridad | Origen (`source`) | De dónde sale | Ejemplo |
+|:---:|---|---|---|
+| **1.º** | `subdomain` | Subdominio del host `<slug>.salonos.app` | `jotabarber.salonos.app` → `jotabarber` |
+| **2.º** | `query` | Parámetro `?salon=<slug>` de la URL | `localhost:8080/?salon=jotabarber` → `jotabarber` |
+| **3.º** | `env` | Fallback de build-time `VITE_SALON_SLUG` | `.env` → `denueveanueve` |
+| — | `none` | Ninguna vía resolvió → **pantalla "salón no encontrado"** | — |
+
+Un origen de mayor prioridad **siempre gana**: con subdominio válido, se ignora
+`?salon` y `VITE_SALON_SLUG`.
+
+**Reglas de validación y extracción del subdominio** (`salon.ts`):
+
+- Un **slug** válido es kebab-case en minúsculas (`^[a-z0-9]+(?:-[a-z0-9]+)*$`),
+  de ≤ 63 caracteres — la **misma** convención que la `CHECK` de `salons.slug` y
+  que una etiqueta DNS. `?salon` y `VITE_SALON_SLUG` se **normalizan** (recorte de
+  espacios + minúsculas) antes de validar; un valor vacío o inválido **cae** al
+  siguiente nivel de prioridad.
+- El **subdominio** se extrae asumiendo un dominio raíz de **dos etiquetas**
+  (`salonos.app`): un host con > 2 etiquetas tiene subdominio (la primera). Se
+  **ignoran** (→ sin subdominio, se cae a `?salon`/env): `localhost` y
+  `*.localhost`, IPs **v4 y v6**, un `www.` inicial (`www.jotabarber.salonos.app`
+  → `jotabarber`; `www.salonos.app` → apex) y el **apex desnudo** (`salonos.app`).
+  Se toleran puerto (`:8080`) y punto final de FQDN (`salonos.app.`).
+
+> No se usa la Public Suffix List: para un apex de 3+ niveles (p. ej.
+> `example.co.uk`) la heurística trataría `example` como subdominio. Está **fuera de
+> alcance a propósito**, porque el despliegue es `*.salonos.app`.
+
+### 2. Cómo se carga la marca — `get_salon_branding` + bucket `salon-logos`
+
+`fetchSalonBranding(slug)` ([`salon-branding.ts`](src/lib/salon-branding.ts)) llama
+a la RPC **pública** (anon) de Salón OS:
+
+```ts
+const { data, error } = await supabase.rpc('get_salon_branding', { p_slug: slug });
+```
+
+La RPC es `RETURNS TABLE`, así que `data` llega como **array**: `[]` cuando el
+slug no existe / el salón está inactivo, o `[{ id, name, slug, logo_url,
+primary_color, secondary_color }]`. Se toma la **primera fila** y se normaliza a
+camelCase con el mapper puro `mapSalonBrandingRow` (`salon.ts`), que devuelve
+`null` si no hay fila (o, defensivamente, si falta el `id`):
+
+```ts
+interface SalonBranding {
+  id: string;              // salons.id → de aquí se DERIVA el salon_id de todas las lecturas
+  name: string;            // nombre comercial
+  slug: string;            // slug público (kebab)
+  logoUrl: string | null;  // URL o ruta del logo, o null
+  primaryColor: string;    // #rrggbb (la RPC garantiza un valor por defecto)
+  secondaryColor: string | null; // #rrggbb o null
+}
+```
+
+El branding se cachea con react-query (`queryKey: ['salon-branding', slug]`,
+`staleTime`/`gcTime: Infinity`): es **estable durante la sesión**.
+
+**Logo — bucket `salon-logos`.** `resolveSalonLogoUrl(logoUrl)`
+([`salon-branding.ts`](src/lib/salon-branding.ts)) admite las dos formas en que
+puede llegar `logo_url`:
+
+- **URL absoluta** (`http(s):`, `data:`, `blob:`) → se usa **tal cual**.
+- **Ruta de objeto** dentro del bucket público `salon-logos` (p. ej.
+  `jotabarber/logo.png`) → se construye su URL pública con
+  `supabase.storage.from('salon-logos').getPublicUrl(path)`.
+
+Devuelve `null` si no hay logo. `<SalonWordmark>`
+([`src/components/SalonWordmark.tsx`](src/components/SalonWordmark.tsx)) pinta el
+`<img>` del logo y, si **no hay logo o la imagen falla al cargar** (404 / URL
+rota, vía `onError`), **cae al nombre del salón** como wordmark de texto. Nunca
+cablea la marca de un salón concreto ni muestra el logo de otro.
+
+Al resolver el branding, `<SalonProvider>` además titula la pestaña
+(`document.title = name`) y alinea la barra del navegador/PWA
+(`meta[name="theme-color"]` ← `primary_color`). Ver [`docs/PWA.md`](docs/PWA.md)
+para el alcance de la marca en la PWA.
+
+### 3. El fallback — nunca un pantallazo en blanco
+
+Cada punto de fallo tiene una salida **controlada** (definidas en
+[`salon-context.tsx`](src/lib/salon-context.tsx) y
+[`salon-theme.ts`](src/lib/salon-theme.ts)):
+
+| Situación | Resultado |
+|---|---|
+| No se resuelve ningún slug (`source: 'none'`) | Pantalla **"salón no encontrado"** (recargable). |
+| Slug resuelto pero la RPC devuelve `[]` (inexistente/inactivo) | Pantalla **"salón no encontrado"** (reintentable). |
+| La RPC falla (red/servidor) | Pantalla de **error de conexión**, reintentable (`refetch`). |
+| Cargando el branding | Pantalla de **carga** (spinner, `aria-live`). |
+| Salón **sin logo** o logo roto (404) | Wordmark de **texto** con el nombre del salón. |
+| `primary_color` inválido / branding nulo | `resolveBrandTheme` → `null` ⇒ **no se toca ninguna variable** y manda el **tema dorado por defecto** de `index.css`. |
+
+La derivación del tema **nunca lanza** ante un branding mal formado: a lo sumo
+devuelve `null` y el tema por defecto queda intacto (sin regresión ni crash).
+
+### 4. Criterio de contraste — WCAG 2.1 AA (texto normal, 4.5:1)
+
+El tema white-label **no asume** texto claro u oscuro sobre la marca: lo **elige
+midiendo el contraste WCAG real**. En [`salon-theme.ts`](src/lib/salon-theme.ts):
+
+- El color de marca `#rrggbb` (mismo patrón `^#[0-9a-fA-F]{6}$` que la `CHECK` de
+  `salon_branding.primary_color`; sin atajo de 3 dígitos ni alfa) se convierte a
+  HSL y alimenta los tokens de acento (`--primary`, `--ring`, la familia
+  `--gold`, `--accent`, gradiente y sombra), **re-tintando** las relaciones ya
+  calibradas del tema dorado por defecto (con el oro base `#cc9433` la salida
+  coincide **exactamente** con `index.css`).
+- Para el **texto sobre el relleno**, `readableForeground()` calcula la **razón de
+  contraste** (fórmula WCAG 1.4.3, `(L1+0.05)/(L2+0.05)` sobre la luminancia
+  relativa) entre el color y los **dos** textos del sistema —claro `40 20% 92%` /
+  oscuro `30 10% 6%`— y escoge el de **mayor** contraste. Umbral AA:
+  `WCAG_AA_TEXT = 4.5`.
+
+Garantías (fijadas en [`salon-theme.test.ts`](src/lib/salon-theme.test.ts)):
+
+- **`--primary` / `--primary-foreground`** (relleno de botones/CTA, la superficie
+  que realmente lleva texto) **cumple AA** (≥ 4.5:1) para toda marca representativa.
+- **`--accent` / `--accent-foreground`** es un mid-tone **deliberadamente apagado**
+  para estados activos sutiles: su texto es **siempre el más legible posible**,
+  aunque ese máximo pueda quedar algo por debajo de AA (≈ 4.3) en el acento
+  insignia. La superficie de CTA sí cumple holgado (≈ 7.1).
+- `assessFillLegibility(hex)` expone `ratio` + `meetsAA` para **avisar sin
+  bloquear**: un color problemático (p. ej. un gris medio cuyo mejor texto ≈ 4.03)
+  se **detecta** como no-AA en vez de fingir legibilidad.
+
+### 5. Probar otra peluquería en local — `?salon=<slug>`
+
+En `localhost` **no hay subdominio** (se ignora), así que la resolución cae a
+`?salon=<slug>` (2.ª prioridad) o a `VITE_SALON_SLUG` (3.ª):
+
+```sh
+npm run dev
+# Por defecto sirve el salón de VITE_SALON_SLUG (.env), p. ej. "denueveanueve":
+#   http://localhost:8080/
+
+# Para probar OTRA peluquería, añade ?salon=<slug> (gana al fallback de .env):
+#   http://localhost:8080/?salon=jotabarber
+```
+
+Notas:
+
+- El slug debe **existir y estar activo** en Salón OS (que `get_salon_branding` lo
+  devuelva). Un slug inexistente muestra la pantalla **"salón no encontrado"** —
+  que es, precisamente, el comportamiento white-label correcto a verificar.
+- El slug se resuelve **una vez por carga** (al montar `<SalonProvider>`, leyendo
+  `window.location.search`), y el branding se cachea toda la sesión. Mantén el
+  `?salon=` en la **carga inicial**; para cambiar de salón, recarga con otro valor.
+- Para simular el subdominio real de producción, mapea
+  `jotabarber.salonos.app → 127.0.0.1` en tu `hosts` y entra por ahí; para el día
+  a día, `?salon=` es lo más simple.
+
+> Referencia ampliada (heurística del subdominio, matriz de fallback y cálculo del
+> contraste con ejemplos): [`docs/WHITE-LABEL.md`](docs/WHITE-LABEL.md).
+
+---
+
 ## Requisitos
 
 - **Node.js 18+** y **npm** (o [bun](https://bun.sh), hay `bun.lock` en el repo).
