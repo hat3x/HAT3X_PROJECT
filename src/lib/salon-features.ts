@@ -57,6 +57,46 @@ export async function salonHasFeature(
 }
 
 /**
+ * Lee TODOS los entitlements de `salonId` en UNA sola consulta y los reduce a un mapa
+ * `feature → enabled`. Pensado para VISUALIZAR o gatear VARIOS add-ons a la vez (p. ej.
+ * la vista de «Complementos» de Ajustes) sin pagar un round-trip por feature como haría
+ * llamar N veces a {@link salonHasFeature}.
+ *
+ * A diferencia de {@link salonHasFeature}, NO filtra por `enabled`: devuelve la fila tal
+ * cual para que el llamador distinga los TRES estados que la UI necesita (la semántica
+ * OPT-IN se preserva en el consumidor, no se pierde aquí):
+ *   · clave ausente            ⇒ no contratado (la ausencia de fila ES el gate).
+ *   · `get(feature) === true`  ⇒ contratado y activo.
+ *   · `get(feature) === false` ⇒ contratado pero pausado (`enabled=false`, p. ej. impago).
+ *
+ * Acota SIEMPRE por `salon_id` (RLS del miembro + filtro explícito). De SOLO LECTURA: no
+ * provisiona ni modifica entitlements (eso es exclusivo de HAT3X vía service_role). USO
+ * EXCLUSIVO DE SERVIDOR.
+ *
+ * @throws el error de Postgrest si la consulta falla (el llamador lo traduce a su error
+ *   de dominio). Un resultado vacío NO es error: es un mapa vacío (ningún add-on).
+ */
+export async function listSalonFeatures(
+  client: AnySupabaseClient,
+  salonId: string,
+): Promise<Map<SalonFeature, boolean>> {
+  const { data, error } = await client
+    .from("salon_features")
+    .select("feature, enabled")
+    .eq("salon_id", salonId);
+
+  if (error !== null) {
+    throw error;
+  }
+
+  const states = new Map<SalonFeature, boolean>();
+  for (const row of data ?? []) {
+    states.set(row.feature, row.enabled);
+  }
+  return states;
+}
+
+/**
  * Mensaje de dominio ÚNICO para el gate de la fidelización nativa (evita que el copy
  * diverja entre `@/lib/loyalty/server` y `@/lib/customers/account`). El código de
  * error asociado es `feature_not_enabled` (HTTP 403).

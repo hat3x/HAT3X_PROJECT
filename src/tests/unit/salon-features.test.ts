@@ -33,6 +33,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   LOYALTY_FEATURE_DISABLED_MESSAGE,
+  listSalonFeatures,
   salonHasFeature,
 } from "@/lib/salon-features";
 import type { SalonFeature } from "@/types/database";
@@ -69,6 +70,43 @@ function makeClient(rows: Row[], error: { message: string } | null = null) {
 type Client = Parameters<typeof salonHasFeature>[0];
 const asClient = (rows: Row[], error: { message: string } | null = null): Client =>
   makeClient(rows, error) as unknown as Client;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Doble MÍNIMO para `listSalonFeatures`, que hace:
+//   from("salon_features").select("feature, enabled").eq("salon_id", …)
+// y AWAITA el builder (sin `.maybeSingle`): devuelve la LISTA de filas que cumplen
+// los `.eq`. El builder es un thenable que resuelve `{ data, error }`.
+// ─────────────────────────────────────────────────────────────────────────────
+function makeListClient(rows: Row[], error: { message: string } | null = null) {
+  function builder() {
+    const filters: Array<(r: Row) => boolean> = [];
+    const b = {
+      select: () => b,
+      eq: (col: string, val: unknown) => {
+        filters.push((r) => r[col] === val);
+        return b;
+      },
+      then: (
+        resolve: (v: {
+          data: Row[] | null;
+          error: { message: string } | null;
+        }) => unknown,
+      ) => {
+        const data = error === null ? rows.filter((r) => filters.every((f) => f(r))) : null;
+        return Promise.resolve(resolve({ data, error }));
+      },
+    };
+    return b;
+  }
+  return { from: () => builder() };
+}
+
+/** Cliente tipado para `listSalonFeatures` sin arrastrar todo el tipo de Supabase. */
+type ListClient = Parameters<typeof listSalonFeatures>[0];
+const asListClient = (
+  rows: Row[],
+  error: { message: string } | null = null,
+): ListClient => makeListClient(rows, error) as unknown as ListClient;
 
 const SALON_A = "salon-a";
 const SALON_B = "salon-b";
@@ -113,6 +151,55 @@ describe("salonHasFeature — tabla de verdad OPT-IN", () => {
     // el llamador lo traduce a un error `internal`/500, no a un gate cerrado en silencio.
     const client = asClient([], { message: "boom" });
     await expect(salonHasFeature(client, SALON_A, LOYALTY)).rejects.toMatchObject({
+      message: "boom",
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A') LOTE — `listSalonFeatures` lee los N add-ons de una vez y DISTINGUE los tres
+//     estados que la vista de Complementos necesita. A diferencia de `salonHasFeature`,
+//     NO colapsa "pausado" con "no contratado": conserva el `enabled` de cada fila.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("listSalonFeatures — mapa feature→enabled (los tres estados de la UI)", () => {
+  it("mapea cada fila a su enabled y DISTINGUE activo (true) de pausado (false)", async () => {
+    const client = asListClient([
+      { salon_id: SALON_A, feature: "loyalty", enabled: true },
+      { salon_id: SALON_A, feature: "pos", enabled: false },
+    ]);
+    const map = await listSalonFeatures(client, SALON_A);
+    expect(map.get("loyalty")).toBe(true); // contratado y activo
+    expect(map.get("pos")).toBe(false); // contratado pero pausado (≠ no contratado)
+  });
+
+  it("un add-on SIN fila queda AUSENTE del mapa (la ausencia = no contratado)", async () => {
+    const client = asListClient([
+      { salon_id: SALON_A, feature: "loyalty", enabled: true },
+    ]);
+    const map = await listSalonFeatures(client, SALON_A);
+    expect(map.has("client_app")).toBe(false);
+    expect(map.get("client_app")).toBeUndefined();
+  });
+
+  it("se acota por salon_id: las filas de OTRO salón no entran en el mapa", async () => {
+    const client = asListClient([
+      { salon_id: SALON_A, feature: "loyalty", enabled: true },
+      { salon_id: SALON_B, feature: "pos", enabled: true },
+    ]);
+    const map = await listSalonFeatures(client, SALON_A);
+    expect(map.has("loyalty")).toBe(true);
+    expect(map.has("pos")).toBe(false); // esa fila era del salón B
+  });
+
+  it("sin ninguna fila ⇒ mapa vacío (ningún add-on), no un error", async () => {
+    const client = asListClient([]);
+    const map = await listSalonFeatures(client, SALON_A);
+    expect(map.size).toBe(0);
+  });
+
+  it("un error de la consulta se PROPAGA (no se enmascara como mapa vacío)", async () => {
+    const client = asListClient([], { message: "boom" });
+    await expect(listSalonFeatures(client, SALON_A)).rejects.toMatchObject({
       message: "boom",
     });
   });
