@@ -174,6 +174,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Profile
     'profile.title': 'Mi Perfil',
     'profile.personalInfo': 'Información personal',
+    'profile.fullName': 'Nombre completo',
     'profile.preferences': 'Preferencias',
     'profile.consents': 'Comunicaciones',
     'profile.preferredLocation': 'Centro preferido',
@@ -462,6 +463,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Profile
     'profile.title': 'My Profile',
     'profile.personalInfo': 'Personal information',
+    'profile.fullName': 'Full name',
     'profile.preferences': 'Preferences',
     'profile.consents': 'Communications',
     'profile.preferredLocation': 'Preferred location',
