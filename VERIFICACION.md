@@ -11,9 +11,12 @@
 | Typecheck | `npx tsc --noEmit -p tsconfig.app.json` | ✅ `exit 0` |
 | Tests | `npm run test` (vitest) | ✅ 1/1 |
 
-> `VITE_SALON_ID` es **obligatoria** en build: `src/lib/salon.ts` lanza un error
-> temprano si falta. Para la verificación se usó un UUID placeholder
-> (`VITE_SALON_ID=00000000-0000-0000-0000-000000000000`).
+> **Actualización (sub-4, 2026-07-19):** lo anterior sobre `VITE_SALON_ID` ya **no
+> aplica**. El salón se resuelve en **runtime** (subdominio > `?salon` >
+> `VITE_SALON_SLUG`) y `salon_id` se **deriva** del branding de
+> `get_salon_branding`; `src/lib/salon.ts` ya no lee ni exige `VITE_SALON_ID`. La
+> variable queda **deprecada** (fallback: `VITE_SALON_SLUG`). Registro histórico del
+> estado en sub-9 más abajo.
 
 ## Confirmaciones funcionales
 

@@ -214,7 +214,7 @@ const ApiKeys = () => {
       <div className="px-6 py-6 max-w-3xl mx-auto space-y-4">
         {/* Info banner */}
         <div className="rounded-xl border border-gold/20 bg-gold/5 p-4 text-sm text-muted-foreground">
-          Las API keys dan acceso programático a la API de De Nueve a Nueve.
+          Las API keys dan acceso programático a la API del salón.
           Cada key solo se muestra <span className="text-foreground font-medium">una vez</span> al generarla. Guárdala en un lugar seguro.
         </div>
 

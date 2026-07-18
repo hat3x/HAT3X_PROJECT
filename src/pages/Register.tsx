@@ -16,8 +16,8 @@ const Register = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { signUp } = useAuth();
-  // salon_id derivado del salón resuelto en runtime (no de VITE_SALON_ID).
-  const { id: salonId } = useSalon();
+  // salon_id y nombre derivados del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId, name: salonName } = useSalon();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
@@ -98,7 +98,10 @@ const Register = () => {
     setLoading(false);
 
     if (rpcError) {
-      // PHONE_CONFLICT/P0001 → teléfono ya vinculado; INVALID_PHONE → no válido.
+      // mapRegisterError traduce el motivo del rechazo (sin sortear el gating):
+      //   INVALID_PHONE → teléfono no válido; PHONE_CONFLICT/P0001 → ya vinculado;
+      //   FEATURE_NOT_ENABLED → el salón no tiene contratado el add-on de app de
+      //   cliente (mensaje claro "esta peluquería no tiene contratado este servicio").
       toast.error(t(mapRegisterError(rpcError)));
       return;
     }
@@ -132,7 +135,7 @@ const Register = () => {
         transition={{ delay: 0.1 }}
       >
         <h1 className="mb-1 font-display text-3xl text-foreground">{t('auth.register')}</h1>
-        <p className="mb-8 text-sm text-muted-foreground">de<span className="text-gold">nueve</span>a<span className="text-gold">nueve</span></p>
+        <p className="mb-8 text-sm text-muted-foreground">{salonName}</p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-3">

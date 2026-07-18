@@ -1,7 +1,8 @@
 # denueveanueve — App de cliente
 
-> Aplicación web (PWA) de fidelización y perfil de cliente para el salón
-> **denueveanueve**, conectada al backend **Salón OS** sobre Supabase.
+> Aplicación web (PWA) **white-label** de fidelización y perfil de cliente para
+> salones, conectada al backend **Salón OS** sobre Supabase. El salón se resuelve
+> en runtime (por subdominio), de modo que la misma app sirve a cualquier salón.
 
 Stack: **Vite · React · TypeScript · @supabase/supabase-js · Tailwind + shadcn/ui**
 
@@ -14,10 +15,13 @@ fidelización (puntos, cupón de bienvenida, recompensas). Originalmente generad
 en Lovable, **desde la migración apunta al proyecto Salón OS** (multi-tenant) y
 ya **no depende de Lovable** para funcionar.
 
-La app es **mono-salón**: todas las lecturas "self" del cliente (`customers`,
+La app es **multi-salón (white-label)**: el salón se resuelve en runtime
+(subdominio del host > `?salon=<slug>` > `VITE_SALON_SLUG`) y su `salon_id` se
+**deriva** del branding que devuelve `get_salon_branding` — ya **no** de
+`VITE_SALON_ID`. Todas las lecturas "self" del cliente (`customers`,
 `loyalty_accounts`, `welcome_coupons`, `rewards`, `points_movements`) se filtran
-además por `salon_id = VITE_SALON_ID`, coherente con las FKs compuestas
-`(id, salon_id)` del esquema y como defensa en profundidad sobre las RLS.
+además por ese `salon_id`, coherente con las FKs compuestas `(id, salon_id)` del
+esquema y como defensa en profundidad sobre las RLS.
 
 ### Estado por pantalla
 
@@ -44,8 +48,9 @@ de re-activación cuando exista el backend correspondiente.
 ## Requisitos
 
 - **Node.js 18+** y **npm** (o [bun](https://bun.sh), hay `bun.lock` en el repo).
-- Acceso al proyecto Supabase de **Salón OS** (URL + anon/publishable key) y al
-  `VITE_SALON_ID` del salón denueveanueve.
+- Acceso al proyecto Supabase de **Salón OS** (URL + anon/publishable key). El
+  salón se resuelve en runtime por subdominio; en local se fija con
+  `VITE_SALON_SLUG` (fallback) o `?salon=<slug>`.
 
 ---
 
@@ -65,15 +70,17 @@ cp .env.example .env
 | `VITE_SUPABASE_URL` | ✅ | URL del proyecto Salón OS (p. ej. `https://jztoyekixcziaicrnlce.supabase.co`). |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | ✅ | Anon / publishable key de Supabase (pública). |
 | `VITE_SUPABASE_PROJECT_ID` | — | ID del proyecto (informativo). |
-| `VITE_SALON_ID` | ✅ | UUID del salón denueveanueve en Salón OS. Filtra todas las lecturas self. |
-| `VITE_SALON_SLUG` | — | Slug público del salón (informativo; por defecto `denueveanueve`). |
+| `VITE_SALON_SLUG` | — | **Fallback** del slug cuando el host no trae subdominio ni `?salon` (p. ej. en local). El salón real se resuelve en runtime. |
+| ~~`VITE_SALON_ID`~~ | — | **Deprecada.** Ya no es fuente de verdad: `salon_id` se deriva del branding en runtime. Puede eliminarse. |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | — | Sólo si se re-activan las suscripciones (Club/Premium). |
 
-> **Arranque estricto.** Si falta `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
-> o `VITE_SALON_ID`, la app lanza un error claro al iniciar en lugar de fallar en
-> silencio con queries vacías. Ver
+> **Arranque estricto.** Si falta `VITE_SUPABASE_URL` o
+> `VITE_SUPABASE_PUBLISHABLE_KEY`, la app lanza un error claro al iniciar en lugar
+> de fallar en silencio. Si no se resuelve ningún salón (sin subdominio, sin
+> `?salon` y sin `VITE_SALON_SLUG`), `<SalonProvider>` muestra una pantalla
+> controlada de "salón no encontrado". Ver
 > [`src/integrations/supabase/client.ts`](src/integrations/supabase/client.ts) y
-> [`src/lib/salon.ts`](src/lib/salon.ts).
+> [`src/lib/salon-context.tsx`](src/lib/salon-context.tsx).
 
 ### Variables de servidor (Edge Functions — **NUNCA** en el bundle del cliente)
 
@@ -132,7 +139,7 @@ de Auth con la ficha de cliente **a través del teléfono**, usando la RPC
 
    ```ts
    const { data, error } = await supabase.rpc('register_my_customer_account', {
-     p_salon_id: SALON_ID,   // VITE_SALON_ID
+     p_salon_id: salonId,    // derivado del salón en runtime (useSalon().id)
      p_phone: phone,
      p_full_name: fullName,
      p_email: email,
@@ -150,10 +157,15 @@ de Auth con la ficha de cliente **a través del teléfono**, usando la RPC
    Errores (la RPC lanza `EXCEPTION` con SQLSTATE `P0001`), mapeados a claves i18n
    por `mapRegisterError` en [`src/lib/auth.tsx`](src/lib/auth.tsx):
 
-   | Mensaje | Causa |
-   |---|---|
-   | `INVALID_PHONE` | El teléfono no tiene un formato válido. |
-   | `PHONE_CONFLICT` | El teléfono ya pertenece a otra cuenta/ficha. |
+   | Mensaje | Causa | Mensaje al usuario |
+   |---|---|---|
+   | `INVALID_PHONE` | El teléfono no tiene un formato válido. | "El número de teléfono no es válido." |
+   | `PHONE_CONFLICT` | El teléfono ya pertenece a otra cuenta/ficha. | "Este teléfono ya está vinculado a otra cuenta." |
+   | `FEATURE_NOT_ENABLED` | El salón **no tiene contratado** el add-on de app de cliente/fidelización (gating autoritativo en servidor). | "Esta peluquería no tiene contratado este servicio…" |
+
+   El gating de `FEATURE_NOT_ENABLED` es **autoritativo en el servidor**: la app
+   sólo traduce el motivo a un mensaje claro (`auth.error.featureNotEnabled`),
+   **sin** sortearlo ni conceder acceso al cliente.
 
 ### ⚠️ Nota: OTP pendiente
 
@@ -199,7 +211,9 @@ src/
 │   └── types.ts                    # tipos generados del esquema Salón OS
 ├── lib/
 │   ├── auth.tsx                    # AuthProvider + mapeo de errores (auth y RPC)
-│   ├── salon.ts                    # SALON_ID / SALON_SLUG (lee VITE_SALON_*)
+│   ├── salon.ts                    # resolución PURA del slug + tipos de branding
+│   ├── salon-branding.ts           # fetchSalonBranding (RPC get_salon_branding)
+│   ├── salon-context.tsx           # <SalonProvider> / useSalon() (salon_id runtime)
 │   └── i18n.tsx                    # traducciones
 ├── pages/
 │   ├── Register.tsx                # alta + enlace por teléfono vía RPC
@@ -210,6 +224,16 @@ src/
 ```
 
 ---
+
+## PWA (white-label)
+
+La app es instalable (PWA) vía [`vite-plugin-pwa`](vite.config.ts). El **color de
+la barra** del navegador/PWA **sí** sigue a la marca del salón en runtime (meta
+`theme-color`, fijada por `<SalonProvider>`). En cambio, el **nombre y el icono**
+del manifest son **build-time** y, con un único build multi-salón, se sirven
+**neutros** (no por-salón). Opciones para marca completa por salón (build por
+salón o manifest dinámico en servidor) y el detalle de la limitación:
+[`docs/PWA.md`](docs/PWA.md).
 
 ## Despliegue
 

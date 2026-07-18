@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Salón">
+  <!--
+    Icono PWA NEUTRO (white-label). No cablea la marca de ningún salón concreto:
+    fondo oscuro del sistema + glifo de tijeras (símbolo genérico de peluquería).
+    La marca por salón (nombre/colores) se aplica en runtime; ver docs/PWA.md.
+    Mantiene el motivo dentro de la "safe zone" central (~80%) para iconos maskable.
+  -->
+  <rect width="512" height="512" rx="112" fill="#0F0D0A"/>
+  <g fill="none" stroke="#C8A97E" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="168" cy="168" r="46"/>
+    <circle cx="168" cy="344" r="46"/>
+    <line x1="201" y1="201" x2="360" y2="360"/>
+    <line x1="392" y1="152" x2="201" y2="311"/>
+  </g>
+</svg>
