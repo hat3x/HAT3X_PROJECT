@@ -12,7 +12,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, metadata?: Record<string, unknown>) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, metadata?: Record<string, unknown>) => Promise<{ data: { user: User | null; session: Session | null }; error: AuthError | null }>;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
@@ -22,7 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   loading: true,
-  signUp: async () => ({ error: null }),
+  signUp: async () => ({ data: { user: null, session: null }, error: null }),
   signIn: async () => ({ error: null }),
   signOut: async () => {},
   resetPassword: async () => ({ error: null }),
@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signUp = async (email: string, password: string, metadata?: Record<string, unknown>) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -70,7 +70,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         emailRedirectTo: `${window.location.origin}/login`,
       },
     });
-    return { error };
+    // Devolvemos `data` ({ user, session }) además del error: cuando el proyecto
+    // no exige confirmación de correo, `session` viene ya activa y permite
+    // ejecutar la RPC de enlace por teléfono con auth.uid() disponible. Ver
+    // Register.tsx.
+    return { data, error };
   };
 
   const signIn = async (email: string, password: string) => {
@@ -127,5 +131,27 @@ export const mapAuthError = (error: unknown): string => {
   if (code === 'weak_password' || message.includes('password should be') || message.includes('weak password')) {
     return 'auth.error.weakPassword';
   }
+  return 'auth.error.generic';
+};
+
+/**
+ * Traduce el error crudo de la RPC `register_my_customer_account` (Salón OS) a
+ * una clave de i18n. La RPC lanza EXCEPTION (SQLSTATE `P0001`) con un mensaje que
+ * identifica el motivo:
+ *   - `INVALID_PHONE`   → el teléfono no tiene un formato válido.
+ *   - `PHONE_CONFLICT`  → el teléfono ya pertenece a otra cuenta/ficha.
+ * Se comprueba primero el texto del mensaje (más específico); como red de
+ * seguridad, el código `P0001` sin texto reconocible se trata como conflicto de
+ * teléfono, que es el fallo esperado más frecuente de esta RPC.
+ */
+export const mapRegisterError = (error: unknown): string => {
+  if (!error) return 'auth.error.generic';
+
+  const err = error as { code?: string; message?: string };
+  const code = (err.code ?? '').toUpperCase();
+  const message = (err.message ?? '').toUpperCase();
+
+  if (message.includes('INVALID_PHONE')) return 'auth.error.invalidPhone';
+  if (message.includes('PHONE_CONFLICT') || code === 'P0001') return 'auth.error.phoneConflict';
   return 'auth.error.generic';
 };
