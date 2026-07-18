@@ -55,6 +55,11 @@ const ROLE_LABEL: Record<MemberRole, string> = {
 interface DashboardNavProps {
   /** Nombre del salón activo; cae a "Salon OS" si no hay uno resuelto. */
   brandName: string | null;
+  /**
+   * URL pública del logo del salón (white-label). Si existe, sustituye a la marca
+   * genérica (cuadro violeta + tijeras); si es `null`, se muestra el fallback premium.
+   */
+  logoUrl?: string | null;
   /** Rol del usuario, para mostrar un descriptor discreto en la cuenta. */
   role: MemberRole | null;
   /** Si el usuario puede ver la sección de ajustes (owner/manager). */
@@ -81,6 +86,7 @@ function isActivePath(pathname: string, href: string): boolean {
  */
 export function DashboardNav({
   brandName,
+  logoUrl,
   role,
   showSettings,
 }: DashboardNavProps): React.ReactElement {
@@ -89,6 +95,7 @@ export function DashboardNav({
 
   const items = showSettings ? [...NAV_ITEMS, SETTINGS_ITEM] : NAV_ITEMS;
   const brand = brandName?.trim() ? brandName : "Salon OS";
+  const logo = logoUrl?.trim() ? logoUrl : null;
 
   // Cierra el menú móvil al cambiar de ruta (navegación completada).
   useEffect(() => {
@@ -113,15 +120,28 @@ export function DashboardNav({
           href="/dashboard"
           className="group flex shrink-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          <span
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-brand transition-transform duration-200 ease-apple-out group-hover:scale-105"
-            aria-hidden="true"
-          >
-            <Scissors className="h-4.5 w-4.5" />
-          </span>
-          <span className="hidden text-base font-semibold tracking-tight sm:inline-block">
-            {brand}
-          </span>
+          {logo ? (
+            // Logo del salón (white-label). Alto fijo (h-9) = sin salto de layout;
+            // `object-contain` respeta el aspecto y `alt` lleva el nombre para SR.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logo}
+              alt={brand}
+              className="h-9 w-auto max-w-[9.5rem] rounded-lg object-contain transition-transform duration-200 ease-apple-out group-hover:scale-105"
+            />
+          ) : (
+            <>
+              <span
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-brand transition-transform duration-200 ease-apple-out group-hover:scale-105"
+                aria-hidden="true"
+              >
+                <Scissors className="h-4.5 w-4.5" />
+              </span>
+              <span className="hidden text-base font-semibold tracking-tight sm:inline-block">
+                {brand}
+              </span>
+            </>
+          )}
         </Link>
 
         {/* Navegación de escritorio */}
