@@ -1,18 +1,24 @@
-import { User, Star, TrendingUp, Clock, Gift, AlertTriangle } from 'lucide-react';
+import { User, Star, TrendingUp, Clock, Gift, Ticket } from 'lucide-react';
+
+/** Cupón de bienvenida ACTIVE y no caducado (welcome_coupons de Salón OS). */
+interface WelcomeCoupon {
+  percent_off: number;
+  expires_at: string;
+}
 
 interface CustomerSummaryCardProps {
   customer: {
-    first_name: string;
-    last_name: string;
-    phone: string;
-    status: string;
-    loyalty?: { visits_total: number; points_balance: number; last_visit_at: string | null };
+    full_name: string;
+    phone: string | null;
+    loyalty?: { visits_total: number; points_balance: number; last_visit_at: string | null } | null;
     rewards_available: number;
+    /** Mejor cupón de bienvenida disponible, si lo hay. */
+    welcomeCoupon?: WelcomeCoupon | null;
   };
 }
 
-function maskPhone(phone: string) {
-  if (phone.length < 4) return '****';
+function maskPhone(phone: string | null) {
+  if (!phone || phone.length < 4) return '••••';
   return '•••• •••• ' + phone.slice(-4);
 }
 
@@ -22,26 +28,29 @@ function formatDate(d: string | null) {
 }
 
 export function CustomerSummaryCard({ customer }: CustomerSummaryCardProps) {
-  const isInactive = customer.status !== 'ACTIVE';
+  const coupon = customer.welcomeCoupon ?? null;
 
   return (
-    <div className={`rounded-xl border p-4 ${isInactive ? 'bg-destructive/5 border-destructive/20' : 'bg-card border-border'}`}>
-      {isInactive && (
-        <div className="mb-3 flex items-center gap-2 text-sm text-destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <span className="font-medium">Cliente {customer.status === 'DISABLED' ? 'deshabilitado' : 'pendiente de verificación'}</span>
-        </div>
-      )}
-
+    <div className="rounded-xl border p-4 bg-card border-border">
       <div className="flex items-center gap-3 mb-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
           <User className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h3 className="font-semibold text-foreground text-lg">{customer.first_name} {customer.last_name}</h3>
+          <h3 className="font-semibold text-foreground text-lg">{customer.full_name}</h3>
           <p className="text-sm text-muted-foreground">{maskPhone(customer.phone)}</p>
         </div>
       </div>
+
+      {coupon && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 p-3">
+          <Ticket className="h-4 w-4 shrink-0 text-primary" />
+          <p className="text-sm text-foreground">
+            <span className="font-semibold text-primary">Cupón de bienvenida · {coupon.percent_off}% dto.</span>
+            <span className="text-muted-foreground"> · caduca {formatDate(coupon.expires_at)}</span>
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-muted p-3">

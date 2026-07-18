@@ -1,20 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SALON_ID } from '@/integrations/supabase/client';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { ErrorState } from '@/components/staff/ErrorState';
 import { CustomerSummaryCard } from '@/components/staff/CustomerSummaryCard';
 import { IdentityVerificationForm } from '@/components/staff/IdentityVerificationForm';
 import { UserCheck } from 'lucide-react';
 
+interface WelcomeCoupon {
+  percent_off: number;
+  expires_at: string;
+}
+
 interface CustomerData {
   id: string;
-  first_name: string;
-  last_name: string;
-  phone: string;
-  status: string;
-  loyalty?: { visits_total: number; points_balance: number; last_visit_at: string | null };
+  full_name: string;
+  phone: string | null;
+  qr_token: string;
+  loyalty?: { visits_total: number; points_balance: number; last_visit_at: string | null } | null;
   rewards_available: number;
+  welcomeCoupon: WelcomeCoupon | null;
   todayAppointment?: {
     id: string;
     location_id: string;
@@ -31,11 +36,17 @@ export default function VerifyCustomer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
-  const [verificationMethod, setVerificationMethod] = useState<string>('');
+  const [, setVerificationMethod] = useState<string>('');
 
   useEffect(() => {
     async function fetchCustomer() {
-      let query = supabase.from('customers').select('id, first_name, last_name, phone, status');
+      const nowISO = new Date().toISOString();
+
+      // El cliente se busca SIEMPRE dentro de este salón (Salón OS es multi-tenant).
+      let query = supabase
+        .from('customers')
+        .select('id, full_name, phone, qr_token')
+        .eq('salon_id', SALON_ID);
 
       if (qrToken) {
         query = query.eq('qr_token', qrToken);
@@ -47,15 +58,9 @@ export default function VerifyCustomer() {
         return;
       }
 
-      const { data: cust, error: custErr } = await query.single();
+      const { data: cust, error: custErr } = await query.maybeSingle();
       if (custErr || !cust) {
         setError('Cliente no encontrado');
-        setLoading(false);
-        return;
-      }
-
-      if (cust.status === 'DISABLED') {
-        setError('Esta cuenta de cliente está deshabilitada');
         setLoading(false);
         return;
       }
@@ -66,10 +71,29 @@ export default function VerifyCustomer() {
       const todayEnd = new Date();
       todayEnd.setHours(23, 59, 59, 999);
 
-      const [loyaltyRes, rewardsRes, appointmentsRes] = await Promise.all([
-        supabase.from('loyalty_accounts').select('*').eq('customer_id', cust.id).single(),
-        supabase.from('rewards').select('id', { count: 'exact', head: true })
-          .eq('customer_id', cust.id).eq('status', 'AVAILABLE'),
+      const [loyaltyRes, rewardsRes, couponsRes, appointmentsRes] = await Promise.all([
+        supabase
+          .from('loyalty_accounts')
+          .select('visits_total, points_balance, last_visit_at')
+          .eq('customer_id', cust.id)
+          .eq('salon_id', SALON_ID)
+          .maybeSingle(),
+        supabase
+          .from('rewards')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_id', cust.id)
+          .eq('salon_id', SALON_ID)
+          .eq('status', 'AVAILABLE')
+          .gt('expires_at', nowISO),
+        supabase
+          .from('welcome_coupons')
+          .select('percent_off, expires_at')
+          .eq('customer_id', cust.id)
+          .eq('salon_id', SALON_ID)
+          .eq('status', 'ACTIVE')
+          .gt('expires_at', nowISO)
+          .order('percent_off', { ascending: false })
+          .order('expires_at', { ascending: true }),
         supabase.from('appointments' as any).select('id, start_at, location_id')
           .eq('customer_id', cust.id)
           .in('status', ['CONFIRMED', 'RESCHEDULED'])
@@ -90,10 +114,13 @@ export default function VerifyCustomer() {
         todayAppointment = { ...apt, services: (aptServices as any[]) ?? [] };
       }
 
+      const welcomeCoupon = couponsRes.data && couponsRes.data.length > 0 ? couponsRes.data[0] : null;
+
       setCustomer({
         ...cust,
         loyalty: loyaltyRes.data ?? undefined,
         rewards_available: rewardsRes.count ?? 0,
+        welcomeCoupon,
         todayAppointment,
       });
       setLoading(false);
@@ -107,8 +134,8 @@ export default function VerifyCustomer() {
     navigate('/select-service', {
       state: {
         customerId: customer!.id,
-        customerName: `${customer!.first_name} ${customer!.last_name}`,
-        qrToken,
+        customerName: customer!.full_name,
+        qrToken: qrToken ?? customer!.qr_token,
         verificationMethod: method,
         loyalty: customer!.loyalty,
         todayAppointment: customer!.todayAppointment ?? null,

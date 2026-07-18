@@ -1,34 +1,46 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SALON_ID } from '@/integrations/supabase/client';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { EmptyState } from '@/components/staff/EmptyState';
-import { Clock, Star, User, Scissors, Calendar, Filter } from 'lucide-react';
+import { Clock, Star, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import type { Database } from '@/types/database';
 
-interface AuditEntry {
+type MovementType = Database['public']['Enums']['points_movement_type'];
+
+interface MovementEntry {
   id: string;
-  action: string;
-  actor_id: string | null;
-  entity_id: string;
-  metadata: any;
+  points: number;
+  reason: string | null;
+  type: MovementType;
   created_at: string;
-  location_id: string | null;
+  customers: { full_name: string } | null;
 }
+
+// Etiqueta legible por tipo cuando el movimiento no trae `reason`.
+const MOVEMENT_LABELS: Record<MovementType, string> = {
+  EARN: 'Puntos ganados',
+  REDEEM: 'Canje de puntos',
+  ADJUST: 'Ajuste de puntos',
+  EXPIRE: 'Puntos caducados',
+};
 
 type FilterPeriod = 'today' | 'week' | 'all';
 
 export default function History() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [entries, setEntries] = useState<MovementEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<FilterPeriod>('today');
 
   useEffect(() => {
-    async function fetch() {
+    async function fetchHistory() {
       setLoading(true);
+      // Movimientos de puntos del salón, del más reciente al más antiguo, con el
+      // nombre del cliente embebido (points_movements → customers).
       let query = supabase
-        .from('audit_logs')
-        .select('*')
-        .eq('action', 'VERIFY_VISIT')
+        .from('points_movements')
+        .select('id, points, reason, type, created_at, customers(full_name)')
+        .eq('salon_id', SALON_ID)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -43,10 +55,10 @@ export default function History() {
       }
 
       const { data } = await query;
-      setEntries(data ?? []);
+      setEntries((data ?? []) as unknown as MovementEntry[]);
       setLoading(false);
     }
-    fetch();
+    fetchHistory();
   }, [period]);
 
   const formatTime = (d: string) => {
@@ -80,41 +92,39 @@ export default function History() {
       {loading ? (
         <LoadingState message="Cargando historial..." />
       ) : entries.length === 0 ? (
-        <EmptyState title="Sin actividad" message="No hay visitas registradas en este período" />
+        <EmptyState title="Sin actividad" message="No hay movimientos de puntos en este período" />
       ) : (
         <div className="space-y-2">
-          {entries.map((entry) => (
-            <div key={entry.id} className="rounded-xl bg-card border border-border p-4">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium text-foreground">
-                      {(entry.metadata as any)?.customer_name ?? 'Cliente'}
-                    </span>
-                  </div>
-                  {(entry.metadata as any)?.service_name && (
+          {entries.map((entry) => {
+            const positive = entry.type === 'EARN' || (entry.type === 'ADJUST' && entry.points >= 0);
+            const magnitude = Math.abs(entry.points);
+            return (
+              <div key={entry.id} className="rounded-xl bg-card border border-border p-4">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <Scissors className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">{(entry.metadata as any)?.service_name}</span>
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium text-foreground">
+                        {entry.customers?.full_name ?? 'Cliente'}
+                      </span>
                     </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Star className="h-4 w-4 text-primary" />
-                    <span className="text-sm text-primary font-medium">
-                      +{(entry.metadata as any)?.points_added ?? 10} pts
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      · {(entry.metadata as any)?.visits_total ?? '?'} visitas
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Star className={`h-4 w-4 ${positive ? 'text-primary' : 'text-destructive'}`} />
+                      <span className={`text-sm font-medium ${positive ? 'text-primary' : 'text-destructive'}`}>
+                        {positive ? '+' : '−'}{magnitude} pts
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        · {entry.reason ?? MOVEMENT_LABELS[entry.type]}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">{formatTime(entry.created_at)}</p>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">{formatTime(entry.created_at)}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

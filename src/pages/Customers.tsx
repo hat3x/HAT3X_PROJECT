@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, SALON_ID } from '@/integrations/supabase/client';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { EmptyState } from '@/components/staff/EmptyState';
 import { Input } from '@/components/ui/input';
@@ -8,11 +8,9 @@ import { Users, Search, ChevronRight, User } from 'lucide-react';
 
 interface Customer {
   id: string;
-  first_name: string;
-  last_name: string;
-  phone: string;
-  email: string;
-  status: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
 }
 
 export default function Customers() {
@@ -25,8 +23,9 @@ export default function Customers() {
     async function fetch() {
       const { data } = await supabase
         .from('customers')
-        .select('id, first_name, last_name, phone, email, status')
-        .order('first_name');
+        .select('id, full_name, phone, email')
+        .eq('salon_id', SALON_ID)
+        .order('full_name');
       setCustomers(data ?? []);
       setLoading(false);
     }
@@ -36,10 +35,9 @@ export default function Customers() {
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase();
     return (
-      c.first_name.toLowerCase().includes(q) ||
-      c.last_name.toLowerCase().includes(q) ||
-      c.phone.includes(q) ||
-      c.email.toLowerCase().includes(q)
+      c.full_name.toLowerCase().includes(q) ||
+      (c.phone ?? '').includes(q) ||
+      (c.email ?? '').toLowerCase().includes(q)
     );
   });
 
@@ -79,16 +77,11 @@ export default function Customers() {
                   <User className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">{c.first_name} {c.last_name}</p>
-                  <p className="text-xs text-muted-foreground">{c.phone}</p>
+                  <p className="font-medium text-foreground">{c.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{c.phone ?? 'Sin teléfono'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {c.status !== 'ACTIVE' && (
-                  <span className="text-xs px-2 py-0.5 rounded bg-destructive/10 text-destructive font-medium">
-                    {c.status === 'DISABLED' ? 'Deshabilitado' : 'Pendiente'}
-                  </span>
-                )}
                 <ChevronRight className="h-5 w-5 text-muted-foreground" />
               </div>
             </button>
