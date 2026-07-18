@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { SalonProvider } from "@/lib/salon-context";
 import { AuthProvider } from "@/lib/auth";
 import { AppShell, EmployeeShell, AdminShell } from "@/components/staff/AppShell";
 
@@ -27,8 +28,12 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
+    {/* SalonProvider resuelve el salón (subdominio > ?salon= > VITE_SALON_SLUG) antes de
+        montar nada: hasta que no hay un salón válido, AuthProvider y las rutas no se
+        renderizan (muestra splash o pantalla de error controlada). */}
+    <SalonProvider>
+      <AuthProvider>
+        <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
@@ -66,7 +71,8 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </SalonProvider>
   </QueryClientProvider>
 );
 

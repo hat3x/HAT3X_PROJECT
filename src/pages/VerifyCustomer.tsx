@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { supabase, SALON_ID } from '@/integrations/supabase/client';
+import { useSalonId } from '@/lib/salon-context';
+import { supabase } from '@/integrations/supabase/client';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { ErrorState } from '@/components/staff/ErrorState';
 import { CustomerSummaryCard } from '@/components/staff/CustomerSummaryCard';
@@ -30,6 +31,7 @@ interface CustomerData {
 export default function VerifyCustomer() {
   const location = useLocation();
   const navigate = useNavigate();
+  const salonId = useSalonId();
   const qrToken = (location.state as any)?.qrToken;
   const customerId = (location.state as any)?.customerId;
   const [customer, setCustomer] = useState<CustomerData | null>(null);
@@ -46,7 +48,7 @@ export default function VerifyCustomer() {
       let query = supabase
         .from('customers')
         .select('id, full_name, phone, qr_token')
-        .eq('salon_id', SALON_ID);
+        .eq('salon_id', salonId);
 
       if (qrToken) {
         query = query.eq('qr_token', qrToken);
@@ -76,20 +78,20 @@ export default function VerifyCustomer() {
           .from('loyalty_accounts')
           .select('visits_total, points_balance, last_visit_at')
           .eq('customer_id', cust.id)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .maybeSingle(),
         supabase
           .from('rewards')
           .select('id', { count: 'exact', head: true })
           .eq('customer_id', cust.id)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .eq('status', 'AVAILABLE')
           .gt('expires_at', nowISO),
         supabase
           .from('welcome_coupons')
           .select('percent_off, expires_at')
           .eq('customer_id', cust.id)
-          .eq('salon_id', SALON_ID)
+          .eq('salon_id', salonId)
           .eq('status', 'ACTIVE')
           .gt('expires_at', nowISO)
           .order('percent_off', { ascending: false })
@@ -126,7 +128,7 @@ export default function VerifyCustomer() {
       setLoading(false);
     }
     fetchCustomer();
-  }, [qrToken, customerId]);
+  }, [qrToken, customerId, salonId]);
 
   const handleVerified = (method: string) => {
     setVerified(true);

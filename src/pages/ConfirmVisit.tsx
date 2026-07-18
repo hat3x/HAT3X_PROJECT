@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { supabase, SALON_ID } from '@/integrations/supabase/client';
+import { useSalonId } from '@/lib/salon-context';
+import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -47,6 +48,7 @@ function classifyAwardError(text: string): AwardErrorCode {
 export default function ConfirmVisit() {
   const location = useLocation();
   const navigate = useNavigate();
+  const salonId = useSalonId();
   const state = (location.state ?? {}) as ConfirmVisitState;
 
   const lines: VisitLine[] = state.lines ?? [];
@@ -75,7 +77,7 @@ export default function ConfirmVisit() {
       .from('welcome_coupons')
       .select('percent_off, expires_at')
       .eq('customer_id', customerId)
-      .eq('salon_id', SALON_ID)
+      .eq('salon_id', salonId)
       .eq('status', 'ACTIVE')
       .gt('expires_at', new Date().toISOString())
       .order('percent_off', { ascending: false })
@@ -89,7 +91,7 @@ export default function ConfirmVisit() {
     return () => {
       active = false;
     };
-  }, [customerId]);
+  }, [customerId, salonId]);
 
   const handleConfirm = async () => {
     if (lines.length === 0) {
@@ -109,7 +111,7 @@ export default function ConfirmVisit() {
       const identifier = customerId ? { p_customer_id: customerId } : { p_qr_token: qrToken };
 
       const { data, error: rpcError } = await supabase.rpc('staff_award_visit', {
-        p_salon_id: SALON_ID,
+        p_salon_id: salonId,
         ...identifier,
         p_line_items: lines as unknown as Json,
         p_redeem_coupon: redeemCoupon,

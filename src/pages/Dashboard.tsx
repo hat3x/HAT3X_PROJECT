@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
-import { supabase, SALON_ID } from '@/integrations/supabase/client';
+import { useSalonId } from '@/lib/salon-context';
+import { supabase } from '@/integrations/supabase/client';
 import { ScanLine, Users, Clock, Star, TrendingUp, Gift } from 'lucide-react';
 import { LoadingState } from '@/components/staff/LoadingState';
 
@@ -13,6 +14,7 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const salonId = useSalonId();
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({ visitsToday: 0, pointsToday: 0, rewardsToday: 0 });
   const [loading, setLoading] = useState(true);
@@ -25,11 +27,11 @@ export default function Dashboard() {
 
       const [visitsRes, pointsRes, rewardsRes] = await Promise.all([
         supabase.from('visits').select('id', { count: 'exact', head: true })
-          .eq('salon_id', SALON_ID).gte('visited_at', todayISO),
+          .eq('salon_id', salonId).gte('visited_at', todayISO),
         supabase.from('points_movements').select('points')
-          .eq('salon_id', SALON_ID).eq('type', 'EARN').gte('created_at', todayISO),
+          .eq('salon_id', salonId).eq('type', 'EARN').gte('created_at', todayISO),
         supabase.from('rewards').select('id', { count: 'exact', head: true })
-          .eq('salon_id', SALON_ID).gte('created_at', todayISO),
+          .eq('salon_id', salonId).gte('created_at', todayISO),
       ]);
 
       const totalPoints = pointsRes.data?.reduce((sum, r) => sum + r.points, 0) ?? 0;
@@ -42,7 +44,7 @@ export default function Dashboard() {
       setLoading(false);
     }
     fetchStats();
-  }, []);
+  }, [salonId]);
 
   if (loading) return <LoadingState message="Cargando dashboard..." />;
 

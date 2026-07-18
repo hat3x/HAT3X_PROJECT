@@ -25,6 +25,12 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
 });
 
 // Identidad del salón (Salón OS es multi-tenant): este despliegue = "denueveanueve".
+//
+// NOTA: el salon_id EFECTIVO de la app ya NO sale de aquí. Se resuelve en runtime por
+// subdominio > ?salon= > VITE_SALON_SLUG y se obtiene vía la RPC get_salon_branding
+// (ver src/lib/salon.ts + src/lib/salon-context.tsx). Se derivan del salón resuelto con
+// `useSalon()` / `useSalonId()`. Estas constantes se conservan como fallback documental
+// del entorno (VITE_SALON_ID/VITE_SALON_SLUG); no las importes en pantallas nuevas.
 export const SALON_ID =
   import.meta.env.VITE_SALON_ID ?? 'abeef620-4fe3-4b29-a17b-6c51a8284f8f';
 export const SALON_SLUG = import.meta.env.VITE_SALON_SLUG ?? 'denueveanueve';

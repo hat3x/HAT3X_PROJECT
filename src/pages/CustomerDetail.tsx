@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, SALON_ID } from '@/integrations/supabase/client';
+import { useSalonId } from '@/lib/salon-context';
+import { supabase } from '@/integrations/supabase/client';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { ErrorState } from '@/components/staff/ErrorState';
 import { CustomerSummaryCard } from '@/components/staff/CustomerSummaryCard';
@@ -19,6 +20,7 @@ const MOVEMENT_LABELS: Record<string, string> = {
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const salonId = useSalonId();
   const [customer, setCustomer] = useState<any>(null);
   const [movements, setMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,11 +31,11 @@ export default function CustomerDetail() {
       if (!id) return;
       const nowISO = new Date().toISOString();
       const [custRes, loyRes, rewRes, coupRes, movRes] = await Promise.all([
-        supabase.from('customers').select('*').eq('id', id).eq('salon_id', SALON_ID).maybeSingle(),
-        supabase.from('loyalty_accounts').select('visits_total, points_balance, last_visit_at').eq('customer_id', id).eq('salon_id', SALON_ID).maybeSingle(),
-        supabase.from('rewards').select('id', { count: 'exact', head: true }).eq('customer_id', id).eq('salon_id', SALON_ID).eq('status', 'AVAILABLE').gt('expires_at', nowISO),
-        supabase.from('welcome_coupons').select('percent_off, expires_at').eq('customer_id', id).eq('salon_id', SALON_ID).eq('status', 'ACTIVE').gt('expires_at', nowISO).order('percent_off', { ascending: false }).order('expires_at', { ascending: true }),
-        supabase.from('points_movements').select('*').eq('customer_id', id).eq('salon_id', SALON_ID).order('created_at', { ascending: false }).limit(20),
+        supabase.from('customers').select('*').eq('id', id).eq('salon_id', salonId).maybeSingle(),
+        supabase.from('loyalty_accounts').select('visits_total, points_balance, last_visit_at').eq('customer_id', id).eq('salon_id', salonId).maybeSingle(),
+        supabase.from('rewards').select('id', { count: 'exact', head: true }).eq('customer_id', id).eq('salon_id', salonId).eq('status', 'AVAILABLE').gt('expires_at', nowISO),
+        supabase.from('welcome_coupons').select('percent_off, expires_at').eq('customer_id', id).eq('salon_id', salonId).eq('status', 'ACTIVE').gt('expires_at', nowISO).order('percent_off', { ascending: false }).order('expires_at', { ascending: true }),
+        supabase.from('points_movements').select('*').eq('customer_id', id).eq('salon_id', salonId).order('created_at', { ascending: false }).limit(20),
       ]);
 
       if (custRes.error || !custRes.data) {
@@ -52,7 +54,7 @@ export default function CustomerDetail() {
       setLoading(false);
     }
     fetch();
-  }, [id]);
+  }, [id, salonId]);
 
   if (loading) return <LoadingState message="Cargando perfil..." />;
   if (error || !customer) return <ErrorState message={error ?? 'No encontrado'} />;

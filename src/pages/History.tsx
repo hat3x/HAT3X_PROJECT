@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase, SALON_ID } from '@/integrations/supabase/client';
+import { useSalonId } from '@/lib/salon-context';
+import { supabase } from '@/integrations/supabase/client';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { EmptyState } from '@/components/staff/EmptyState';
 import { Clock, Star, User } from 'lucide-react';
@@ -28,6 +29,7 @@ const MOVEMENT_LABELS: Record<MovementType, string> = {
 type FilterPeriod = 'today' | 'week' | 'all';
 
 export default function History() {
+  const salonId = useSalonId();
   const [entries, setEntries] = useState<MovementEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<FilterPeriod>('today');
@@ -40,7 +42,7 @@ export default function History() {
       let query = supabase
         .from('points_movements')
         .select('id, points, reason, type, created_at, customers(full_name)')
-        .eq('salon_id', SALON_ID)
+        .eq('salon_id', salonId)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -59,7 +61,7 @@ export default function History() {
       setLoading(false);
     }
     fetchHistory();
-  }, [period]);
+  }, [period, salonId]);
 
   const formatTime = (d: string) => {
     const date = new Date(d);

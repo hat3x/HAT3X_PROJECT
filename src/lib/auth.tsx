@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
-import { supabase, SALON_ID } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
+import { useSalon } from '@/lib/salon-context';
 import type { User, Session } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 
@@ -36,6 +37,11 @@ function idToEmail(id: string): string {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // salon_id del salón resuelto en runtime (SalonProvider ya ha resuelto por subdominio
+  // /?salon=/fallback antes de montar esto): la pertenencia se comprueba contra ESTE
+  // salón, no contra VITE_SALON_ID.
+  const { salonId } = useSalon();
+
   const [state, setState] = useState<AuthState>({
     user: null, session: null, roles: [],
     isStaff: false, isManager: false, isAdmin: false,
@@ -46,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // refresco de token. `role: null` = usuario autenticado pero no miembro.
   const membershipCache = useRef<{ userId: string; role: MemberRole | null } | null>(null);
 
-  // Devuelve el rol del usuario en ESTE salón (VITE_SALON_ID) o null si no es miembro.
+  // Devuelve el rol del usuario en ESTE salón (el resuelto en runtime) o null si no es miembro.
   const fetchMembership = useCallback(async (userId: string): Promise<MemberRole | null> => {
     if (membershipCache.current?.userId === userId) {
       return membershipCache.current.role;
@@ -56,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from('salon_members')
         .select('role')
-        .eq('salon_id', SALON_ID)
+        .eq('salon_id', salonId)
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -72,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('[Auth] Fallo consultando salon_members:', err);
       return null;
     }
-  }, []);
+  }, [salonId]);
 
   const applyState = useCallback((session: Session | null, role: MemberRole | null) => {
     if (!session?.user) {

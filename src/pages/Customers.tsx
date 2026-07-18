@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, SALON_ID } from '@/integrations/supabase/client';
+import { useSalonId } from '@/lib/salon-context';
+import { supabase } from '@/integrations/supabase/client';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { EmptyState } from '@/components/staff/EmptyState';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,7 @@ interface Customer {
 
 export default function Customers() {
   const navigate = useNavigate();
+  const salonId = useSalonId();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -24,13 +26,13 @@ export default function Customers() {
       const { data } = await supabase
         .from('customers')
         .select('id, full_name, phone, email')
-        .eq('salon_id', SALON_ID)
+        .eq('salon_id', salonId)
         .order('full_name');
       setCustomers(data ?? []);
       setLoading(false);
     }
     fetch();
-  }, []);
+  }, [salonId]);
 
   const filtered = customers.filter((c) => {
     const q = search.toLowerCase();

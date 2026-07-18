@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { supabase, SALON_ID } from '@/integrations/supabase/client';
+import { useSalonId } from '@/lib/salon-context';
+import { supabase } from '@/integrations/supabase/client';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { ServiceSelector, type SalonService } from '@/components/staff/ServiceSelector';
 import { Scissors } from 'lucide-react';
@@ -33,6 +34,7 @@ interface SelectServiceState {
 export default function SelectService() {
   const location = useLocation();
   const navigate = useNavigate();
+  const salonId = useSalonId();
   const state = (location.state ?? {}) as SelectServiceState;
   const [services, setServices] = useState<SalonService[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,14 +45,14 @@ export default function SelectService() {
       const { data } = await supabase
         .from('services')
         .select('id, name, category, price_cents, duration_minutes')
-        .eq('salon_id', SALON_ID)
+        .eq('salon_id', salonId)
         .eq('active', true)
         .order('name');
       setServices((data as SalonService[]) ?? []);
       setLoading(false);
     }
     fetchServices();
-  }, []);
+  }, [salonId]);
 
   const handleSelect = (selected: SalonService[]) => {
     const lines: VisitLine[] = selected.map((s) => ({

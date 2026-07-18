@@ -44,8 +44,8 @@ cp .env.example .env
 | `VITE_SUPABASE_URL` | URL del proyecto Supabase de Salón OS. |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | **Anon key** (`role: anon`) del proyecto. Es pública y segura en el cliente. |
 | `VITE_SUPABASE_PROJECT_ID` | ID del proyecto Supabase de Salón OS. |
-| `VITE_SALON_ID` | UUID del salón (multi-tenant). Este despliegue = `denueveanueve`. |
-| `VITE_SALON_SLUG` | Slug del salón (`denueveanueve`). |
+| `VITE_SALON_SLUG` | Slug de reserva por defecto. Es el **fallback** de la resolución en runtime (ver más abajo). |
+| `VITE_SALON_ID` | UUID del salón. **Obsoleto como fuente de verdad**: el `salon_id` se deriva del salón resuelto en runtime. Se conserva como fallback documental. |
 
 La `ANON KEY` puede copiarse desde el panel de Supabase (**Project → API**) o
 desde `salon-os/.env.local` (`NEXT_PUBLIC_SUPABASE_ANON_KEY`).
@@ -53,6 +53,35 @@ desde `salon-os/.env.local` (`NEXT_PUBLIC_SUPABASE_ANON_KEY`).
 > El cliente Supabase (`src/integrations/supabase/client.ts`) trae valores por
 > defecto de Salón OS como red de seguridad, pero en cualquier despliegue real
 > debes definir el `.env` de forma explícita.
+
+---
+
+## Resolución del salón en runtime
+
+Salón OS es multi-tenant y esta app se sirve con **un único código** por subdominio.
+El salón se resuelve al arrancar, con esta **prioridad** (función pura y testeable en
+`src/lib/salon.ts` — `resolveSalonSlug`):
+
+1. **Subdominio del host** — `denueveanueve.salonos.app` → `denueveanueve`. Se ignoran
+   `localhost` / `*.localhost`, IPs (v4/v6), `www` y el apex (`dominio.tld`).
+2. **Parámetro `?salon=<slug>`** — útil en local/preview (`localhost?salon=denueveanueve`).
+3. **`VITE_SALON_SLUG`** — fallback cuando no hay ni subdominio ni parámetro.
+
+Con el slug se llama a la RPC pública `get_salon_branding(p_slug)`
+(`src/lib/salon-branding.ts`), que devuelve **solo campos de marca seguros**: `id`,
+`name`, `slug`, `logo_url`, `primary_color`, `secondary_color` (nunca datos
+fiscales/PII). De ahí se **deriva el `salon_id`** de toda la app (auth y páginas leen
+`useSalon()` / `useSalonId()`), en vez de `VITE_SALON_ID`.
+
+El `SalonProvider` (`src/lib/salon-context.tsx`) hace de **puerta**: hasta que el salón
+no resuelve con éxito no monta el resto de la app. Muestra:
+
+- **splash** mientras carga,
+- **pantalla de error controlada** `SalonUnavailable` si el slug no existe / el salón
+  está inactivo (la RPC devuelve conjunto vacío) o si hay un error de red (reintentable).
+
+Tests: `src/lib/salon.test.ts` (resolución + mapeo, sin red) y
+`src/lib/salon-branding.test.ts` (RPC con cliente mockeado).
 
 ---
 
