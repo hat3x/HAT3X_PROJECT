@@ -1,39 +1,38 @@
-import { useState, useEffect } from 'react';
-import { Star, Clock, Check } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Clock, Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { formatEuros } from '@/lib/utils';
 import { EmptyState } from './EmptyState';
 
-interface Service {
+// Servicio del salón (esquema Salón OS). El precio se guarda en céntimos
+// (price_cents); las categorías son un texto plano en la propia fila.
+export interface SalonService {
   id: string;
   name: string;
-  category_id: string | null;
-  fixed_points: number | null;
-  base_price: number | null;
-  duration_min: number | null;
+  category: string | null;
+  price_cents: number;
+  duration_minutes: number | null;
 }
 
-interface ServiceCategory {
-  id: string;
-  name: string;
-  sort_order: number | null;
-}
+// Bucket para los servicios sin categoría; se muestra siempre el último.
+const UNCATEGORIZED = 'Otros';
 
 interface ServiceSelectorProps {
-  services: Service[];
-  categories: ServiceCategory[];
-  onSelect: (services: Service[]) => void;
+  services: SalonService[];
+  onSelect: (services: SalonService[]) => void;
   preSelectedIds?: string[];
 }
 
-export function ServiceSelector({ services, categories, onSelect, preSelectedIds = [] }: ServiceSelectorProps) {
+export function ServiceSelector({ services, onSelect, preSelectedIds = [] }: ServiceSelectorProps) {
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<Map<string, Service>>(new Map());
+  const [selected, setSelected] = useState<Map<string, SalonService>>(new Map());
   const [initialized, setInitialized] = useState(false);
 
+  // Pre-selecciona los servicios de la cita del día (si los hay), una sola vez.
   useEffect(() => {
     if (!initialized && services.length > 0 && preSelectedIds.length > 0) {
-      const initial = new Map<string, Service>();
+      const initial = new Map<string, SalonService>();
       services.forEach((s) => {
         if (preSelectedIds.includes(s.id)) initial.set(s.id, s);
       });
@@ -42,46 +41,32 @@ export function ServiceSelector({ services, categories, onSelect, preSelectedIds
     }
   }, [services, preSelectedIds, initialized]);
 
-  // Build category name map
-  const catMap = new Map(categories.map((c) => [c.id, c.name]));
+  // Filtrado por nombre o categoría y agrupado por categoría, con "Otros" al final.
+  const grouped = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const filtered = services.filter((s) => {
+      if (!term) return true;
+      const category = (s.category ?? '').toLowerCase();
+      return s.name.toLowerCase().includes(term) || category.includes(term);
+    });
 
-  const filtered = services.filter((s) => {
-    const catName = s.category_id ? catMap.get(s.category_id) ?? '' : '';
-    return (
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      catName.toLowerCase().includes(search.toLowerCase())
-    );
-  });
+    const byCategory = new Map<string, SalonService[]>();
+    filtered.forEach((s) => {
+      const key = s.category?.trim() || UNCATEGORIZED;
+      if (!byCategory.has(key)) byCategory.set(key, []);
+      byCategory.get(key)!.push(s);
+    });
 
-  // Group by category, respecting sort_order
-  const grouped: { name: string; items: Service[] }[] = [];
-  const catOrder = categories.map((c) => c.id);
+    return Array.from(byCategory.entries())
+      .sort(([a], [b]) => {
+        if (a === UNCATEGORIZED) return 1;
+        if (b === UNCATEGORIZED) return -1;
+        return a.localeCompare(b, 'es');
+      })
+      .map(([name, items]) => ({ name, items }));
+  }, [services, search]);
 
-  // Services with known categories
-  const byCat = new Map<string, Service[]>();
-  const uncategorized: Service[] = [];
-
-  filtered.forEach((s) => {
-    if (s.category_id && catMap.has(s.category_id)) {
-      if (!byCat.has(s.category_id)) byCat.set(s.category_id, []);
-      byCat.get(s.category_id)!.push(s);
-    } else {
-      uncategorized.push(s);
-    }
-  });
-
-  catOrder.forEach((catId) => {
-    const items = byCat.get(catId);
-    if (items && items.length > 0) {
-      grouped.push({ name: catMap.get(catId)!, items });
-    }
-  });
-
-  if (uncategorized.length > 0) {
-    grouped.push({ name: 'Otros', items: uncategorized });
-  }
-
-  const toggleService = (service: Service) => {
+  const toggleService = (service: SalonService) => {
     setSelected((prev) => {
       const next = new Map(prev);
       if (next.has(service.id)) {
@@ -93,10 +78,7 @@ export function ServiceSelector({ services, categories, onSelect, preSelectedIds
     });
   };
 
-  const totalPoints = Array.from(selected.values()).reduce(
-    (sum, s) => sum + (s.fixed_points ?? 10),
-    0
-  );
+  const totalCents = Array.from(selected.values()).reduce((sum, s) => sum + (s.price_cents ?? 0), 0);
 
   return (
     <div>
@@ -104,6 +86,7 @@ export function ServiceSelector({ services, categories, onSelect, preSelectedIds
         placeholder="Buscar servicio..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
+        aria-label="Buscar servicio por nombre o categoría"
         className="mb-4 h-11 bg-card border-border text-foreground placeholder:text-muted-foreground"
       />
 
@@ -120,7 +103,9 @@ export function ServiceSelector({ services, categories, onSelect, preSelectedIds
                   return (
                     <button
                       key={service.id}
+                      type="button"
                       onClick={() => toggleService(service)}
+                      aria-pressed={isSelected}
                       className={`flex w-full items-center justify-between rounded-xl border p-4 text-left transition-all active:scale-[0.98] ${
                         isSelected
                           ? 'bg-primary/10 border-primary'
@@ -130,26 +115,20 @@ export function ServiceSelector({ services, categories, onSelect, preSelectedIds
                       <div className="flex-1">
                         <p className="font-medium text-foreground">{service.name}</p>
                         <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Star className="h-3 w-3 text-primary" />
-                            {service.fixed_points ?? 10} pts
-                          </span>
-                          {service.duration_min && (
+                          <span className="font-semibold text-primary">{formatEuros(service.price_cents)}</span>
+                          {service.duration_minutes != null && (
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {service.duration_min} min
+                              {service.duration_minutes} min
                             </span>
-                          )}
-                          {service.base_price != null && (
-                            <span>{service.base_price.toFixed(2)}€</span>
                           )}
                         </div>
                       </div>
-                      <div className={`flex h-6 w-6 items-center justify-center rounded-md border transition-colors ${
-                        isSelected
-                          ? 'bg-primary border-primary'
-                          : 'border-muted-foreground/30'
-                      }`}>
+                      <div
+                        className={`flex h-6 w-6 items-center justify-center rounded-md border transition-colors ${
+                          isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/30'
+                        }`}
+                      >
                         {isSelected && <Check className="h-4 w-4 text-primary-foreground" />}
                       </div>
                     </button>
@@ -161,12 +140,13 @@ export function ServiceSelector({ services, categories, onSelect, preSelectedIds
         </div>
       )}
 
-      {/* Sticky confirm bar */}
+      {/* Barra fija de confirmación */}
       {selected.size > 0 && (
         <div className="fixed bottom-20 left-4 right-4 z-40 rounded-xl bg-card border border-border p-4 shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm text-muted-foreground">
-              {selected.size} servicio{selected.size > 1 ? 's' : ''} · <span className="font-semibold text-primary">{totalPoints} pts</span>
+              {selected.size} servicio{selected.size > 1 ? 's' : ''} ·{' '}
+              <span className="font-semibold text-primary">{formatEuros(totalCents)}</span>
             </p>
           </div>
           <Button
