@@ -259,6 +259,24 @@ describe('mapOtpError', () => {
     expect(mapOtpError({ message: 'Error sending confirmation sms to number' })).toBe('auth.error.otpSendFailed');
   });
 
+  it('proveedor Phone no configurado/deshabilitado → otpProviderUnavailable (mensaje honesto)', () => {
+    // Señales inequívocas de configuración: el proyecto no tiene proveedor de SMS o el
+    // signup por teléfono está deshabilitado. Merecen un mensaje distinto del transitorio.
+    expect(mapOtpError({ code: 'phone_provider_disabled', message: 'Phone provider is disabled' })).toBe(
+      'auth.error.otpProviderUnavailable'
+    );
+    expect(mapOtpError({ message: 'Signups not allowed for otp' })).toBe('auth.error.otpProviderUnavailable');
+    expect(mapOtpError({ message: 'Unsupported phone provider' })).toBe('auth.error.otpProviderUnavailable');
+    expect(mapOtpError({ message: 'SMS provider is not configured' })).toBe('auth.error.otpProviderUnavailable');
+    expect(mapOtpError({ message: 'Phone signups are disabled' })).toBe('auth.error.otpProviderUnavailable');
+  });
+
+  it('un fallo transitorio de envío al proveedor NO se confunde con "no configurado"', () => {
+    // "Error sending … to provider" sin señal de configuración es reintentable: sigue
+    // siendo otpSendFailed, no el mensaje honesto de proveedor no disponible.
+    expect(mapOtpError({ message: 'Error sending confirmation OTP to provider' })).toBe('auth.error.otpSendFailed');
+  });
+
   it('teléfono inválido → invalidPhone', () => {
     expect(mapOtpError({ code: 'validation_failed', message: 'Invalid phone number' })).toBe(
       'auth.error.invalidPhone'

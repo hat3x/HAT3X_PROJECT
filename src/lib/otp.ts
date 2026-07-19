@@ -257,7 +257,8 @@ export function formatCountdown(totalSeconds: number): string {
  *
  *   · Supabase Auth (envío con `updateUser({ phone })` y verificación con
  *     `verifyOtp({ type: 'phone_change' })`): código caducado/incorrecto, límite de
- *     envío/verificación, teléfono inválido, fallo al enviar el SMS.
+ *     envío/verificación, teléfono inválido, proveedor de SMS no configurado/deshabilitado
+ *     (mensaje honesto y distinto del fallo transitorio) y fallo al enviar el SMS.
  *   · La RPC de enlace `register_my_customer_account` (Salón OS), que puede rechazar
  *     el enlace con `PHONE_NOT_VERIFIED` si el servidor exige el teléfono verificado.
  *
@@ -298,18 +299,42 @@ export function mapOtpError(error: unknown): string {
     return 'auth.error.otpTooManyAttempts';
   }
 
-  // 4) Fallo al ENVIAR el SMS (proveedor). Va tras el límite de frecuencia, que ya
+  // 4) SMS NO disponible porque el proyecto/salón NO tiene proveedor Phone
+  //    configurado (o el signup por teléfono está deshabilitado). NO es un fallo del
+  //    número ni un problema transitorio de red: es de configuración. Merece un
+  //    mensaje HONESTO ("aún no está activado, puedes continuar sin verificar") en
+  //    lugar de "no se pudo enviar el SMS, inténtalo de nuevo" (que invitaría a
+  //    reintentar en vano). Se comprueba ANTES del fallo genérico de envío del punto 5.
+  //    Solo casan las señales inequívocas de configuración (disabled / not configured /
+  //    unsupported / phone signups disabled); un "Error sending … to provider" transitorio
+  //    NO casa aquí y cae al punto 5 (reintentable), como debe.
+  if (
+    has('phone_provider_disabled') ||
+    has('phone_provider_not_configured') ||
+    has('phone signups are disabled') ||
+    has('signups not allowed for otp') ||
+    (has('provider') &&
+      (has('disabled') ||
+        has('not enabled') ||
+        has('not configured') ||
+        has('unsupported') ||
+        has('unavailable')))
+  ) {
+    return 'auth.error.otpProviderUnavailable';
+  }
+
+  // 5) Fallo al ENVIAR el SMS (proveedor). Va tras el límite de frecuencia, que ya
   //    habría capturado los `over_sms_send_rate_limit`.
   if ((has('sms') && has('send')) || has('sms_send_failed') || has('error sending')) {
     return 'auth.error.otpSendFailed';
   }
 
-  // 5) Teléfono inválido (validación de Supabase o de la RPC).
+  // 6) Teléfono inválido (validación de Supabase o de la RPC).
   if (has('invalid_phone') || (has('phone') && has('invalid')) || has('invalid number')) {
     return 'auth.error.invalidPhone';
   }
 
-  // 6) Código incorrecto / token no válido (cuando el backend NO dice "expired").
+  // 7) Código incorrecto / token no válido (cuando el backend NO dice "expired").
   if (has('invalid') || has('incorrect') || has('token') || has('bad_code')) {
     return 'auth.error.otpInvalid';
   }

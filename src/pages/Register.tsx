@@ -4,10 +4,13 @@ import { useI18n } from '@/lib/i18n';
 import { useAuth, mapAuthError, mapRegisterError } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useSalon } from '@/lib/salon-context';
+import { normalizePhoneToE164 } from '@/lib/otp';
+import { sendPhoneOtp, resendPhoneOtp, confirmPhoneOtp } from '@/lib/phone-verification';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import PhoneOtpStep from '@/components/PhoneOtpStep';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -20,6 +23,17 @@ const Register = () => {
   const { id: salonId, name: salonName } = useSalon();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // Máquina de dos fases: primero el formulario, luego (con sesión activa) la
+  // verificación del teléfono por SMS (OTP). `pending` guarda lo que necesita el
+  // enlace posterior + el E.164 exacto que usan enviar/reenviar/verificar (debe
+  // coincidir con el `new_phone` pendiente en Supabase Auth).
+  const [phase, setPhase] = useState<'form' | 'verify'>('form');
+  const [pending, setPending] = useState<{
+    phone: string;
+    e164: string;
+    fullName: string;
+    email: string;
+  } | null>(null);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -31,6 +45,43 @@ const Register = () => {
     marketing: false,
     whatsapp: false,
   });
+
+  /**
+   * Paso final del registro: enlaza la ficha del cliente por teléfono vía la RPC de
+   * Salón OS y navega a la app. Lo invocan tanto el paso OTP (tras verificar el
+   * teléfono, o al continuar sin verificar cuando el SMS no está disponible) como el
+   * atajo de `handleSubmit` cuando el teléfono no es normalizable a E.164. Confiamos en
+   * la RPC para resolver el desenlace (created | linked | already_linked; los tres son
+   * un éxito para el usuario).
+   */
+  const finishRegistration = async ({ phone, fullName, email }: { phone: string; fullName: string; email: string }) => {
+    setLoading(true);
+    const { data: rpcData, error: rpcError } = await supabase.rpc('register_my_customer_account', {
+      p_salon_id: salonId,
+      p_phone: phone,
+      p_full_name: fullName,
+      p_email: email,
+    });
+    setLoading(false);
+
+    if (rpcError) {
+      // mapRegisterError traduce el motivo del rechazo (sin sortear el gating):
+      //   INVALID_PHONE → teléfono no válido; PHONE_CONFLICT/P0001 → ya vinculado;
+      //   FEATURE_NOT_ENABLED → el salón no tiene contratado el add-on de app de
+      //   cliente (mensaje claro "esta peluquería no tiene contratado este servicio").
+      // Volvemos al formulario (mismo desenlace previo: se avisa y NO se navega).
+      toast.error(t(mapRegisterError(rpcError)));
+      setPhase('form');
+      return;
+    }
+
+    const outcome =
+      rpcData && typeof rpcData === 'object' && !Array.isArray(rpcData)
+        ? (rpcData as Record<string, unknown>).outcome
+        : rpcData;
+    toast.success(t(outcome === 'linked' ? 'auth.register.successLinked' : 'auth.register.successCreated'));
+    navigate('/home');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,38 +131,24 @@ const Register = () => {
       return;
     }
 
-    // 3) Enlace por teléfono. Confiamos en la RPC para resolver el desenlace:
-    //      - created        → se creó la cuenta de cliente para este teléfono.
-    //      - linked          → se enlazó una ficha existente creada por el salón.
-    //      - already_linked  → el teléfono ya estaba enlazado a esta cuenta.
-    //    Los tres desenlaces son un éxito para el usuario.
-    // TODO(OTP · fase posterior): verificar el teléfono por SMS (OTP) ANTES de
-    //   confiar en el enlace, para impedir que alguien reclame la ficha de otra
-    //   persona registrándose con un teléfono ajeno.
-    const { data: rpcData, error: rpcError } = await supabase.rpc('register_my_customer_account', {
-      p_salon_id: salonId,
-      p_phone: phone,
-      p_full_name: fullName,
-      p_email: form.email,
-    });
-
-    setLoading(false);
-
-    if (rpcError) {
-      // mapRegisterError traduce el motivo del rechazo (sin sortear el gating):
-      //   INVALID_PHONE → teléfono no válido; PHONE_CONFLICT/P0001 → ya vinculado;
-      //   FEATURE_NOT_ENABLED → el salón no tiene contratado el add-on de app de
-      //   cliente (mensaje claro "esta peluquería no tiene contratado este servicio").
-      toast.error(t(mapRegisterError(rpcError)));
+    // 3) Verificación del teléfono por SMS (OTP) ANTES de confiar en el enlace: impide
+    //    que alguien reclame la ficha de otra persona registrándose con un teléfono
+    //    ajeno (cierra el TODO de la auditoría sub-1 §9). Necesitamos el E.164 exacto,
+    //    así que normalizamos UNA vez aquí y lo reutilizan enviar/reenviar/verificar
+    //    (deben coincidir con el `new_phone` pendiente en Supabase Auth). El enlace por
+    //    RPC se ejecuta después, en `finishRegistration`, cuando el paso OTP termina.
+    const norm = normalizePhoneToE164(phone);
+    if (norm.ok) {
+      setPending({ phone, e164: (norm as { e164: string }).e164, fullName, email: form.email });
+      setLoading(false);
+      setPhase('verify');
       return;
     }
 
-    const outcome =
-      rpcData && typeof rpcData === 'object' && !Array.isArray(rpcData)
-        ? (rpcData as Record<string, unknown>).outcome
-        : rpcData;
-    toast.success(t(outcome === 'linked' ? 'auth.register.successLinked' : 'auth.register.successCreated'));
-    navigate('/home');
+    // Teléfono no normalizable a E.164 → no hay forma de verificarlo por SMS. Seguimos
+    // con el enlace: la RPC valida el teléfono y, si procede, lo rechaza con su propio
+    // mensaje (INVALID_PHONE), en vez de atascar al usuario en un paso imposible.
+    await finishRegistration({ phone, fullName, email: form.email });
   };
 
   const update = (key: string, value: unknown) => setForm((f) => ({ ...f, [key]: value }));
@@ -123,12 +160,28 @@ const Register = () => {
         animate={{ opacity: 1, x: 0 }}
         className="mb-8"
       >
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          onClick={() => (phase === 'verify' ? setPhase('form') : navigate(-1))}
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
           <ArrowLeft size={18} />
           <span className="text-sm">{t('general.back')}</span>
         </button>
       </motion.div>
 
+      {phase === 'verify' && pending ? (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <PhoneOtpStep
+            phone={pending.phone}
+            onSendCode={() => sendPhoneOtp(pending.e164, supabase.auth)}
+            onResendCode={() => resendPhoneOtp(pending.e164, supabase.auth)}
+            onVerifyCode={(code) => confirmPhoneOtp(pending.e164, code, supabase.auth)}
+            onVerified={() => finishRegistration(pending)}
+            onContinueWithoutVerification={() => finishRegistration(pending)}
+            onChangeNumber={() => setPhase('form')}
+          />
+        </motion.div>
+      ) : (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -205,6 +258,7 @@ const Register = () => {
           </p>
         </form>
       </motion.div>
+      )}
     </div>
   );
 };
