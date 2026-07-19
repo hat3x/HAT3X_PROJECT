@@ -16,6 +16,7 @@ import {
   Sun,
   Sunrise,
   User,
+  UserCheck,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -36,6 +37,7 @@ import type {
   AvailabilityResponse,
   BookingBootstrap,
   BookingConfirmation,
+  BookingPrefill,
   PublicSalon,
   PublicSlot,
 } from "@/lib/booking/types";
@@ -75,6 +77,22 @@ const EMPTY_CONTACT: ContactForm = {
   notes: "",
   marketingConsent: false,
 };
+
+/**
+ * Estado inicial del paso «Tus datos» a partir de la precarga del cliente autenticado
+ * (sub-6), o vacío si no la hay. Solo campos de PERFIL: `notes` arranca SIEMPRE vacío
+ * (pertenece a la cita concreta, no al perfil). Lo sembrado queda editable con libertad.
+ */
+function contactFromPrefill(prefill: BookingPrefill | null | undefined): ContactForm {
+  if (!prefill) return EMPTY_CONTACT;
+  return {
+    fullName: prefill.fullName,
+    phone: prefill.phone,
+    email: prefill.email,
+    notes: "",
+    marketingConsent: prefill.marketingConsent,
+  };
+}
 
 /** Agrupa huecos por franja del día en la zona del salón. */
 function groupSlots(
@@ -124,9 +142,15 @@ class BookingRequestError extends Error {
 export function BookingWizard({
   slug,
   bootstrap,
+  prefill,
 }: {
   slug: string;
   bootstrap: BookingBootstrap;
+  /**
+   * Datos del cliente AUTENTICADO con ficha en este salón para sembrar «Tus datos»
+   * (sub-6). `null`/ausente ⇒ visitante anónimo o sin ficha: el formulario arranca vacío.
+   */
+  prefill?: BookingPrefill | null;
 }): React.ReactElement {
   const { salon, services, professionals, serviceProfessionals } = bootstrap;
   const timeZone = salon.timezone;
@@ -137,7 +161,13 @@ export function BookingWizard({
   const [professionalId, setProfessionalId] = useState<string>("any");
   const [date, setDate] = useState<string>(today);
   const [slot, setSlot] = useState<PublicSlot | null>(null);
-  const [contact, setContact] = useState<ContactForm>(EMPTY_CONTACT);
+  // Siembra «Tus datos» con la ficha del cliente autenticado, si la hay (sub-6).
+  // Inicializador perezoso: `prefill` llega del servidor y no cambia en vida del
+  // componente, así que basta sembrarlo una vez (sin efecto que re-sincronice) y lo
+  // sembrado sigue siendo editable.
+  const [contact, setContact] = useState<ContactForm>(() =>
+    contactFromPrefill(prefill),
+  );
 
   const selectedService = useMemo(
     () => services.find((s) => s.id === serviceId) ?? null,
@@ -587,6 +617,22 @@ export function BookingWizard({
                   </span>
                 </div>
               </div>
+
+              {/* Reconocimiento del cliente autenticado: sus datos vienen sembrados
+                  desde su ficha (sub-6). Aviso sutil y editable, no un bloqueo. */}
+              {prefill && (
+                <div className="flex items-center gap-2.5 rounded-xl border border-primary/15 bg-primary/5 px-3.5 py-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <UserCheck className="h-4 w-4" />
+                  </span>
+                  <p className="text-sm text-muted-foreground">
+                    Hemos rellenado tus datos.{" "}
+                    <span className="font-medium text-foreground">
+                      Revísalos y confirma.
+                    </span>
+                  </p>
+                </div>
+              )}
 
               <form
                 className="space-y-4"

@@ -145,6 +145,7 @@ import {
   CustomerAccountError,
   findCustomerByPhone,
   getMyCustomer,
+  getMyCustomerForSalon,
   linkOrCreateCustomerAccount,
 } from "@/lib/customers/account";
 
@@ -518,5 +519,68 @@ describe("getMyCustomer", () => {
     holder.currentUser = { id: "user-sin-ficha" };
     const mine = await getMyCustomer();
     expect(mine).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getMyCustomerForSalon (sub-6) — la ficha del cliente autenticado en UN salón.
+//
+// Variante "suave" de getMyCustomer para la reserva pública: acota por salón, no
+// lanza sin sesión (devuelve null) y nunca cruza de cuenta ni de salón.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("getMyCustomerForSalon", () => {
+  beforeEach(() => {
+    holder.currentUser = { id: USER_ANA };
+    // Ana es cliente de A y de B (una ficha por salón, misma cuenta).
+    seedCustomer({
+      id: "cust-ana-a",
+      salon_id: SALON_A,
+      full_name: "Ana",
+      phone: "612345678",
+      email: "ana@correo.com",
+      marketing_consent: true,
+      user_id: USER_ANA,
+      created_at: "2026-01-01T00:00:00Z",
+    });
+    seedCustomer({
+      id: "cust-ana-b",
+      salon_id: SALON_B,
+      full_name: "Ana",
+      user_id: USER_ANA,
+      created_at: "2026-02-01T00:00:00Z",
+    });
+    // Bea comparte el salón A pero es otra cuenta: nunca debe aflorar en la de Ana.
+    seedCustomer({
+      id: "cust-bea",
+      salon_id: SALON_A,
+      full_name: "Bea",
+      user_id: USER_BEA,
+    });
+  });
+
+  it("devuelve la ficha del salón pedido (self, acotada por salon_id)", async () => {
+    const ficha = await getMyCustomerForSalon(SALON_A);
+    expect(ficha?.id).toBe("cust-ana-a");
+  });
+
+  it("elige la ficha del salón pedido, no la de otro salón de la misma cuenta", async () => {
+    const ficha = await getMyCustomerForSalon(SALON_B);
+    expect(ficha?.id).toBe("cust-ana-b");
+  });
+
+  it("devuelve null si la cuenta aún no es cliente de ESE salón", async () => {
+    const ficha = await getMyCustomerForSalon("salon-donde-ana-no-es-cliente");
+    expect(ficha).toBeNull();
+  });
+
+  it("SUAVE: sin sesión devuelve null (no lanza unauthorized)", async () => {
+    holder.currentUser = null;
+    await expect(getMyCustomerForSalon(SALON_A)).resolves.toBeNull();
+  });
+
+  it("nunca devuelve la ficha de OTRA cuenta aunque comparta salón", async () => {
+    holder.currentUser = { id: USER_BEA }; // Bea, no Ana
+    const ficha = await getMyCustomerForSalon(SALON_A);
+    expect(ficha?.id).toBe("cust-bea"); // la SUYA, jamás la de Ana en el mismo salón
   });
 });

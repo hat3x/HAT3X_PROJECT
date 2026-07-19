@@ -27,7 +27,11 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BookingWizard } from "@/app/(public)/reservar/[slug]/booking-wizard";
-import type { BookingBootstrap, PublicSlot } from "@/lib/booking/types";
+import type {
+  BookingBootstrap,
+  BookingPrefill,
+  PublicSlot,
+} from "@/lib/booking/types";
 
 const SALON_ID = "11111111-1111-1111-1111-111111111111";
 const SERVICE_ID = "22222222-2222-2222-2222-222222222222";
@@ -110,7 +114,7 @@ function installFetch(opts: {
 }
 
 /** Monta el wizard con su propio QueryClient (sin reintentos, para que el error aflore ya). */
-function renderWizard(): void {
+function renderWizard(prefill?: BookingPrefill | null): void {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -121,7 +125,11 @@ function renderWizard(): void {
     createElement(
       QueryClientProvider,
       { client },
-      createElement(BookingWizard, { slug: "estudio-nova", bootstrap: BOOTSTRAP }),
+      createElement(BookingWizard, {
+        slug: "estudio-nova",
+        bootstrap: BOOTSTRAP,
+        prefill,
+      }),
     ),
   );
 }
@@ -326,5 +334,95 @@ describe("BookingWizard · errores legibles no recuperables", () => {
 
     expect(await screen.findByText("Salón no encontrado.")).toBeInTheDocument();
     expect(screen.queryByText("Esa hora acaba de ocuparse")).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4) Precarga del cliente autenticado (sub-6) — siembra «Tus datos» y reserva de un toque.
+//
+// Cuando la página pasa `prefill` (cliente con sesión y ficha en este salón), el paso
+// «Tus datos» arranca sembrado con sus datos de perfil y muestra un aviso de
+// reconocimiento; lo sembrado sigue siendo editable. Sin `prefill`, comportamiento
+// idéntico al de siempre (formulario vacío, sin aviso).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("BookingWizard · precarga del cliente autenticado (sub-6)", () => {
+  const PREFILL: BookingPrefill = {
+    fullName: "Ada Lovelace",
+    phone: "611 22 33 44",
+    email: "ada@correo.com",
+    marketingConsent: true,
+  };
+
+  const CONFIRMATION = {
+    appointmentId: "44444444-4444-4444-4444-444444444444",
+    startsAt: SLOT.startsAt,
+    endsAt: SLOT.endsAt,
+    professionalName: "Ana",
+    serviceName: "Corte de pelo",
+    salonName: "Estudio Nova",
+  };
+
+  it("siembra nombre/teléfono/email/consentimiento y muestra el aviso de reconocimiento", async () => {
+    const user = userEvent.setup();
+    installFetch({ post: () => ({ status: 201, body: CONFIRMATION }) });
+
+    renderWizard(PREFILL);
+    await advanceToContact(user);
+
+    expect(screen.getByLabelText(/Nombre y apellidos/i)).toHaveValue("Ada Lovelace");
+    expect(screen.getByLabelText(/Teléfono/i)).toHaveValue("611 22 33 44");
+    expect(screen.getByLabelText(/Email/i)).toHaveValue("ada@correo.com");
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    // Reconocimiento visible: el cliente ve que le hemos rellenado los datos.
+    expect(screen.getByText(/Hemos rellenado tus datos/i)).toBeInTheDocument();
+  });
+
+  it("reserva de un toque: envía al POST los datos SEMBRADOS sin reescribir nada", async () => {
+    const user = userEvent.setup();
+    const calls = installFetch({ post: () => ({ status: 201, body: CONFIRMATION }) });
+
+    renderWizard(PREFILL);
+    await advanceToContact(user);
+
+    // Sin teclear: el botón ya está habilitado (nombre + teléfono válidos sembrados).
+    await user.click(screen.getByRole("button", { name: /Confirmar reserva/i }));
+
+    expect(await screen.findByText("¡Reserva confirmada!")).toBeInTheDocument();
+    const body = calls.postBodies[0] as { customer: Record<string, unknown> };
+    expect(body.customer).toEqual({
+      fullName: "Ada Lovelace",
+      phone: "611 22 33 44",
+      email: "ada@correo.com",
+      marketingConsent: true,
+    });
+  });
+
+  it("lo sembrado es EDITABLE: al cambiar el teléfono, viaja el nuevo valor", async () => {
+    const user = userEvent.setup();
+    const calls = installFetch({ post: () => ({ status: 201, body: CONFIRMATION }) });
+
+    renderWizard(PREFILL);
+    await advanceToContact(user);
+
+    const phone = screen.getByLabelText(/Teléfono/i);
+    await user.clear(phone);
+    await user.type(phone, "600999999");
+    await user.click(screen.getByRole("button", { name: /Confirmar reserva/i }));
+
+    expect(await screen.findByText("¡Reserva confirmada!")).toBeInTheDocument();
+    const body = calls.postBodies[0] as { customer: Record<string, unknown> };
+    expect(body.customer.phone).toBe("600999999");
+  });
+
+  it("sin precarga (anónimo): el formulario arranca vacío y sin aviso de reconocimiento", async () => {
+    const user = userEvent.setup();
+    installFetch({ post: () => ({ status: 201, body: CONFIRMATION }) });
+
+    renderWizard(); // sin prefill
+    await advanceToContact(user);
+
+    expect(screen.getByLabelText(/Nombre y apellidos/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Teléfono/i)).toHaveValue("");
+    expect(screen.queryByText(/Hemos rellenado tus datos/i)).toBeNull();
   });
 });

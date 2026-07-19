@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { resolveBookingPrefill } from "@/lib/booking/prefill";
 import { BookingError, getBootstrap } from "@/lib/booking/server";
 
 import { BookingWizard } from "./booking-wizard";
@@ -29,6 +30,10 @@ export default async function BookingPage({
 }: PageProps): Promise<React.ReactElement> {
   try {
     const bootstrap = await getBootstrap(params.slug);
+    // Precarga «best-effort» del cliente autenticado con ficha en ESTE salón (sub-6):
+    // si hay sesión, sus datos siembran el paso «Tus datos». Nunca lanza (anónimo o
+    // fallo ⇒ null: el formulario arranca vacío, como siempre).
+    const prefill = await resolveBookingPrefill(bootstrap.salon.id);
     return (
       <main className="relative min-h-dvh overflow-hidden">
         {/* Fondo decorativo: halo violeta cálido en la parte superior. Sutil,
@@ -38,7 +43,7 @@ export default async function BookingPage({
           className="pointer-events-none absolute inset-x-0 top-0 h-[22rem] bg-[radial-gradient(70%_100%_at_50%_0%,hsl(var(--primary)/0.10),transparent_72%)]"
         />
         <div className="relative mx-auto w-full max-w-xl px-4 py-10 md:py-16">
-          <BookingWizard slug={params.slug} bootstrap={bootstrap} />
+          <BookingWizard slug={params.slug} bootstrap={bootstrap} prefill={prefill} />
         </div>
       </main>
     );

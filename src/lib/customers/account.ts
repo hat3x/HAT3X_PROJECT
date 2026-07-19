@@ -509,3 +509,47 @@ export async function getMyCustomer(userId?: string): Promise<Customer[]> {
   }
   return data ?? [];
 }
+
+// -----------------------------------------------------------------------------
+// 4. getMyCustomerForSalon — la ficha del cliente autenticado en UN salón (self, suave)
+// -----------------------------------------------------------------------------
+
+/**
+ * Ficha del cliente AUTENTICADO en un salón concreto, o `null`. Variante «suave» de
+ * {@link getMyCustomer} pensada para contextos PÚBLICOS —la reserva en línea (sub-6)—,
+ * donde precargar sus datos es una CONVENIENCIA, no un flujo autenticado:
+ *
+ *   · SIN sesión NO lanza `unauthorized`: devuelve `null`. La página `/reservar/[slug]`
+ *     es pública y el visitante anónimo es el caso COMÚN y esperado; no debe tratarse
+ *     como un error. (Es la única diferencia de contrato con `getMyCustomer`.)
+ *   · CON sesión reutiliza la lectura self (RLS `self_select_own_customer`,
+ *     `user_id = auth.uid()`) y, además, acota por `salon_id`. Como el único parcial
+ *     `(salon_id, user_id)` garantiza una ficha por salón, `maybeSingle()` devuelve esa
+ *     única ficha o `null` si esta cuenta aún no es cliente de ESTE salón.
+ *
+ * Doble aislamiento: RLS (solo `user_id = auth.uid()`) + filtro por `salon_id`. Nunca
+ * puede devolver la ficha de otra cuenta ni la de otro salón. Un fallo REAL de consulta
+ * sí se propaga (`internal` 500): la política de «best-effort, nunca romper la reserva»
+ * la aplica quien llama (ver `@/lib/booking/prefill`), no esta primitiva.
+ *
+ * @throws {CustomerAccountError} `internal` ante fallo de consulta (nunca `unauthorized`).
+ */
+export async function getMyCustomerForSalon(salonId: string): Promise<Customer | null> {
+  const supabase = createClient(); // RLS: self_select_own_customer (user_id = auth.uid())
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user === null) return null; // anónimo: sin datos que precargar, sin error
+
+  const { data, error } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("salon_id", salonId)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new CustomerAccountError("internal", 500, "No se pudo consultar la ficha del cliente.");
+  }
+  return data;
+}

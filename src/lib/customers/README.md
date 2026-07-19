@@ -17,7 +17,7 @@ Es el "cómo se persiste y se enlaza" que las migraciones
 | Fichero | Contenido |
 | --- | --- |
 | `normalize-phone.ts` | `normalizePhone(input)` — teléfono en cualquier formato → E.164. **Espejo byte a byte** de la función SQL `app.normalize_phone(text)`. Pura y testeable. |
-| `account.ts` | Acciones de **servidor**: `findCustomerByPhone`, `linkOrCreateCustomerAccount`, `getMyCustomer` + `CustomerAccountError`. |
+| `account.ts` | Acciones de **servidor**: `findCustomerByPhone`, `linkOrCreateCustomerAccount`, `getMyCustomer`, `getMyCustomerForSalon` + `CustomerAccountError`. |
 
 ## El modelo de datos en una imagen
 
@@ -117,6 +117,7 @@ import {
   findCustomerByPhone,
   linkOrCreateCustomerAccount,
   getMyCustomer,
+  getMyCustomerForSalon,
   CustomerAccountError,
 } from "@/lib/customers/account";
 
@@ -137,6 +138,12 @@ const { customer, outcome } = await linkOrCreateCustomerAccount({
 
 // AUTOSERVICIO: la(s) ficha(s) del cliente autenticado (una por salón → es un ARRAY).
 const misFichas = await getMyCustomer();
+
+// RESERVA PÚBLICA (sub-6): la ficha del cliente autenticado en UN salón, o null.
+// Variante "suave" de getMyCustomer para una página PÚBLICA: sin sesión devuelve null
+// (no lanza `unauthorized`), así el visitante anónimo —el caso común— no es un error.
+// Con ella se precargan sus datos en el asistente de reserva (ver `@/lib/booking/prefill`).
+const miFichaAqui = await getMyCustomerForSalon(salonId);
 ```
 
 ### `linkOrCreateCustomerAccount` — las tres ramas + el conflicto
@@ -207,7 +214,10 @@ asociado, para que un Route Handler o Server Action lo traduzca sin filtrar deta
 - `src/tests/integration/customers-account.test.ts` — idempotencia y las tres ramas
   (crear/enlazar/no-op), el conflicto de teléfono ajeno, "solo tu propia cuenta" y el
   acotado por `salon_id`, sobre un doble con estado de Supabase (la RLS real se valida en
-  la capa de BD: migraciones + guardianes).
+  la capa de BD: migraciones + guardianes). Incluye `getMyCustomerForSalon` (sub-6):
+  acota por salón, sin sesión → null, nunca cruza de cuenta ni de salón.
+- `src/tests/unit/booking-prefill.test.ts` — el mapeo ficha → formulario y el contrato
+  «best-effort» de la precarga de la reserva pública (`@/lib/booking/prefill`, sub-6).
 
 ## Troubleshooting
 
