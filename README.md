@@ -17,6 +17,7 @@ Sistema de gestión integral para salones de belleza con soporte multi-sede.
 - [Sistema de diseño](#sistema-de-diseño)
 - [Funcionalidades](#funcionalidades)
 - [Autenticación](#autenticación)
+- [Verificación del teléfono del cliente (OTP)](#verificación-del-teléfono-del-cliente-otp)
 - [API pública de reservas](#api-pública-de-reservas)
 - [Productización: planes (add-ons) y white-label](#productización-planes-add-ons-y-white-label)
 - [Capa de pagos y facturación](#capa-de-pagos-y-facturación)
@@ -121,6 +122,10 @@ El esquema se gestiona con migraciones SQL en `supabase/migrations/`. Se aplican
 | `20260718140000_rpc_get_salon_branding.sql` | **Branding público:** RPC `get_salon_branding(slug)` — marca por slug para anónimos, sin exponer la tabla `salons` |
 | `20260718150000_rpc_feature_gate.sql` | **Feature-gating:** `register_my_customer_account`/`staff_award_visit` exigen sus add-ons (`FEATURE_NOT_ENABLED`) |
 | `20260718160000_rls_productization_guard.sql` | **Guardián de productización:** aserción «última palabra» — RLS activa y sin políticas anon/public en `salons`/`salon_features`/`salon_branding` + integridad del gate `app.salon_has_feature` |
+| `20260718170000_rpc_get_salon_branding_add_id.sql` | **Branding público (+id):** `get_salon_branding` expone también `salons.id` (uuid opaco) sin filtrar datos fiscales/PII |
+| `20260719100000_rls_self_appointments.sql` | **Acceso del cliente:** RLS **SELF** de solo lectura para que la cuenta enlazada lea **sus** citas |
+| `20260719110000_salon_security_settings.sql` | **Válvula de seguridad (OTP):** tabla `salon_security_settings` + interruptor `require_phone_verification` (secure by default, fail-closed) + gate `app.salon_requires_phone_verification()` — ver [Verificación del teléfono](#verificación-del-teléfono-del-cliente-otp) |
+| `20260719120000_rpc_register_phone_verification_gate.sql` | **Enforcement OTP:** `register_my_customer_account` exige el teléfono **confirmado** de la cuenta (`auth.users.phone_confirmed_at`) cuando el salón lo requiere → `PHONE_NOT_VERIFIED` |
 
 ### Regenerar tipos TypeScript
 
@@ -276,6 +281,62 @@ por pantalla— está en **[DESIGN.md](./DESIGN.md)**.
 - **Login:** email + contraseña (`signInWithPassword`). Usuarios creados desde Supabase Dashboard (Authentication → Users) o por invitación.
 - **Sesión SSR:** `src/middleware.ts` refresca la cookie de sesión en cada request usando `@supabase/ssr`.
 - **OAuth:** habilitar el proveedor en Supabase y llamar `supabase.auth.signInWithOAuth`. El callback `/auth/callback` ya está implementado.
+
+---
+
+## Verificación del teléfono del cliente (OTP)
+
+El **teléfono es la clave natural de identidad** del cliente (un teléfono = una ficha por
+salón). Antes de que el autoservicio enlace/cree la ficha de una cuenta por su teléfono, hay
+que **probar que ese número es suyo** con un **código de un solo uso (OTP) por SMS**. Sin esa
+prueba, alguien podría **reclamar el teléfono de otra persona** y quedarse con su ficha y sus
+puntos.
+
+> 📖 **Guía completa (paso humano + flujo + interruptor):**
+> **[`docs/verificacion-telefono-otp.md`](./docs/verificacion-telefono-otp.md)**.
+> Operativa y troubleshooting en
+> [MANTENIMIENTO.md → Verificación del teléfono](./MANTENIMIENTO.md#verificación-del-teléfono-del-cliente-otp-por-sms).
+
+### Paso humano: el proveedor de SMS lo pone Supabase, no la app
+
+El OTP lo **envía Supabase Auth (GoTrue)**, así que Supabase necesita un **proveedor de SMS**.
+Es un **paso manual de puesta en marcha**, una sola vez por proyecto:
+
+**Panel de Supabase → Authentication → Providers → Phone** → activar → elegir **Twilio** →
+pegar `Account SID` + `Auth Token` (o API Key) + `Messaging Service SID`/remitente → guardar.
+
+> ⚠️ **No confundir con el Twilio de WhatsApp.** Las credenciales del **OTP** se pegan **en el
+> panel de Supabase**; **no** hay ninguna variable `TWILIO_*`/`NEXT_PUBLIC_*` en la app para el
+> OTP. Las variables `TWILIO_*` del `.env` son **solo** para los recordatorios de
+> [WhatsApp](#whatsapp--twilio), que envía la app — otro uso distinto.
+
+### El flujo (PARTE 2 — verificar el teléfono)
+
+```
+pedir teléfono → Supabase envía el SMS (vía el proveedor) → el usuario introduce el código
+→ Supabase lo confirma en auth.users (phone + phone_confirmed_at) → RECIÉN ENTONCES se llama
+a register_my_customer_account
+```
+
+La **UI** de este flujo vive en la **app de cliente (PWA, FASE 3B/3C)**; **este repositorio
+aporta el enforcement de servidor**: la RPC `register_my_customer_account` y su gemela TS
+`linkOrCreateCustomerAccount` **leen `auth.users.phone_confirmed_at`** y **rechazan** con
+`PHONE_NOT_VERIFIED` (RPC, `P0001`) / `phone_not_verified` (Server Action, **403**) cualquier
+registro cuyo teléfono no esté **confirmado y coincida** con el declarado.
+
+### El interruptor `require_phone_verification` (y su riesgo)
+
+La tabla `public.salon_security_settings` gobierna, **por salón**, si se exige el OTP. Es
+**secure by default** y **fail-closed**: la columna nace `NOT NULL DEFAULT TRUE` y **la
+ausencia de fila también exige verificación** (el gate resuelve a "exigir" salvo un `false`
+**explícito**). Un salón sin configurar nada queda **protegido**.
+
+> 🛑 **Riesgo explícito.** Poner `require_phone_verification = false` **REABRE el agujero de
+> suplantación por teléfono**: cualquiera podría reclamar el teléfono de otra persona y
+> apropiarse de su ficha/puntos. **Solo tiene sentido en desarrollo/staging** (p. ej. probar
+> el registro sin montar aún el proveedor de SMS). En producción, la respuesta correcta a "no
+> llega el OTP" es **arreglar el proveedor**, no relajar la válvula. La escritura de esta tabla
+> está reservada a **HAT3X (`service_role`)**: el salón **no** puede auto-abrirse el agujero.
 
 ---
 
@@ -577,6 +638,7 @@ Para activar WhatsApp en producción, seguir la guía completa en [MANTENIMIENTO
 Ver [MANTENIMIENTO.md](./MANTENIMIENTO.md) para:
 - Troubleshooting de errores comunes (incluye TPV, caja/arqueo y facturación)
 - Identidad del cliente por teléfono: modelo de cuenta, normalización E.164 y resolución de duplicados
+- Verificación del teléfono del cliente (OTP): proveedor de SMS en Supabase y el interruptor `require_phone_verification`
 - Modelo de datos TPV/facturación, flujo de caja y capa de pagos abstraída
 - Conformidad fiscal Veri\*factu: validación por gestoría y fase futura VERI\*FACTU
 - Guía de configuración Twilio paso a paso

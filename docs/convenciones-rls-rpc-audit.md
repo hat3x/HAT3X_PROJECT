@@ -225,12 +225,20 @@ register_my_customer_account(p_salon_id uuid, p_phone text, p_full_name text,
 - **Espejo SQL de** `linkOrCreateCustomerAccount` (`src/lib/customers/account.ts`).
 - **Seguridad:** `auth.uid()` (JWT) es SIEMPRE el `user_id`, **nunca** un parámetro →
   solo enlazas/creas TU propia ficha. Acotado por `p_salon_id`. Bypasa RLS de forma
-  controlada (la ficha nace con `user_id` null). **⚠️ Asume teléfono verificado por OTP
-  aguas arriba** (pendiente antes de clientes reales).
+  controlada (la ficha nace con `user_id` null).
+- **Gate OTP (propiedad del teléfono) — YA ENFORCED** (migración `20260719120000`, paso
+  3.2): cuando el salón lo exige (válvula `require_phone_verification`, fail-closed), el
+  `p_phone` debe coincidir con el teléfono **confirmado** de la cuenta
+  (`auth.users.phone` + `phone_confirmed_at`), o → `PHONE_NOT_VERIFIED`. Cierra la ⚠️
+  histórica "asume teléfono verificado aguas arriba". Detalle:
+  [`verificacion-telefono-otp.md`](./verificacion-telefono-otp.md).
 - **Return:** `{ customer_id, qr_token, outcome }`.
 - **`outcome` ∈** `already_linked` | `linked` | `created` (== `LinkOrCreateOutcome`).
 - **Errores (SQLSTATE):** `UNAUTHORIZED` `28000` · `INVALID_NAME` `22023` ·
-  `INVALID_PHONE` `22023` · `SALON_NOT_FOUND` `P0002` · `PHONE_CONFLICT` `P0001`.
+  `INVALID_PHONE` `22023` · `SALON_NOT_FOUND` `P0002` · `FEATURE_NOT_ENABLED` `P0001`
+  (add-ons `client_app`+`loyalty`) · `PHONE_NOT_VERIFIED` `P0001` (OTP) ·
+  `PHONE_CONFLICT` `P0001`. Orden: `UNAUTHORIZED → INVALID_NAME → INVALID_PHONE →
+  SALON_NOT_FOUND → FEATURE_NOT_ENABLED → PHONE_NOT_VERIFIED → (identidad)`.
 - Inserta el **`phone` crudo** (la columna generada calcula `phone_e164`); `full_name`
   a 120; `email` → `lower(trim())` o null. Enlace condicional a `user_id is null`
   (guarda de carreras).

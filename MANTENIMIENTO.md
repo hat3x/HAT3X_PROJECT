@@ -78,7 +78,13 @@ npm run typecheck
 ### Cliente — «Este teléfono ya está vinculado a otra cuenta en este salón» (409)
 - Lo lanza `linkOrCreateCustomerAccount` (`@/lib/customers/account`) cuando el teléfono ya normalizado (`phone_e164`) pertenece a una ficha con **otra** `user_id` en ese salón. **Es intencionado:** el teléfono es la identidad, y una cuenta no puede apropiarse de la ficha de otra persona.
 - Si de verdad es la misma persona (p. ej. cambió de cuenta), la fusión es una operación de **staff/soporte**, no de autoservicio: ver «resolución de duplicados» en [Identidad del cliente](#identidad-del-cliente--cuenta-teléfono-y-dedup).
-- Recordatorio de seguridad: `linkOrCreateCustomerAccount` **confía** en que el teléfono se verificó (OTP) **antes** de llamar. Sin esa verificación aguas arriba, este 409 es la última barrera contra un robo de ficha.
+- Capa de seguridad: `linkOrCreateCustomerAccount` (y su gemela RPC) **exige el OTP** del teléfono **antes** de enlazar (ver el `phone_not_verified` de abajo). El 409 es la barrera para el caso en que la ficha **ya** estaba enlazada a otra cuenta.
+
+### Cliente — «Verifica tu teléfono antes de vincular tu cuenta» (`phone_not_verified` 403 / `PHONE_NOT_VERIFIED`)
+- Lo lanzan `linkOrCreateCustomerAccount` (`@/lib/customers/account`, **403**) y la RPC gemela `register_my_customer_account` (SQLSTATE `P0001`) cuando el salón **exige** verificación y el teléfono declarado **no** está confirmado en la cuenta, o el confirmado **no coincide** con el declarado. **Es intencionado:** sin probar la posesión del número, alguien podría reclamar la ficha de otra persona.
+- **La app debe** llevar al usuario a **verificar su teléfono** (recibir el OTP por SMS y confirmarlo) y **reintentar con el mismo número**. Es un error de negocio esperado, no un bug (comparte `P0001` con `PHONE_CONFLICT`/`FEATURE_NOT_ENABLED`: se distingue por el **mensaje**).
+- **Causa operativa típica en producción:** el **proveedor de SMS de Supabase no está configurado** o falla → el OTP nunca llega → ningún teléfono se confirma. Solución: revisar **Authentication → Providers → Phone** en Supabase (ver [Verificación del teléfono](#verificación-del-teléfono-del-cliente-otp-por-sms)). **La respuesta correcta NO es relajar la válvula** en un salón real.
+- **En desarrollo/staging sin proveedor de SMS:** se puede **relajar** `require_phone_verification` para ese salón (solo `service_role`, y reabre el agujero). Procedimiento en [Verificación del teléfono](#verificación-del-teléfono-del-cliente-otp-por-sms).
 
 ### Cliente — «could not create unique index "idx_customers_salon_phone_e164" … duplicate key value»
 - La migración `20260717110000_customers_phone_e164.sql` corre en una **transacción**: si al crear el índice único dos fichas del mismo salón normalizan al **mismo** `phone_e164`, el `CREATE UNIQUE INDEX` falla y **aborta toda la migración** (no deja el esquema a medias). Es lo correcto: un duplicado se resuelve a mano, no se oculta.
@@ -325,6 +331,62 @@ alter table   public.customers drop column if exists user_id;
 
 El rollback de la parte C (RLS SELF + candado de columnas) está documentado al pie de
 `20260717120000_rls_self_customer.sql`.
+
+## Verificación del teléfono del cliente (OTP por SMS)
+
+Antes de que el autoservicio enlace/cree la ficha de una cuenta **por su teléfono**, hay que
+**probar que ese número es suyo** con un **OTP por SMS**. El SMS lo **envía Supabase Auth**, no
+la app; el backend (RPC `register_my_customer_account` + Server Action
+`linkOrCreateCustomerAccount`) **exige** el teléfono **confirmado** cuando el salón lo requiere.
+**Guía completa (flujo PARTE 2 + enforcement + interruptor):**
+[`docs/verificacion-telefono-otp.md`](./docs/verificacion-telefono-otp.md). Verificación de
+no-regresión/seguridad: [`docs/verificacion-seguridad-otp-no-regresion.md`](./docs/verificacion-seguridad-otp-no-regresion.md).
+
+### Paso humano (puesta en marcha): proveedor de SMS en Supabase
+
+El OTP lo manda Supabase Auth (GoTrue) → necesita un **proveedor de SMS**. Una sola vez por
+proyecto de Supabase:
+
+1. **Twilio Console** (<https://www.twilio.com>): copia `Account SID` + `Auth Token` (o una API
+   Key) y un `Messaging Service SID` / número capaz de enviar SMS a España (`+34`).
+2. **Panel de Supabase → Authentication → Providers → Phone**: **activa** el proveedor de
+   teléfono, elige **Twilio** y **pega ahí** esas credenciales. Guarda.
+3. Revisa **Authentication → Rate Limits** (los OTP son SMS de pago) y **verifica** con un envío
+   a un móvil real.
+
+> ⚠️ **No es el mismo Twilio que WhatsApp.** Las credenciales del **OTP** se pegan **en el panel
+> de Supabase**; las variables `TWILIO_*` del `.env` de la app son **solo** para los
+> [recordatorios de WhatsApp](./README.md#whatsapp--twilio). No hay ninguna variable de entorno
+> del OTP en el repo — ese secreto vive en Supabase. Detalle de la distinción en
+> [`docs/verificacion-telefono-otp.md`](./docs/verificacion-telefono-otp.md#dos-usos-de-twilio-en-este-proyecto-no-confundirlos).
+
+### El interruptor `require_phone_verification` (por salón) y su riesgo
+
+`public.salon_security_settings.require_phone_verification` decide, **por salón**, si se exige
+el OTP. Es **secure by default** (`NOT NULL DEFAULT TRUE`) y **fail-closed** (sin fila también se
+exige): un salón sin configurar nada queda **protegido**.
+
+> 🛑 **Poner `require_phone_verification = false` REABRE el agujero de suplantación por
+> teléfono** (cualquiera podría reclamar el teléfono de otro y quedarse con su ficha/puntos).
+> **Solo dev/staging** (p. ej. probar el registro sin proveedor de SMS). **En producción,
+> arregla el proveedor de SMS, no relajes la válvula.**
+
+Relajar (solo **`service_role`**; el salón no puede hacerlo desde el navegador) — SQL Editor de
+Supabase o `psql` con la service key:
+
+```sql
+-- ⚠️ DEV/STAGING ONLY — reabre la suplantación por teléfono.
+insert into public.salon_security_settings (salon_id, require_phone_verification, notes)
+values ('<SALON_UUID>', false, 'DEV: sin proveedor SMS en staging — reactivar antes de clientes reales')
+on conflict (salon_id) do update
+  set require_phone_verification = excluded.require_phone_verification,
+      notes                      = excluded.notes;
+```
+
+Volver al estado seguro (exigir de nuevo): `update … set require_phone_verification = true …` o
+`delete` de la fila (por fail-closed, sin fila también se exige). Rellena siempre `notes` para
+dejar rastro (quién/por qué/hasta cuándo). Leer el estado (`select require_phone_verification …`)
+sí lo pueden hacer los miembros del salón (RLS SELECT); **escribir**, no.
 
 ## Tareas periódicas
 

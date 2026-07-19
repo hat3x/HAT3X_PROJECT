@@ -126,7 +126,7 @@ import {
 const existing = await findCustomerByPhone(salonId, "612 34 56 78");
 
 // AUTOSERVICIO (app de cliente): enlaza/crea la ficha de MI cuenta por mi teléfono.
-// Idempotente. El teléfono se asume YA verificado como mío (OTP) aguas arriba.
+// Idempotente. EXIGE el teléfono verificado (OTP) salvo válvula relajada → phone_not_verified.
 const { customer, outcome } = await linkOrCreateCustomerAccount({
   salon_id: salonId,
   user_id: myAuthUserId,        // DEBE ser el del usuario autenticado
@@ -188,11 +188,16 @@ carrera con otro enlace concurrente.
   que en la ruta de autoservicio congela `salon_id`, `qr_token`, `notes`, `user_id`, `id`
   y `created_at`. Ver esa migración y `docs/multitenant-loyalty-contract.md`.
 
-> ⚠️ **Requisito NO cubierto aquí: PROPIEDAD del teléfono.** `linkOrCreateCustomerAccount`
-> **confía** en que el teléfono ya se verificó como del usuario (p. ej. OTP por SMS)
-> **antes** de llamar. Sin esa verificación, cualquiera podría reclamar el teléfono de
-> otra persona y apropiarse de su ficha. La verificación OTP es responsabilidad de la
-> capa que invoca esta función.
+- **PROPIEDAD del teléfono (gate OTP) — la GARANTIZA esta capa.** Enlazar/crear una ficha
+  por teléfono sin probar que ese número es de quien lo declara permitiría reclamar la ficha
+  de otra persona. `linkOrCreateCustomerAccount` **exige** la verificación (ya no la delega):
+  salvo válvula relajada (`require_phone_verification`, fail-closed por salón), el teléfono
+  debe coincidir con el **confirmado** de la cuenta (`auth.users.phone` + `phone_confirmed_at`,
+  sellados por el OTP de Supabase), o → `phone_not_verified` (403). Espejo del paso 3.2 de la
+  RPC `register_my_customer_account`. **El SMS del OTP lo envía Supabase Auth**, que requiere un
+  **proveedor de SMS (Twilio) configurado en el panel de Supabase** (paso humano). Flujo
+  completo, paso humano y el riesgo del interruptor en
+  **[`docs/verificacion-telefono-otp.md`](../../../docs/verificacion-telefono-otp.md)**.
 
 ## `CustomerAccountError` → HTTP
 
@@ -204,6 +209,8 @@ asociado, para que un Route Handler o Server Action lo traduzca sin filtrar deta
 | `invalid_request` | 400 | Datos inválidos o teléfono sin número real |
 | `unauthorized` | 401 | Sin sesión |
 | `forbidden` | 403 | La cuenta no es la del usuario autenticado / no es miembro del salón |
+| `phone_not_verified` | 403 | Teléfono no **confirmado** (OTP) o distinto del de la cuenta — salón que exige verificación. Ver [OTP](../../../docs/verificacion-telefono-otp.md) |
+| `feature_not_enabled` | 403 | El salón no tiene el add-on `loyalty` (bootstrap de fidelización) |
 | `not_found` | 404 | Salón inexistente |
 | `conflict` | 409 | El teléfono ya está vinculado a **otra** cuenta en el salón |
 | `internal` | 500 | Fallo de consulta |
