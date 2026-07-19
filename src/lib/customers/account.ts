@@ -24,17 +24,27 @@
  *     admin se acota SIEMPRE a mano por `salon_id` (nunca se cruza de salón) y se exige
  *     que la cuenta que enlaza sea la del propio usuario autenticado.
  *
- * ── Requisito previo NO cubierto aquí: PROPIEDAD del teléfono ─────────────────
- * `linkOrCreateCustomerAccount` confía en que el teléfono recibido ya ha sido
- * VERIFICADO como propiedad del usuario (p. ej. OTP por SMS) ANTES de llamar. Sin esa
- * verificación previa, cualquiera podría reclamar el teléfono de otra persona y
- * apropiarse de su ficha (robo de identidad). La verificación OTP es responsabilidad
- * de la capa que invoca esta función (fuera del alcance de esta subtarea); aquí solo
- * se implementa la lógica de enlace/creación una vez probada la posesión.
+ * ── PROPIEDAD del teléfono: la GARANTIZA esta capa (gate OTP, fail-closed) ────
+ * El teléfono es la CLAVE NATURAL de identidad, así que enlazar/crear una ficha por
+ * teléfono SIN probar que ese número es de quien lo declara permitiría reclamar la ficha
+ * de otra persona (robo de identidad + de puntos). Antes esta capa DELEGABA esa
+ * verificación al llamante; ya NO: `linkOrCreateCustomerAccount` la EXIGE aquí, con el
+ * MISMO criterio que la RPC gemela `register_my_customer_account` (paso 3.2 de la
+ * migración 20260719120000):
+ *   · Fail-closed por salón: consulta la válvula `require_phone_verification`
+ *     (`public.salon_security_settings`, migración 20260719110000). SIN fila ⇒ se EXIGE
+ *     verificación; solo una fila EXPLÍCITA `= false` (acto de HAT3X, solo dev/staging)
+ *     la salta.
+ *   · Prueba de posesión: cuando se exige, el teléfono declarado debe coincidir —ya
+ *     normalizado a E.164— con el teléfono CONFIRMADO de la cuenta autenticada
+ *     (`auth.users.phone` + `phone_confirmed_at`, sellados por el OTP de Supabase/GoTrue;
+ *     aquí se leen con `auth.getUser()`). Si no hay teléfono confirmado o no coincide ⇒
+ *     `CustomerAccountError('phone_not_verified', 403)`.
  *
  * USO EXCLUSIVO DE SERVIDOR (usa el cliente admin y cookies de sesión). No importar
  * desde componentes cliente.
  */
+import type { User } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { normalizePhone } from "@/lib/customers/normalize-phone";
@@ -52,6 +62,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 export type CustomerAccountErrorCode =
   | "unauthorized"
   | "forbidden"
+  | "phone_not_verified"
   | "feature_not_enabled"
   | "not_found"
   | "invalid_request"
@@ -92,7 +103,11 @@ export interface LinkOrCreateCustomerInput {
   salon_id: string;
   /** Cuenta de auth (auth.users.id) que se enlaza. DEBE ser la del usuario autenticado. */
   user_id: string;
-  /** Teléfono (en cualquier formato) YA verificado como del usuario; se normaliza a E.164. */
+  /**
+   * Teléfono (en cualquier formato) que se normaliza a E.164. Debe pertenecer al usuario:
+   * salvo válvula relajada, esta capa exige que coincida con el teléfono CONFIRMADO de la
+   * cuenta (gate OTP; ver cabecera del módulo) o falla con `phone_not_verified`.
+   */
   phone: string;
   /** Nombre para la ficha (obligatorio al crear). */
   full_name: string;
@@ -133,8 +148,13 @@ const linkOrCreateSchema = z.object({
 // Autorización (cliente RLS de la sesión)
 // -----------------------------------------------------------------------------
 
-/** Id del usuario autenticado, o 401 si no hay sesión. */
-async function requireAuthenticatedUserId(): Promise<string> {
+/**
+ * Usuario autenticado COMPLETO (incluye `phone` y `phone_confirmed_at`, que necesita el
+ * gate OTP), o 401 si no hay sesión. `getUser()` valida el token contra el servidor de
+ * auth y devuelve el registro AUTORITATIVO de la cuenta, así que la confirmación del
+ * teléfono es de fiar (no depende de un claim del JWT, que no la transporta).
+ */
+async function requireAuthenticatedUser(): Promise<User> {
   const supabase = createClient();
   const {
     data: { user },
@@ -142,7 +162,12 @@ async function requireAuthenticatedUserId(): Promise<string> {
   if (user === null) {
     throw new CustomerAccountError("unauthorized", 401, "No autorizado.");
   }
-  return user.id;
+  return user;
+}
+
+/** Id del usuario autenticado, o 401 si no hay sesión. */
+async function requireAuthenticatedUserId(): Promise<string> {
+  return (await requireAuthenticatedUser()).id;
 }
 
 /**
@@ -276,6 +301,76 @@ async function requireLoyaltyFeature(admin: AdminClient, salonId: string): Promi
 }
 
 /**
+ * Gate de seguridad FAIL-CLOSED: ¿este salón EXIGE que el teléfono esté verificado (OTP)
+ * antes de fiarse de él como identidad? Espejo TS de `app.salon_requires_phone_verification`
+ * (migración 20260719110000). Como esa función vive en el esquema `app` (que PostgREST no
+ * expone), la verdad se lee de la TABLA `public.salon_security_settings` con el cliente
+ * ADMIN, acotando por `salon_id` — mismo motivo y patrón que `salonHasFeature`.
+ *
+ * Fail-closed (idéntico al `not exists(… = false)` del gate SQL): SIN fila ⇒ `true`
+ * (exigir, seguro por defecto); con fila ⇒ el valor de la válvula (columna NOT NULL). Solo
+ * un `require_phone_verification = false` EXPLÍCITO (acto de HAT3X, solo dev/staging)
+ * devuelve `false`.
+ */
+async function salonRequiresPhoneVerification(
+  admin: AdminClient,
+  salonId: string,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("salon_security_settings")
+    .select("require_phone_verification")
+    .eq("salon_id", salonId)
+    .maybeSingle();
+  if (error !== null) {
+    throw new CustomerAccountError(
+      "internal",
+      500,
+      "No se pudo verificar la configuración de seguridad del salón.",
+    );
+  }
+  return data === null ? true : data.require_phone_verification;
+}
+
+/**
+ * Gate OTP (propiedad del teléfono) — espejo TS del paso 3.2 de la RPC
+ * `register_my_customer_account` (migración 20260719120000). Salvo que el salón haya
+ * RELAJADO la válvula ({@link salonRequiresPhoneVerification}, fail-closed), exige que el
+ * teléfono declarado (`phoneE164`, ya en E.164) coincida con el teléfono CONFIRMADO de la
+ * cuenta autenticada.
+ *
+ * "Confirmado" = hay sello `phone_confirmed_at` Y `user.phone` (que GoTrue guarda en E.164
+ * pero SIN el '+' de cabecera, p. ej. '34612…'). Se le antepone '+' para que
+ * `normalizePhone` lo trate como el E.164 internacional que es y lo compare en la MISMA
+ * forma canónica que `phoneE164`; sin ese '+', un '34…' se tomaría por número nacional y se
+ * le añadiría otro '34' (basura), y ningún verificado coincidiría. `normalizePhone` colapsa
+ * un '+' doble, así que es robusto aunque un GoTrue futuro guardara ya el prefijo.
+ *
+ * Se llama TRAS el feature-gate y ANTES de tocar/crear fichas (mismo orden que la RPC):
+ * sin teléfono verificado no se enlaza ficha ajena ni se crea una nueva.
+ */
+async function requireVerifiedPhoneOwnership(
+  admin: AdminClient,
+  salonId: string,
+  user: User,
+  phoneE164: string,
+): Promise<void> {
+  if (!(await salonRequiresPhoneVerification(admin, salonId))) {
+    return; // Válvula relajada (solo dev/staging): reabre el agujero de suplantación.
+  }
+  const verifiedPhone =
+    user.phone_confirmed_at != null && user.phone
+      ? normalizePhone(`+${user.phone}`)
+      : null;
+  if (verifiedPhone === null || verifiedPhone !== phoneE164) {
+    throw new CustomerAccountError(
+      "phone_not_verified",
+      403,
+      "Verifica tu teléfono antes de vincular tu cuenta.",
+    );
+  }
+}
+
+/**
  * Reconcilia una ficha YA EXISTENTE con la cuenta que se quiere enlazar:
  *   · misma cuenta            → no-op idempotente ("already_linked").
  *   · sin cuenta (user_id null) → la enlaza (UPDATE condicional a `user_id is null`).
@@ -383,11 +478,15 @@ export async function findCustomerByPhone(
  * a la persona por su TELÉFONO. Idempotente. Flujo:
  *   1. Autoservicio: la cuenta a enlazar (`user_id`) DEBE ser la del usuario autenticado.
  *   2. Se normaliza el teléfono a E.164; sin número real ⇒ `invalid_request`.
- *   3. Si ya existe ficha con ese teléfono en el salón:
+ *   3. El salón debe existir (`not_found`) y tener el add-on de fidelización
+ *      (`feature_not_enabled`, 403).
+ *   4. Gate OTP (fail-closed por salón): salvo válvula relajada, el teléfono debe ser el
+ *      CONFIRMADO de la cuenta autenticada, o ⇒ `phone_not_verified` (403). Ver cabecera.
+ *   5. Si ya existe ficha con ese teléfono en el salón:
  *        · sin cuenta        → se enlaza          (outcome "linked").
  *        · misma cuenta      → no-op idempotente  (outcome "already_linked").
  *        · otra cuenta       → conflicto 409.
- *   4. Si no existe, se CREA la ficha con `user_id`. El resto lo hace la BD sola: el
+ *   6. Si no existe, se CREA la ficha con `user_id`. El resto lo hace la BD sola: el
  *      DEFAULT rellena `qr_token`, la columna generada calcula `phone_e164` y el trigger
  *      `trg_customers_bootstrap_loyalty` crea la cuenta de puntos + el cupón de bienvenida.
  *
@@ -398,12 +497,14 @@ export async function findCustomerByPhone(
  * teléfono y por cuenta y aplicamos la misma lógica de enlace, de modo que el reintento
  * converge sin duplicar ni lanzar un error opaco.
  *
- * PROPIEDAD DEL TELÉFONO: ver la nota de cabecera del módulo — se asume verificado (OTP)
- * aguas arriba.
+ * PROPIEDAD DEL TELÉFONO: la GARANTIZA esta capa (paso 4), en paridad con la RPC gemela
+ * `register_my_customer_account`. Ver la nota de cabecera del módulo.
  *
  * @throws {CustomerAccountError} `invalid_request` (datos inválidos / teléfono sin número);
  *   `unauthorized` (sin sesión); `forbidden` (la cuenta no es la del usuario autenticado);
- *   `not_found` (salón inexistente); `conflict` (teléfono de otra cuenta); `internal`.
+ *   `not_found` (salón inexistente); `feature_not_enabled` (salón sin fidelización);
+ *   `phone_not_verified` (teléfono no confirmado o distinto del de la cuenta); `conflict`
+ *   (teléfono de otra cuenta); `internal`.
  */
 export async function linkOrCreateCustomerAccount(
   input: LinkOrCreateCustomerInput,
@@ -417,8 +518,8 @@ export async function linkOrCreateCustomerAccount(
 
   // Autoservicio: solo puedes enlazar/crear TU PROPIA ficha. Impide que un usuario
   // autenticado enlace la cuenta de otra persona o cree fichas para cuentas ajenas.
-  const sessionUserId = await requireAuthenticatedUserId();
-  if (sessionUserId !== userId) {
+  const sessionUser = await requireAuthenticatedUser();
+  if (sessionUser.id !== userId) {
     throw new CustomerAccountError("forbidden", 403, "Solo puedes vincular tu propia cuenta.");
   }
 
@@ -430,6 +531,10 @@ export async function linkOrCreateCustomerAccount(
   const admin = createAdminClient();
   await assertSalonExists(admin, salonId);
   await requireLoyaltyFeature(admin, salonId); // 403 si el salón no tiene el add-on
+  // Gate OTP (propiedad del teléfono, fail-closed por salón): tras el feature-gate y antes
+  // de tocar/crear fichas. 403 `phone_not_verified` si el número no está confirmado o no es
+  // el de la cuenta (impide reclamar la ficha de otra persona). Espejo del paso 3.2 de la RPC.
+  await requireVerifiedPhoneOwnership(admin, salonId, sessionUser, phoneE164);
 
   // ¿Ya existe la persona (por teléfono) en este salón?
   const existing = await findCustomerByPhoneE164(admin, salonId, phoneE164);

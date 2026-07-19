@@ -222,6 +222,13 @@ function seedBase() {
     { salon_id: SALON_A, feature: "loyalty", enabled: true },
     { salon_id: SALON_B, feature: "loyalty", enabled: true },
   ]);
+  // Estas pruebas cubren el ÍNDICE ÚNICO por teléfono, NO el gate OTP: se relaja la
+  // válvula de verificación por salón (require_phone_verification=false) para aislar esa
+  // preocupación. El enforcement OTP tiene su propio bloque en customers-account.test.
+  holder.store.set("salon_security_settings", [
+    { salon_id: SALON_A, require_phone_verification: false },
+    { salon_id: SALON_B, require_phone_verification: false },
+  ]);
   holder.store.set("customers", []);
 }
 

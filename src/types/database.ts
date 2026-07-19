@@ -1673,6 +1673,42 @@ export interface Database {
           },
         ];
       };
+      // Válvulas de seguridad del salón. 1:1 con salons (salon_id es PK y FK).
+      // require_phone_verification: NOT NULL DEFAULT TRUE (secure by default). Lectura
+      // solo para miembros del salón (RLS); la escritura es exclusiva de HAT3X
+      // (service_role). Ver migración 20260719110000_salon_security_settings.
+      salon_security_settings: {
+        Row: {
+          salon_id: string;
+          require_phone_verification: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          salon_id: string;
+          require_phone_verification?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          salon_id?: string;
+          require_phone_verification?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "salon_security_settings_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: true;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;

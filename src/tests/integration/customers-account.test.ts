@@ -18,7 +18,10 @@ type Row = Record<string, unknown>;
 
 const holder = vi.hoisted(() => ({
   store: new Map<string, Row[]>(),
-  currentUser: null as { id: string } | null,
+  // El gate OTP lee `phone` / `phone_confirmed_at` del usuario (como `auth.getUser()`).
+  currentUser: null as
+    | { id: string; phone?: string; phone_confirmed_at?: string }
+    | null,
   idCounter: 0,
 }));
 
@@ -157,6 +160,9 @@ const SALON_B = "salon-b";
 const USER_ANA = "user-ana";
 const USER_BEA = "user-bea";
 const PHONE_ANA = "+34612345678"; // forma canónica E.164
+// GoTrue guarda auth.users.phone en E.164 pero SIN el '+' de cabecera; el gate OTP se lo
+// antepone para normalizar. Es el MISMO número que PHONE_ANA (su forma "de cuenta").
+const PHONE_ANA_AUTH = "34612345678";
 
 const rowsOf = (table: string): Row[] => holder.store.get(table) ?? [];
 
@@ -181,7 +187,14 @@ function disableLoyalty(salonId = SALON_A, mode: "absent" | "disabled" = "absent
 function seedBase() {
   holder.store = new Map<string, Row[]>();
   holder.idCounter = 0;
-  holder.currentUser = { id: USER_ANA };
+  // Ana llega con su teléfono CONFIRMADO por OTP (coincide con PHONE_ANA): pasa el gate.
+  // Sin fila en salon_security_settings, el gate es fail-closed ⇒ EXIGE verificación, así
+  // que las ramas crear/enlazar/no-op/conflicto se ejercitan con el gate activo (realista).
+  holder.currentUser = {
+    id: USER_ANA,
+    phone: PHONE_ANA_AUTH,
+    phone_confirmed_at: "2026-01-01T00:00:00Z",
+  };
 
   holder.store.set("salons", [{ id: SALON_A }, { id: SALON_B }]);
   holder.store.set("salon_members", [
@@ -408,6 +421,118 @@ describe("linkOrCreateCustomerAccount — gate del add-on 'loyalty' (feature_not
     expect((err as CustomerAccountError).message).toBe(
       "Este salón no tiene contratada la fidelización",
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// linkOrCreateCustomerAccount — gate OTP (propiedad del teléfono, sub-3)
+//
+// Espejo TS del paso 3.2 de la RPC register_my_customer_account: salvo válvula
+// relajada por salón (salon_security_settings.require_phone_verification=false), el
+// teléfono declarado debe coincidir con el CONFIRMADO de la cuenta (auth.users.phone +
+// phone_confirmed_at). Fail-closed: SIN fila de seguridad ⇒ se EXIGE verificación.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("linkOrCreateCustomerAccount — gate OTP (phone_not_verified / 403)", () => {
+  /** Relaja la válvula del salón (solo dev/staging): salta el gate OTP. */
+  function relaxPhoneVerification(salonId = SALON_A): void {
+    holder.store.set("salon_security_settings", [
+      ...rowsOf("salon_security_settings").filter((r) => r.salon_id !== salonId),
+      { salon_id: salonId, require_phone_verification: false },
+    ]);
+  }
+
+  it("→ 403 phone_not_verified si la cuenta NO tiene teléfono confirmado (fail-closed sin fila)", async () => {
+    holder.currentUser = { id: USER_ANA }; // sin phone / phone_confirmed_at
+    await expect(
+      linkOrCreateCustomerAccount({
+        salon_id: SALON_A,
+        user_id: USER_ANA,
+        phone: PHONE_ANA,
+        full_name: "Ana",
+      }),
+    ).rejects.toMatchObject({ code: "phone_not_verified", status: 403 });
+    // El gate corta antes del alta: no se creó ninguna ficha.
+    expect(rowsOf("customers")).toHaveLength(0);
+  });
+
+  it("→ 403 si el teléfono confirmado es OTRO distinto del declarado (anti-suplantación)", async () => {
+    holder.currentUser = {
+      id: USER_ANA,
+      phone: "34600000000", // confirmado, pero NO es el que declara
+      phone_confirmed_at: "2026-01-01T00:00:00Z",
+    };
+    await expect(
+      linkOrCreateCustomerAccount({
+        salon_id: SALON_A,
+        user_id: USER_ANA,
+        phone: PHONE_ANA, // +34612345678
+        full_name: "Ana",
+      }),
+    ).rejects.toMatchObject({ code: "phone_not_verified", status: 403 });
+    expect(rowsOf("customers")).toHaveLength(0);
+  });
+
+  it("→ 403 si hay teléfono pero SIN sello de confirmación (phone_confirmed_at ausente)", async () => {
+    holder.currentUser = { id: USER_ANA, phone: PHONE_ANA_AUTH }; // sin phone_confirmed_at
+    await expect(
+      linkOrCreateCustomerAccount({
+        salon_id: SALON_A,
+        user_id: USER_ANA,
+        phone: PHONE_ANA,
+        full_name: "Ana",
+      }),
+    ).rejects.toMatchObject({ code: "phone_not_verified", status: 403 });
+  });
+
+  it("PASA si el teléfono declarado coincide con el CONFIRMADO (aunque cambie el formato)", async () => {
+    holder.currentUser = {
+      id: USER_ANA,
+      phone: PHONE_ANA_AUTH, // '34612345678' (forma de cuenta, sin '+')
+      phone_confirmed_at: "2026-01-01T00:00:00Z",
+    };
+    const result = await linkOrCreateCustomerAccount({
+      salon_id: SALON_A,
+      user_id: USER_ANA,
+      phone: "612 34 56 78", // formato libre → +34612345678 = el confirmado
+      full_name: "Ana",
+    });
+    expect(result.outcome).toBe("created");
+  });
+
+  it("VÁLVULA RELAJADA (require_phone_verification=false): salta el gate aun sin confirmar", async () => {
+    relaxPhoneVerification(SALON_A);
+    holder.currentUser = { id: USER_ANA }; // sin teléfono confirmado
+    const result = await linkOrCreateCustomerAccount({
+      salon_id: SALON_A,
+      user_id: USER_ANA,
+      phone: PHONE_ANA,
+      full_name: "Ana",
+    });
+    expect(result.outcome).toBe("created");
+  });
+
+  it("el feature-gate gana al gate OTP (sin 'loyalty' ⇒ feature_not_enabled, no phone_not_verified)", async () => {
+    disableLoyalty(SALON_A);
+    holder.currentUser = { id: USER_ANA }; // tampoco verificado, pero el feature corta antes
+    await expect(
+      linkOrCreateCustomerAccount({
+        salon_id: SALON_A,
+        user_id: USER_ANA,
+        phone: PHONE_ANA,
+        full_name: "Ana",
+      }),
+    ).rejects.toMatchObject({ code: "feature_not_enabled", status: 403 });
+  });
+
+  it("el fallo del gate OTP es un CustomerAccountError (no un error opaco)", async () => {
+    holder.currentUser = { id: USER_ANA };
+    const err = await linkOrCreateCustomerAccount({
+      salon_id: SALON_A,
+      user_id: USER_ANA,
+      phone: PHONE_ANA,
+      full_name: "Ana",
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CustomerAccountError);
   });
 });
 

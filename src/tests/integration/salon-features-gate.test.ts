@@ -215,6 +215,12 @@ function seed() {
   // Add-on 'loyalty' contratado y activo por defecto: los controles positivos parten
   // de un salón CON fidelización. `disableLoyalty` lo retira en los tests de gate.
   holder.store.set("salon_features", [{ salon_id: SALON_A, feature: "loyalty", enabled: true }]);
+  // El control positivo del alta prueba el GATE DE 'loyalty', no el gate OTP: se relaja la
+  // válvula de verificación del salón para aislar esa preocupación (el enforcement OTP se
+  // cubre en customers-account.test).
+  holder.store.set("salon_security_settings", [
+    { salon_id: SALON_A, require_phone_verification: false },
+  ]);
   holder.store.set("customers", [
     { id: CUSTOMER_A, salon_id: SALON_A, full_name: "Ana", qr_token: QR_A, user_id: null },
   ]);
