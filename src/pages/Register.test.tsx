@@ -26,6 +26,9 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   signUp: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
+  // Sesión que expone useAuth: por defecto sin usuario (alta normal); los tests de
+  // reanudación (sub-6) la rellenan con un usuario de teléfono sin confirmar.
+  authState: { user: null as unknown, loading: false },
 }));
 
 vi.mock('@/integrations/supabase/client', () => ({
@@ -40,7 +43,10 @@ vi.mock('@/lib/auth', async (importOriginal) => {
   // Mantiene mapAuthError/mapRegisterError reales (puros) y sólo sustituye useAuth,
   // para no montar el AuthProvider (que se suscribiría a onAuthStateChange).
   const actual = (await importOriginal()) as Record<string, unknown>;
-  return { ...actual, useAuth: () => ({ signUp: mocks.signUp }) };
+  return {
+    ...actual,
+    useAuth: () => ({ signUp: mocks.signUp, user: mocks.authState.user, loading: mocks.authState.loading }),
+  };
 });
 
 // Import DESPUÉS de declarar los mocks (respeta el izado de vi.mock).
@@ -56,6 +62,9 @@ afterEach(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Por defecto NO hay sesión previa (alta normal, sin reanudación de sub-6).
+  mocks.authState.user = null;
+  mocks.authState.loading = false;
   // Camino feliz por defecto: hay sesión tras signUp; el SMS se envía y se verifica ok.
   mocks.signUp.mockResolvedValue({ data: { user: {}, session: { access_token: 'tok' } }, error: null });
   mocks.auth.updateUser.mockResolvedValue({ data: { user: {} }, error: null });
@@ -185,5 +194,60 @@ describe('Register — encadenado del registro (sub-5)', () => {
     // Vuelve al formulario: el campo de nombre reaparece; no se navega.
     await waitFor(() => expect(container.querySelector('#firstName')).not.toBeNull());
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('Register — reanudación de un registro a medias (sub-6)', () => {
+  /** Sesión de una cuenta creada por signUp que abandonó ANTES de verificar el teléfono. */
+  const pendingSessionUser = {
+    email: 'ana@example.com',
+    phone_confirmed_at: null,
+    user_metadata: { phone: '600123456', first_name: 'Ana', last_name: 'García' },
+  };
+
+  it('con sesión y teléfono SIN confirmar, salta directo al OTP (sin pedir el formulario) y reenvía el código', async () => {
+    mocks.authState.user = pendingSessionUser;
+
+    const { container } = renderRegister();
+
+    // No se pide el formulario: se abre el paso de verificación y se dispara el SMS con el
+    // E.164 normalizado del teléfono guardado en la sesión (reutiliza el MISMO PhoneOtpStep).
+    await waitFor(() => expect(mocks.auth.updateUser).toHaveBeenCalledWith({ phone: '+34600123456' }));
+    await waitForCodeInput(container);
+    // Aviso cálido de reanudación (no el gate obligatorio) y sin campos del formulario.
+    expect(screen.getByText('Retomamos donde lo dejaste')).toBeTruthy();
+    expect(container.querySelector('#firstName')).toBeNull();
+
+    // Introduce el código → verifyOtp ok → recién ahí se enlaza la ficha con los datos
+    // RECONSTRUIDOS de la sesión (mismo p_phone que el alta) → navega a /home.
+    const input = container.querySelector('input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '123456' } });
+
+    await waitFor(() =>
+      expect(mocks.auth.verifyOtp).toHaveBeenCalledWith({
+        phone: '+34600123456',
+        token: '123456',
+        type: 'phone_change',
+      })
+    );
+    await waitFor(() =>
+      expect(mocks.rpc).toHaveBeenCalledWith('register_my_customer_account', {
+        p_salon_id: 'salon-1',
+        p_phone: '600123456',
+        p_full_name: 'Ana García',
+        p_email: 'ana@example.com',
+      })
+    );
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/home'));
+  });
+
+  it('con el teléfono YA confirmado, NO reanuda: muestra el formulario de alta y no envía ningún SMS', async () => {
+    mocks.authState.user = { ...pendingSessionUser, phone_confirmed_at: '2026-07-19T10:00:00Z' };
+
+    const { container } = renderRegister();
+
+    // Sin reanudación: aparece el formulario (campo de nombre) y no se dispara el OTP.
+    await waitFor(() => expect(container.querySelector('#firstName')).not.toBeNull());
+    expect(mocks.auth.updateUser).not.toHaveBeenCalled();
   });
 });

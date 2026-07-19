@@ -1,25 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/lib/i18n';
 import { useAuth, mapAuthError } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useSalon } from '@/lib/salon-context';
 import { normalizePhoneToE164 } from '@/lib/otp';
-import { classifyRegisterOutcome, PHONE_NOT_VERIFIED_ERROR_KEY } from '@/lib/registration-flow';
+import {
+  classifyRegisterOutcome,
+  detectPhoneVerificationResumption,
+  PHONE_NOT_VERIFIED_ERROR_KEY,
+} from '@/lib/registration-flow';
 import { sendPhoneOtp, resendPhoneOtp, confirmPhoneOtp } from '@/lib/phone-verification';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import PhoneOtpStep from '@/components/PhoneOtpStep';
-import { ArrowLeft, Eye, EyeOff, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, PartyPopper, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
 const Register = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { signUp } = useAuth();
+  const { signUp, user, loading: authLoading } = useAuth();
   // salon_id y nombre derivados del salón resuelto en runtime (no de VITE_SALON_ID).
   const { id: salonId, name: salonName } = useSalon();
   const [loading, setLoading] = useState(false);
@@ -43,6 +47,12 @@ const Register = () => {
   // completo (sale de su estado terminal "completando" y reenvía un código nuevo). Así,
   // tras un PHONE_NOT_VERIFIED, el usuario reintenta la verificación en el sitio.
   const [verifyAttempt, setVerifyAttempt] = useState(0);
+  // Reanudación (sub-6): `resuming` distingue el "termina tu verificación" (sesión ya
+  // existente, sin formulario de por medio) del alta normal, para ajustar copy y el atrás.
+  const [resuming, setResuming] = useState(false);
+  // La reanudación se resuelve UNA sola vez; y nunca debe secuestrar un alta manual en curso.
+  const resumeHandledRef = useRef(false);
+  const manualSignupRef = useRef(false);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -54,6 +64,35 @@ const Register = () => {
     marketing: false,
     whatsapp: false,
   });
+
+  // ── Reanudación de un registro a medias (sub-6) ────────────────────────────
+  // Al entrar con una sesión ya existente cuyo teléfono NO está confirmado (cuenta creada
+  // pero verificación abandonada), saltamos directos al MISMO paso de OTP en vez de dejar
+  // una cuenta inservible. La decisión es PURA (detectPhoneVerificationResumption mira solo
+  // la sesión) y se resuelve UNA vez: cuando la sesión ya está rehidratada (authLoading=false),
+  // sin secuestrar un alta manual en curso ni pisar un paso de verificación ya abierto.
+  useEffect(() => {
+    if (resumeHandledRef.current || manualSignupRef.current || authLoading) return;
+    if (phase !== 'form' || pending) return;
+
+    const resumption = detectPhoneVerificationResumption(user);
+    if (resumption.kind !== 'resume') return;
+
+    // El SMS se envía/verifica en E.164; si el teléfono guardado no normaliza, no forzamos
+    // la reanudación (el usuario se queda en el formulario, sin bloquearse en un paso imposible).
+    const norm = normalizePhoneToE164(resumption.phone);
+    if (!norm.ok) return;
+
+    resumeHandledRef.current = true;
+    setPending({
+      phone: resumption.phone,
+      e164: (norm as { e164: string }).e164,
+      fullName: resumption.fullName,
+      email: resumption.email,
+    });
+    setResuming(true);
+    setPhase('verify');
+  }, [user, authLoading, phase, pending]);
 
   /**
    * Paso final del registro: enlaza la ficha del cliente por teléfono vía la RPC de
@@ -117,6 +156,9 @@ const Register = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Un alta manual manda: bloquea la reanudación automática para que el efecto de sub-6
+    // no pise este flujo si la sesión se rehidrata a mitad del signUp.
+    manualSignupRef.current = true;
     if (!form.terms) {
       toast.error('Debes aceptar los términos y condiciones');
       return;
@@ -193,7 +235,12 @@ const Register = () => {
         className="mb-8"
       >
         <button
-          onClick={() => (phase === 'verify' ? backToForm() : navigate(-1))}
+          onClick={() => {
+            // Al reanudar no hay formulario al que "volver": el usuario YA tiene cuenta, así
+            // que el atrás lo lleva a casa (podrá retomar la verificación luego desde el aviso).
+            if (resuming) return navigate('/home');
+            return phase === 'verify' ? backToForm() : navigate(-1);
+          }}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft size={18} />
@@ -214,6 +261,20 @@ const Register = () => {
               </div>
             </div>
           )}
+          {/* Aviso cálido de reanudación (sub-6): recuerda que retomamos un registro a medias,
+              sin dramatismo. Si el servidor pasa a EXIGIR la verificación (phoneGateRequired),
+              cede el sitio al aviso más firme de arriba para no duplicar mensajes. */}
+          {resuming && !phoneGateRequired && (
+            <div className="mb-6 rounded-xl border border-gold/25 bg-gold/5 p-4">
+              <div className="flex items-start gap-3">
+                <PartyPopper className="mt-0.5 h-5 w-5 shrink-0 text-gold" aria-hidden="true" />
+                <div>
+                  <p className="mb-1 font-medium text-foreground">{t('auth.resume.title')}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{t('auth.resume.body')}</p>
+                </div>
+              </div>
+            </div>
+          )}
           <PhoneOtpStep
             // Remontar (key) al reintentar tras PHONE_NOT_VERIFIED: reinicia el estado
             // interno del paso y reenvía un código nuevo.
@@ -227,7 +288,9 @@ const Register = () => {
             // exigido la verificación. Una vez devuelve PHONE_NOT_VERIFIED, esa salida
             // sería falsa (la RPC volvería a rechazar) y crearía un bucle: la retiramos.
             onContinueWithoutVerification={phoneGateRequired ? undefined : () => finishRegistration(pending)}
-            onChangeNumber={backToForm}
+            // Al reanudar no ofrecemos "cambiar número": la cuenta ya se creó con ese teléfono
+            // (cambiarlo es un flujo de perfil aparte, fuera de sub-6). El atrás de arriba lleva a casa.
+            onChangeNumber={resuming ? undefined : backToForm}
           />
         </motion.div>
       ) : (

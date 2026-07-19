@@ -99,3 +99,91 @@ export function classifyRegisterOutcome(result: { data?: unknown; error?: unknow
       : data;
   return { kind: 'success', linked: outcome === 'linked' };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reanudación de la verificación de teléfono (sub-6)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Si el usuario deja el alta a medias (signUp crea la cuenta y persiste la sesión,
+// pero cierra la app ANTES de confirmar el teléfono), al volver a entrar la sesión se
+// rehidrata pero el teléfono sigue sin verificar y —con el gating de sub-5— la ficha no
+// llegó a enlazarse: la cuenta queda inservible. En vez de dejarle ahí, detectamos ese
+// estado SOLO a partir de la sesión y ofrecemos terminar el MISMO paso de OTP.
+
+/**
+ * Subconjunto del `user` de Supabase Auth (`useAuth().user`) que necesita la detección
+ * de reanudación. Tiparlo así (en vez de la clase `User`) permite:
+ *   · pasar `useAuth().user` sin cast (es estructuralmente compatible: el `User` de
+ *     @supabase/auth-js expone `phone_confirmed_at?`, `new_phone?` y `user_metadata`), y
+ *   · construir dobles triviales en los tests (`{ phone_confirmed_at: null, … }`),
+ * en la misma línea de inyección de dependencias que `PhoneOtpAuthClient` (phone-verification.ts).
+ */
+export interface SessionUserLike {
+  /** Correo de la cuenta; lo reutiliza la RPC de enlace al reanudar (`p_email`). */
+  email?: string | null;
+  /** Sello de confirmación del teléfono. VACÍO ⇒ el teléfono aún NO está verificado. */
+  phone_confirmed_at?: string | null;
+  /** Teléfono pendiente (E.164) de un cambio en curso, si `updateUser({ phone })` ya se llamó. */
+  new_phone?: string | null;
+  /** Metadatos escritos por signUp: teléfono tecleado, nombre y apellidos. */
+  user_metadata?: {
+    phone?: unknown;
+    first_name?: unknown;
+    last_name?: unknown;
+  } | null;
+}
+
+/**
+ * Decisión de reanudación derivada ÚNICAMENTE de la sesión (sub-6):
+ *   · `none`   → no hay nada que reanudar (sin sesión, o el teléfono ya está verificado).
+ *   · `resume` → la cuenta existe pero el teléfono NO está confirmado: hay que ofrecer
+ *     terminar el OTP. Incluye lo que `finishRegistration` necesita (`phone`, `fullName`,
+ *     `email`), reconstruido de los metadatos del alta, para reutilizar el MISMO paso de
+ *     verificación sin volver a pedir el formulario.
+ */
+export type PhoneVerificationResumption =
+  | { kind: 'none' }
+  | { kind: 'resume'; phone: string; fullName: string; email: string };
+
+/** Devuelve una cadena saneada (recortada) de un valor `unknown`; si no lo es, `''`. */
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * Detecta, SOLO a partir de la sesión rehidratada, si el usuario dejó el registro a
+ * medias (cuenta creada pero teléfono sin confirmar) y procede ofrecerle terminar la
+ * verificación por SMS. NO consulta la base de datos ni toca Supabase: mira el `user`
+ * de `useAuth()` y decide de forma pura y determinista.
+ *
+ * Reglas:
+ *   · sin `user`, o con `phone_confirmed_at` sellado → `none` (nada que reanudar; es el
+ *     mismo criterio de `isPhoneConfirmed`, ver phone-verification.ts).
+ *   · teléfono sin confirmar Y con un teléfono conocido → `resume`, con los datos de la
+ *     RPC reconstruidos de los metadatos.
+ *
+ * El teléfono preferido es el TECLEADO en el alta (`user_metadata.phone`), para que la
+ * RPC reciba exactamente el mismo `p_phone` que en el alta normal; si faltara, se cae al
+ * `new_phone` (E.164) del cambio en curso. Sin ningún teléfono conocido no hay forma de
+ * reanudar el SMS → `none`.
+ */
+export function detectPhoneVerificationResumption(
+  user: SessionUserLike | null | undefined
+): PhoneVerificationResumption {
+  if (!user) return { kind: 'none' };
+  // Teléfono ya verificado (Supabase selló `phone_confirmed_at`) → nada que reanudar.
+  // Inline del criterio de `isPhoneConfirmed` para que este módulo de decisiones puras
+  // no dependa de la capa CON efectos (phone-verification.ts).
+  if (readString(user.phone_confirmed_at)) return { kind: 'none' };
+
+  const typedPhone = readString(user.user_metadata?.phone);
+  const pendingPhone = readString(user.new_phone);
+  const phone = typedPhone || pendingPhone;
+  if (!phone) return { kind: 'none' };
+
+  const fullName = `${readString(user.user_metadata?.first_name)} ${readString(
+    user.user_metadata?.last_name
+  )}`.trim();
+
+  return { kind: 'resume', phone, fullName, email: readString(user.email) };
+}

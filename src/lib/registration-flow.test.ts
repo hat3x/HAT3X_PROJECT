@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
   mapRegisterError,
   classifyRegisterOutcome,
+  detectPhoneVerificationResumption,
   PHONE_NOT_VERIFIED_ERROR_KEY,
 } from './registration-flow';
 
@@ -93,5 +94,60 @@ describe('classifyRegisterOutcome', () => {
 
   it('éxito sin datos (null) → success + linked=false (no rompe)', () => {
     expect(classifyRegisterOutcome({ data: null, error: null })).toEqual({ kind: 'success', linked: false });
+  });
+});
+
+describe('detectPhoneVerificationResumption (reanudación de sub-6)', () => {
+  /** Sesión de una cuenta creada por signUp que abandonó ANTES de verificar el teléfono. */
+  const pendingUser = (overrides = {}) => ({
+    email: 'ana@example.com',
+    phone_confirmed_at: null,
+    user_metadata: { phone: '600123456', first_name: 'Ana', last_name: 'García' },
+    ...overrides,
+  });
+
+  it('sin sesión (null/undefined) → none (no hay nada que reanudar)', () => {
+    expect(detectPhoneVerificationResumption(null)).toEqual({ kind: 'none' });
+    expect(detectPhoneVerificationResumption(undefined)).toEqual({ kind: 'none' });
+  });
+
+  it('teléfono ya confirmado (phone_confirmed_at sellado) → none aunque haya teléfono', () => {
+    expect(
+      detectPhoneVerificationResumption(pendingUser({ phone_confirmed_at: '2026-07-19T10:00:00Z' }))
+    ).toEqual({ kind: 'none' });
+  });
+
+  it('cuenta creada + teléfono sin confirmar → resume con los datos del alta (para la RPC)', () => {
+    expect(detectPhoneVerificationResumption(pendingUser())).toEqual({
+      kind: 'resume',
+      phone: '600123456',
+      fullName: 'Ana García',
+      email: 'ana@example.com',
+    });
+  });
+
+  it('prefiere el teléfono TECLEADO (metadata) sobre el new_phone pendiente (mismo p_phone que el alta)', () => {
+    const user = pendingUser({ new_phone: '+34611000000' });
+    expect(detectPhoneVerificationResumption(user)).toMatchObject({ kind: 'resume', phone: '600123456' });
+  });
+
+  it('sin teléfono en metadata pero con new_phone pendiente → reanuda con el E.164 pendiente', () => {
+    const user = pendingUser({ user_metadata: { first_name: 'Ana', last_name: 'García' }, new_phone: '+34600123456' });
+    expect(detectPhoneVerificationResumption(user)).toEqual({
+      kind: 'resume',
+      phone: '+34600123456',
+      fullName: 'Ana García',
+      email: 'ana@example.com',
+    });
+  });
+
+  it('teléfono sin confirmar pero SIN ningún teléfono conocido → none (nada que reenviar)', () => {
+    const user = pendingUser({ user_metadata: { first_name: 'Ana' }, new_phone: null });
+    expect(detectPhoneVerificationResumption(user)).toEqual({ kind: 'none' });
+  });
+
+  it('nombre incompleto en metadata → fullName se recorta sin romper (solo el nombre disponible)', () => {
+    const user = pendingUser({ user_metadata: { phone: '600123456', first_name: 'Ana' } });
+    expect(detectPhoneVerificationResumption(user)).toMatchObject({ kind: 'resume', fullName: 'Ana' });
   });
 });

@@ -78,6 +78,14 @@ const translations: Record<Locale, Record<string, string>> = {
     // (la RPC devolvió PHONE_NOT_VERIFIED). Se muestra sobre el paso de verificación.
     'auth.register.phoneRequiredTitle': 'Verificación obligatoria',
     'auth.register.phoneRequired': 'Para completar tu registro, esta peluquería necesita verificar tu teléfono. Introduce el código que te hemos enviado por SMS; no podemos crear tu cuenta hasta confirmarlo.',
+    // Reanudación de un registro a medias (sub-6): al volver a entrar con la cuenta creada
+    // pero el teléfono sin confirmar, retomamos el MISMO paso de OTP con un tono amable.
+    'auth.resume.title': 'Retomamos donde lo dejaste',
+    'auth.resume.body': 'Solo falta verificar tu teléfono para dejar tu cuenta lista. Te enviamos un código nuevo por SMS.',
+    'auth.resume.homeTitle': 'Te queda un pasito 👋',
+    'auth.resume.homeBody': 'Verifica tu teléfono para activar del todo tu cuenta y no perderte tus puntos ni tus citas.',
+    'auth.resume.cta': 'Terminar verificación',
+    'auth.resume.dismiss': 'Ahora no',
     // Home
     'home.greeting': 'Hola',
     'home.nextAppointment': 'Próxima cita',
@@ -446,6 +454,14 @@ const translations: Record<Locale, Record<string, string>> = {
     // finish sign-up (the RPC returned PHONE_NOT_VERIFIED).
     'auth.register.phoneRequiredTitle': 'Verification required',
     'auth.register.phoneRequired': "To finish signing up, this salon needs to verify your phone. Enter the code we sent you by SMS; we can't create your account until it's confirmed.",
+    // Resuming an abandoned sign-up (sub-6): on return with the account created but the phone
+    // still unconfirmed, we pick the SAME OTP step back up with a warm, low-pressure tone.
+    'auth.resume.title': "Let's pick up where you left off",
+    'auth.resume.body': "Just verify your phone to get your account ready. We've sent you a fresh code by SMS.",
+    'auth.resume.homeTitle': 'One little step left 👋',
+    'auth.resume.homeBody': "Verify your phone to fully activate your account so you don't miss your points or appointments.",
+    'auth.resume.cta': 'Finish verifying',
+    'auth.resume.dismiss': 'Not now',
     'home.greeting': 'Hello',
     'home.nextAppointment': 'Next appointment',
     'home.noAppointments': 'No upcoming appointments',
