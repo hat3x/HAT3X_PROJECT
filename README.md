@@ -31,9 +31,9 @@ esquema y como defensa en profundidad sobre las RLS.
 | Home | `/home` | ✅ Operativa |
 | Perfil | `/profile` | ✅ Operativa (lee de Salón OS) |
 | Fidelización | `/loyalty` | ✅ Operativa (lee de Salón OS) |
-| Catálogo de servicios | `/services` | ✅ Operativa |
-| **Reservar cita** | `/book` | ⏳ **Próximamente** — sub-fase 3B-2 |
-| **Mis citas** | `/appointments` | ⏳ **Próximamente** — sub-fase 3B-2 |
+| Catálogo de servicios | `/services` | ✅ Operativa (catálogo público de Salón OS) |
+| **Reservar cita** | `/book` | ✅ Operativa (API pública de reserva de Salón OS) |
+| **Mis citas** | `/appointments` | ✅ Operativa · lectura *self* — *depende de una política RLS/RPC self en el servidor (ver [limitación pendiente](#reservas-y-mis-citas--api-pública-de-salón-os))* |
 | Club / Premium | `/club`, `/premium` | 🚫 Desactivada (sin backend en Salón OS) |
 | Promos | `/promos` | 🚫 Desactivada (sin backend en Salón OS) |
 | Admin / API Keys | `/admin/*` | 🚫 Desactivada (sin backend en Salón OS) |
@@ -253,8 +253,15 @@ cp .env.example .env
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | ✅ | Anon / publishable key de Supabase (pública). |
 | `VITE_SUPABASE_PROJECT_ID` | — | ID del proyecto (informativo). |
 | `VITE_SALON_SLUG` | — | **Fallback** del slug cuando el host no trae subdominio ni `?salon` (p. ej. en local). El salón real se resuelve en runtime. |
+| `VITE_SALON_OS_API_URL` | ✅¹ | Origen (scheme + host, **sin barra final**) del despliegue de Salón OS que sirve la **API pública de reserva** (`{base}/api/public/booking/{slug}`). Es **build-time** y **común a todo el despliegue** (no depende del salón). Producción: `https://app.salonos.app`; en local: `http://localhost:3000`; desde el móvil, la **IP de red** del PC (no `localhost`). Detalle: [Reservas y «Mis Citas»](#reservas-y-mis-citas--api-pública-de-salón-os). |
 | ~~`VITE_SALON_ID`~~ | — | **Deprecada.** Ya no es fuente de verdad: `salon_id` se deriva del branding en runtime. Puede eliminarse. |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | — | Sólo si se re-activan las suscripciones (Club/Premium). |
+
+> ¹ **Obligatoria para reservar.** `/book` la exige: si falta, la pantalla lanza
+> `SalonOsConfigError` con un mensaje claro (capturado por el `<ErrorBoundary>`), no
+> falla en silencio. `/appointments` la usa sólo para **enriquecer** los nombres de
+> servicio/profesional de forma **no bloqueante**: sin ella, las citas se listan igual
+> (sin esos nombres). El resto de la app (perfil, fidelización) no depende de ella.
 
 > **Arranque estricto.** Si falta `VITE_SUPABASE_URL` o
 > `VITE_SUPABASE_PUBLISHABLE_KEY`, la app lanza un error claro al iniciar en lugar
@@ -511,26 +518,166 @@ con un teléfono ajeno. Es trabajo de una fase posterior.
 
 ---
 
-## Reservas y citas — diferidas a la sub-fase 3B-2
+## Reservas y «Mis Citas» — API pública de Salón OS
 
-La gestión de reservas está **fuera del alcance de la fase de migración actual**.
-Las rutas `/book` y `/appointments` renderizan un estado **"Próximamente"**
-([`PlaceholderPage`](src/pages/PlaceholderPage.tsx)) para que el build quede verde
-contra el nuevo esquema de Salón OS.
+Las rutas `/book` (reservar) y `/appointments` («Mis Citas») están **operativas**
+contra el backend de **Salón OS** tras la re-integración de la migración (sub-1…sub-9).
+Ambas requieren sesión (`RequireAuth`). Principio de oro: **el servidor manda** — la app
+**no** recalcula disponibilidad, duraciones ni husos; consume lo que la API pública
+declara reservable, tal cual.
 
-Los flujos originales se conservan **verbatim** en
-[`src/pages/_deferred/reservations-3B-2/`](src/pages/_deferred/reservations-3B-2/):
+### Dos vías de datos (dos backends)
 
-- `BookAppointment.tsx` — flujo multi-paso (ubicación → sección → servicios →
-  personal → fecha/hora → confirmar, con comprobación de disponibilidad y sync con
-  Google Calendar).
-- `Appointments.tsx` — pestañas de próximas/historial, realtime, cancelar y
-  reprogramar (`RescheduleDialog.tsx`), sobre las tablas legacy `appointments` /
-  `appointment_services`.
-- `ServiceCatalog.tsx` — versión con selección para reserva.
+| Pantalla | Cómo lee/escribe | Origen |
+|---|---|---|
+| **Reservar** (`/book`) | API **pública HTTP** de reserva (anon, sin sesión) | `{VITE_SALON_OS_API_URL}/api/public/booking/{slug}` |
+| **Mis Citas** (`/appointments`) | **SDK de Supabase** con RLS *self* (con sesión) | `public.appointments` del proyecto Salón OS |
 
-Se **re-integrarán con el motor de reservas de Salón OS en la sub-fase 3B-2**.
-Detalles en el [README de esa carpeta](src/pages/_deferred/reservations-3B-2/README.md).
+- La **reserva** habla con la app Next.js de Salón OS por HTTP: base = `VITE_SALON_OS_API_URL`
+  (build-time), slug **resuelto en runtime**. Transporte tipado en
+  [`src/lib/salon-os-api.ts`](src/lib/salon-os-api.ts); config (base + slug) en
+  [`src/config/salon-os.ts`](src/config/salon-os.ts); lógica pura del asistente en
+  [`src/lib/booking.ts`](src/lib/booking.ts).
+- **Mis Citas** lee `public.appointments` directamente en Supabase con la política RLS *self*
+  (ver **⚠️ Limitación pendiente** al final de esta sección). Los **nombres** de
+  servicio/profesional se enriquecen con el catálogo público (mismo
+  endpoint `bootstrap`), de forma **no bloqueante**. Hook en
+  [`src/hooks/useAppointments.ts`](src/hooks/useAppointments.ts).
+
+### Configurar `VITE_SALON_OS_API_URL`
+
+Origen (scheme + host, **sin barra final**) del despliegue de Salón OS que sirve la API
+pública de reserva. Es **build-time** e **igual para todos los salones** del despliegue
+(no depende del salón resuelto). El cliente tipado construye sobre ella
+`{base}/api/public/booking/{slug}` con el slug de runtime. Si falta, la app lanza
+`SalonOsConfigError` con un mensaje claro; no falla en silencio.
+
+| Entorno | Valor de `VITE_SALON_OS_API_URL` |
+|---|---|
+| **Producción** | `https://app.salonos.app` (dominio real del despliegue de Salón OS) |
+| **Local (mismo PC)** | `http://localhost:3000` (la app Next.js de `salon-os` en tu máquina) |
+| **Móvil físico (misma Wi-Fi)** | `http://<IP-LAN-de-tu-PC>:3000` — p. ej. `http://192.168.1.42:3000`. **Nunca `localhost`**: en el móvil, `localhost` es el propio móvil, no tu PC. |
+
+> ⚠️ **Es build-time.** Vite **inyecta** las `VITE_*` al arrancar el dev server / al construir;
+> **no** se leen en runtime. Si cambias `VITE_SALON_OS_API_URL`, **reinicia** `npm run dev`
+> (o reconstruye). Definirla en tu `.env` local; en producción, en las variables del proveedor.
+
+Endpoints públicos (anon) que consume el cliente ([`salon-os-api.ts`](src/lib/salon-os-api.ts)):
+
+| Método · ruta | Para qué |
+|---|---|
+| `GET  /api/public/booking/{slug}` | **bootstrap**: salón + catálogo (servicios, profesionales, quién presta qué, zona horaria). |
+| `GET  …/{slug}/availability?serviceId=&date=&professionalId=` | **huecos** reservables (los calcula el servidor). |
+| `POST /api/public/booking/{slug}` | **crea la reserva** (cita en estado `pending`). |
+
+### El flujo de reserva (`/book`)
+
+Asistente **multi-paso, una decisión por pantalla** ([`BookAppointment.tsx`](src/pages/BookAppointment.tsx)):
+
+1. **Servicio** — del catálogo público (`bootstrap`). Se puede **preseleccionar** con
+   `?serviceId=<uuid>` (enlace desde el catálogo).
+2. **Profesional** — uno concreto **o «cualquiera»** (`any`); en «cualquiera» lo asigna el servidor.
+3. **Fecha** — calendario; sólo se bloquea el **pasado** (del resto decide el servidor).
+4. **Hueco** — los que devuelve `availability`, pintados **tal cual**: sólo se ordenan y
+   deduplican por hora (presentación), sin ninguna aritmética de disponibilidad en cliente.
+5. **Confirmar** — datos de contacto **prellenados de la ficha *self*** del cliente (nombre +
+   teléfono **normalizado** `phone_e164`, para reutilizar la misma ficha que el servidor enlazó
+   por teléfono), editables. El **POST** reserva con el **profesional concreto del hueco** elegido
+   (nunca `any`), con el cuerpo **exacto** que valida el servidor (Zod `.strict()`).
+
+Al confirmar, la cita se crea en estado **`pending`**: la pantalla de éxito lo dice con
+honestidad (no promete confirmación) e **invalida** la caché de `['appointments']` para que
+aparezca en «Mis Citas».
+
+**Errores legibles sin romper la app** (clasificación pura `classifyBookingError` en
+[`src/lib/booking.ts`](src/lib/booking.ts)):
+
+| Caso | HTTP | Comportamiento en la UI |
+|---|:---:|---|
+| `slotTaken` | 409/410 | El hueco se ocupó entre verlo y reservar → vuelve a **huecos** y **recalcula**. |
+| `invalidData` | 400/422 | Datos rechazados por el servidor → aviso, **sin perder** lo tecleado. |
+| `salonUnavailable` | 403/404 | Salón no encontrado / no reservable. |
+| `network` | 0 | La petición ni llegó: red caída, API inaccesible o **CORS**. |
+| `server` | 5xx | El servicio de reservas falló al procesar. |
+
+### «Mis Citas» (`/appointments`)
+
+Lista **sólo las citas del cliente autenticado** desde `public.appointments`, con **mínimo
+privilegio** ([`useAppointments.ts`](src/hooks/useAppointments.ts)):
+
+- **Columnas explícitas** (nunca `SELECT *`): se omiten `notes`/`cancelled_reason` (posibles
+  notas internas del staff; RLS filtra **filas**, no columnas).
+- **Doble filtro** `(customer_id, salon_id)` como defensa en profundidad sobre la RLS.
+- **Sólo lectura**: no hay cancelar/reprogramar desde la app (iría por una RPC controlada,
+  fuera de alcance).
+- **Enriquecido no bloqueante**: los nombres salen del catálogo público; si esa consulta falla,
+  las citas se ven igual (sin nombres) — nunca convierte una carga correcta en error.
+- Pestañas **próximas/historial** y estados legibles: **carga**, **vacío**, **error** y el
+  aviso honesto de **acceso bloqueado** (ver limitación).
+
+### Cómo probarlo — local y móvil
+
+**En local (mismo PC):**
+
+```sh
+# 1) Levanta el backend Salón OS (app Next.js) en http://localhost:3000
+# 2) En este repo, en tu .env:
+#      VITE_SALON_OS_API_URL="http://localhost:3000"
+npm run dev            # cliente en http://localhost:8080
+# Abre http://localhost:8080/?salon=denueveanueve, inicia sesión y ve a "Reservar".
+```
+
+**Desde el móvil físico (misma Wi-Fi):** el dev server ya escucha en **todas las interfaces**
+(`server.host: "::"`, puerto **8080** en [`vite.config.ts`](vite.config.ts)), así que es
+accesible por la **IP de red** de tu PC — pero `localhost` **desde el móvil** apunta al propio
+móvil, no a tu PC. Por eso hay que usar la **IP LAN** del PC en **ambos** sitios (la URL del
+cliente **y** `VITE_SALON_OS_API_URL`):
+
+```sh
+# 1) Averigua la IP LAN de tu PC (Windows):  ipconfig  →  "Dirección IPv4" (p. ej. 192.168.1.42)
+# 2) En .env, apunta la API a esa IP (NO localhost) y REINICIA el dev server (es build-time):
+#      VITE_SALON_OS_API_URL="http://192.168.1.42:3000"
+npm run dev
+# 3) En el móvil (misma Wi-Fi) abre:
+#      http://192.168.1.42:8080/?salon=denueveanueve
+```
+
+Notas para la prueba desde móvil:
+
+- **Reinicia `npm run dev`** tras cambiar `VITE_SALON_OS_API_URL` (Vite la inyecta en build-time).
+- **CORS**: el backend Salón OS debe permitir el **origen** desde el que se sirve el cliente
+  (`http://192.168.1.42:8080`). Si no, la reserva falla como error de **red** (`status 0` →
+  «No se pudo conectar con el servicio de reservas»). Es configuración **del servidor**, no de esta app.
+- El **salón** se resuelve igual que siempre: en una IP no hay subdominio, así que usa
+  `?salon=<slug>` o el fallback `VITE_SALON_SLUG`.
+- **Firewall de Windows**: la primera vez, permite el acceso entrante a los puertos **8080**
+  (cliente) y **3000** (API) en tu red **privada**.
+- **HTTP vs HTTPS/PWA**: en LAN es HTTP plano; algunas capacidades PWA sólo aplican en
+  `localhost` o HTTPS. Para probar reserva y «Mis Citas» no hace falta.
+
+### ⚠️ Limitación pendiente — «Mis Citas» depende de una política/RPC *self* en el servidor
+
+«Mis Citas» **sólo funciona** si el proyecto Supabase de **Salón OS** tiene activa una política
+RLS (o RPC) **self de solo lectura** que deje a un cliente autenticado ver **sólo sus** citas
+(`self_select_own_appointments`). **Esa política vive en el servidor de Salón OS y no se gobierna
+desde este repo.** Dos casos si falta:
+
+| Estado en el servidor | Respuesta | Qué percibe el usuario |
+|---|---|---|
+| Falta el **GRANT SELECT** al rol `authenticated` | `42501 permission denied` | **Detectable** → aviso honesto (`BlockedNotice`, tono ámbar): «aún no disponible», con **reservar** y **reintentar**. |
+| RLS activa pero **sin política SELECT** para el cliente | **0 filas, sin error** | **Indistinguible** de «no tienes citas» (limitación conocida). |
+
+**Regla dura:** si el cliente no puede leer sus citas, **NO se abren políticas amplias** desde el
+frontend (nada de `service_role`, ni leer sin filtro `customer_id`/`salon_id`, ni `USING (true)`).
+Se avisa con honestidad en pantalla y **se resuelve en el servidor**. Guía completa (SQL de la
+política, verificación y «definición de hecho»):
+[`docs/PENDIENTE-mis-citas-rls.md`](docs/PENDIENTE-mis-citas-rls.md). Auditoría de aislamiento de
+datos: [`docs/SECURITY-AUDIT-sub7-aislamiento-mis-citas.md`](docs/SECURITY-AUDIT-sub7-aislamiento-mis-citas.md).
+
+> **Nota histórica.** El código del flujo original (multi-servicio, Google Calendar, realtime,
+> cancelar/reprogramar sobre el esquema legacy) se conserva **verbatim** en
+> [`src/pages/_deferred/reservations-3B-2/`](src/pages/_deferred/reservations-3B-2/) sólo como
+> referencia; la implementación **activa** es la descrita arriba, sobre la API pública de Salón OS.
 
 ---
 
@@ -539,7 +686,9 @@ Detalles en el [README de esa carpeta](src/pages/_deferred/reservations-3B-2/REA
 ```
 src/
 ├── App.tsx                         # rutas (React Router) + feature flags
-├── config/features.ts              # flags de capacidades gated en Salón OS
+├── config/
+│   ├── features.ts                 # flags de capacidades gated en Salón OS
+│   └── salon-os.ts                 # config API pública: base (env) + slug (runtime) + hooks
 ├── integrations/supabase/
 │   ├── client.ts                   # cliente Supabase (lee VITE_SUPABASE_*)
 │   └── types.ts                    # tipos generados del esquema Salón OS
@@ -549,12 +698,20 @@ src/
 │   ├── salon-branding.ts           # fetchSalonBranding (RPC) + logo (bucket salon-logos)
 │   ├── salon-theme.ts              # tema white-label PURO + contraste WCAG AA
 │   ├── salon-context.tsx           # <SalonProvider> / useSalon() (salon_id runtime)
+│   ├── salon-os-api.ts             # cliente HTTP tipado de la API pública de reserva (VITE_SALON_OS_API_URL)
+│   ├── booking.ts                  # lógica PURA del asistente de reserva (huecos, contacto, errores)
+│   ├── appointments.ts             # transformación PURA de "Mis Citas" (enriquecido, isAccessDeniedError)
 │   └── i18n.tsx                    # traducciones
+├── hooks/
+│   ├── useCustomer.ts              # ficha SELF del cliente autenticado (customerId)
+│   └── useAppointments.ts          # "Mis Citas": lectura self + catálogo (no bloqueante)
 ├── pages/
 │   ├── Register.tsx                # alta + enlace por teléfono vía RPC
 │   ├── Home.tsx / Profile.tsx / Loyalty.tsx  # pantallas operativas
-│   ├── BookAppointment.tsx / Appointments.tsx # "Próximamente" (3B-2)
-│   └── _deferred/reservations-3B-2/           # flujos de reservas conservados
+│   ├── ServiceCatalog.tsx          # catálogo público de Salón OS
+│   ├── BookAppointment.tsx         # asistente de reserva (API pública de Salón OS) ✅
+│   ├── Appointments.tsx            # "Mis Citas" (RLS self · lectura) ✅
+│   └── _deferred/reservations-3B-2/           # flujo legacy conservado (referencia)
 └── components/                     # UI (shadcn/ui), navegación, guards
 ```
 
