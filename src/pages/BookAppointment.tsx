@@ -32,17 +32,18 @@ import { toast } from 'sonner';
 import { useI18n } from '@/lib/i18n';
 import { useCustomer } from '@/hooks/useCustomer';
 import { useSalonOsApi } from '@/config/salon-os';
-import {
-  SalonOsApiError,
-  type BookingConfirmation,
-  type ProfessionalSelection,
-  type PublicService,
-  type PublicSlot,
+import type {
+  BookingConfirmation,
+  ProfessionalSelection,
+  PublicService,
+  PublicSlot,
 } from '@/lib/salon-os-api';
 import {
   buildBookingCustomer,
+  classifyBookingError,
   formatLocalDate,
   isCustomerComplete,
+  isSlotTakenError,
   prepareSlots,
   professionalName,
   professionalsForService,
@@ -124,13 +125,6 @@ const OptionCard = ({
   </button>
 );
 
-// ── Traducción de errores del POST a mensajes de usuario ─────────────────────────
-
-/** ¿El hueco ya no está libre? (carrera entre ver y reservar). */
-function isSlotTakenError(err: unknown): boolean {
-  return err instanceof SalonOsApiError && (err.status === 409 || err.status === 410);
-}
-
 // ── Pantalla ─────────────────────────────────────────────────────────────────────
 
 const BookAppointment = () => {
@@ -156,6 +150,27 @@ const BookAppointment = () => {
   const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
 
   const stepIndex = STEPS.indexOf(step);
+
+  // Traduce el error de cualquier paso (bootstrap / disponibilidad / POST) a un mensaje
+  // LEGIBLE según su causa: hueco ocupado, datos inválidos, salón no disponible, red
+  // caída o servidor. Si no encaja en ningún caso conocido, usa el `fallbackKey` del
+  // paso. La clasificación es pura y testeada (classifyBookingError, en @/lib/booking).
+  const errorMessage = (error: unknown, fallbackKey: string): string => {
+    switch (classifyBookingError(error)) {
+      case 'slotTaken':
+        return t('book.errorSlotTaken');
+      case 'invalidData':
+        return t('book.errorInvalidData');
+      case 'salonUnavailable':
+        return t('book.errorSalonUnavailable');
+      case 'network':
+        return t('book.errorNetwork');
+      case 'server':
+        return t('book.errorServer');
+      default:
+        return t(fallbackKey);
+    }
+  };
 
   // 1) Catálogo público (servicios + profesionales + TZ). Cacheado junto a "Mis Citas".
   const bootstrapQuery = useQuery({
@@ -214,7 +229,9 @@ const BookAppointment = () => {
         setStep('slot');
         void availabilityQuery.refetch();
       } else {
-        toast.error(t('book.errorBooking'));
+        // Resto de casos (datos inválidos, salón no disponible, red caída, servidor):
+        // se queda en «confirmar» con un aviso legible y deja reintentar sin perder datos.
+        toast.error(errorMessage(err, 'book.errorBooking'));
       }
     },
   });
@@ -288,7 +305,7 @@ const BookAppointment = () => {
         <h1 className="mb-2 font-display text-3xl text-foreground">{t('book.success')}</h1>
         <p className="mb-6 max-w-xs text-sm text-muted-foreground">{t('book.successDesc')}</p>
 
-        <div className="mb-8 w-full max-w-sm space-y-2 rounded-xl border border-border bg-card p-4 text-left">
+        <div className="mb-4 w-full max-w-sm space-y-2 rounded-xl border border-border bg-card p-4 text-left">
           <SummaryRow icon={<Scissors className="h-4 w-4 text-gold" />} label={t('book.service')} value={confirmation.serviceName} />
           <SummaryRow icon={<User className="h-4 w-4 text-gold" />} label={t('book.staff')} value={confirmation.professionalName} />
           <SummaryRow
@@ -297,6 +314,12 @@ const BookAppointment = () => {
             value={`${formatLongDate(confirmation.startsAt, fmt)} · ${formatTime(confirmation.startsAt, fmt)}`}
           />
         </div>
+
+        {/* La reserva se crea en estado «pending»: lo decimos claro para no prometer confirmación. */}
+        <p className="mb-8 flex w-full max-w-sm items-start gap-2 rounded-xl border border-gold/25 bg-gold/5 px-4 py-3 text-left text-xs leading-relaxed text-muted-foreground">
+          <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold" aria-hidden="true" />
+          <span>{t('book.successPending')}</span>
+        </p>
 
         <Button
           onClick={() => navigate('/appointments')}
@@ -362,7 +385,10 @@ const BookAppointment = () => {
               {bootstrapQuery.isPending ? (
                 <CenteredSpinner label={t('general.loading')} />
               ) : bootstrapQuery.isError ? (
-                <ErrorState body={t('book.loadError')} onRetry={() => void bootstrapQuery.refetch()} />
+                <ErrorState
+                  body={errorMessage(bootstrapQuery.error, 'book.loadError')}
+                  onRetry={() => void bootstrapQuery.refetch()}
+                />
               ) : !bootstrap || bootstrap.services.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">{t('book.noServices')}</p>
               ) : (
@@ -481,7 +507,10 @@ const BookAppointment = () => {
               {availabilityQuery.isPending ? (
                 <CenteredSpinner label={t('book.checkingAvailability')} />
               ) : availabilityQuery.isError ? (
-                <ErrorState body={t('book.errorAvailability')} onRetry={() => void availabilityQuery.refetch()} />
+                <ErrorState
+                  body={errorMessage(availabilityQuery.error, 'book.errorAvailability')}
+                  onRetry={() => void availabilityQuery.refetch()}
+                />
               ) : slots.length === 0 ? (
                 <div className="py-10 text-center">
                   <p className="mb-4 text-sm text-muted-foreground">{t('book.noSlots')}</p>
@@ -588,7 +617,15 @@ const BookAppointment = () => {
               </div>
 
               {createBooking.isError && !isSlotTakenError(createBooking.error) && (
-                <p role="alert" className="text-sm text-destructive">{t('book.errorBooking')}</p>
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3.5"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                  <p className="text-sm leading-relaxed text-destructive">
+                    {errorMessage(createBooking.error, 'book.errorBooking')}
+                  </p>
+                </div>
               )}
 
               <Button

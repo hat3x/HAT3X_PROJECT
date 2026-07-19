@@ -15,6 +15,7 @@
 // cliente NO recalcula disponibilidad: consume los `PublicSlot` TAL CUAL llegan del
 // endpoint de availability. Aquí sólo los ORDENAMOS y DEDUPLICAMOS para pintarlos
 // (presentación), nunca decidimos si un hueco es reservable.
+import { SalonOsApiError } from '@/lib/salon-os-api';
 import type {
   BookingBootstrap,
   BookingCustomerInput,
@@ -168,4 +169,96 @@ export function buildBookingCustomer(values: CustomerFormValues): BookingCustome
     customer.marketingConsent = values.marketingConsent;
   }
   return customer;
+}
+
+// ── Clasificación de errores (para mensajes legibles, sin romper la app) ─────────
+
+/**
+ * Caso de error del flujo de reserva, ya interpretado a algo que la UI sabe explicar.
+ * El servidor es la fuente de verdad; aquí NO se decide nada de negocio: sólo se traduce
+ * el `status` HTTP del `SalonOsApiError` (transporte) a una categoría estable para elegir
+ * el mensaje y el comportamiento (p. ej. volver a huecos si el hueco ya se ocupó).
+ *
+ *   · `slotTaken`        409/410 · el hueco se ocupó entre verlo y confirmarlo (carrera).
+ *   · `invalidData`      400/422 · el servidor rechazó los datos del cuerpo (validación).
+ *   · `salonUnavailable` 403/404 · salón no encontrado / no disponible para reservar.
+ *   · `network`          0       · la petición ni llegó: red caída / API inaccesible / CORS.
+ *   · `server`           5xx     · el servicio de reservas falló al procesar.
+ *   · `unknown`          resto   · cualquier otro caso (incluye errores no-API).
+ */
+export type BookingErrorKind =
+  | 'slotTaken'
+  | 'invalidData'
+  | 'salonUnavailable'
+  | 'network'
+  | 'server'
+  | 'unknown';
+
+/**
+ * Traduce un error cualquiera (lo que capture react-query) a un `BookingErrorKind`.
+ * Sólo los `SalonOsApiError` (que llevan `status`) se clasifican por código; cualquier
+ * otro valor cae en `unknown`. Función PURA: no toca red, i18n ni UI — el mapeo a texto
+ * y a comportamiento vive en la pantalla (BookAppointment.tsx).
+ */
+export function classifyBookingError(error: unknown): BookingErrorKind {
+  if (!(error instanceof SalonOsApiError)) return 'unknown';
+  const { status } = error;
+  if (status === 0) return 'network';
+  if (status === 409 || status === 410) return 'slotTaken';
+  if (status === 400 || status === 422) return 'invalidData';
+  if (status === 403 || status === 404) return 'salonUnavailable';
+  if (status >= 500) return 'server';
+  return 'unknown';
+}
+
+/** ¿El hueco ya no está libre? (carrera entre ver y reservar → 409/410). */
+export function isSlotTakenError(error: unknown): boolean {
+  return classifyBookingError(error) === 'slotTaken';
+}
+
+// ── Prellenado de contacto desde la ficha SELF del cliente autenticado ──────────
+
+/**
+ * Subconjunto de la ficha (public.customers) que alimenta el prellenado de contacto.
+ * Se acepta una forma laxa (campos opcionales/anulables) para no acoplar esta lógica
+ * pura al tipo exacto que devuelva la capa de datos.
+ */
+export interface CustomerContactRecord {
+  full_name?: string | null;
+  /** Teléfono tal cual lo tecleó el cliente (sin normalizar). */
+  phone?: string | null;
+  /** Teléfono NORMALIZADO (E.164) que el servidor resolvió al crear/enlazar la ficha. */
+  phone_e164?: string | null;
+}
+
+/** Valores de contacto listos para inyectar en los inputs controlados de la reserva. */
+export interface ContactPrefill {
+  fullName: string;
+  phone: string;
+}
+
+/**
+ * Deriva el nombre y el teléfono a PRECARGAR en la reserva desde la ficha SELF del
+ * cliente (la que la app lee con RLS: `user_id = auth.uid()`). Devuelve SIEMPRE cadenas
+ * (nunca `null`) para enchufarlas directas a inputs controlados.
+ *
+ * TELÉFONO — se PREFIERE la forma NORMALIZADA `phone_e164` sobre la cruda `phone`: es
+ * el número canónico con el que el servidor YA identificó/enlazó la ficha («reutiliza la
+ * ficha existente por teléfono normalizado, ya resuelto en servidor»). Precargarlo hace
+ * que, al confirmar, la reserva se re-vincule a ESA misma ficha sin ambigüedad. Si la
+ * ficha aún no tiene `phone_e164` (registro antiguo) o viene en blanco, cae al `phone`
+ * crudo; sin ninguno de los dos → cadena vacía.
+ *
+ * NOMBRE — `full_name` recortado (o "" si viene vacío/nulo). Es NOT NULL en el esquema,
+ * pero se trata a la defensiva. Ambos campos se RECORTAN: nunca se precargan espacios
+ * sueltos que hagan pasar por completo un formulario que en realidad está vacío
+ * (coherente con `isCustomerComplete`, que también recorta).
+ */
+export function customerContactPrefill(
+  customer: CustomerContactRecord | null | undefined,
+): ContactPrefill {
+  if (!customer) return { fullName: '', phone: '' };
+  const fullName = customer.full_name?.trim() ?? '';
+  const phone = (customer.phone_e164?.trim() || customer.phone?.trim()) ?? '';
+  return { fullName, phone };
 }

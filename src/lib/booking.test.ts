@@ -5,6 +5,7 @@
 // —ni existe— ningún cálculo de si un hueco es reservable; los `PublicSlot` se dan por
 // verdad y sólo se comprueba su orden/dedup para pintarlos.
 import { describe, it, expect } from 'vitest';
+import { SalonOsApiError } from '@/lib/salon-os-api';
 import type {
   BookingBootstrap,
   PublicProfessional,
@@ -13,9 +14,11 @@ import type {
 } from '@/lib/salon-os-api';
 import {
   buildBookingCustomer,
+  classifyBookingError,
   formatLocalDate,
   groupServicesByCategory,
   isCustomerComplete,
+  isSlotTakenError,
   prepareSlots,
   professionalName,
   professionalsForService,
@@ -202,5 +205,53 @@ describe('buildBookingCustomer', () => {
     });
     const allowed = ['fullName', 'phone', 'email', 'notes', 'marketingConsent'].sort();
     expect(Object.keys(customer).sort()).toEqual(allowed);
+  });
+});
+
+// ── classifyBookingError / isSlotTakenError (mensajes legibles del flujo) ────────
+
+describe('classifyBookingError', () => {
+  const apiErr = (status: number) => new SalonOsApiError(`err ${status}`, status);
+
+  it('mapea 409 y 410 a "slotTaken" (el hueco se ocupó entre ver y reservar)', () => {
+    expect(classifyBookingError(apiErr(409))).toBe('slotTaken');
+    expect(classifyBookingError(apiErr(410))).toBe('slotTaken');
+  });
+
+  it('mapea 400 y 422 a "invalidData" (validación del cuerpo)', () => {
+    expect(classifyBookingError(apiErr(400))).toBe('invalidData');
+    expect(classifyBookingError(apiErr(422))).toBe('invalidData');
+  });
+
+  it('mapea 403 y 404 a "salonUnavailable" (salón no encontrado / no disponible)', () => {
+    expect(classifyBookingError(apiErr(403))).toBe('salonUnavailable');
+    expect(classifyBookingError(apiErr(404))).toBe('salonUnavailable');
+  });
+
+  it('mapea status 0 a "network" (la petición ni llegó: red caída / API inaccesible)', () => {
+    // El cliente HTTP usa status 0 para el fetch que rechaza (red/DNS/CORS).
+    expect(classifyBookingError(new SalonOsApiError('sin red', 0))).toBe('network');
+  });
+
+  it('mapea cualquier 5xx a "server"', () => {
+    expect(classifyBookingError(apiErr(500))).toBe('server');
+    expect(classifyBookingError(apiErr(503))).toBe('server');
+  });
+
+  it('cae en "unknown" para otros status API y para errores que no son de la API', () => {
+    expect(classifyBookingError(apiErr(418))).toBe('unknown'); // status API sin caso propio
+    expect(classifyBookingError(new Error('cualquiera'))).toBe('unknown');
+    expect(classifyBookingError(null)).toBe('unknown');
+    expect(classifyBookingError(undefined)).toBe('unknown');
+  });
+});
+
+describe('isSlotTakenError', () => {
+  it('es true sólo para 409/410 y false para el resto', () => {
+    expect(isSlotTakenError(new SalonOsApiError('taken', 409))).toBe(true);
+    expect(isSlotTakenError(new SalonOsApiError('gone', 410))).toBe(true);
+    expect(isSlotTakenError(new SalonOsApiError('bad', 400))).toBe(false);
+    expect(isSlotTakenError(new SalonOsApiError('down', 0))).toBe(false);
+    expect(isSlotTakenError(new Error('x'))).toBe(false);
   });
 });
