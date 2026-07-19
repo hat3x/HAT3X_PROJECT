@@ -466,17 +466,28 @@ autenticación es **email + contraseña** con sesión persistente en `localStora
 
 El registro ([`src/pages/Register.tsx`](src/pages/Register.tsx)) enlaza la cuenta
 de Auth con la ficha de cliente **a través del teléfono**, usando la RPC
-`register_my_customer_account` de Salón OS. El flujo tiene 3 pasos:
+`register_my_customer_account` de Salón OS. Desde la implementación del **OTP de
+teléfono**, el enlace por RPC se ejecuta **sólo tras verificar el teléfono por SMS**
+(detalle, requisitos de proveedor y pruebas en
+[Verificación de teléfono por SMS (OTP)](#verificación-de-teléfono-por-sms-otp)). El
+flujo es:
 
 1. **Alta en Supabase Auth** (`signUp` con email + contraseña y metadatos). El
    trigger `handle_new_user` crea la ficha base del cliente. Ya **no** hay
    pre-check manual de email/teléfono: la unicidad y el enlace los resuelve la RPC
-   del paso 3 de forma atómica (sin condición de carrera).
+   del paso 4 de forma atómica (sin condición de carrera).
 2. **Comprobación de sesión.** La RPC necesita una sesión activa (se ejecuta con
    `auth.uid()`). Si el proyecto exige confirmación de correo, todavía no hay
    sesión: se informa al usuario ("revisa tu correo") y **el enlace se aplaza al
    primer inicio de sesión**.
-3. **Enlace por teléfono** vía RPC:
+3. **Verificación de teléfono por SMS (OTP)** — con la sesión activa, se normaliza el
+   teléfono a E.164 y se **verifica por SMS antes** de confiar en el enlace
+   ([`PhoneOtpStep`](src/components/PhoneOtpStep.tsx)). El SMS lo **envía Supabase
+   Auth** (`updateUser({ phone })` → `verifyOtp({ type: 'phone_change' })`), no la app.
+   Sólo si el teléfono queda verificado se ejecuta el paso 4. Detalle completo, el
+   **paso humano** de configurar Twilio y cómo probarlo:
+   [Verificación de teléfono por SMS (OTP)](#verificación-de-teléfono-por-sms-otp).
+4. **Enlace por teléfono** vía RPC (**sólo tras el OTP correcto**):
 
    ```ts
    const { data, error } = await supabase.rpc('register_my_customer_account', {
@@ -508,13 +519,156 @@ de Auth con la ficha de cliente **a través del teléfono**, usando la RPC
    sólo traduce el motivo a un mensaje claro (`auth.error.featureNotEnabled`),
    **sin** sortearlo ni conceder acceso al cliente.
 
-### ⚠️ Nota: OTP pendiente
+---
 
-Hoy el enlace por teléfono **se confía sin verificar** que el teléfono pertenece
-realmente a quien se registra. Está pendiente (marcado con `TODO(OTP)` en
-`Register.tsx`) **verificar el teléfono por SMS (OTP) antes de confiar en el
-enlace**, para impedir que alguien reclame la ficha de otra persona registrándose
-con un teléfono ajeno. Es trabajo de una fase posterior.
+## Verificación de teléfono por SMS (OTP)
+
+> **Estado: implementado ✅.** Sustituye a la antigua nota *«OTP pendiente»*. El enlace
+> de la ficha por teléfono **ya no se confía a ciegas**: el teléfono se **verifica por
+> SMS antes** de llamar a la RPC de enlace, cerrando (en cliente) el riesgo de que
+> alguien reclame la ficha de otra persona registrándose con un teléfono ajeno.
+> Diseño y punto de inserción:
+> [`docs/AUDITORIA-sub1-flujo-auth-verificacion-telefono.md`](docs/AUDITORIA-sub1-flujo-auth-verificacion-telefono.md).
+
+### El SMS lo envía **Supabase Auth** (no esta app, no Salón OS)
+
+El código de verificación lo **envía Supabase Auth** (GoTrue). Esta app **no** manda
+ningún SMS por su cuenta: sólo invoca tres métodos del cliente de Auth. La capa con
+efectos está en [`src/lib/phone-verification.ts`](src/lib/phone-verification.ts) y la
+lógica **pura** (normalización E.164, cooldown de reenvío, mapeo de errores, saneo del
+código) en [`src/lib/otp.ts`](src/lib/otp.ts):
+
+| Acción de la app | Llamada a Supabase Auth | Qué hace Supabase |
+|---|---|---|
+| **Enviar** el código | `supabase.auth.updateUser({ phone })` | Deja el teléfono como `new_phone` pendiente y **envía el SMS**. |
+| **Reenviar** el código | `supabase.auth.resend({ type: 'phone_change', phone })` | Reenvía el SMS del cambio de teléfono en curso. |
+| **Confirmar** el código | `supabase.auth.verifyOtp({ phone, token, type: 'phone_change' })` | Sella `auth.users.phone_confirmed_at` **sin** cambiar `auth.uid()`. |
+
+> **Mecanismo inamovible — `type: 'phone_change'`, nunca `'sms'`.** El usuario ya tiene
+> sesión email+contraseña; añadir el teléfono a **esa misma identidad** es un *cambio de
+> teléfono*. Usar `signInWithOtp` / `type: 'sms'` crearía una **identidad de teléfono
+> nueva**, re-apuntaría `auth.uid()` y rompería login, fidelización y reservas. Ver el
+> encabezado de [`phone-verification.ts`](src/lib/phone-verification.ts) y la auditoría §9.
+
+### ⚙️ Paso HUMANO (no de código): activar **Twilio** como proveedor *Phone* en Supabase
+
+> **Esto no se configura en este repositorio.** [`supabase/config.toml`](supabase/config.toml)
+> sólo contiene el `project_id`; **no hay** (ni debe haber) credenciales de SMS en el
+> código. Para que Supabase Auth pueda enviar el SMS, alguien con acceso al proyecto debe
+> **activar y configurar un proveedor de SMS (Twilio) en el panel de Supabase**. Es un
+> paso de **consola, manual y por única vez** (implica coste por SMS en Twilio).
+
+Pasos en el **Supabase Dashboard** del proyecto de **Salón OS**:
+
+1. **Authentication → Providers → Phone** *(según la versión del panel puede aparecer
+   como **Authentication → Sign In / Providers → Phone**)*.
+2. **Activa** el proveedor *Phone* y marca **«Enable phone confirmations»**.
+3. En **SMS provider** elige **Twilio** y rellena las credenciales de tu cuenta Twilio:
+   - **Account SID**
+   - **Auth Token**
+   - **Message Service SID** *(o el número/`From` de Twilio)*
+4. *(Opcional pero recomendado)* Revisa la **longitud del código** (la app espera
+   **6 dígitos**), la **caducidad**, la **plantilla del SMS** (`Your code is {{ .Code }}`)
+   y los **rate limits** de SMS (**Authentication → Rate Limits**; Supabase limita los
+   SMS/hora por defecto).
+5. **Guarda.** No hay que desplegar nada en esta app: el cambio vive en el servidor de Auth.
+
+**Si el proveedor NO está configurado, la app no se rompe:** detecta el error de
+configuración y muestra un **mensaje honesto** (clave `auth.error.otpProviderUnavailable`:
+*«el envío de SMS todavía no está activado en esta peluquería; puedes continuar sin
+verificar…»*) con la salida **«Continuar sin verificar»** —siempre que el servidor no
+**exija** la verificación (ver el gating del paso 6 más abajo).
+
+### El flujo, paso a paso
+
+Todo se orquesta en [`src/pages/Register.tsx`](src/pages/Register.tsx), con el paso de UI
+en [`src/components/PhoneOtpStep.tsx`](src/components/PhoneOtpStep.tsx):
+
+1. **Formulario** → `signUp(email, password, metadata)` crea la cuenta de Auth (y, vía
+   trigger, la ficha base). Se guarda el teléfono tecleado en `user_metadata`.
+2. **Sesión.** Con sesión activa (`auth.uid()` disponible) se pasa al OTP. *Rama «revisa
+   tu correo»:* si el proyecto exige confirmar el email, todavía **no hay sesión** →
+   aviso y `/login`; la verificación se retomará más tarde (ver paso 7).
+3. **Envío del SMS (Supabase Auth).** Al entrar en el paso de verificación, `PhoneOtpStep`
+   normaliza el teléfono a **E.164** y llama a `updateUser({ phone })`; Supabase **envía el
+   código** al móvil.
+4. **Introducir el código.** Campo de **6 dígitos** que **auto-verifica** al completarse
+   (`verifyOtp({ type: 'phone_change' })`). Incluye **reenviar** con espera anti-spam
+   (**cooldown 60 s** con cuenta atrás `m:ss`), **cambiar número** y **errores legibles**
+   (código incorrecto/caducado, demasiados intentos, fallo de envío…).
+5. **Teléfono verificado** (`phone_confirmed_at` sellado) → `finishRegistration` llama a la
+   RPC `register_my_customer_account` y navega a `/home` (toast de bienvenida / ficha
+   vinculada).
+6. **Gating del servidor.** Si la RPC responde `PHONE_NOT_VERIFIED` (el servidor **exige**
+   el teléfono verificado), la app **reabre** la verificación con un aviso de *«verificación
+   obligatoria»*, **reenvía un código nuevo** y **retira** la salida «continuar sin verificar»
+   para no crear un bucle. Sin callejón sin salida.
+7. **Reanudación de un registro a medias.** Si el usuario cierra la app con la cuenta creada
+   pero el teléfono **sin confirmar**, al volver: aparece un banner en **Home** (*«Te queda un
+   pasito»*, [`Home.tsx`](src/pages/Home.tsx)) y, al entrar en `/register`, se **retoma el
+   mismo paso de OTP** en lugar de dejar una cuenta inservible. La detección es **pura** (mira
+   sólo la sesión: `phone_confirmed_at` vacío + teléfono conocido) en
+   [`registration-flow.ts`](src/lib/registration-flow.ts).
+
+**Mensajes al usuario** (i18n en [`src/lib/i18n.tsx`](src/lib/i18n.tsx), ES/EN):
+
+| Situación | Clave i18n | Mensaje (ES) |
+|---|---|---|
+| Código incorrecto | `auth.error.otpInvalid` | «El código introducido no es correcto…» |
+| Código caducado | `auth.error.otpExpired` | «El código ha caducado. Pide uno nuevo…» |
+| Demasiados intentos | `auth.error.otpTooManyAttempts` | «Demasiados intentos. Espera unos minutos…» |
+| No se pudo enviar el SMS | `auth.error.otpSendFailed` | «No hemos podido enviar el código por SMS…» |
+| Sin proveedor SMS configurado | `auth.error.otpProviderUnavailable` | «…el envío de SMS todavía no está activado…» |
+| Servidor exige verificar | `auth.error.phoneNotVerified` | «Debes verificar tu número de teléfono…» |
+| Verificado / completando | `auth.otp.verified` / `auth.otp.finishing` | «¡Teléfono verificado!» / «…completando tu registro…» |
+
+### Cómo probarlo — end-to-end
+
+**Requisito previo:** Twilio configurado como proveedor *Phone* en Supabase (sección
+anterior) y un número de móvil real que pueda recibir SMS.
+
+**Camino feliz (con proveedor configurado):**
+
+```sh
+npm run dev            # cliente en http://localhost:8080
+# 1) Abre http://localhost:8080/?salon=denueveanueve  →  "Crear cuenta".
+# 2) Rellena el formulario con un TELÉFONO REAL (España: 9 dígitos, p. ej. 600 123 456)
+#    y envía. La app pasa al paso "Verifica tu teléfono".
+# 3) Llega el SMS (lo envía Supabase Auth vía Twilio). Teclea el código de 6 dígitos:
+#    al completarlo se verifica solo → "¡Teléfono verificado!" → RPC de enlace → /home.
+```
+
+**Casos a comprobar además del feliz:**
+
+| Caso a probar | Cómo provocarlo | Resultado esperado |
+|---|---|---|
+| **Reenvío** con cooldown | Espera el SMS y pulsa «Reenviar código» | Botón deshabilitado con cuenta atrás `m:ss` (60 s); tras reenviar, aviso «Te hemos enviado un código nuevo». |
+| **Código incorrecto/caducado** | Teclea 6 dígitos erróneos o deja caducar el código | Error legible; el campo se limpia para reintentar sin borrar a mano. |
+| **Cambiar número** | Pulsa «Cambiar número» | Vuelve al formulario para corregir el teléfono. |
+| **Servidor exige verificar** | RPC devuelve `PHONE_NOT_VERIFIED` (gating de Salón OS) | Aviso «verificación obligatoria»; reenvía código; desaparece «continuar sin verificar». |
+| **Reanudación** | Crea la cuenta, **cierra** la app antes de meter el código y **vuelve a entrar** | Banner «Te queda un pasito» en Home y, en `/register`, se retoma el mismo OTP. |
+| **Sin proveedor SMS** | Prueba con Twilio **sin** configurar en Supabase | Mensaje honesto `otpProviderUnavailable` + «Continuar sin verificar» (si el servidor no lo exige). |
+
+**Sin gastar SMS (pruebas automáticas).** La lógica del flujo está cubierta por Vitest sin
+tocar Supabase ni enviar SMS reales (inyección de dependencias en toda la capa OTP):
+
+```sh
+npm test    # ejecuta, entre otros:
+#   src/lib/otp.test.ts                    → E.164, cooldown, mapeo de errores, saneo del código
+#   src/lib/phone-verification.test.ts     → enviar/reenviar/confirmar (cliente de Auth simulado)
+#   src/lib/registration-flow.test.ts      → desenlace de la RPC + detección de reanudación
+#   src/components/PhoneOtpStep.test.tsx    → UI del paso de OTP (estados, reenvío, errores)
+#   src/pages/Register.test.tsx            → encadenado registro → OTP → enlace
+```
+
+### Alcance y dependencia con Salón OS
+
+El OTP en cliente es **defensa en profundidad y UX**, pero **por sí solo no cierra** el
+secuestro de ficha: `register_my_customer_account` es una RPC de servidor invocable con la
+anon key **saltándose la UI**. La garantía completa requiere que la **RPC de Salón OS**
+compruebe la propiedad del teléfono (`auth.users.phone_confirmed_at` = `p_phone`) —trabajo
+del servidor, fuera de este repo. El gating `PHONE_NOT_VERIFIED` (paso 6) es precisamente ese
+refuerzo cuando el servidor lo aplica. Ver auditoría §11.
 
 ---
 
