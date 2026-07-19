@@ -6,6 +6,7 @@ import {
   formatDuration,
   formatPrice,
   formatTimeRange,
+  isAccessDeniedError,
   isUpcoming,
   localeToBcp47,
   partitionAppointments,
@@ -216,5 +217,39 @@ describe('estilos y claves de estado', () => {
 
   it('statusLabelKey construye la clave i18n', () => {
     expect(statusLabelKey('confirmed')).toBe('appointments.status.confirmed');
+  });
+});
+
+// ── diagnóstico de acceso (RLS self rechazada por el servidor) ────────────────────
+describe('isAccessDeniedError', () => {
+  it('detecta el rechazo por código Postgres 42501 (permission denied)', () => {
+    expect(
+      isAccessDeniedError({
+        code: '42501',
+        message: 'permission denied for table appointments',
+        details: '',
+        hint: '',
+      }),
+    ).toBe(true);
+  });
+
+  it('detecta el rechazo por el texto del mensaje aunque falte el código', () => {
+    expect(isAccessDeniedError({ message: 'permission denied for table appointments' })).toBe(true);
+    expect(isAccessDeniedError({ message: 'new row violates row-level security policy' })).toBe(true);
+    // Variante sin guion ("row level security"), por si cambia el texto del motor.
+    expect(isAccessDeniedError({ message: 'ROW LEVEL SECURITY violation' })).toBe(true);
+  });
+
+  it('NO marca como rechazo un fallo transitorio (red / 5xx) → es reintentable', () => {
+    expect(isAccessDeniedError({ message: 'Failed to fetch' })).toBe(false);
+    expect(isAccessDeniedError({ code: '500', message: 'Internal Server Error' })).toBe(false);
+    expect(isAccessDeniedError(new Error('network error'))).toBe(false);
+  });
+
+  it('tolera entradas no-objeto sin romper', () => {
+    expect(isAccessDeniedError(null)).toBe(false);
+    expect(isAccessDeniedError(undefined)).toBe(false);
+    expect(isAccessDeniedError('permission denied')).toBe(false); // string suelto, no PostgrestError
+    expect(isAccessDeniedError({ code: 42501 })).toBe(false); // code numérico, no el string '42501'
   });
 });

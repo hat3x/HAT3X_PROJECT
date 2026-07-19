@@ -69,6 +69,41 @@ export interface CatalogIndex {
 /** Las dos pestañas de la pantalla. */
 export type AppointmentTab = 'upcoming' | 'history';
 
+// ── Diagnóstico de acceso: ¿el servidor RECHAZÓ la lectura self? ──────────────────
+
+/**
+ * ¿El error de Supabase indica que el cliente NO tiene permiso para leer sus citas?
+ *
+ * La lectura self de "Mis Citas" depende de una política/RPC RLS *self* en el servidor
+ * de Salón OS (fuera del alcance de esta app). Si ese permiso no está activo, PostgREST
+ * responde «permission denied» (código Postgres `42501`) en lugar de datos. Detectarlo
+ * deja dar un AVISO HONESTO en pantalla ("requiere un permiso de servidor aún no
+ * activo") en vez de un error genérico de red que invita a reintentar en vano — y SIN
+ * abrir políticas amplias como parche desde el cliente (ver docs/PENDIENTE-mis-citas-rls.md).
+ *
+ * OJO — límite conocido: si el servidor tuviera RLS habilitada pero SIN política SELECT
+ * (en vez de faltar el GRANT), la lectura NO da error: PostgREST devuelve 0 filas. Ese
+ * caso es INDISTINGUIBLE de "no tienes citas" desde el cliente; queda documentado como
+ * pendiente. Aquí sólo se captura el rechazo EXPLÍCITO (el único señalable sin ambigüedad).
+ *
+ * Función PURA (no toca red ni React): mira el `code` (`42501`) del PostgrestError y, a
+ * la defensiva, el texto del mensaje ("permission denied" / "row-level security"), por si
+ * el transporte no propagara el código. Cualquier otro error (red, 5xx…) → false: es un
+ * fallo transitorio normal y la pantalla lo trata como reintentable.
+ */
+export function isAccessDeniedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if ((error as { code?: unknown }).code === '42501') return true;
+  const message = (error as { message?: unknown }).message;
+  if (typeof message !== 'string') return false;
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('permission denied') ||
+    normalized.includes('row-level security') ||
+    normalized.includes('row level security')
+  );
+}
+
 // ── Estados: qué es "próxima" y estilo del badge ─────────────────────────────────
 
 /**

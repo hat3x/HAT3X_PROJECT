@@ -157,6 +157,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'appointments.loadingLabel': 'Cargando tus citas…',
     'appointments.error.title': 'No pudimos cargar tus citas',
     'appointments.error.body': 'Revisa tu conexión e inténtalo de nuevo.',
+    'appointments.blocked.title': 'Tus citas aún no están disponibles aquí',
+    'appointments.blocked.body':
+      'Estamos activando el acceso seguro a tu historial de citas: es un permiso del sistema que todavía no está habilitado. En cuanto lo esté, verás aquí tus reservas. Mientras tanto, puedes reservar una cita nueva.',
     'appointments.reschedule': 'Reprogramar',
     'appointments.cancel': 'Cancelar cita',
     'appointments.whatsappManage': 'Gestionar por WhatsApp',
@@ -491,6 +494,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'appointments.loadingLabel': 'Loading your appointments…',
     'appointments.error.title': "We couldn't load your appointments",
     'appointments.error.body': 'Check your connection and try again.',
+    'appointments.blocked.title': 'Your appointments are not available here yet',
+    'appointments.blocked.body':
+      "We're switching on secure access to your appointment history — it needs a system permission that isn't enabled yet. As soon as it is, your bookings will show up here. In the meantime, you can book a new appointment.",
     'appointments.reschedule': 'Reschedule',
     'appointments.cancel': 'Cancel appointment',
     'appointments.whatsappManage': 'Manage via WhatsApp',

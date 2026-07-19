@@ -19,10 +19,12 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSalon } from '@/lib/salon-context';
 import { useCustomer } from '@/hooks/useCustomer';
+import { getSalonOsApiBaseUrl } from '@/config/salon-os';
 import { createSalonOsApi } from '@/lib/salon-os-api';
 import {
   buildCatalogIndex,
   enrichAppointment,
+  isAccessDeniedError,
   partitionAppointments,
   type AppointmentRow,
   type CatalogIndex,
@@ -42,6 +44,13 @@ export interface UseAppointmentsResult {
   /** La lectura de citas (o de la ficha) falló. */
   isError: boolean;
   error: unknown;
+  /**
+   * El servidor RECHAZÓ la lectura self (permission denied · falta la política/RPC
+   * self en Salón OS, ver docs/PENDIENTE-mis-citas-rls.md). Es un subconjunto de
+   * `isError`: la pantalla lo comprueba ANTES para dar un aviso honesto (no un error
+   * de red reintentable). NUNCA se resuelve abriendo políticas amplias desde el cliente.
+   */
+  accessBlocked: boolean;
   /** Reintenta la lectura de citas (y el catálogo si estaba en error). */
   refetch: () => void;
   /** Próximas, orden ascendente (la más cercana primero). */
@@ -82,7 +91,11 @@ export function useAppointments(): UseAppointmentsResult {
   // 2) Catálogo público del salón (nombres + zona horaria). Enriquecido opcional.
   const catalogQuery = useQuery({
     queryKey: ['salon-bootstrap', slug],
-    queryFn: ({ signal }) => createSalonOsApi({ slug }).getBootstrap(signal),
+    // Base de la API vía la capa de config; el slug es el YA resuelto en runtime
+    // (useSalon().slug). El cliente se crea DENTRO del queryFn a propósito: si faltara
+    // la config, el fallo cae en react-query (catálogo no bloqueante), no en el render.
+    queryFn: ({ signal }) =>
+      createSalonOsApi({ baseUrl: getSalonOsApiBaseUrl(), slug }).getBootstrap(signal),
     enabled: !!slug,
     staleTime: 1000 * 60 * 30, // 30 min: el catálogo cambia poco
     gcTime: 1000 * 60 * 60,
@@ -103,12 +116,18 @@ export function useAppointments(): UseAppointmentsResult {
 
   const isLoading = customerLoading || (!!customerId && appointmentsQuery.isPending);
   const isError = !!customerError || appointmentsQuery.isError;
+  // ¿El fallo es un RECHAZO de permiso (RLS self ausente en el servidor) y no un fallo
+  // transitorio? Se mira tanto la lectura de citas como la de la ficha (cualquiera de las
+  // dos puede toparse con el permiso self). Ver isAccessDeniedError / PENDIENTE doc.
+  const accessBlocked =
+    isAccessDeniedError(appointmentsQuery.error) || isAccessDeniedError(customerError);
   const count = appointmentsQuery.data?.length ?? 0;
 
   return {
     isLoading,
     isError,
     error: customerError ?? appointmentsQuery.error,
+    accessBlocked,
     refetch: () => {
       void appointmentsQuery.refetch();
       if (catalogQuery.isError) void catalogQuery.refetch();

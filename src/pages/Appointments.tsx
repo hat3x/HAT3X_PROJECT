@@ -16,6 +16,7 @@ import {
   CalendarDays,
   CalendarPlus,
   Clock,
+  Info,
   RefreshCw,
 } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -188,6 +189,48 @@ const ErrorState = ({ onRetry }: { onRetry: () => void }) => {
   );
 };
 
+// ── Aviso honesto: el servidor aún no permite la lectura self ─────────────────────
+//
+// La lista depende de una política/RPC RLS *self* en el servidor de Salón OS. Si ese
+// permiso NO está activo, la lectura se rechaza (permission denied) y aquí NO se abre
+// acceso amplio como parche desde el cliente: se avisa con honestidad (no un error de
+// red reintentable que confunda) y se ofrece reservar o reintentar. El detalle técnico
+// y la resolución (servidor, fuera de alcance de la app) viven en
+// docs/PENDIENTE-mis-citas-rls.md. Tono informativo (ámbar), no destructivo: no está
+// "roto", falta activar el permiso.
+const BlockedNotice = ({ onRetry, onBook }: { onRetry: () => void; onBook: () => void }) => {
+  const { t } = useI18n();
+  return (
+    <div role="status" aria-live="polite" className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-warning/10 ring-1 ring-warning/20">
+        <Info className="h-7 w-7 text-warning" aria-hidden="true" />
+      </div>
+      <h2 className="mb-2 font-display text-xl text-foreground">{t('appointments.blocked.title')}</h2>
+      <p className="mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
+        {t('appointments.blocked.body')}
+      </p>
+      <div className="flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={onBook}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg gradient-gold px-6 text-sm font-semibold text-primary-foreground shadow-gold transition-opacity hover:opacity-90"
+        >
+          <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+          {t('appointments.bookCta')}
+        </button>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          {t('general.retry')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const EmptyState = ({ tab, onBook }: { tab: AppointmentTab; onBook: () => void }) => {
   const { t } = useI18n();
   return (
@@ -221,6 +264,7 @@ const Appointments = () => {
   const {
     isLoading,
     isError,
+    accessBlocked,
     refetch,
     upcoming,
     history,
@@ -273,6 +317,9 @@ const Appointments = () => {
       <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="px-6">
         {isLoading ? (
           <LoadingSkeleton />
+        ) : accessBlocked ? (
+          // El servidor rechazó la lectura self: aviso honesto, NUNCA acceso amplio.
+          <BlockedNotice onRetry={refetch} onBook={() => navigate('/book')} />
         ) : isError ? (
           <ErrorState onRetry={refetch} />
         ) : active.length === 0 ? (
