@@ -15,6 +15,7 @@ import type {
 import {
   buildBookingCustomer,
   classifyBookingError,
+  customerContactPrefill,
   formatLocalDate,
   groupServicesByCategory,
   isCustomerComplete,
@@ -253,5 +254,57 @@ describe('isSlotTakenError', () => {
     expect(isSlotTakenError(new SalonOsApiError('bad', 400))).toBe(false);
     expect(isSlotTakenError(new SalonOsApiError('down', 0))).toBe(false);
     expect(isSlotTakenError(new Error('x'))).toBe(false);
+  });
+});
+
+// ── customerContactPrefill (prellenado desde la ficha SELF; teléfono normalizado) ──
+
+describe('customerContactPrefill', () => {
+  it('precarga nombre y teléfono NORMALIZADO (phone_e164) de la ficha', () => {
+    expect(
+      customerContactPrefill({
+        full_name: 'Ana García',
+        phone: '600 12 34 56',
+        phone_e164: '+34600123456',
+      }),
+    ).toEqual({ fullName: 'Ana García', phone: '+34600123456' });
+  });
+
+  it('PREFIERE phone_e164 sobre phone (reutiliza la ficha por teléfono normalizado)', () => {
+    // Aunque el cliente tecleó una variante cruda, se precarga la forma canónica con la
+    // que el servidor enlazó la ficha: al confirmar, la reserva reusa ESA misma ficha.
+    const { phone } = customerContactPrefill({
+      full_name: 'A',
+      phone: '600123456',
+      phone_e164: '+34600123456',
+    });
+    expect(phone).toBe('+34600123456');
+  });
+
+  it('cae al phone crudo cuando la ficha aún no tiene phone_e164 (registro antiguo)', () => {
+    expect(
+      customerContactPrefill({ full_name: 'A', phone: '600123456', phone_e164: null }).phone,
+    ).toBe('600123456');
+  });
+
+  it('ignora un phone_e164 en blanco y usa el phone crudo', () => {
+    expect(
+      customerContactPrefill({ full_name: 'A', phone: '600123456', phone_e164: '   ' }).phone,
+    ).toBe('600123456');
+  });
+
+  it('teléfono vacío cuando la ficha no tiene ninguno de los dos', () => {
+    expect(customerContactPrefill({ full_name: 'A', phone: null, phone_e164: null }).phone).toBe('');
+  });
+
+  it('recorta el nombre y tolera full_name vacío/nulo (defensivo)', () => {
+    expect(customerContactPrefill({ full_name: '  Ana  ' }).fullName).toBe('Ana');
+    expect(customerContactPrefill({ full_name: '' }).fullName).toBe('');
+    expect(customerContactPrefill({ full_name: null }).fullName).toBe('');
+  });
+
+  it('ficha nula/indefinida → cadenas vacías (cliente sin ficha todavía)', () => {
+    expect(customerContactPrefill(null)).toEqual({ fullName: '', phone: '' });
+    expect(customerContactPrefill(undefined)).toEqual({ fullName: '', phone: '' });
   });
 });

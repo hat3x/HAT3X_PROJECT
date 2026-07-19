@@ -41,6 +41,7 @@ import type {
 import {
   buildBookingCustomer,
   classifyBookingError,
+  customerContactPrefill,
   formatLocalDate,
   isCustomerComplete,
   isSlotTakenError,
@@ -236,13 +237,16 @@ const BookAppointment = () => {
     },
   });
 
-  // Prellenado de contacto desde la ficha del cliente (una vez, sin pisar lo tecleado).
+  // Prellenado de contacto desde la ficha SELF del cliente (una vez, sin pisar lo
+  // tecleado). El teléfono sale NORMALIZADO (phone_e164) para que la reserva reutilice la
+  // MISMA ficha que el servidor ya enlazó por teléfono. Ver customerContactPrefill.
   const prefilled = useRef(false);
   useEffect(() => {
     if (prefilled.current || !customer) return;
     prefilled.current = true;
-    setFullName(customer.full_name ?? '');
-    setPhone(customer.phone ?? customer.phone_e164 ?? '');
+    const { fullName: prefillName, phone: prefillPhone } = customerContactPrefill(customer);
+    setFullName(prefillName);
+    setPhone(prefillPhone);
   }, [customer]);
 
   // Preselección de servicio vía ?serviceId= (enlace desde el catálogo). Una sola vez.
