@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/lib/i18n';
-import { useAuth, mapAuthError, mapRegisterError } from '@/lib/auth';
+import { useAuth, mapAuthError } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useSalon } from '@/lib/salon-context';
 import { normalizePhoneToE164 } from '@/lib/otp';
+import { classifyRegisterOutcome, PHONE_NOT_VERIFIED_ERROR_KEY } from '@/lib/registration-flow';
 import { sendPhoneOtp, resendPhoneOtp, confirmPhoneOtp } from '@/lib/phone-verification';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import PhoneOtpStep from '@/components/PhoneOtpStep';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -34,6 +35,14 @@ const Register = () => {
     fullName: string;
     email: string;
   } | null>(null);
+  // El servidor ya exigió el teléfono verificado (la RPC devolvió PHONE_NOT_VERIFIED):
+  // muestra el aviso de "verificación obligatoria" y retira la salida "continuar sin
+  // verificar" (que ahora sería una salida falsa y crearía un bucle). Ver finishRegistration.
+  const [phoneGateRequired, setPhoneGateRequired] = useState(false);
+  // Clave de remontaje del paso OTP: al incrementarla, <PhoneOtpStep> se reinicia por
+  // completo (sale de su estado terminal "completando" y reenvía un código nuevo). Así,
+  // tras un PHONE_NOT_VERIFIED, el usuario reintenta la verificación en el sitio.
+  const [verifyAttempt, setVerifyAttempt] = useState(0);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -53,10 +62,14 @@ const Register = () => {
    * atajo de `handleSubmit` cuando el teléfono no es normalizable a E.164. Confiamos en
    * la RPC para resolver el desenlace (created | linked | already_linked; los tres son
    * un éxito para el usuario).
+   *
+   * El desenlace lo clasifica `classifyRegisterOutcome` (módulo PURO), que separa tres
+   * caminos: éxito → navegar; PHONE_NOT_VERIFIED → REABRIR la verificación (el servidor
+   * exige el teléfono confirmado); cualquier otro error → avisar y volver al formulario.
    */
   const finishRegistration = async ({ phone, fullName, email }: { phone: string; fullName: string; email: string }) => {
     setLoading(true);
-    const { data: rpcData, error: rpcError } = await supabase.rpc('register_my_customer_account', {
+    const result = await supabase.rpc('register_my_customer_account', {
       p_salon_id: salonId,
       p_phone: phone,
       p_full_name: fullName,
@@ -64,23 +77,42 @@ const Register = () => {
     });
     setLoading(false);
 
-    if (rpcError) {
-      // mapRegisterError traduce el motivo del rechazo (sin sortear el gating):
-      //   INVALID_PHONE → teléfono no válido; PHONE_CONFLICT/P0001 → ya vinculado;
-      //   FEATURE_NOT_ENABLED → el salón no tiene contratado el add-on de app de
-      //   cliente (mensaje claro "esta peluquería no tiene contratado este servicio").
-      // Volvemos al formulario (mismo desenlace previo: se avisa y NO se navega).
-      toast.error(t(mapRegisterError(rpcError)));
+    const outcome = classifyRegisterOutcome(result);
+
+    // El servidor exige el teléfono verificado por SMS y aún NO consta como tal. NO
+    // devolvemos al usuario al formulario (callejón sin salida): dejamos activo el paso
+    // de verificación, encendemos el aviso de "verificación obligatoria" y REMONTAMOS
+    // <PhoneOtpStep> (bump de verifyAttempt) para que reenvíe un código nuevo y el
+    // usuario reintente la verificación en el sitio.
+    if (outcome.kind === 'phone-not-verified') {
+      setPhoneGateRequired(true);
+      setVerifyAttempt((n) => n + 1);
+      setPhase('verify');
+      toast.error(t(PHONE_NOT_VERIFIED_ERROR_KEY));
+      return;
+    }
+
+    if (outcome.kind === 'error') {
+      // Motivo del rechazo ya traducido (sin sortear el gating): INVALID_PHONE →
+      // teléfono no válido; PHONE_CONFLICT/P0001 → ya vinculado; FEATURE_NOT_ENABLED →
+      // el salón no tiene contratado el add-on. Se avisa y se vuelve al formulario.
+      toast.error(t(outcome.errorKey));
       setPhase('form');
       return;
     }
 
-    const outcome =
-      rpcData && typeof rpcData === 'object' && !Array.isArray(rpcData)
-        ? (rpcData as Record<string, unknown>).outcome
-        : rpcData;
-    toast.success(t(outcome === 'linked' ? 'auth.register.successLinked' : 'auth.register.successCreated'));
+    toast.success(t(outcome.linked ? 'auth.register.successLinked' : 'auth.register.successCreated'));
     navigate('/home');
+  };
+
+  /**
+   * Vuelve al formulario desde el paso de verificación (botón "atrás" o "cambiar
+   * número"), apagando el gate de verificación obligatoria para no arrastrarlo a un
+   * nuevo intento con otro número.
+   */
+  const backToForm = () => {
+    setPhoneGateRequired(false);
+    setPhase('form');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -161,7 +193,7 @@ const Register = () => {
         className="mb-8"
       >
         <button
-          onClick={() => (phase === 'verify' ? setPhase('form') : navigate(-1))}
+          onClick={() => (phase === 'verify' ? backToForm() : navigate(-1))}
           className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft size={18} />
@@ -171,14 +203,31 @@ const Register = () => {
 
       {phase === 'verify' && pending ? (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          {phoneGateRequired && (
+            <div className="mb-6 rounded-xl border border-warning/30 bg-warning/10 p-4" role="alert">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
+                <div>
+                  <p className="mb-1 font-medium text-foreground">{t('auth.register.phoneRequiredTitle')}</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{t('auth.register.phoneRequired')}</p>
+                </div>
+              </div>
+            </div>
+          )}
           <PhoneOtpStep
+            // Remontar (key) al reintentar tras PHONE_NOT_VERIFIED: reinicia el estado
+            // interno del paso y reenvía un código nuevo.
+            key={verifyAttempt}
             phone={pending.phone}
             onSendCode={() => sendPhoneOtp(pending.e164, supabase.auth)}
             onResendCode={() => resendPhoneOtp(pending.e164, supabase.auth)}
             onVerifyCode={(code) => confirmPhoneOtp(pending.e164, code, supabase.auth)}
             onVerified={() => finishRegistration(pending)}
-            onContinueWithoutVerification={() => finishRegistration(pending)}
-            onChangeNumber={() => setPhase('form')}
+            // Solo se ofrece "continuar sin verificar" MIENTRAS el servidor no haya
+            // exigido la verificación. Una vez devuelve PHONE_NOT_VERIFIED, esa salida
+            // sería falsa (la RPC volvería a rechazar) y crearía un bucle: la retiramos.
+            onContinueWithoutVerification={phoneGateRequired ? undefined : () => finishRegistration(pending)}
+            onChangeNumber={backToForm}
           />
         </motion.div>
       ) : (

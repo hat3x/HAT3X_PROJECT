@@ -248,14 +248,19 @@ const PhoneOtpStep = ({
           </div>
         </div>
         <div className="space-y-3">
-          <Button
-            type="button"
-            onClick={handleContinueWithout}
-            disabled={busy}
-            className="h-12 w-full gradient-gold font-semibold tracking-wide text-primary-foreground shadow-gold transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {t('auth.otp.continueWithout')}
-          </Button>
+          {/* "Continuar sin verificar" solo si el padre lo permite: cuando el servidor YA
+              exige verificación (gate activo) el padre no pasa el callback y esta salida
+              desaparece, evitando un bucle (RPC → PHONE_NOT_VERIFIED → aquí → …). */}
+          {onContinueWithoutVerification && (
+            <Button
+              type="button"
+              onClick={handleContinueWithout}
+              disabled={busy}
+              className="h-12 w-full gradient-gold font-semibold tracking-wide text-primary-foreground shadow-gold transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {t('auth.otp.continueWithout')}
+            </Button>
+          )}
           {onChangeNumber && (
             <Button type="button" variant="ghost" onClick={onChangeNumber} disabled={busy} className="w-full text-muted-foreground hover:text-foreground">
               {t('auth.otp.changeNumber')}

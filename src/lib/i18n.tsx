@@ -74,6 +74,10 @@ const translations: Record<Locale, Record<string, string>> = {
     'auth.register.successCreated': '¡Cuenta creada! Te damos la bienvenida.',
     'auth.register.successLinked': '¡Cuenta creada! Hemos vinculado tu ficha existente.',
     'auth.register.checkEmail': 'Cuenta creada. Revisa tu correo para verificar tu cuenta.',
+    // Aviso cuando el servidor exige verificar el teléfono para completar el alta
+    // (la RPC devolvió PHONE_NOT_VERIFIED). Se muestra sobre el paso de verificación.
+    'auth.register.phoneRequiredTitle': 'Verificación obligatoria',
+    'auth.register.phoneRequired': 'Para completar tu registro, esta peluquería necesita verificar tu teléfono. Introduce el código que te hemos enviado por SMS; no podemos crear tu cuenta hasta confirmarlo.',
     // Home
     'home.greeting': 'Hola',
     'home.nextAppointment': 'Próxima cita',
@@ -438,6 +442,10 @@ const translations: Record<Locale, Record<string, string>> = {
     'auth.register.successCreated': 'Account created! Welcome.',
     'auth.register.successLinked': 'Account created! We linked your existing profile.',
     'auth.register.checkEmail': 'Account created. Check your email to verify your account.',
+    // Shown above the verification step when the server requires a verified phone to
+    // finish sign-up (the RPC returned PHONE_NOT_VERIFIED).
+    'auth.register.phoneRequiredTitle': 'Verification required',
+    'auth.register.phoneRequired': "To finish signing up, this salon needs to verify your phone. Enter the code we sent you by SMS; we can't create your account until it's confirmed.",
     'home.greeting': 'Hello',
     'home.nextAppointment': 'Next appointment',
     'home.noAppointments': 'No upcoming appointments',

@@ -134,34 +134,8 @@ export const mapAuthError = (error: unknown): string => {
   return 'auth.error.generic';
 };
 
-/**
- * Traduce el error crudo de la RPC `register_my_customer_account` (Salón OS) a
- * una clave de i18n. La RPC lanza EXCEPTION (SQLSTATE `P0001`) con un mensaje que
- * identifica el motivo:
- *   - `INVALID_PHONE`        → el teléfono no tiene un formato válido.
- *   - `FEATURE_NOT_ENABLED`  → el salón NO tiene contratado el add-on de app de
- *                              cliente / fidelización; la RPC hace el gating en
- *                              servidor y rechaza el alta.
- *   - `PHONE_CONFLICT`       → el teléfono ya pertenece a otra cuenta/ficha.
- * Se comprueba primero el texto del mensaje (más específico); como red de
- * seguridad, el código `P0001` sin texto reconocible se trata como conflicto de
- * teléfono, que es el fallo esperado más frecuente de esta RPC.
- *
- * IMPORTANTE: aquí sólo TRADUCIMOS el motivo del rechazo; no lo sorteamos. El
- * gating (incluido `FEATURE_NOT_ENABLED`) es autoritativo en el servidor y la app
- * se limita a mostrar un mensaje claro sin conceder acceso al cliente.
- */
-export const mapRegisterError = (error: unknown): string => {
-  if (!error) return 'auth.error.generic';
-
-  const err = error as { code?: string; message?: string };
-  const code = (err.code ?? '').toUpperCase();
-  const message = (err.message ?? '').toUpperCase();
-
-  if (message.includes('INVALID_PHONE')) return 'auth.error.invalidPhone';
-  // Add-on no contratado por el salón. Debe comprobarse ANTES del catch-all de
-  // P0001, porque la RPC también lanza este motivo como EXCEPTION (P0001).
-  if (message.includes('FEATURE_NOT_ENABLED')) return 'auth.error.featureNotEnabled';
-  if (message.includes('PHONE_CONFLICT') || code === 'P0001') return 'auth.error.phoneConflict';
-  return 'auth.error.generic';
-};
+// La traducción del error de la RPC de enlace `register_my_customer_account` vive en
+// el módulo PURO `src/lib/registration-flow.ts` (testeable sin el cliente de Supabase,
+// junto a la clasificación del desenlace del alta de sub-5). Se re-exporta aquí por
+// compatibilidad con los imports existentes (`import { mapRegisterError } from '@/lib/auth'`).
+export { mapRegisterError } from './registration-flow';
