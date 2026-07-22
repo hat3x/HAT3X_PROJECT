@@ -225,7 +225,12 @@ function parseTstzRange(range: string): BusyInterval {
   return { starts_at: normalize(rawLower), ends_at: normalize(rawUpper) };
 }
 
-/** Huecos de un profesional para un día. */
+/**
+ * Huecos de un profesional para un día. Si se pasa `excludeAppointmentId`, los bloques
+ * de ESA cita NO cuentan como ocupados: es lo que permite MOVER una cita a un hueco que
+ * solapa su posición actual sin que se auto-bloquee (ver {@link rescheduleBookingForSalon}).
+ * Omitido ⇒ comportamiento normal (toda ocupación bloquea).
+ */
 async function slotsForProfessional(
   admin: AdminClient,
   salon: SalonConfig,
@@ -234,8 +239,22 @@ async function slotsForProfessional(
   exposureMin: number,
   postExposureMin: number,
   date: string,
+  excludeAppointmentId?: string,
 ): Promise<AvailableSlot[]> {
   const { startIso, endIso } = dayBoundsUtc(date, salon.timezone);
+
+  // Solo bloques físicos de ocupación del profesional (application + post_exposure).
+  // El tramo de exposure de otras citas NO aparece aquí y por tanto no bloquea.
+  let blocksQuery = admin
+    .from("appointment_blocks")
+    .select("occupied_range")
+    .eq("salon_id", salon.id)
+    .eq("professional_id", professionalId)
+    .filter("occupied_range", "ov", `["${startIso}","${endIso}")`);
+  // Al reprogramar, la PROPIA cita no debe contarse a sí misma como ocupación.
+  if (excludeAppointmentId) {
+    blocksQuery = blocksQuery.neq("appointment_id", excludeAppointmentId);
+  }
 
   const [schedulesRes, exceptionRes, blocksRes] = await Promise.all([
     admin
@@ -250,14 +269,7 @@ async function slotsForProfessional(
       .eq("professional_id", professionalId)
       .eq("exception_date", date)
       .maybeSingle(),
-    // Solo bloques físicos de ocupación del profesional (application + post_exposure).
-    // El tramo de exposure de otras citas NO aparece aquí y por tanto no bloquea.
-    admin
-      .from("appointment_blocks")
-      .select("occupied_range")
-      .eq("salon_id", salon.id)
-      .eq("professional_id", professionalId)
-      .filter("occupied_range", "ov", `["${startIso}","${endIso}")`),
+    blocksQuery,
   ]);
 
   if (schedulesRes.error || blocksRes.error) {
@@ -302,6 +314,7 @@ async function availabilityForSalonConfig(
   serviceId: string,
   date: string,
   professionalId: string | undefined,
+  excludeAppointmentId?: string,
 ): Promise<PublicSlot[]> {
   const { data: service, error: serviceError } = await admin
     .from("services")
@@ -332,6 +345,7 @@ async function availabilityForSalonConfig(
         service.exposure_min,
         service.post_exposure_min,
         date,
+        excludeAppointmentId,
       ),
     })),
   );
@@ -629,4 +643,142 @@ export async function createBookingForSalon(
   const admin = createAdminClient();
   const salon = await loadSalonById(admin, salonId);
   return createBookingForSalonConfig(admin, salon, input);
+}
+
+// -----------------------------------------------------------------------------
+// Reprogramación (mover) de una cita existente
+// -----------------------------------------------------------------------------
+
+/** Datos para MOVER una cita existente a otro hueco (y opcionalmente otro profesional). */
+export interface RescheduleBookingInput {
+  /** PK de la cita a mover. Su PERTENENCIA la verifica quien llama (recepción). */
+  appointmentId: string;
+  /**
+   * Servicio de la cita (se mantiene al mover: reprogramar cambia CUÁNDO, no QUÉ). Lo
+   * aporta el llamante desde la propia cita; el servidor lo re-acota por `salon_id`.
+   */
+  serviceId: string;
+  /** Nuevo inicio elegido (instante UTC en ISO con offset). */
+  startsAt: string;
+  /**
+   * Profesional destino: un uuid concreto (mismo o distinto) o `"any"` para que el
+   * servidor asigne uno disponible. La recepción resuelve el "mantener el actual"
+   * (cuerpo sin `newProfessionalId`) a su uuid ANTES de llegar aquí.
+   */
+  professionalId: string | "any";
+}
+
+/**
+ * MUEVE la cita `appointmentId` del `salonId` a `startsAt` (+ profesional destino),
+ * REUTILIZANDO el motor de disponibilidad. Es la operación gemela de
+ * {@link createBookingForSalon} pero sobre una cita YA existente: no crea ni resuelve
+ * ficha de cliente (la cita ya tiene la suya), solo re-valida el hueco y reescribe la
+ * agenda. Flujo:
+ *
+ *   1. Resuelve el salón por id y carga el servicio (fases + nombre, acotado por salón).
+ *   2. Recalcula disponibilidad EN EL SERVIDOR con `availabilityForSalonConfig`, pero
+ *      EXCLUYENDO los bloques de la PROPIA cita (`excludeAppointmentId`): así un hueco
+ *      que solapa su posición actual no la marca como ocupada (no se auto-bloquea).
+ *      Nunca se fía del hueco enviado por el cliente.
+ *   3. Exige que `startsAt` esté ENTRE los huecos libres; si no ⇒ `BookingError(409)`.
+ *   4. Reescribe `starts_at` / `ends_at` / `professional_id` acotando por `(salon_id,
+ *      id)`. El trigger `sync_appointment_blocks` regenera los bloques; si el nuevo
+ *      hueco lo ocupó otra reserva entre el recomputo y el UPDATE, la exclusion
+ *      constraint anti-solape lo rechaza (`23P01`) ⇒ `BookingError(409)`.
+ *
+ * `salonId` DEBE ser el de fiar (de la `x-api-key`, resuelto por el guard de recepción).
+ * TODA lectura/escritura se acota por él: es imposible tocar la cita de otro salón.
+ *
+ * @throws {BookingError}
+ *   · 404 si el servicio de la cita ya no es reservable en el salón.
+ *   · 409 si el nuevo hueco no está libre (recomputo o carrera anti-solape).
+ *   · 500 ante un fallo real de consulta/escritura.
+ */
+export async function rescheduleBookingForSalon(
+  salonId: string,
+  input: RescheduleBookingInput,
+): Promise<BookingConfirmation> {
+  const admin = createAdminClient();
+  const salon = await loadSalonById(admin, salonId);
+
+  const { data: salonMeta } = await admin
+    .from("salons")
+    .select("name")
+    .eq("id", salon.id)
+    .single();
+
+  const { data: service, error: serviceError } = await admin
+    .from("services")
+    .select("id, name, application_min, exposure_min, post_exposure_min, active")
+    .eq("salon_id", salon.id)
+    .eq("id", input.serviceId)
+    .maybeSingle();
+
+  if (serviceError) throw new BookingError(500, "Error al cargar el servicio.");
+  if (!service || !service.active) throw new BookingError(404, "Servicio no disponible.");
+
+  const date = localDateInZone(salon.timezone, new Date(input.startsAt));
+  const wantedProfessional =
+    input.professionalId === "any" ? undefined : input.professionalId;
+
+  // Recomputar disponibilidad con el MISMO motor, EXCLUYENDO la propia cita para que no
+  // se bloquee a sí misma al moverse a un hueco solapado con su posición actual.
+  const slots = await availabilityForSalonConfig(
+    admin,
+    salon,
+    input.serviceId,
+    date,
+    wantedProfessional,
+    input.appointmentId,
+  );
+  const match = slots.find((s) => s.startsAt === input.startsAt);
+  if (!match) {
+    throw new BookingError(409, "Ese horario ya no está disponible. Elige otro.");
+  }
+
+  const professionalId = match.professionalId;
+
+  // ends_at cubre la cita completa: aplicación + exposición + post-exposición. Coincide
+  // con `match.endsAt`, pero se deriva aquí de las fases del servicio para no depender de
+  // la forma del hueco (el trigger de bloques recalcula por fase a partir del servicio).
+  const totalMinutes =
+    service.application_min + service.exposure_min + service.post_exposure_min;
+  const endsAt = new Date(
+    new Date(input.startsAt).getTime() + totalMinutes * 60_000,
+  ).toISOString();
+
+  const { data: appointment, error: updateError } = await admin
+    .from("appointments")
+    .update({
+      starts_at: input.startsAt,
+      ends_at: endsAt,
+      professional_id: professionalId,
+    })
+    .eq("salon_id", salon.id)
+    .eq("id", input.appointmentId)
+    .select("id, starts_at, ends_at")
+    .single();
+
+  if (updateError || !appointment) {
+    // Violación de la exclusion constraint anti-solape: alguien ocupó el hueco antes.
+    if (updateError?.code === "23P01") {
+      throw new BookingError(409, "Ese horario acaba de ocuparse. Elige otro.");
+    }
+    throw new BookingError(500, "No se pudo mover la cita.");
+  }
+
+  const { data: professional } = await admin
+    .from("professionals")
+    .select("full_name")
+    .eq("id", professionalId)
+    .single();
+
+  return {
+    appointmentId: appointment.id,
+    startsAt: appointment.starts_at,
+    endsAt: appointment.ends_at,
+    professionalName: professional?.full_name ?? "",
+    serviceName: service.name,
+    salonName: salonMeta?.name ?? "",
+  };
 }
