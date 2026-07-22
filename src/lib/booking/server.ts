@@ -489,13 +489,22 @@ async function findOrCreateCustomer(
   throw new BookingError(500, "No se pudo registrar el cliente.");
 }
 
-export async function createBooking(
-  slug: string,
+/**
+ * NÚCLEO de creación de reserva, ya RESUELTO el salón (config) y con el cliente admin.
+ * Lo COMPARTEN los dos puntos de entrada —{@link createBooking} (por slug, reserva
+ * pública) y {@link createBookingForSalon} (por id, recepción)—: ambos recalculan la
+ * disponibilidad EN EL SERVIDOR con `availabilityForSalonConfig` (nunca fían del hueco
+ * enviado por el cliente), resuelven/crean la ficha por TELÉFONO normalizado (un cliente
+ * = una ficha, sub-1) e insertan la cita en estado `pending`. Al ser una única función,
+ * los dos flujos crean la cita de forma IDÉNTICA por construcción (no hay dos copias que
+ * puedan divergir) y todo queda ACOTADO por `salon.id` (aislamiento a mano, como exige el
+ * cliente admin que omite RLS).
+ */
+async function createBookingForSalonConfig(
+  admin: AdminClient,
+  salon: SalonConfig,
   input: CreateBookingInput,
 ): Promise<BookingConfirmation> {
-  const admin = createAdminClient();
-  const salon = await loadSalon(admin, slug);
-
   const { data: salonMeta } = await admin
     .from("salons")
     .select("name")
@@ -519,8 +528,15 @@ export async function createBooking(
   const wantedProfessional =
     input.professionalId === "any" ? undefined : input.professionalId;
 
-  // Recalcular disponibilidad en el servidor: nunca confiar en el hueco enviado.
-  const slots = await getAvailability(slug, input.serviceId, date, wantedProfessional);
+  // Recalcular disponibilidad en el servidor con el MISMO motor (mismo admin+salón, sin
+  // re-resolver el salón): nunca confiar en el hueco enviado por el cliente.
+  const slots = await availabilityForSalonConfig(
+    admin,
+    salon,
+    input.serviceId,
+    date,
+    wantedProfessional,
+  );
   const match = slots.find((s) => s.startsAt === input.startsAt);
   if (!match) {
     throw new BookingError(409, "Ese horario ya no está disponible. Elige otro.");
@@ -580,4 +596,37 @@ export async function createBooking(
     serviceName: service.name,
     salonName: salonMeta?.name ?? "",
   };
+}
+
+/**
+ * Crea la reserva pública entrando por `slug`. Resuelve el salón por slug y delega en
+ * {@link createBookingForSalonConfig} (el núcleo compartido con la recepción).
+ */
+export async function createBooking(
+  slug: string,
+  input: CreateBookingInput,
+): Promise<BookingConfirmation> {
+  const admin = createAdminClient();
+  const salon = await loadSalon(admin, slug);
+  return createBookingForSalonConfig(admin, salon, input);
+}
+
+/**
+ * Creación de reserva ACOTADA por `salonId` (no por slug). Es EXACTAMENTE el mismo motor
+ * que la reserva pública —recalcula disponibilidad en el servidor, resuelve/crea la ficha
+ * por TELÉFONO normalizado (un cliente = una ficha) e inserta la cita `pending`— pero
+ * entra por el id del salón: el que la RECEPCIÓN (`POST /api/reception/appointments`)
+ * obtiene de su clave de servicio (`x-api-key`), ya validada por el guard. Comparte
+ * {@link createBookingForSalonConfig} con {@link createBooking}, así que crea la cita
+ * igual que la reserva pública para ese salón; no reimplementa la reserva a mano. Al
+ * reutilizar el dedup por teléfono (FASE 3), reservar por recepción con un teléfono ya
+ * conocido REUTILIZA su ficha en vez de duplicarla.
+ */
+export async function createBookingForSalon(
+  salonId: string,
+  input: CreateBookingInput,
+): Promise<BookingConfirmation> {
+  const admin = createAdminClient();
+  const salon = await loadSalonById(admin, salonId);
+  return createBookingForSalonConfig(admin, salon, input);
 }
