@@ -220,22 +220,29 @@ Rutas definidas en `src/App.tsx`.
 
 ---
 
-## Fuera de alcance en esta fase
+## Agenda y personal (solo lectura) — activo en esta fase
 
-La **agenda y la gestión de empleados** (calendario del empleado, alta y horarios
-del personal) **quedan pendientes para una sub-fase aparte**.
+Las vistas de **agenda y personal** ya están **activas**, reconstruidas contra el
+esquema real de Salón OS (`professionals` / `professional_schedules` / `appointments`),
+en modo **solo visualización**:
 
-El modelo antiguo de turnos (`staff_members` / `employee_schedules`) **no encaja**
-con Salón OS, que gestiona la disponibilidad mediante `professionals` /
-`professional_schedules`. Hasta que ese flujo se reconstruya, las pantallas
-correspondientes se muestran como placeholders elegantes (`ComingSoon`):
+- `/employee/calendar` — «Mi agenda» del profesional (selector + vista día/semana).
+- `/admin/agenda` — «Agenda del salón»: el día de todo el equipo agrupado por
+  profesional (owner/manager).
+- `/admin/employees` — «Empleados»: listado de personal del salón (owner/manager).
 
-- `/employee/calendar` — «Mi calendario»
-- `/admin/employees` — gestión de empleados
-- `/admin/employees/:id` — calendario por empleado
+**Navegación.** «Mi agenda» está en la barra de staff/empleado; las vistas de
+administración (owner/manager) se alcanzan desde **Ajustes → Administración** y tienen
+su propia sub-navegación (`AdminBottomNav`). Tras autenticarse, todo el personal sigue
+aterrizando en `/dashboard` (`RoleRedirect`) como landing neutral por rol.
 
-Por eso, tras autenticarse, **todo el personal aterriza en `/dashboard`**
-(`RoleRedirect`), que sí está dentro del alcance actual.
+### Todavía fuera de alcance
+
+**Crear y cancelar citas** quedan fuera de esta fase: las pantallas son de solo lectura.
+La acción de crear aparece de forma **deliberadamente deshabilitada** (`AgendaReadOnlyNotice`)
+para que la limitación sea explícita. El alta y la edición del **personal** siguen viviendo
+en el panel de Salón OS (no se duplican aquí). El componente `ComingSoon` se conserva como
+placeholder genérico para funciones que aún no existen.
 
 ---
 

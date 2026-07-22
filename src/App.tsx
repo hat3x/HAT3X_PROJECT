@@ -61,10 +61,12 @@ const App = () => (
               <Route path="/employee/settings" element={<Settings />} />
             </Route>
 
-            {/* Admin routes */}
+            {/* Admin routes (owner/manager) — solo lectura en esta fase */}
             <Route element={<AdminShell />}>
+              {/* Agenda del salón: la vista muestra TODO el salón agrupado por profesional,
+                  así que vive en una ruta propia (no bajo /employees/:id). */}
+              <Route path="/admin/agenda" element={<AdminEmployeeCalendar />} />
               <Route path="/admin/employees" element={<AdminEmployees />} />
-              <Route path="/admin/employees/:id" element={<AdminEmployeeCalendar />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

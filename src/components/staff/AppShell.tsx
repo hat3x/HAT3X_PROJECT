@@ -83,17 +83,20 @@ function EmployeeBottomNav() {
   );
 }
 
-// Admin bottom nav
-import { LayoutDashboard, Users, ScanLine, Clock, CalendarDays } from 'lucide-react';
+// Iconos compartidos por EmployeeBottomNav (LayoutDashboard, CalendarDays) y
+// AdminBottomNav (LayoutDashboard, CalendarClock, Users). El import está hoisted,
+// así que ambos navs lo consumen.
+import { LayoutDashboard, Users, CalendarDays, CalendarClock } from 'lucide-react';
 
 function AdminBottomNav() {
-  // Employee management (/admin/employees) is out of scope in the Salón OS
-  // build, so it is replaced here by the in-scope customers destination.
+  // Sub-navegación del área de administración (owner/manager). Las vistas de salón
+  // ya están EN alcance (solo lectura): la agenda del salón (/admin/agenda) y el
+  // listado de personal (/admin/employees) se enlazan aquí. «Inicio» devuelve al
+  // resto de la app (staff). El punto de entrada a esta área está en Ajustes.
   const items = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
-    { to: '/scan', icon: ScanLine, label: 'Escanear' },
-    { to: '/customers', icon: Users, label: 'Clientes' },
-    { to: '/history', icon: Clock, label: 'Historial' },
+    { to: '/admin/agenda', icon: CalendarClock, label: 'Agenda salón' },
+    { to: '/admin/employees', icon: Users, label: 'Empleados' },
     { to: '/settings', icon: Settings, label: 'Ajustes' },
   ];
 

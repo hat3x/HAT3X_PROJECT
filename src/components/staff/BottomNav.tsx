@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils';
 
 export function BottomNav() {
   // "Mi agenda" (agenda del profesional) ya está en alcance de Salón OS (sub-3) y se enlaza
-  // aquí. La antigua gestión de empleados ("Empleados") sigue fuera de alcance y no se enlaza.
+  // aquí. Las vistas de administración (agenda del salón, "Empleados") también están activas
+  // pero son solo para owner/manager: su punto de entrada vive en Ajustes (no en esta barra,
+  // común a todo el personal), y su propia sub-navegación es AdminBottomNav.
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
     { to: '/scan', icon: ScanLine, label: 'Escanear' },

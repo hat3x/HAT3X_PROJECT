@@ -5,9 +5,10 @@ import { LoadingState } from '@/components/staff/LoadingState';
 /**
  * Entry redirect after auth resolves.
  *
- * The role-specific landing pages (employee calendar / admin employees) are
- * out of scope in the Salón OS build and are disabled, so every authenticated
- * staff user lands on the in-scope dashboard.
+ * The agenda and personnel views are now active (read-only), but the dashboard
+ * remains the single, role-neutral landing for every authenticated staff user:
+ * it works for all roles and avoids branching the entry flow. Owners/managers
+ * reach the admin views from Ajustes (see Settings) and AdminBottomNav.
  */
 export default function RoleRedirect() {
   const { user, loading } = useAuth();

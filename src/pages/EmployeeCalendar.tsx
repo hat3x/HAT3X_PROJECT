@@ -28,6 +28,7 @@ import {
 import { LoadingState } from '@/components/staff/LoadingState';
 import { ErrorState } from '@/components/staff/ErrorState';
 import { EmptyState } from '@/components/staff/EmptyState';
+import { AgendaReadOnlyNotice } from '@/components/staff/AgendaReadOnlyNotice';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -152,6 +153,9 @@ export default function EmployeeCalendar() {
           Tus citas {view === 'day' ? 'del día' : 'de la semana'}, ordenadas por hora.
         </p>
       </header>
+
+      {/* Solo visualización en esta fase: la acción de crear queda presente pero inactiva. */}
+      <AgendaReadOnlyNotice className="mb-4 animate-slide-up" />
 
       {/* Selector de profesional (obligatorio: la sesión no identifica al profesional). */}
       <div className="mb-4 space-y-2">

@@ -6,6 +6,7 @@ import { ADMIN_ROLES } from '@/lib/auth';
 import { LoadingState } from '@/components/staff/LoadingState';
 import { ErrorState } from '@/components/staff/ErrorState';
 import { EmptyState } from '@/components/staff/EmptyState';
+import { AgendaReadOnlyNotice } from '@/components/staff/AgendaReadOnlyNotice';
 import { Button } from '@/components/ui/button';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -99,6 +100,9 @@ function AdminEmployeeCalendarView() {
           Citas de todo el equipo, agrupadas por profesional.
         </p>
       </header>
+
+      {/* Solo visualización en esta fase: la acción de crear queda presente pero inactiva. */}
+      <AgendaReadOnlyNotice className="mb-4" />
 
       {/* Navegación por día (objetivos de 40 px ≥ 24 px, WCAG SC 2.5.8). */}
       <div className="mb-4 flex items-center gap-2">

@@ -1,11 +1,11 @@
 import { useAuth } from '@/lib/auth';
 import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, User, Scissors } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { CalendarClock, ChevronRight, LogOut, Shield, User, Scissors, Users } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function Settings() {
-  const { user, roles, signOut } = useAuth();
+  const { user, roles, isManager, signOut } = useAuth();
   const { name: salonName } = useSalon();
   const navigate = useNavigate();
 
@@ -62,6 +62,41 @@ export default function Settings() {
           Cerrar sesión
         </Button>
       </div>
+
+      {/* Punto de entrada al área de administración (solo owner/manager). Desde aquí, común a
+          todas las barras de navegación, se alcanzan las vistas de salón (solo lectura). */}
+      {isManager && (
+        <div className="mt-6">
+          <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Administración
+          </h2>
+          <nav
+            aria-label="Administración del salón"
+            className="overflow-hidden rounded-xl border border-border bg-card"
+          >
+            {[
+              { to: '/admin/agenda', icon: CalendarClock, label: 'Agenda del salón' },
+              { to: '/admin/employees', icon: Users, label: 'Empleados' },
+            ].map(({ to, icon: Icon, label }, index) => (
+              <Link
+                key={to}
+                to={to}
+                className={
+                  'flex items-center gap-3 px-4 py-3.5 text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring' +
+                  (index > 0 ? ' border-t border-border' : '')
+                }
+              >
+                <Icon className="h-5 w-5 flex-shrink-0 text-primary" aria-hidden="true" />
+                <span className="flex-1 text-sm font-medium">{label}</span>
+                <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
+              </Link>
+            ))}
+          </nav>
+          <p className="mt-2 px-1 text-xs text-muted-foreground">
+            Vistas de solo lectura para propietario y encargado.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
