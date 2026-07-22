@@ -7,6 +7,19 @@ import type { Database } from '@/types/database';
 // Rol del staff dentro de un salón (Salón OS es multi-tenant).
 export type MemberRole = Database['public']['Enums']['member_role']; // 'owner' | 'manager' | 'staff'
 
+// Conjuntos de roles reutilizables — ÚNICA definición de la jerarquía de permisos de UI.
+// Se derivan del rol leído de `salon_members`; consúmelos (p. ej. desde <RequireRole>) en
+// lugar de recomprobar strings de rol sueltos, para no duplicar la lógica en cada pantalla.
+//
+// ⚠️ Capa de UX / defensa en profundidad. La autorización AUTORITATIVA vive en las políticas
+// RLS de Supabase (servidor): estos conjuntos solo deciden qué PANTALLAS se muestran; NO
+// reemplazan a la RLS ni deben reimplementar sus reglas.
+//
+// Todo el personal del salón (cualquier miembro con rol) puede ver las vistas de staff.
+export const STAFF_ROLES: readonly MemberRole[] = ['owner', 'manager', 'staff'];
+// Pantallas de administración: reservadas a propietario y encargado (no al staff base).
+export const ADMIN_ROLES: readonly MemberRole[] = ['owner', 'manager'];
+
 // Mensaje mostrado cuando el usuario se autentica pero NO pertenece a este salón.
 const NO_ACCESS_ERROR = 'Sin acceso a este salón';
 

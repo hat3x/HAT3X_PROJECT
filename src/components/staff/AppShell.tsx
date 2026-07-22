@@ -1,72 +1,54 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '@/lib/auth';
-import { LoadingState } from '@/components/staff/LoadingState';
+import { Outlet } from 'react-router-dom';
+import { RequireRole } from './RequireRole';
+import { STAFF_ROLES, ADMIN_ROLES } from '@/lib/auth';
 import { BottomNav } from './BottomNav';
-import { Shield } from 'lucide-react';
 
+// Mensajes de denegación por tipo de vista (se muestran a un usuario AUTENTICADO
+// cuyo rol de salón no alcanza para la sección). El bloqueo real de datos lo impone
+// la RLS de Supabase; estas guardias solo evitan pintar pantallas sin permiso.
+const STAFF_DENIED = 'Tu cuenta no tiene permisos de staff en este salón.';
+const ADMIN_DENIED =
+  'Necesitas permisos de administración (propietario o encargado) para ver esta sección.';
+
+/** Layout + guardia de las rutas comunes de staff (owner/manager/staff). */
 export function AppShell() {
-  const { user, loading, hasStaffAccess } = useAuth();
-
-  if (loading) return <LoadingState message="Verificando acceso..." />;
-  if (!user) return <Navigate to="/login" replace />;
-
-  if (!hasStaffAccess) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-6">
-        <div className="text-center max-w-sm">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
-            <Shield className="h-8 w-8 text-destructive" />
-          </div>
-          <h1 className="mb-2 text-xl font-bold text-foreground">Acceso denegado</h1>
-          <p className="text-muted-foreground text-sm">Tu cuenta no tiene permisos de staff.</p>
-        </div>
+  return (
+    <RequireRole allow={STAFF_ROLES} deniedMessage={STAFF_DENIED}>
+      <div className="flex min-h-screen flex-col bg-background">
+        <main className="flex-1 pb-20">
+          <Outlet />
+        </main>
+        <BottomNav />
       </div>
-    );
-  }
-
-  return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <main className="flex-1 pb-20">
-        <Outlet />
-      </main>
-      <BottomNav />
-    </div>
+    </RequireRole>
   );
 }
 
-/** Shell for employee-only routes (staff with linked staff_member) */
+/** Layout + guardia de las rutas de empleado (mismo acceso base que staff). */
 export function EmployeeShell() {
-  const { user, loading, hasStaffAccess } = useAuth();
-
-  if (loading) return <LoadingState message="Verificando acceso..." />;
-  if (!user) return <Navigate to="/login" replace />;
-  if (!hasStaffAccess) return <Navigate to="/login" replace />;
-
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <main className="flex-1 pb-20">
-        <Outlet />
-      </main>
-      <EmployeeBottomNav />
-    </div>
+    <RequireRole allow={STAFF_ROLES} deniedMessage={STAFF_DENIED}>
+      <div className="flex min-h-screen flex-col bg-background">
+        <main className="flex-1 pb-20">
+          <Outlet />
+        </main>
+        <EmployeeBottomNav />
+      </div>
+    </RequireRole>
   );
 }
 
-/** Shell for admin-only routes */
+/** Layout + guardia de las rutas de administración: solo propietario/encargado. */
 export function AdminShell() {
-  const { user, loading, isAdmin } = useAuth();
-
-  if (loading) return <LoadingState message="Verificando acceso..." />;
-  if (!user) return <Navigate to="/login" replace />;
-  if (!isAdmin) return <Navigate to="/dashboard" replace />;
-
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <main className="flex-1 pb-20">
-        <Outlet />
-      </main>
-      <AdminBottomNav />
-    </div>
+    <RequireRole allow={ADMIN_ROLES} deniedMessage={ADMIN_DENIED}>
+      <div className="flex min-h-screen flex-col bg-background">
+        <main className="flex-1 pb-20">
+          <Outlet />
+        </main>
+        <AdminBottomNav />
+      </div>
+    </RequireRole>
   );
 }
 
