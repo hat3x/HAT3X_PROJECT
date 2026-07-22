@@ -1709,6 +1709,57 @@ export interface Database {
           },
         ];
       };
+      // Claves de API por salón para integraciones NO-humanas (auth de servicio).
+      // Se persiste SOLO el hash SHA-256 (key_hash, hex minúsculas 64) y un prefijo
+      // corto NO secreto (key_prefix); NUNCA la clave en claro. Tabla de SECRETOS:
+      // RLS deny-by-default SIN políticas y privilegios revocados a anon/authenticated
+      // — solo service_role (backend HAT3X) la lee/escribe. Ver migración
+      // 20260722100000_service_api_keys y src/lib/service-keys/. NO editable por el
+      // salón: la emisión es exclusiva de HAT3X (service_role/backoffice).
+      service_api_keys: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          scopes: string[];
+          is_active: boolean;
+          created_at: string;
+          last_used_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          scopes?: string[];
+          is_active?: boolean;
+          created_at?: string;
+          last_used_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          key_hash?: string;
+          key_prefix?: string;
+          scopes?: string[];
+          is_active?: boolean;
+          created_at?: string;
+          last_used_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "service_api_keys_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;
@@ -1774,6 +1825,9 @@ export type Reward = Tables<"rewards">;
 export type SalonFeatureRow = Tables<"salon_features">;
 // Marca (white-label) — logo + colores por salón (1:1 con salons)
 export type SalonBranding = Tables<"salon_branding">;
+// Seguridad — claves de API por salón (auth de servicio, emisión solo HAT3X)
+export type ServiceApiKey = Tables<"service_api_keys">;
+export type ServiceApiKeyInsert = TablesInsert<"service_api_keys">;
 
 // Phase helpers -----------------------------------------------------------------
 
