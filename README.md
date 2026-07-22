@@ -223,7 +223,7 @@ Rutas definidas en `src/App.tsx`.
 ## Agenda y personal (solo lectura) — activo en esta fase
 
 Las vistas de **agenda y personal** ya están **activas**, reconstruidas contra el
-esquema real de Salón OS (`professionals` / `professional_schedules` / `appointments`),
+esquema real de Salón OS (tablas `appointments`, `appointment_blocks` y `professionals`),
 en modo **solo visualización**:
 
 - `/employee/calendar` — «Mi agenda» del profesional (selector + vista día/semana).
@@ -236,13 +236,95 @@ administración (owner/manager) se alcanzan desde **Ajustes → Administración*
 su propia sub-navegación (`AdminBottomNav`). Tras autenticarse, todo el personal sigue
 aterrizando en `/dashboard` (`RoleRedirect`) como landing neutral por rol.
 
-### Todavía fuera de alcance
+### Lectura con la RLS de miembro (sin políticas ni RPC nuevas)
 
-**Crear y cancelar citas** quedan fuera de esta fase: las pantallas son de solo lectura.
-La acción de crear aparece de forma **deliberadamente deshabilitada** (`AgendaReadOnlyNotice`)
-para que la limitación sea explícita. El alta y la edición del **personal** siguen viviendo
-en el panel de Salón OS (no se duplican aquí). El componente `ComingSoon` se conserva como
-placeholder genérico para funciones que aún no existen.
+La agenda **lee las citas directamente de las tablas de Salón OS** con la sesión del
+usuario ya autenticado (miembro del salón). **No se ha creado ninguna política RLS ni
+ninguna RPC nueva** para esto: se reutiliza lo que Salón OS ya expone.
+
+- El acceso es una consulta PostgREST normal (`supabase.from('appointments')…`,
+  `…from('appointment_blocks')…`, `…from('professionals')…`), **nunca** un `.rpc()`.
+  Las **únicas** RPC de la app son `staff_award_visit` (acreditar visita) y
+  `get_salon_branding` (marca del salón); **ninguna** interviene en la agenda.
+- Quien decide qué filas se devuelven es la **RLS de Salón OS**: la `ANON KEY` es
+  pública, pero es la **sesión del miembro** (su fila en `salon_members`) la que hace
+  que la RLS deje leer las citas/tramos/profesionales **de su salón**. Un usuario sin
+  pertenencia no ve nada; el gating vive en el servidor, la app no lo sortea.
+- Además, **toda** consulta se acota explícitamente por `salon_id` (el del salón
+  resuelto en runtime, vía `useSalonId()`). Es un cinturón-y-tirantes coherente con el
+  despliegue multi-tenant de código único: la RLS aísla por miembro y la app pide solo
+  el salón activo. Sin `salon_id` resuelto no se lanza consulta.
+
+La capa de datos está separada en **parte pura** (rango de fechas, `SELECT` con joins,
+mapeo → modelo de vista: `src/lib/appointments.ts`, `professionals.ts`,
+`appointment-blocks.ts`) y **parte de I/O** (la consulta real:
+`src/lib/appointments-queries.ts`, `professionals-queries.ts`,
+`appointment-blocks-queries.ts`), cableadas a React Query en `src/hooks/`. Las consultas
+usan rango semiabierto `[gte, lt)` sobre `starts_at` para no duplicar citas en la frontera.
+
+### Cómo se resuelve el profesional del usuario (y por qué hay un selector)
+
+La subtarea pedía mostrar «la agenda del profesional autenticado». La
+[auditoría de esquema](docs/HAT3X-031-auditoria-esquema-salon-os.md) (Hallazgo 1)
+concluyó que **hoy no es posible derivar el profesional desde la sesión**:
+
+- `professionals.user_id` es **nullable, sin FK a `auth.users` y sin poblar**, y ningún
+  punto de la app lo consulta.
+- La identidad autenticada (`auth.uid`) solo resuelve **pertenencia + rol** vía
+  `salon_members`; **nunca** resuelve *qué profesional soy*.
+
+**Limitación asumida → selector de profesional.** Como no hay vínculo fiable
+usuario ↔ profesional, «Mi agenda» (`EmployeeCalendar`) **no filtra por la identidad del
+usuario**: ofrece un **selector** con el personal **activo** del salón, y la agenda se
+carga para el profesional elegido. Para suavizar la fricción:
+
+- si el salón tiene **un solo** profesional activo, se **autoselecciona**;
+- la elección se **recuerda por salón** en `localStorage` (namespaced por `salon_id`;
+  degrada en silencio si no hay almacenamiento) y se **valida** contra la lista al cargar
+  (un id de un profesional dado de baja se descarta);
+- la UI marca la limitación de forma explícita con una nota **«(pendiente)»**.
+
+Cuando en Salón OS se **pueble `professionals.user_id`** (con su FK e índice único), se
+podrá **autoseleccionar** el profesional del usuario y el selector pasará a ser opcional.
+
+### Manejo de solapes y tramos (modelo de 3 fases)
+
+Cada servicio se divide en hasta **3 tramos** —**aplicación**, **exposición** y
+**post-exposición**— que Salón OS materializa en `appointment_blocks` (una fila por
+tramo, con `phase` + `occupied_range`, la ventana en la que el profesional está ocupado).
+
+- **Los solapes son legítimos, no errores.** Durante la **exposición** el cliente espera
+  y el profesional puede atender otra cita, así que dos citas se **solapan** de forma
+  normal. La UI lo explica una vez por pantalla con `PhaseModelNote` (tono informativo,
+  `role="note"`, no de alerta) y desglosa los tramos de cada cita con `AppointmentPhases`.
+- **La disponibilidad la calcula el servidor, no el cliente.** La app **solo lee y pinta**
+  las ventanas `occupied_range` tal cual llegan; **jamás** deriva huecos libres/ocupados
+  ni recalcula solapes en cliente (ver el aviso `⛔ SIN DISPONIBILIDAD EN CLIENTE` en
+  `src/lib/appointments.ts` y `appointment-blocks.ts`).
+- **Es una mejora opcional y degradable.** Los tramos se piden aparte, solo para las citas
+  ya visibles (`appointment_id IN (...)` acotado por `salon_id`). Si el salón **no usa
+  tramos**, o si el parseo de un rango falla, la cita se muestra **tal cual** (sin
+  desglose); un fallo aquí **no rompe** la lista de citas.
+- El parseo de `occupied_range` (un `tstzrange` de Postgres) es defensivo: normaliza el
+  formato del rango a ISO 8601 y, ante cualquier duda (rango `empty`, límite infinito,
+  texto no reconocido), degrada a «sin ventana» en vez de a un error.
+
+### Crear y cancelar citas: fuera de alcance (fase posterior)
+
+**Crear y cancelar citas desde el staff quedan pendientes para una fase posterior**: en
+esta fase las pantallas son de **solo lectura**. La acción de crear aparece de forma
+**deliberadamente deshabilitada** (`AgendaReadOnlyNotice`: botón «Nueva cita» inactivo +
+nota «Crear o cancelar citas llegará en una próxima fase») para que la limitación sea
+**explícita** en lugar de dar a entender que la pantalla no la contempla. El alta y la
+edición del **personal** siguen viviendo en el panel de Salón OS (no se duplican aquí). El
+componente `ComingSoon` se conserva como placeholder genérico para funciones que aún no
+existen.
+
+> Cuando se aborde esa fase, crear una cita implicará (a) resolver el profesional por
+> **selector** (mientras `user_id` no esté poblado), y (b) escribir la cita **más** sus
+> `appointment_blocks` calculando los 3 tramos desde `services.application_min` /
+> `exposure_min` / `post_exposure_min` y el `starts_at`. Requerirá permisos de **escritura**
+> bajo RLS (hoy la app solo lee), no cubiertos en esta fase.
 
 ---
 
