@@ -71,6 +71,30 @@ async function loadSalon(admin: AdminClient, slug: string): Promise<SalonConfig>
   };
 }
 
+/**
+ * Carga un salón activo por su `id` o lanza BookingError 404. Hermano de
+ * {@link loadSalon} (que resuelve por `slug`): idéntica proyección y validación de
+ * `active`, pero acotando por la clave primaria. Lo usa la disponibilidad de
+ * RECEPCIÓN, que ya conoce el `salon_id` (viene de la clave `x-api-key`) y no un slug.
+ */
+async function loadSalonById(admin: AdminClient, salonId: string): Promise<SalonConfig> {
+  const { data, error } = await admin
+    .from("salons")
+    .select("id, timezone, settings, active")
+    .eq("id", salonId)
+    .maybeSingle();
+
+  if (error) throw new BookingError(500, "Error al cargar el salón.");
+  if (!data || !data.active) throw new BookingError(404, "Salón no encontrado.");
+
+  return {
+    id: data.id,
+    timezone: data.timezone,
+    slotIntervalMinutes: readSettingNumber(data.settings, "slot_interval_minutes", 15),
+    minLeadMinutes: readSettingNumber(data.settings, "min_lead_minutes", 0),
+  };
+}
+
 /** Límites UTC [inicio, fin) del día local del salón. */
 function dayBoundsUtc(date: string, timeZone: string): { startIso: string; endIso: string } {
   const start = zonedWallTimeToUtc(date, "00:00", timeZone);
@@ -262,15 +286,23 @@ async function slotsForProfessional(
   });
 }
 
-export async function getAvailability(
-  slug: string,
+/**
+ * NÚCLEO de disponibilidad, ya RESUELTO el salón. Lo COMPARTEN los dos puntos de
+ * entrada —{@link getAvailability} (por slug, reserva pública) y
+ * {@link getAvailabilityForSalon} (por id, recepción)—: ambos cargan las fases del
+ * servicio, resuelven los profesionales que lo prestan y generan los MISMOS huecos
+ * vía `slotsForProfessional` → `generateSlots`. Al ser una única función, el
+ * cálculo es idéntico en los dos flujos por construcción (no hay dos copias que
+ * puedan divergir), y todo queda ACOTADO por `salon.id` (aislamiento a mano, como
+ * exige el cliente admin que omite RLS).
+ */
+async function availabilityForSalonConfig(
+  admin: AdminClient,
+  salon: SalonConfig,
   serviceId: string,
   date: string,
   professionalId: string | undefined,
 ): Promise<PublicSlot[]> {
-  const admin = createAdminClient();
-  const salon = await loadSalon(admin, slug);
-
   const { data: service, error: serviceError } = await admin
     .from("services")
     .select("application_min, exposure_min, post_exposure_min, active")
@@ -310,6 +342,37 @@ export async function getAvailability(
     return (entry?.slots ?? []).map((s) => ({ ...s, professionalId }));
   }
   return mergeSlotsByProfessional(perProfessional);
+}
+
+export async function getAvailability(
+  slug: string,
+  serviceId: string,
+  date: string,
+  professionalId: string | undefined,
+): Promise<PublicSlot[]> {
+  const admin = createAdminClient();
+  const salon = await loadSalon(admin, slug);
+  return availabilityForSalonConfig(admin, salon, serviceId, date, professionalId);
+}
+
+/**
+ * Disponibilidad ACOTADA por `salonId` (no por slug). Es EXACTAMENTE el mismo motor
+ * que la reserva pública —resuelve el salón, carga las fases del servicio y genera
+ * los huecos con `generateSlots`— pero entra por el id del salón: el que la
+ * RECEPCIÓN (`GET /api/reception/availability`) obtiene de su clave de servicio
+ * (`x-api-key`), ya validada por el guard. Comparte `availabilityForSalonConfig`
+ * con {@link getAvailability}, así que devuelve los MISMOS huecos que vería la
+ * reserva pública para ese salón; no recalcula disponibilidad a mano.
+ */
+export async function getAvailabilityForSalon(
+  salonId: string,
+  serviceId: string,
+  date: string,
+  professionalId: string | undefined,
+): Promise<PublicSlot[]> {
+  const admin = createAdminClient();
+  const salon = await loadSalonById(admin, salonId);
+  return availabilityForSalonConfig(admin, salon, serviceId, date, professionalId);
 }
 
 // -----------------------------------------------------------------------------
