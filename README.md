@@ -19,6 +19,7 @@ Sistema de gestión integral para salones de belleza con soporte multi-sede.
 - [Autenticación](#autenticación)
 - [Verificación del teléfono del cliente (OTP)](#verificación-del-teléfono-del-cliente-otp)
 - [API pública de reservas](#api-pública-de-reservas)
+- [Recepcionista IA — API de recepción (`/api/reception`)](#recepcionista-ia--api-de-recepción-apireception)
 - [Productización: planes (add-ons) y white-label](#productización-planes-add-ons-y-white-label)
 - [Capa de pagos y facturación](#capa-de-pagos-y-facturación)
 - [Aviso de conformidad fiscal (Veri\*factu)](#aviso-de-conformidad-fiscal-veri-factu)
@@ -126,6 +127,7 @@ El esquema se gestiona con migraciones SQL en `supabase/migrations/`. Se aplican
 | `20260719100000_rls_self_appointments.sql` | **Acceso del cliente:** RLS **SELF** de solo lectura para que la cuenta enlazada lea **sus** citas |
 | `20260719110000_salon_security_settings.sql` | **Válvula de seguridad (OTP):** tabla `salon_security_settings` + interruptor `require_phone_verification` (secure by default, fail-closed) + gate `app.salon_requires_phone_verification()` — ver [Verificación del teléfono](#verificación-del-teléfono-del-cliente-otp) |
 | `20260719120000_rpc_register_phone_verification_gate.sql` | **Enforcement OTP:** `register_my_customer_account` exige el teléfono **confirmado** de la cuenta (`auth.users.phone_confirmed_at`) cuando el salón lo requiere → `PHONE_NOT_VERIFIED` |
+| `20260722100000_service_api_keys.sql` | **Recepcionista IA (auth no-humana):** tabla `service_api_keys` (clave de API por salón) — guarda solo el **hash SHA-256** (`key_hash`) y un prefijo no secreto; **RLS deny-by-default sin políticas** + `REVOKE` a anon/authenticated (tabla de secretos, solo `service_role`). Ver [API de recepción](#recepcionista-ia--api-de-recepción-apireception) |
 
 ### Regenerar tipos TypeScript
 
@@ -349,6 +351,95 @@ ausencia de fila también exige verificación** (el gate resuelve a "exigir" sal
 | `POST` | `/api/public/booking/[slug]` | Crea una reserva (estado `pending`) |
 
 La API valida con Zod y usa el cliente admin de Supabase con validaciones de dominio explícitas (salón, servicio y profesional deben pertenecer al mismo tenant).
+
+---
+
+## Recepcionista IA — API de recepción (`/api/reception`)
+
+El add-on **Recepcionista IA** (Retell + Twilio + n8n) atiende llamadas y opera sobre la agenda
+del salón. Salón OS aporta la **mitad de servidor**: una API HTTP máquina-a-máquina bajo
+`/api/reception` que reutiliza el **mismo motor de reservas** que la web pública (misma BD, misma
+agenda, un cliente = una ficha por teléfono). El **agente de voz, el número de teléfono y los
+flujos de orquestación** son **configuración externa** (ver [PARTE 1 vs PARTE 2](#parte-1-este-repo-vs-parte-2-configuración-externa)).
+
+> 📖 **Contrato completo para configurar n8n** (los 5 endpoints con request/response, códigos de
+> error y ejemplos): **[`docs/reception-api-contract.md`](./docs/reception-api-contract.md)**.
+
+### Autenticación no-humana: claves de servicio (`service_api_keys`)
+
+Las peticiones no traen sesión de usuario: se autentican con una **clave de servicio** por
+cabecera `x-api-key: sk_recep_…`. Cada clave **identifica al salón** en cuyo nombre actúa la
+integración; todo lo que el endpoint lee/escribe se **acota a ese salón**.
+
+- **Solo HAT3X emite claves** (con `service_role`); el salón **nunca** se autogenera una. No hay
+  ninguna Server Action ni Route Handler que un usuario del salón pueda invocar para emitir:
+  ausencia de superficie self-service = imposibilidad de autoemisión.
+- La base de datos guarda **únicamente el hash SHA-256** de la clave (`key_hash`) y un prefijo
+  corto no secreto (`key_prefix`); **jamás la clave en claro**. La clave completa se muestra
+  **una sola vez** al emitirla. Si se pierde, se **revoca** (`is_active = false`) y se emite otra.
+- La tabla `public.service_api_keys` es de **secretos**: **RLS deny-by-default sin políticas** y
+  privilegios **revocados** a `anon`/`authenticated` — ni el owner del salón la lee. Solo el
+  backend de HAT3X (`service_role`) la opera.
+
+> 📖 **Runbook de emisión, entrega segura, rotación y revocación:**
+> **[`docs/service-keys-emision.md`](./docs/service-keys-emision.md)**. Piezas de código:
+> [`src/lib/service-keys/`](./src/lib/service-keys/) · migración
+> [`20260722100000_service_api_keys.sql`](./supabase/migrations/20260722100000_service_api_keys.sql).
+
+### Gating por el add-on `ai_receptionist`
+
+`/api/reception` es un **módulo contratable**: solo funciona para salones con el add-on
+`ai_receptionist` **activo** (mismo modelo de entitlements que el resto de la
+[productización](#productización-planes-add-ons-y-white-label)). El **guard común**
+(`withReceptionGuard`) resuelve cada petición en dos pasos, en orden:
+
+1. **Autenticación** — `x-api-key → salón`. Clave ausente, con formato ajeno, desconocida o
+   revocada ⇒ **`401 UNAUTHORIZED`**.
+2. **Entitlement** — el salón debe tener `ai_receptionist` (fila en `salon_features` con
+   `enabled = true`) ⇒ si no, **`403 FEATURE_NOT_ENABLED`**. Espeja el gate SQL
+   `app.salon_has_feature(salon_id, 'ai_receptionist')`.
+
+Activarlo es un upsert con `service_role` (como cualquier add-on):
+
+```sql
+insert into public.salon_features (salon_id, feature, enabled, notes)
+values ('<SALON_UUID>', 'ai_receptionist', true, 'plan Recepcionista IA')
+on conflict (salon_id, feature) do update set enabled = excluded.enabled, notes = excluded.notes;
+```
+
+### Endpoints
+
+Todos exigen `x-api-key`, aplican el add-on `ai_receptionist` y responden con `Cache-Control:
+no-store`. Detalle de cada contrato en [`docs/reception-api-contract.md`](./docs/reception-api-contract.md).
+
+| Método | Endpoint | Qué hace |
+|---|---|---|
+| `POST` | `/api/reception/identify` | Reconoce al cliente por su teléfono; devuelve su ficha (mínima) y próximas citas. |
+| `GET`  | `/api/reception/availability` | Huecos reservables (mismo motor que la reserva pública). |
+| `POST` | `/api/reception/appointments` | Crea una cita (dedup de ficha por teléfono). |
+| `POST` | `/api/reception/appointments/cancel` | Cancela una cita **del propio cliente** (control de pertenencia). |
+| `POST` | `/api/reception/appointments/reschedule` | Mueve una cita **del propio cliente** a otro hueco/profesional. |
+
+Los errores hablan un **contrato compartido** de códigos estables (`UNAUTHORIZED`,
+`FEATURE_NOT_ENABLED`, `NO_AVAILABILITY`, `SLOT_TAKEN`, `APPOINTMENT_NOT_FOUND`,
+`NOT_YOUR_APPOINTMENT`, `VALIDATION_ERROR`, `INTERNAL_ERROR`) — ver
+[`src/lib/reception/CONTRACT.md`](./src/lib/reception/CONTRACT.md).
+
+### PARTE 1 (este repo) vs PARTE 2 (configuración externa)
+
+Este repositorio construye **PARTE 1** (la API, las claves y el gating). El resto es
+**configuración externa y pasos humanos** (**PARTE 2**), fuera del código:
+
+| PARTE 1 — este repo (✅ construido) | PARTE 2 — configuración externa (⚙️ pasos humanos) |
+|---|---|
+| Endpoints `/api/reception`, contrato de errores | **Agente de Retell** (voz + prompt) |
+| Claves de servicio `service_api_keys` (emisión/verificación) | **Número de Twilio** que recibe las llamadas |
+| Gating por `ai_receptionist` | **Workflows de n8n** reapuntados a estos endpoints con la `x-api-key` |
+
+> El **único acoplamiento** entre ambas mitades son estos endpoints y la clave: Salón OS **no**
+> habla con Retell/Twilio ni despliega n8n; PARTE 2 se conecta llamando a esta API. La secuencia
+> de puesta en marcha (activar el add-on → emitir la clave → configurar Twilio/Retell/n8n →
+> prueba de humo) está en [`docs/reception-api-contract.md` §6](./docs/reception-api-contract.md#6-montar-el-recepcionista-ia-parte-2--pasos-humanos).
 
 ---
 
