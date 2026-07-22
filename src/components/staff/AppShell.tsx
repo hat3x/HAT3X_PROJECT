@@ -58,10 +58,10 @@ import { Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function EmployeeBottomNav() {
-  // "Mi Calendario" is out of scope in the Salón OS build (disabled screen),
-  // so this nav only exposes in-scope destinations.
+  // "Mi agenda" (agenda del profesional) ya está en alcance de Salón OS (sub-3) y se enlaza aquí.
   const items = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
+    { to: '/employee/calendar', icon: CalendarDays, label: 'Agenda' },
     { to: '/employee/settings', icon: Settings, label: 'Ajustes' },
   ];
 
@@ -84,7 +84,7 @@ function EmployeeBottomNav() {
 }
 
 // Admin bottom nav
-import { LayoutDashboard, Users, ScanLine, Clock } from 'lucide-react';
+import { LayoutDashboard, Users, ScanLine, Clock, CalendarDays } from 'lucide-react';
 
 function AdminBottomNav() {
   // Employee management (/admin/employees) is out of scope in the Salón OS

@@ -1,15 +1,15 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ScanLine, Users, Clock, Settings } from 'lucide-react';
+import { LayoutDashboard, ScanLine, Users, CalendarDays, Clock, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function BottomNav() {
-  // The employee-calendar ("Mi Ficha") and employee-management ("Empleados")
-  // screens are out of scope in the Salón OS build, so the nav links only to
-  // in-scope destinations for every staff role.
+  // "Mi agenda" (agenda del profesional) ya está en alcance de Salón OS (sub-3) y se enlaza
+  // aquí. La antigua gestión de empleados ("Empleados") sigue fuera de alcance y no se enlaza.
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
     { to: '/scan', icon: ScanLine, label: 'Escanear' },
     { to: '/customers', icon: Users, label: 'Clientes' },
+    { to: '/employee/calendar', icon: CalendarDays, label: 'Agenda' },
     { to: '/history', icon: Clock, label: 'Historial' },
     { to: '/settings', icon: Settings, label: 'Ajustes' },
   ];
