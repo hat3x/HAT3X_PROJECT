@@ -223,9 +223,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 // Bajo el mock: las funciones de dominio de recepción (sin `deps`) y el motor de reservas
 // resuelven `createAdminClient()` al almacén con estado. Se importan DESPUÉS del mock.
-import {
-  handleReceptionCreateAppointment,
-} from "@/app/api/reception/appointments/route";
+import { handleReceptionCreateAppointment } from "@/app/api/reception/appointments/handler";
 import { identifyCustomer } from "@/lib/reception/identify";
 import { cancelAppointment, RECEPTION_CANCELLED_REASON } from "@/lib/reception/cancel";
 import { rescheduleAppointment } from "@/lib/reception/reschedule";

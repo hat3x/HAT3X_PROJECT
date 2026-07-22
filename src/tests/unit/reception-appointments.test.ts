@@ -28,10 +28,8 @@ vi.mock("@/lib/booking/server", async (importOriginal) => {
   return { ...actual, createBookingForSalon: vi.fn() };
 });
 
-import {
-  POST,
-  handleReceptionCreateAppointment,
-} from "@/app/api/reception/appointments/route";
+import { handleReceptionCreateAppointment } from "@/app/api/reception/appointments/handler";
+import { POST } from "@/app/api/reception/appointments/route";
 import { BookingError, createBookingForSalon } from "@/lib/booking/server";
 import type { BookingConfirmation } from "@/lib/booking/types";
 import { ReceptionError } from "@/lib/reception/errors";

@@ -25,10 +25,8 @@ vi.mock("@/lib/booking/server", async (importOriginal) => {
   return { ...actual, getAvailabilityForSalon: vi.fn() };
 });
 
-import {
-  GET,
-  handleReceptionAvailability,
-} from "@/app/api/reception/availability/route";
+import { handleReceptionAvailability } from "@/app/api/reception/availability/handler";
+import { GET } from "@/app/api/reception/availability/route";
 import { BookingError, getAvailabilityForSalon } from "@/lib/booking/server";
 import { ReceptionError } from "@/lib/reception/errors";
 import type { PublicSlot } from "@/lib/booking/types";
