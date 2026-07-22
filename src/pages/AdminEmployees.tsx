@@ -17,6 +17,7 @@ import { initials, readableTextColor, type ProfessionalListItem } from '@/lib/pr
 import { LoadingState } from '@/components/staff/LoadingState';
 import { ErrorState } from '@/components/staff/ErrorState';
 import { EmptyState } from '@/components/staff/EmptyState';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { Badge } from '@/components/ui/badge';
 
 /** Avatar de iniciales. Usa el `color` del profesional con texto de contraste legible; si no
@@ -87,9 +88,22 @@ function ProfessionalCard({ professional }: { professional: ProfessionalListItem
 }
 
 export default function AdminEmployees() {
-  const { data, isLoading, isError, refetch } = useProfessionals();
+  const { data, isLoading, isError, error, refetch } = useProfessionals();
   const professionals = data ?? [];
   const activeCount = professionals.filter((p) => p.active).length;
+
+  // Resumen del estado actual para lectores de pantalla. Región viva SIEMPRE presente (no se
+  // monta/desmonta): así el cambio carga → datos/vacío/error se anuncia de forma fiable y la
+  // pantalla nunca queda «en blanco» en silencio para quien no ve el contenido visual.
+  const statusMessage = isLoading
+    ? 'Cargando el personal del salón.'
+    : isError
+      ? 'No se pudo cargar el personal.'
+      : professionals.length === 0
+        ? 'No hay personal en este salón.'
+        : `${professionals.length} ${
+            professionals.length === 1 ? 'profesional' : 'profesionales'
+          }, ${activeCount} ${activeCount === 1 ? 'activo' : 'activos'}.`;
 
   return (
     <div className="px-4 pt-6">
@@ -106,12 +120,18 @@ export default function AdminEmployees() {
         El alta y la edición del personal se gestionan en el panel de Salón OS.
       </p>
 
+      <p className="sr-only" role="status" aria-live="polite">
+        {statusMessage}
+      </p>
+
       {isLoading ? (
         <LoadingState message="Cargando empleados..." />
       ) : isError ? (
         <ErrorState
           title="No se pudo cargar el personal"
-          message="Revisa tu conexión e inténtalo de nuevo."
+          message={friendlyErrorMessage(error, {
+            fallback: 'No se pudo cargar el personal. Revisa tu conexión e inténtalo de nuevo.',
+          })}
           onRetry={() => refetch()}
         />
       ) : professionals.length === 0 ? (
