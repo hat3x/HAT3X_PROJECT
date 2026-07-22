@@ -5,12 +5,19 @@
  * de Next (`./http`). Los Route Handlers importan desde aquí:
  *
  * ```ts
- * import { ReceptionError, receptionErrorResponse, receptionJson } from "@/lib/reception";
+ * import {
+ *   ReceptionError,
+ *   receptionErrorResponse,
+ *   receptionJson,
+ *   withReceptionGuard,
+ * } from "@/lib/reception";
  * ```
  *
- * AVISO: al reexportar `./http` este barrel arrastra `next/server`. En módulos que
- * NO son Route Handlers y solo necesiten el contrato puro (tests, Server Actions,
- * lógica de dominio), importa directamente de `@/lib/reception/errors`.
+ * AVISO: al reexportar `./http` y `./guard` este barrel arrastra `next/server` (y el
+ * guard, además, el cliente admin y las capas de service-keys/entitlements). En
+ * módulos que NO son Route Handlers y solo necesiten el contrato puro (tests, Server
+ * Actions, lógica de dominio), importa directamente de `@/lib/reception/errors`.
  */
 export * from "@/lib/reception/errors";
 export * from "@/lib/reception/http";
+export * from "@/lib/reception/guard";
