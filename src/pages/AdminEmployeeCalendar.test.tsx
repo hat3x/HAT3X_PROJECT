@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { UseQueryResult } from '@tanstack/react-query';
@@ -15,13 +15,19 @@ vi.mock('@/lib/auth', async (importOriginal) => {
 // sin red ni Supabase. El componente solo consume useDayAppointments de este módulo.
 vi.mock('@/hooks/use-appointments', () => ({ useDayAppointments: vi.fn() }));
 
+// Tramos (fases) de las citas: se mockean para controlar el desglose sin red (sub-7).
+vi.mock('@/hooks/use-appointment-blocks', () => ({ useAppointmentBlocks: vi.fn() }));
+
 import { useAuth } from '@/lib/auth';
 import { useDayAppointments } from '@/hooks/use-appointments';
+import { useAppointmentBlocks } from '@/hooks/use-appointment-blocks';
 import type { AppointmentListItem } from '@/lib/appointments';
+import type { AppointmentBlock } from '@/lib/appointment-blocks';
 import AdminEmployeeCalendar from './AdminEmployeeCalendar';
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseDay = vi.mocked(useDayAppointments);
+const mockedUseBlocks = vi.mocked(useAppointmentBlocks);
 const FAKE_USER = { id: 'user-1' } as unknown as User;
 
 function setAuth(overrides: Partial<ReturnType<typeof useAuth>>) {
@@ -63,6 +69,30 @@ function setQuery(overrides: Partial<UseQueryResult<AppointmentListItem[], Error
   } as unknown as UseQueryResult<AppointmentListItem[], Error>);
 }
 
+/** Resultado del hook de tramos (por defecto: sin tramos ⇒ la cita se muestra tal cual). */
+function setBlocks(blocks: AppointmentBlock[] = []) {
+  mockedUseBlocks.mockReturnValue({
+    data: blocks,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  } as unknown as UseQueryResult<AppointmentBlock[], Error>);
+}
+
+function makeBlock(overrides: Partial<AppointmentBlock> = {}): AppointmentBlock {
+  return {
+    id: 'blk-1',
+    salonId: 'salon-1',
+    appointmentId: 'apt-1',
+    professionalId: 'prof-1',
+    phase: 'application',
+    phaseKey: 'application',
+    phaseLabel: 'Aplicación',
+    occupied: { startsAt: '2026-07-22T09:00:00.000Z', endsAt: '2026-07-22T09:15:00.000Z' },
+    ...overrides,
+  };
+}
+
 function makeItem(overrides: Partial<AppointmentListItem> = {}): AppointmentListItem {
   return {
     id: 'apt-1',
@@ -90,6 +120,11 @@ function renderPage() {
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  // Por defecto no hay tramos: las pruebas que los necesiten sobrescriben el mock con setBlocks.
+  setBlocks();
+});
 
 afterEach(() => {
   cleanup();
@@ -233,5 +268,80 @@ describe('AdminEmployeeCalendar — navegación por día', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /día siguiente/i }));
     expect(screen.getByRole('button', { name: /volver a hoy/i })).toBeInTheDocument();
+  });
+});
+
+describe('AdminEmployeeCalendar — modelo de 3 fases (sub-7)', () => {
+  it('desglosa los tramos ocupados de la cita y explica que los solapes son normales', () => {
+    asOwner();
+    setQuery({ data: [makeItem({ id: 'apt-1', professionalId: 'prof-1' })] });
+    setBlocks([
+      makeBlock({ id: 'b-app', phase: 'application', phaseKey: 'application', phaseLabel: 'Aplicación' }),
+      makeBlock({
+        id: 'b-exp',
+        phase: 'exposure',
+        phaseKey: 'exposure',
+        phaseLabel: 'Exposición',
+        occupied: { startsAt: '2026-07-22T09:15:00.000Z', endsAt: '2026-07-22T09:45:00.000Z' },
+      }),
+      makeBlock({
+        id: 'b-post',
+        phase: 'post_exposure',
+        phaseKey: 'post_exposure',
+        phaseLabel: 'Post-exposición',
+        occupied: { startsAt: '2026-07-22T09:45:00.000Z', endsAt: '2026-07-22T10:00:00.000Z' },
+      }),
+    ]);
+    renderPage();
+
+    // Cada fase se pinta con su etiqueta de texto (no solo color).
+    expect(screen.getByText('Aplicación')).toBeInTheDocument();
+    expect(screen.getByText('Exposición')).toBeInTheDocument();
+    expect(screen.getByText('Post-exposición')).toBeInTheDocument();
+    // La nota del modelo aclara que un solape NO es un error.
+    expect(screen.getByRole('note')).toHaveTextContent(/no es un error/i);
+  });
+
+  it('sin appointment_blocks muestra la cita tal cual, sin nota ni desglose', () => {
+    asOwner();
+    setQuery({ data: [makeItem({ id: 'apt-1', customer: { fullName: 'Ada Lovelace', phone: null } })] });
+    // setBlocks() del beforeEach ya deja la lista de tramos vacía.
+    renderPage();
+
+    expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+    expect(screen.queryByText('Aplicación')).toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
+  it('muestra citas solapadas del mismo profesional sin ocultarlas ni marcarlas como error', () => {
+    asOwner();
+    setQuery({
+      data: [
+        makeItem({
+          id: 'a',
+          professionalId: 'prof-1',
+          professional: { id: 'prof-1', fullName: 'Ana', color: null },
+          customer: { fullName: 'Ada Lovelace', phone: null },
+          startsAt: '2026-07-22T09:00:00.000Z',
+          endsAt: '2026-07-22T10:00:00.000Z',
+        }),
+        makeItem({
+          id: 'b',
+          professionalId: 'prof-1',
+          professional: { id: 'prof-1', fullName: 'Ana', color: null },
+          customer: { fullName: 'Alan Turing', phone: null },
+          startsAt: '2026-07-22T09:20:00.000Z',
+          endsAt: '2026-07-22T09:50:00.000Z',
+        }),
+      ],
+    });
+    renderPage();
+
+    // Las dos citas solapadas conviven en la sección del profesional; ninguna se oculta.
+    const anaSection = screen.getByRole('region', { name: 'Ana' });
+    expect(within(anaSection).getByText('Ada Lovelace')).toBeInTheDocument();
+    expect(within(anaSection).getByText('Alan Turing')).toBeInTheDocument();
+    // El solape no genera ninguna alerta de error.
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

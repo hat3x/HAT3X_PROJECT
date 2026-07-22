@@ -16,6 +16,8 @@ import {
 import { useSalonId } from '@/lib/salon-context';
 import { DEFAULT_WEEK_STARTS_ON, type AppointmentListItem } from '@/lib/appointments';
 import { useDayAppointments, useWeekAppointments } from '@/hooks/use-appointments';
+import { useAppointmentBlocks } from '@/hooks/use-appointment-blocks';
+import { groupBlocksByAppointment, type AppointmentBlock } from '@/lib/appointment-blocks';
 import { fetchProfessionals } from '@/lib/professionals-queries';
 import type { ProfessionalListItem } from '@/lib/professionals';
 import {
@@ -28,7 +30,9 @@ import {
 import { LoadingState } from '@/components/staff/LoadingState';
 import { ErrorState } from '@/components/staff/ErrorState';
 import { EmptyState } from '@/components/staff/EmptyState';
+import { AppointmentPhases, PhaseModelNote } from '@/components/staff/AppointmentPhases';
 import { AgendaReadOnlyNotice } from '@/components/staff/AgendaReadOnlyNotice';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -54,6 +58,7 @@ type AgendaView = 'day' | 'week';
 // recomputar memos / disparar efectos sin necesidad).
 const EMPTY_PROFESSIONALS: ProfessionalListItem[] = [];
 const EMPTY_APPOINTMENTS: AppointmentListItem[] = [];
+const EMPTY_BLOCKS: AppointmentBlock[] = [];
 
 // Recuerda el profesional elegido por salón (no hay autovínculo, así se evita repetir la
 // selección en cada visita). Namespaced por salon_id; degrada en silencio si no hay storage.
@@ -127,6 +132,19 @@ export default function EmployeeCalendar() {
   const agenda = view === 'day' ? dayQuery : weekQuery;
   const appointments = agenda.data ?? EMPTY_APPOINTMENTS;
   const weekGroups = useMemo(() => groupByLocalDay(appointments), [appointments]);
+
+  // Tramos (fases) de las citas visibles, para pintar las ventanas realmente ocupadas
+  // (`appointment_blocks`). Es una mejora OPCIONAL: si el salón no usa tramos, el mapa queda
+  // vacío y la agenda muestra las citas tal cual. Un fallo aquí NO rompe la lista (query aparte).
+  const appointmentIds = useMemo(() => appointments.map((a) => a.id), [appointments]);
+  const blocksQuery = useAppointmentBlocks(appointmentIds, {
+    enabled: hasProfessional && appointmentIds.length > 0,
+  });
+  const blocksByAppointment = useMemo(
+    () => groupBlocksByAppointment(blocksQuery.data ?? EMPTY_BLOCKS),
+    [blocksQuery.data],
+  );
+  const hasPhaseData = blocksByAppointment.size > 0;
 
   const now = new Date();
   const isCurrentPeriod =
@@ -263,7 +281,9 @@ export default function EmployeeCalendar() {
           ) : professionalsQuery.isError ? (
             <ErrorState
               title="No se pudo cargar el personal"
-              message={professionalsQuery.error?.message}
+              message={friendlyErrorMessage(professionalsQuery.error, {
+                fallback: 'No se pudo cargar el personal. Vuelve a intentarlo.',
+              })}
               onRetry={() => void professionalsQuery.refetch()}
             />
           ) : professionals.length === 0 ? (
@@ -284,7 +304,9 @@ export default function EmployeeCalendar() {
         ) : agenda.isError ? (
           <ErrorState
             title="No se pudo cargar la agenda"
-            message={agenda.error?.message}
+            message={friendlyErrorMessage(agenda.error, {
+              fallback: 'No se pudo cargar la agenda. Vuelve a intentarlo.',
+            })}
             onRetry={() => void agenda.refetch()}
           />
         ) : appointments.length === 0 ? (
@@ -302,8 +324,14 @@ export default function EmployeeCalendar() {
             <p className="mb-3 text-xs text-muted-foreground">
               {appointments.length} {appointments.length === 1 ? 'cita' : 'citas'}
             </p>
+            {/* Explica el modelo de tramos y que los solapes son normales (solo si hay tramos). */}
+            {hasPhaseData && <PhaseModelNote />}
             {view === 'day' ? (
-              <AgendaList appointments={appointments} accentColor={accentColor} />
+              <AgendaList
+                appointments={appointments}
+                accentColor={accentColor}
+                blocksByAppointment={blocksByAppointment}
+              />
             ) : (
               <div className="space-y-6">
                 {weekGroups.map((group) => (
@@ -311,7 +339,11 @@ export default function EmployeeCalendar() {
                     <h2 className="mb-2 text-sm font-semibold text-foreground">
                       {formatDayHeading(group.date)}
                     </h2>
-                    <AgendaList appointments={group.appointments} accentColor={accentColor} />
+                    <AgendaList
+                      appointments={group.appointments}
+                      accentColor={accentColor}
+                      blocksByAppointment={blocksByAppointment}
+                    />
                   </section>
                 ))}
               </div>
@@ -327,14 +359,21 @@ export default function EmployeeCalendar() {
 function AgendaList({
   appointments,
   accentColor,
+  blocksByAppointment,
 }: {
   appointments: AppointmentListItem[];
   accentColor: string | null;
+  blocksByAppointment: Map<string, AppointmentBlock[]>;
 }) {
   return (
     <ul className="space-y-2">
       {appointments.map((appointment) => (
-        <AgendaRow key={appointment.id} appointment={appointment} accentColor={accentColor} />
+        <AgendaRow
+          key={appointment.id}
+          appointment={appointment}
+          accentColor={accentColor}
+          blocks={blocksByAppointment.get(appointment.id) ?? EMPTY_BLOCKS}
+        />
       ))}
     </ul>
   );
@@ -344,9 +383,11 @@ function AgendaList({
 function AgendaRow({
   appointment,
   accentColor,
+  blocks,
 }: {
   appointment: AppointmentListItem;
   accentColor: string | null;
+  blocks: AppointmentBlock[];
 }) {
   const meta = statusMeta(appointment.status);
   // Prioriza el color embebido de la cita; si no llegó, cae al del profesional seleccionado.
@@ -387,6 +428,9 @@ function AgendaRow({
             <Scissors className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
             <span className="truncate">{appointment.service?.name ?? 'Servicio'}</span>
           </p>
+
+          {/* Desglose de tramos ocupados (aplicación/exposición/post) si la cita los tiene. */}
+          <AppointmentPhases blocks={blocks} />
         </div>
 
         <Badge variant={meta.variant} className="flex-shrink-0">

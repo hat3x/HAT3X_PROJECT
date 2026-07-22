@@ -7,10 +7,14 @@ import { LoadingState } from '@/components/staff/LoadingState';
 import { ErrorState } from '@/components/staff/ErrorState';
 import { EmptyState } from '@/components/staff/EmptyState';
 import { AgendaReadOnlyNotice } from '@/components/staff/AgendaReadOnlyNotice';
+import { AppointmentPhases, PhaseModelNote } from '@/components/staff/AppointmentPhases';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { Button } from '@/components/ui/button';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useDayAppointments } from '@/hooks/use-appointments';
+import { useAppointmentBlocks } from '@/hooks/use-appointment-blocks';
+import { groupBlocksByAppointment, type AppointmentBlock } from '@/lib/appointment-blocks';
 import type { AppointmentListItem, AppointmentStatus } from '@/lib/appointments';
 import {
   APPOINTMENT_STATUS_LABELS,
@@ -45,6 +49,9 @@ const STATUS_BADGE_VARIANT: Record<AppointmentStatus, BadgeVariant> = {
 // Estados que "no ocurren": se atenúan para que no compitan visualmente con las citas vivas.
 const INACTIVE_STATUSES: ReadonlySet<AppointmentStatus> = new Set(['cancelled', 'no_show']);
 
+// Identidad estable para el fallback "sin tramos" (evita recrear el array en cada render).
+const EMPTY_BLOCKS: AppointmentBlock[] = [];
+
 function capitalize(text: string): string {
   return text.length > 0 ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
@@ -74,11 +81,24 @@ function AdminEmployeeCalendarView() {
 
   // Reutiliza la capa de datos (sub-2): una sola consulta acotada por salon_id + rango del
   // día, con cliente/servicio/profesional embebidos (sin N+1).
-  const { data, isLoading, isError, isFetching, refetch } = useDayAppointments(day);
+  const { data, isLoading, isError, isFetching, error, refetch } = useDayAppointments(day);
 
   const groups = useMemo(() => groupAppointmentsByProfessional(data ?? []), [data]);
   const total = countAppointments(groups);
   const professionalCount = groups.length;
+
+  // Tramos (fases) de las citas del día para pintar las ventanas realmente ocupadas
+  // (`appointment_blocks`). Mejora OPCIONAL: sin tramos el mapa queda vacío y cada cita se muestra
+  // tal cual. Consulta aparte: un fallo aquí no rompe la agenda del salón.
+  const appointmentIds = useMemo(() => (data ?? []).map((a) => a.id), [data]);
+  const blocksQuery = useAppointmentBlocks(appointmentIds, {
+    enabled: appointmentIds.length > 0,
+  });
+  const blocksByAppointment = useMemo(
+    () => groupBlocksByAppointment(blocksQuery.data ?? EMPTY_BLOCKS),
+    [blocksQuery.data],
+  );
+  const hasPhaseData = blocksByAppointment.size > 0;
 
   const goToPreviousDay = () => setDay((d) => startOfDay(addDays(d, -1)));
   const goToNextDay = () => setDay((d) => startOfDay(addDays(d, 1)));
@@ -146,7 +166,9 @@ function AdminEmployeeCalendarView() {
       ) : isError ? (
         <ErrorState
           title="No se pudo cargar la agenda"
-          message="Hubo un problema al obtener las citas del salón."
+          message={friendlyErrorMessage(error, {
+            fallback: 'No se pudieron cargar las citas del salón. Vuelve a intentarlo.',
+          })}
           onRetry={() => void refetch()}
         />
       ) : total === 0 ? (
@@ -165,8 +187,15 @@ function AdminEmployeeCalendarView() {
             {countsLabel}
           </p>
 
+          {/* Explica el modelo de tramos y que los solapes son normales (solo si hay tramos). */}
+          {hasPhaseData && <PhaseModelNote />}
+
           {groups.map((group) => (
-            <ProfessionalSection key={group.professionalId} group={group} />
+            <ProfessionalSection
+              key={group.professionalId}
+              group={group}
+              blocksByAppointment={blocksByAppointment}
+            />
           ))}
         </div>
       )}
@@ -175,7 +204,13 @@ function AdminEmployeeCalendarView() {
 }
 
 /** Sección de un profesional: cabecera con su color de marca + su lista de citas del día. */
-function ProfessionalSection({ group }: { group: ProfessionalGroup }) {
+function ProfessionalSection({
+  group,
+  blocksByAppointment,
+}: {
+  group: ProfessionalGroup;
+  blocksByAppointment: Map<string, AppointmentBlock[]>;
+}) {
   const name = professionalDisplayName(group);
   const color = group.professional?.color ?? null;
   const count = group.appointments.length;
@@ -205,7 +240,10 @@ function ProfessionalSection({ group }: { group: ProfessionalGroup }) {
       >
         {group.appointments.map((appointment) => (
           <li key={appointment.id}>
-            <AppointmentCard appointment={appointment} />
+            <AppointmentCard
+              appointment={appointment}
+              blocks={blocksByAppointment.get(appointment.id) ?? EMPTY_BLOCKS}
+            />
           </li>
         ))}
       </ul>
@@ -214,7 +252,13 @@ function ProfessionalSection({ group }: { group: ProfessionalGroup }) {
 }
 
 /** Tarjeta de una cita: franja horaria, cliente, servicio y estado (badge con texto). */
-function AppointmentCard({ appointment }: { appointment: AppointmentListItem }) {
+function AppointmentCard({
+  appointment,
+  blocks,
+}: {
+  appointment: AppointmentListItem;
+  blocks: AppointmentBlock[];
+}) {
   const inactive = INACTIVE_STATUSES.has(appointment.status);
   const customerName = appointment.customer?.fullName ?? 'Cliente';
   const serviceName = appointment.service?.name ?? 'Servicio';
@@ -234,6 +278,9 @@ function AppointmentCard({ appointment }: { appointment: AppointmentListItem }) 
           </p>
           <p className="truncate text-sm text-foreground">{customerName}</p>
           <p className="truncate text-xs text-muted-foreground">{serviceName}</p>
+
+          {/* Desglose de tramos ocupados (aplicación/exposición/post) si la cita los tiene. */}
+          <AppointmentPhases blocks={blocks} />
         </div>
         <Badge variant={STATUS_BADGE_VARIANT[appointment.status]} className="shrink-0">
           {APPOINTMENT_STATUS_LABELS[appointment.status]}
