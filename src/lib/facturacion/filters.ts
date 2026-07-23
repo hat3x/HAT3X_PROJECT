@@ -22,6 +22,9 @@ import {
   INVOICE_TYPE_CODE,
   PAYMENT_METHOD_LABEL,
 } from "@/lib/facturacion/rows";
+// Solo el TIPO (erasado en compilación): filters.ts es apto para cliente y no debe
+// arrastrar el serializador de exportación al bundle.
+import type { ExportFormat } from "@/lib/invoicing/export";
 import { isIsoDate } from "@/lib/metrics/range";
 import type { PosInvoiceType, PosPaymentMethod } from "@/types/database";
 
@@ -188,4 +191,57 @@ export function invoiceFiltersToSearchParams(
   if (filters.paymentMethod !== null) params.set(METHOD_PARAM, filters.paymentMethod);
   if (filters.search !== null) params.set(SEARCH_PARAM, filters.search);
   return params;
+}
+
+// ── Exportación fiscal (libro registro AEAT / gestoría) ─────────────────────────
+//
+// La descarga reutiliza `GET /api/facturacion/export`, que SOLO acota por periodo
+// (y opcionalmente serie). Es deliberado: el libro registro que se entrega a la
+// gestoría debe ser COMPLETO para el periodo — no puede omitir facturas porque la
+// vista esté filtrada por sede, tipo, método o búsqueda. Esos filtros ordenan y
+// acotan la TABLA en pantalla, no el documento fiscal. La UI lo deja claro.
+
+/** Ruta del Route Handler que sirve el libro registro descargable. */
+export const INVOICE_EXPORT_PATH = "/api/facturacion/export";
+
+/**
+ * Nombres de los parámetros de la EXPORTACIÓN. Ojo: difieren de los de la tabla —
+ * el Route Handler lee `from`/`to`/`format` (no `desde`/`hasta`). Se nombran aquí
+ * para que el mapeo periodo-de-la-vista → periodo-de-la-descarga sea explícito.
+ */
+const EXPORT_FROM_PARAM = "from";
+const EXPORT_TO_PARAM = "to";
+const EXPORT_FORMAT_PARAM = "format";
+
+/**
+ * ¿Hay filtros activos que NO acotan la exportación fiscal? (sede, tipo, método o
+ * búsqueda). Sirve para avisar en la UI de que la descarga cubrirá TODO el periodo,
+ * no solo lo que se ve filtrado en la tabla. El rango de fechas se excluye porque sí
+ * viaja a la exportación.
+ */
+export function hasNonPeriodInvoiceFilters(filters: InvoiceFilters): boolean {
+  return (
+    filters.locationId !== null ||
+    filters.invoiceType !== null ||
+    filters.paymentMethod !== null ||
+    filters.search !== null
+  );
+}
+
+/**
+ * URL de descarga del libro registro para el periodo dado, reutilizando el Route
+ * Handler de exportación. Solo viajan el PERIODO (`from`/`to`, si están) y el
+ * `format`; se omiten los parámetros vacíos para no ensuciar la URL. Sin `from`/`to`
+ * la descarga es el libro completo (todo el histórico) en ese formato.
+ */
+export function invoiceExportHref(
+  from: string | null,
+  to: string | null,
+  format: ExportFormat,
+): string {
+  const params = new URLSearchParams();
+  if (from !== null) params.set(EXPORT_FROM_PARAM, from);
+  if (to !== null) params.set(EXPORT_TO_PARAM, to);
+  params.set(EXPORT_FORMAT_PARAM, format);
+  return `${INVOICE_EXPORT_PATH}?${params.toString()}`;
 }

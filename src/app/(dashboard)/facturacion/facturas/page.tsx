@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Download, FileText, SearchX } from "lucide-react";
+import { FileText, SearchX } from "lucide-react";
 
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import { FacturacionEmpty } from "@/app/(dashboard)/facturacion/facturacion-empty";
 import { ImmutabilityNote } from "@/app/(dashboard)/facturacion/immutability-note";
+import { InvoicesExport } from "@/app/(dashboard)/facturacion/facturas/invoices-export";
 import {
   InvoicesFilters,
   type LocationOption,
 } from "@/app/(dashboard)/facturacion/facturas/invoices-filters";
 import { InvoicesTable } from "@/app/(dashboard)/facturacion/facturas/invoices-table";
-import { Button } from "@/components/ui/button";
 import {
   hasActiveInvoiceFilters,
+  hasNonPeriodInvoiceFilters,
   parseInvoiceFilters,
   type RawSearchParams,
 } from "@/lib/facturacion/filters";
@@ -51,7 +52,9 @@ interface FacturasPageProps {
  * Estados: carga (`loading.tsx`), error (`error.tsx`) y dos vacíos — sin facturas en
  * absoluto (estado inicial) vs sin resultados para los filtros (con acción de
  * limpiar). Registro inmutable y encadenado Veri*factu: aquí es solo lectura. La
- * acción «Exportar libro» descarga el LIBRO COMPLETO desde `GET /api/facturacion/export`.
+ * acción «Exportar» descarga el libro del PERIODO filtrado (o el histórico completo si
+ * no hay rango) desde `GET /api/facturacion/export`; sede/tipo/método/búsqueda no
+ * acotan el libro fiscal y el diálogo lo advierte.
  */
 export default async function FacturasPage({
   searchParams,
@@ -100,12 +103,11 @@ export default async function FacturasPage({
         title="Facturas"
         description="Libro registro de las facturas emitidas por tu salón. Cada factura es un registro inmutable y encadenado (Veri*factu)."
         action={
-          <Button asChild variant="outline" size="sm">
-            <a href="/api/facturacion/export" download>
-              <Download className="mr-2 h-4 w-4" aria-hidden="true" />
-              Exportar libro
-            </a>
-          </Button>
+          <InvoicesExport
+            from={filters.from}
+            to={filters.to}
+            hasNonPeriodFilters={hasNonPeriodInvoiceFilters(filters)}
+          />
         }
       />
 
@@ -139,7 +141,7 @@ export default async function FacturasPage({
                   Se muestran las {Math.min(invoices.length, FACTURACION_LIST_LIMIT)}{" "}
                   facturas más recientes de las {totals.invoiceCount} del periodo
                   filtrado; los TOTALES corresponden a las {totals.invoiceCount}.
-                  Descarga el libro completo con «Exportar libro».
+                  Descárgalas todas con «Exportar».
                 </p>
               ) : null}
             </>
