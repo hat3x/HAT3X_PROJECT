@@ -7,12 +7,17 @@ import {
   CalendarDays,
   Euro,
   Gauge,
+  Receipt,
   Scissors,
   Sparkles,
   UserPlus,
   Users,
 } from "lucide-react";
 
+import {
+  buildDashboardMetrics,
+  type DashboardMetric,
+} from "@/app/(dashboard)/dashboard/metric-cards";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,6 +26,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { localDateInZone } from "@/lib/booking/timezone";
+import {
+  getAgendaOccupancy,
+  getNewVsReturningCustomers,
+  getSalesSummary,
+} from "@/lib/metrics";
+import { getActiveSalon, type ActiveSalon } from "@/lib/salon";
+import { salonHasFeature } from "@/lib/salon-features";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -28,20 +41,19 @@ export const metadata: Metadata = {
   title: "Panel",
 };
 
+/** Cliente Supabase de servidor (con la sesión del usuario). */
+type ServerSupabase = ReturnType<typeof createClient>;
+
 /**
- * Métricas destacadas del salón. Las cifras se conectarán a datos reales en una
- * tarea posterior; de momento el componente presenta un empty state cuidado
- * (esta tarea es de lenguaje visual, no toca queries ni Server Actions).
+ * KPIs a mostrar cuando el usuario aún no tiene salón asociado: mismas etiquetas
+ * que el caso con `pos`, con valor "—" y en tono apagado (empty state cuidado, sin
+ * consultar la base porque no hay salón sobre el que agregar).
  */
-const METRICS: ReadonlyArray<{
-  label: string;
-  hint: string;
-  icon: React.ComponentType<{ className?: string }>;
-}> = [
-  { label: "Citas de hoy", hint: "Reservas confirmadas", icon: CalendarDays },
-  { label: "Ingresos de hoy", hint: "Cobros del día", icon: Euro },
-  { label: "Clientes nuevos", hint: "Altas esta semana", icon: UserPlus },
-  { label: "Ocupación", hint: "Agenda completada", icon: Gauge },
+const PLACEHOLDER_METRICS: readonly DashboardMetric[] = [
+  { key: "revenue", label: "Ingresos de hoy", value: "—", hint: "Cobros del día", icon: Euro },
+  { key: "tickets", label: "Tickets de hoy", value: "—", hint: "Ventas cerradas hoy", icon: Receipt },
+  { key: "new-customers", label: "Clientes nuevos", value: "—", hint: "Altas este mes", icon: UserPlus },
+  { key: "occupancy", label: "Ocupación", value: "—", hint: "Agenda reservada hoy", icon: Gauge },
 ];
 
 /** Accesos rápidos a las áreas principales del panel. */
@@ -82,6 +94,45 @@ const SHORTCUTS: ReadonlyArray<{
   },
 ];
 
+/**
+ * Resuelve los KPIs del resumen para el salón activo, agregados EN SERVIDOR
+ * (RPC de `@/lib/metrics`; nunca se traen las ventas al cliente para sumarlas).
+ *
+ *   · Ingresos y nº de tickets → ventas de HOY (`salon_sales_summary`), y SOLO se
+ *     consultan si el salón tiene `pos`: sin TPV no hay KPIs de ingresos.
+ *   · Clientes nuevos → altas del MES en curso (`salon_new_vs_returning_customers`).
+ *   · Ocupación / citas de hoy → agenda de HOY (`salon_agenda_occupancy`).
+ *
+ * "Hoy" y el inicio de mes se calculan en la zona horaria del salón para que el
+ * corte de día coincida con el que usan las propias RPC (`salons.timezone`).
+ */
+async function loadDashboardMetrics(
+  supabase: ServerSupabase,
+  salon: ActiveSalon,
+): Promise<DashboardMetric[]> {
+  const today = localDateInZone(salon.timezone); // YYYY-MM-DD en la zona del salón
+  const monthStart = `${today.slice(0, 7)}-01`; // primer día del mes en curso
+  const todayPeriod = { from: today, to: today };
+  const monthPeriod = { from: monthStart, to: today };
+
+  const hasPos = await salonHasFeature(supabase, salon.id, "pos");
+
+  const [sales, newVsReturning, occupancy] = await Promise.all([
+    hasPos
+      ? getSalesSummary(supabase, salon.id, todayPeriod)
+      : Promise.resolve(null),
+    getNewVsReturningCustomers(supabase, salon.id, monthPeriod),
+    getAgendaOccupancy(supabase, salon.id, todayPeriod),
+  ]);
+
+  return buildDashboardMetrics({
+    hasPos,
+    sales,
+    newCustomers: newVsReturning.new_customers,
+    occupancy,
+  });
+}
+
 export default async function DashboardPage(): Promise<React.ReactElement> {
   const supabase = createClient();
 
@@ -93,6 +144,14 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
   if (user === null) {
     redirect("/login");
   }
+
+  const salon = await getActiveSalon();
+  const metrics = salon ? await loadDashboardMetrics(supabase, salon) : null;
+
+  // Sin salón: empty state apagado (no hay datos que agregar). Con salón: KPIs reales.
+  const cards = metrics ?? PLACEHOLDER_METRICS;
+  const isEmpty = metrics === null;
+  const metricsGridCols = cards.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3";
 
   return (
     <main className="container py-10">
@@ -130,16 +189,19 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
             Resumen
           </h2>
           <p className="text-xs text-muted-foreground">
-            Se activa con la actividad registrada
+            {isEmpty ? "Se activa con la actividad registrada" : "Actividad de hoy"}
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {METRICS.map((metric, index) => (
+        <div className={cn("grid gap-4 sm:grid-cols-2", metricsGridCols)}>
+          {cards.map((metric, index) => (
             <MetricCard
-              key={metric.label}
+              key={metric.key}
               label={metric.label}
+              value={metric.value}
               hint={metric.hint}
               icon={metric.icon}
+              progress={metric.progress}
+              muted={isEmpty}
               delayMs={80 + index * 50}
             />
           ))}
@@ -165,21 +227,29 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
 }
 
 /**
- * Tarjeta de métrica con empty state elegante: icono en cuadro con tinte de
- * marca, valor grande en placeholder y una etiqueta aclaratoria. Diseñada para
- * recibir un valor real sin cambiar el layout.
+ * Tarjeta de métrica: icono en cuadro con tinte de marca, valor grande y una
+ * etiqueta aclaratoria. `muted` la deja en empty state (valor "—" apagado) cuando
+ * no hay salón; `progress` (0..1) pinta un carril de ocupación bajo el valor.
  */
 function MetricCard({
   label,
+  value,
   hint,
   icon: Icon,
+  progress,
+  muted = false,
   delayMs,
 }: {
   label: string;
+  value: string;
   hint: string;
   icon: React.ComponentType<{ className?: string }>;
+  progress?: number;
+  muted?: boolean;
   delayMs: number;
 }): React.ReactElement {
+  const showMeter = !muted && typeof progress === "number";
+
   return (
     <Card
       className="animate-fade-up transition-shadow duration-200 hover:shadow-md"
@@ -189,13 +259,29 @@ function MetricCard({
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground">
           <Icon className="h-5 w-5" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-muted-foreground">
             {label}
           </p>
-          <p className="mt-0.5 text-3xl font-semibold leading-tight tracking-tight text-foreground/40">
-            —
+          <p
+            className={cn(
+              "mt-0.5 text-3xl font-semibold leading-tight tracking-tight tabular-nums",
+              muted ? "text-foreground/40" : "text-foreground",
+            )}
+          >
+            {value}
           </p>
+          {showMeter ? (
+            <div
+              aria-hidden
+              className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-accent"
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-500 ease-apple-out"
+                style={{ width: `${Math.round(progress! * 100)}%` }}
+              />
+            </div>
+          ) : null}
           <p className="mt-1 text-xs text-muted-foreground/80">{hint}</p>
         </div>
       </CardContent>
