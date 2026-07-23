@@ -1,4 +1,8 @@
-import { salonHasFeature } from "@/lib/salon-features";
+import {
+  EMPTY_SALON_FEATURE_FLAGS,
+  type SalonFeatureFlags,
+} from "@/lib/salon-feature-flags";
+import { salonFeatureFlags, salonHasFeature } from "@/lib/salon-features";
 import { createClient } from "@/lib/supabase/server";
 import type { MemberRole, SalonFeature } from "@/types/database";
 
@@ -138,4 +142,28 @@ export async function activeSalonHasFeature(
 
   const supabase = createClient();
   return salonHasFeature(supabase, salonId, feature);
+}
+
+/**
+ * Snapshot completo de entitlements del salón ACTIVO para GATEAR la UI del panel en
+ * cliente. Resuelve el salón de la sesión y, con el cliente RLS, calcula el snapshot
+ * booleano en UNA consulta (vía {@link salonFeatureFlags}). Sin sesión ni salón ⇒
+ * {@link EMPTY_SALON_FEATURE_FLAGS} (todo `false`, deny-by-default como el gate SQL).
+ *
+ * Pensado para SEMBRAR el provider cliente `SalonFeaturesProvider` desde el layout del
+ * panel: el servidor lo resuelve UNA vez y el árbol cliente lo lee con `useSalonFeatures`
+ * / `useHasFeature` / `useHasPos` — sin refetch ni prop-drilling. Base para ocultar los
+ * módulos de pago (Facturación, gráficas de ingresos) cuando falta `pos`, dejando visible
+ * la analítica de gestión (citas, clientes, ocupación).
+ *
+ * Es SOLO presentación: ocultar un acceso NUNCA sustituye al gate de datos, que ya vive
+ * en el servidor de cada dominio (p. ej. las acciones del TPV/facturación). Un cliente
+ * que fuerce la URL sigue topándose con el gate real del servidor.
+ */
+export async function getActiveSalonFeatureFlags(): Promise<SalonFeatureFlags> {
+  const salonId = await getActiveSalonId();
+  if (salonId === null) return EMPTY_SALON_FEATURE_FLAGS;
+
+  const supabase = createClient();
+  return salonFeatureFlags(supabase, salonId);
 }

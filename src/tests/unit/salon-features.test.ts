@@ -34,6 +34,7 @@ import { describe, it, expect } from "vitest";
 import {
   LOYALTY_FEATURE_DISABLED_MESSAGE,
   listSalonFeatures,
+  salonFeatureFlags,
   salonHasFeature,
 } from "@/lib/salon-features";
 import type { SalonFeature } from "@/types/database";
@@ -200,6 +201,51 @@ describe("listSalonFeatures — mapa feature→enabled (los tres estados de la U
   it("un error de la consulta se PROPAGA (no se enmascara como mapa vacío)", async () => {
     const client = asListClient([], { message: "boom" });
     await expect(listSalonFeatures(client, SALON_A)).rejects.toMatchObject({
+      message: "boom",
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A'') SNAPSHOT — `salonFeatureFlags` reduce las N filas a un booleano por feature con
+//      todas las claves presentes. A diferencia de `listSalonFeatures` (que preserva los
+//      tres estados para la vista de Complementos), COLAPSA "en pausa" a `false`: es el
+//      dato que siembra el gate de UI para ocultar Facturación / gráficas de ingresos.
+//      El reductor puro se prueba a fondo en `salon-feature-flags.test.ts`; aquí se fija
+//      el CABLEADO DB→snapshot (misma consulta, mismo acotado por salón, misma propagación).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("salonFeatureFlags — snapshot booleano del gate (DB → flags)", () => {
+  it("colapsa contratado/pausado/ausente a un booleano por feature", async () => {
+    const client = asListClient([
+      { salon_id: SALON_A, feature: "pos", enabled: true }, // activo ⇒ true
+      { salon_id: SALON_A, feature: "loyalty", enabled: false }, // en pausa ⇒ false
+      // client_app / staff_app / ai_receptionist ausentes ⇒ false
+    ]);
+    await expect(salonFeatureFlags(client, SALON_A)).resolves.toEqual({
+      loyalty: false,
+      client_app: false,
+      staff_app: false,
+      ai_receptionist: false,
+      pos: true,
+    });
+  });
+
+  it("sin ninguna fila ⇒ todas las flags en false (deny-by-default)", async () => {
+    const client = asListClient([]);
+    const flags = await salonFeatureFlags(client, SALON_A);
+    expect(Object.values(flags).every((v) => v === false)).toBe(true);
+  });
+
+  it("se acota por salon_id: las filas de OTRO salón no encienden ninguna flag", async () => {
+    // 'pos' activo solo en el salón B; preguntar por A no debe encenderlo.
+    const client = asListClient([{ salon_id: SALON_B, feature: "pos", enabled: true }]);
+    await expect(salonFeatureFlags(client, SALON_A)).resolves.toMatchObject({ pos: false });
+    await expect(salonFeatureFlags(client, SALON_B)).resolves.toMatchObject({ pos: true });
+  });
+
+  it("un error de la consulta se PROPAGA (no se enmascara como snapshot vacío)", async () => {
+    const client = asListClient([], { message: "boom" });
+    await expect(salonFeatureFlags(client, SALON_A)).rejects.toMatchObject({
       message: "boom",
     });
   });

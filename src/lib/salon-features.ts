@@ -24,6 +24,10 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  toSalonFeatureFlags,
+  type SalonFeatureFlags,
+} from "@/lib/salon-feature-flags";
 import type { Database, SalonFeature } from "@/types/database";
 
 /** Cualquier cliente Supabase tipado con el esquema del proyecto (admin o sesión). */
@@ -94,6 +98,27 @@ export async function listSalonFeatures(
     states.set(row.feature, row.enabled);
   }
   return states;
+}
+
+/**
+ * Snapshot BOOLEANO del GATE para `salonId`: lee los entitlements en UNA consulta (vía
+ * {@link listSalonFeatures}) y los reduce con {@link toSalonFeatureFlags} a un
+ * `feature → boolean` con todas las claves presentes (OPT-IN: en pausa / ausente ⇒
+ * `false`). Es el dato que el SERVIDOR calcula UNA vez para sembrar el provider cliente
+ * del panel, evitando N gates. Acota SIEMPRE por `salon_id`. USO EXCLUSIVO DE SERVIDOR.
+ *
+ * A diferencia de {@link listSalonFeatures} (que preserva los tres estados para la vista
+ * de Complementos), esto COLAPSA "en pausa" a `false`: para gatear módulos de pago
+ * (ocultar Facturación / gráficas de ingresos) un add-on suspendido cuenta como OFF.
+ *
+ * @throws el error de Postgrest si la consulta falla (idéntico a {@link listSalonFeatures}).
+ */
+export async function salonFeatureFlags(
+  client: AnySupabaseClient,
+  salonId: string,
+): Promise<SalonFeatureFlags> {
+  const states = await listSalonFeatures(client, salonId);
+  return toSalonFeatureFlags(states);
 }
 
 /**
