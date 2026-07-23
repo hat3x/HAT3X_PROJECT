@@ -162,6 +162,26 @@ idempotente:
 > el dedup es por `sale_id` ya facturado en la serie ⇒ reejecutar **no reemite** (la
 > serie solo crece). En `--dry-run` estima el nº de facturas sin escribir.
 
+### Verificación y resumen final (sub-9)
+
+Al terminar (solo en ejecución real, no en `--dry-run`), el seed **relee la BD** e
+imprime un **resumen de verificación** (`[seed-demo:summary]`) que sirve de prueba de
+extremo a extremo:
+
+| Línea | Qué confirma |
+|---|---|
+| **Salón demo** | `id` + `slug` del salón demo y si fue **creado** en esta ejecución o **reutilizado** (idempotente). |
+| **Owner** | ID de acceso + email de login; la **contraseña** solo si el seed la fijó (alta o `--reset-password`); si el usuario ya existía, indica que se conserva. |
+| **Clientes / Citas / Ventas / Facturas** | **Recuentos acumulados** releídos de la BD (COUNT exact) y **rango de fechas** (`starts_at` / `sold_at` / `issued_at`, en la zona del salón). |
+| **Cadena huella** | Resultado de **`verifyHashChain`** sobre la serie releída: debe ser **`=== -1`** (cadena de facturación **íntegra**). |
+| **Salones ajenos** | Confirma por **relectura** que **ningún salón existente fue modificado**: fotografía `(slug, updated_at)` de todos los salones ≠ demo **antes** de sembrar y exige que sigan intactos **después**. Aborta (fail-loud) si alguno cambió o desapareció. El salón real `denueveanueve` queda así verificado como jamás tocado. |
+
+> **Garantía en caliente, no solo por diseño.** La guarda `assertNotProductionSalon`
+> impide *a priori* tocar el salón real; el resumen de sub-9 lo **verifica a posteriori**
+> releyendo la BD, cerrando el lazo. Si el volumen de citas/ventas parece crecer entre
+> reejecuciones es porque la agenda futura es relativa a "hoy" (sub-6); las facturas,
+> en cambio, son **inmutables** y su recuento solo crece hasta el objetivo.
+
 ### Garantías de seguridad
 
 - **Salón real intocable.** El seed tiene *prohibido por diseño* escribir sobre

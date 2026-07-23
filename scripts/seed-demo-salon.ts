@@ -2071,20 +2071,34 @@ function issuerTaxIdFromSnapshot(issuerData: Json): string {
   return "";
 }
 
+/** Resuelve la serie de facturación demo del entorno o cae al valor por defecto. */
+function resolveInvoiceSeries(): string {
+  const seriesEnv = process.env.SEED_DEMO_INVOICE_SERIES?.trim();
+  return seriesEnv !== undefined && seriesEnv.length > 0 ? seriesEnv : DEMO_INVOICE_SERIES;
+}
+
 /**
- * Reverifica que la cadena de huella de la serie es ÍNTEGRA releyendo TODOS sus
- * registros de la BD (ordenados por número ascendente) y pasándolos por
- * `verifyHashChain` (`@/lib/invoicing`), que recalcula la huella de cada registro y
- * comprueba el eslabón `previous_hash`. Aserción post-seed exigida por el contrato
- * (docs/seed-demo-contracts.md §3.4): debe devolver -1. Reconstruye el
- * `HashableInvoiceRecord` EXACTAMENTE con los campos que se firmaron (emisor, número
- * visible, fechas, tipo, cuota/total, eslabón) — sin reimplementar la huella.
+ * Registro de la cadena de huella reconstruido desde la BD: el `HashableInvoiceRecord`
+ * firmado + el `current_hash` persistido (para reverificar la huella) + el `issued_at`
+ * ISO original (para el rango de fechas del resumen de verificación de sub-9).
  */
-async function assertInvoiceChainIntact(
+type LoadedInvoiceRecord = HashableInvoiceRecord & {
+  currentHash: string;
+  issuedAtIso: string;
+};
+
+/**
+ * Relee TODOS los registros de la serie de la BD (ordenados por número ascendente) y
+ * reconstruye el `HashableInvoiceRecord` EXACTAMENTE con los campos que se firmaron
+ * (emisor, número visible, fechas, tipo, cuota/total, eslabón) — sin reimplementar la
+ * huella. Base COMPARTIDA por la aserción de integridad (sub-8) y el resumen de
+ * verificación final (sub-9), para releer la serie una sola vez por consumidor.
+ */
+async function loadInvoiceChainRecords(
   client: SupabaseClient<Database>,
   salonId: string,
   series: string,
-): Promise<void> {
+): Promise<LoadedInvoiceRecord[]> {
   const { data, error } = await client
     .from("pos_invoices")
     .select(
@@ -2098,10 +2112,7 @@ async function assertInvoiceChainIntact(
       `No se pudo releer la serie "${series}" para verificar la cadena: ${error.message}`,
     );
   }
-  const rows = data ?? [];
-  if (rows.length === 0) return;
-
-  const records = rows.map(
+  return (data ?? []).map(
     (row) =>
       ({
         issuerTaxId: issuerTaxIdFromSnapshot(row.issuer_data),
@@ -2113,8 +2124,25 @@ async function assertInvoiceChainIntact(
         previousHash: row.previous_hash,
         generatedAt: new Date(row.created_at),
         currentHash: row.current_hash,
-      }) satisfies HashableInvoiceRecord & { currentHash: string },
+        issuedAtIso: row.issued_at,
+      }) satisfies LoadedInvoiceRecord,
   );
+}
+
+/**
+ * Reverifica que la cadena de huella de la serie es ÍNTEGRA releyendo TODOS sus
+ * registros de la BD y pasándolos por `verifyHashChain` (`@/lib/invoicing`), que
+ * recalcula la huella de cada registro y comprueba el eslabón `previous_hash`.
+ * Aserción post-seed exigida por el contrato (docs/seed-demo-contracts.md §3.4):
+ * debe devolver -1.
+ */
+async function assertInvoiceChainIntact(
+  client: SupabaseClient<Database>,
+  salonId: string,
+  series: string,
+): Promise<void> {
+  const records = await loadInvoiceChainRecords(client, salonId, series);
+  if (records.length === 0) return;
 
   const corruptIndex = verifyHashChain(records);
   if (corruptIndex !== -1) {
@@ -2154,8 +2182,7 @@ async function seedInvoices(ctx: SeedContext): Promise<InvoicesSeedResult> {
   assertNotProductionSalon({ id: ctx.salonId, slug: ctx.slug });
   const { client, salonId } = ctx;
 
-  const seriesEnv = process.env.SEED_DEMO_INVOICE_SERIES?.trim();
-  const series = seriesEnv !== undefined && seriesEnv.length > 0 ? seriesEnv : DEMO_INVOICE_SERIES;
+  const series = resolveInvoiceSeries();
   const targetCount = resolveInvoiceCount(process.env.SEED_DEMO_INVOICE_COUNT);
 
   if (ctx.dryRun) {
@@ -2386,6 +2413,315 @@ async function seedDomainData(ctx: SeedContext): Promise<void> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Verificación y resumen final (sub-9): relee la BD para (a) confirmar que NINGÚN
+// salón existente fue modificado y (b) imprimir el estado del salón demo (identidad,
+// credenciales del owner, recuentos + rango de fechas, y verifyHashChain === -1).
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Huella mínima de un salón ajeno para detectar cualquier modificación posterior. */
+interface SalonFingerprint {
+  slug: string;
+  /** `updated_at` (ISO). El seed es additivo y jamás hace UPDATE sobre `salons`. */
+  updatedAt: string;
+}
+
+/**
+ * Fotografía TODOS los salones distintos del demo (`id ≠ salonId`) por su
+ * `(slug, updated_at)`. Sirve de LÍNEA BASE: al terminar el seed se relee y se exige
+ * que ninguno haya cambiado (ver `assertOtherSalonsUntouched`). Como el seed solo
+ * escribe filas colgadas del salón demo (por `salon_id`) y nunca hace UPDATE/DELETE
+ * sobre `salons`, la línea base debe quedar intacta byte a byte.
+ */
+async function snapshotOtherSalons(
+  client: SupabaseClient<Database>,
+  salonId: string,
+): Promise<Map<string, SalonFingerprint>> {
+  const { data, error } = await client
+    .from("salons")
+    .select("id, slug, updated_at")
+    .neq("id", salonId);
+  if (error !== null) {
+    throw new Error(`No se pudo fotografiar los salones existentes: ${error.message}`);
+  }
+  return new Map(
+    (data ?? []).map((row) => [row.id, { slug: row.slug, updatedAt: row.updated_at }]),
+  );
+}
+
+/**
+ * Reafirma por RELECTURA que ningún salón existente (los de la línea base) fue
+ * modificado ni borrado durante el seed: cada uno debe seguir presente con el MISMO
+ * `updated_at`. Es la comprobación en caliente de la garantía "solo se toca el salón
+ * demo" del contrato (docs/seed-demo-contracts.md §1). Lanza si detecta cualquier
+ * cambio. Devuelve cuántos salones ajenos se verificaron intactos.
+ */
+async function assertOtherSalonsUntouched(
+  client: SupabaseClient<Database>,
+  salonId: string,
+  baseline: ReadonlyMap<string, SalonFingerprint>,
+): Promise<number> {
+  const { data, error } = await client
+    .from("salons")
+    .select("id, slug, updated_at")
+    .neq("id", salonId);
+  if (error !== null) {
+    throw new Error(
+      `No se pudo releer los salones existentes para verificarlos: ${error.message}`,
+    );
+  }
+  const current = new Map(
+    (data ?? []).map(
+      (row) => [row.id, { slug: row.slug, updatedAt: row.updated_at }] as const,
+    ),
+  );
+  for (const [id, fingerprint] of baseline) {
+    const now = current.get(id);
+    if (now === undefined) {
+      throw new Error(
+        `El salón existente "${fingerprint.slug}" (${id}) DESAPARECIÓ durante el seed: ` +
+          "el seed demo jamás debe borrar salones ajenos.",
+      );
+    }
+    if (now.updatedAt !== fingerprint.updatedAt) {
+      throw new Error(
+        `El salón existente "${fingerprint.slug}" (${id}) fue MODIFICADO durante el seed ` +
+          `(updated_at ${fingerprint.updatedAt} → ${now.updatedAt}): el seed demo solo puede ` +
+          "tocar el salón demo.",
+      );
+    }
+  }
+  return baseline.size;
+}
+
+/**
+ * Filtro encadenable + thenable de un COUNT de PostgREST. Al operar con nombres de
+ * tabla dinámicos se pierde el estrechamiento de supabase-js; el `cast` es el único
+ * escape de tipos y queda acotado a los helpers de recuento (mismo patrón sancionado
+ * que `ensureRow`).
+ */
+type CountQuery = {
+  eq: (column: string, value: unknown) => CountQuery;
+} & PromiseLike<{ count: number | null; error: { message: string } | null }>;
+
+/**
+ * Cuenta filas de `table` que cumplen `match` mediante COUNT exact SIN traer filas
+ * (`head: true`). Se usa para los totales del resumen (clientes/citas/ventas/facturas)
+ * releídos de la BD, de modo que reflejen el estado ACUMULADO (no solo el alta de esta
+ * ejecución, que en una reejecución idempotente sería 0).
+ */
+async function countRows(
+  client: SupabaseClient<Database>,
+  table: PublicTable,
+  match: Readonly<Record<string, string>>,
+): Promise<number> {
+  let query = client
+    .from(table)
+    .select("*", { count: "exact", head: true }) as unknown as CountQuery;
+  for (const [column, value] of Object.entries(match)) {
+    query = query.eq(column, value);
+  }
+  const { count, error } = await query;
+  if (error !== null) {
+    throw new Error(`No se pudo contar "${table}": ${error.message}`);
+  }
+  return count ?? 0;
+}
+
+/** Rango temporal (ISO) de un conjunto de filas, o `null` en cada extremo si está vacío. */
+interface DateRange {
+  from: string | null;
+  to: string | null;
+}
+
+/** Filtro encadenable de una lectura ordenada de PostgREST (escape de tipos localizado). */
+type RangeQuery = {
+  eq: (column: string, value: unknown) => RangeQuery;
+  order: (column: string, options: { ascending: boolean }) => RangeQuery;
+  limit: (count: number) => {
+    maybeSingle: () => Promise<{
+      data: Record<string, unknown> | null;
+      error: { message: string } | null;
+    }>;
+  };
+};
+
+/**
+ * Devuelve el rango `[from, to]` (mínimo y máximo) de una columna temporal de `table`
+ * acotada al salón demo, o `null` en el extremo correspondiente si la tabla está
+ * vacía. Usa dos lecturas `ORDER BY column {asc|desc} LIMIT 1` (amigables con el
+ * índice, sin traer todas las filas).
+ */
+async function salonColumnRange(
+  client: SupabaseClient<Database>,
+  table: PublicTable,
+  salonId: string,
+  column: string,
+): Promise<DateRange> {
+  const readEdge = async (ascending: boolean): Promise<string | null> => {
+    const base = client.from(table).select(column) as unknown as RangeQuery;
+    const { data, error } = await base
+      .eq("salon_id", salonId)
+      .order(column, { ascending })
+      .limit(1)
+      .maybeSingle();
+    if (error !== null) {
+      throw new Error(`No se pudo leer el rango de "${table}.${column}": ${error.message}`);
+    }
+    const value = data?.[column];
+    return typeof value === "string" ? value : null;
+  };
+  const [from, to] = await Promise.all([readEdge(true), readEdge(false)]);
+  return { from, to };
+}
+
+/** Rango `[min, max]` de `issued_at` sobre los registros de factura ya cargados. */
+function invoiceDateRange(records: readonly LoadedInvoiceRecord[]): DateRange {
+  let from: string | null = null;
+  let to: string | null = null;
+  for (const record of records) {
+    const epoch = new Date(record.issuedAtIso).getTime();
+    if (from === null || epoch < new Date(from).getTime()) from = record.issuedAtIso;
+    if (to === null || epoch > new Date(to).getTime()) to = record.issuedAtIso;
+  }
+  return { from, to };
+}
+
+/** Estado final verificado del salón demo (deliverable del resumen de sub-9). */
+interface SeedSummary {
+  salon: DemoSalonRef;
+  customers: number;
+  appointments: DateRange & { count: number };
+  sales: DateRange & { count: number };
+  invoices: DateRange & { count: number; series: string; chainResult: number };
+  /** Nº de salones ajenos verificados INTACTOS (sin cambios) tras el seed. */
+  otherSalonsUntouched: number;
+}
+
+/**
+ * Construye el resumen de verificación releyendo la BD: recuentos y rango de fechas de
+ * clientes/citas/ventas, la cadena de facturas (recuento + `verifyHashChain` + rango) y
+ * la confirmación de que los salones ajenos siguen intactos. Las lecturas son
+ * independientes ⇒ se lanzan en paralelo. Si algún salón ajeno cambió,
+ * `assertOtherSalonsUntouched` lanza y aborta el seed (fail-loud).
+ */
+async function buildSeedSummary(
+  ctx: SeedContext,
+  salon: DemoSalonRef,
+  otherSalonsBaseline: ReadonlyMap<string, SalonFingerprint>,
+): Promise<SeedSummary> {
+  const { client, salonId } = ctx;
+  const series = resolveInvoiceSeries();
+
+  const [
+    customers,
+    appointmentsCount,
+    salesCount,
+    appointmentsRange,
+    salesRange,
+    invoiceRecords,
+    otherSalonsUntouched,
+  ] = await Promise.all([
+    countRows(client, "customers", { salon_id: salonId }),
+    countRows(client, "appointments", { salon_id: salonId }),
+    countRows(client, "pos_sales", { salon_id: salonId }),
+    salonColumnRange(client, "appointments", salonId, "starts_at"),
+    salonColumnRange(client, "pos_sales", salonId, "sold_at"),
+    loadInvoiceChainRecords(client, salonId, series),
+    assertOtherSalonsUntouched(client, salonId, otherSalonsBaseline),
+  ]);
+
+  const chainResult = invoiceRecords.length > 0 ? verifyHashChain(invoiceRecords) : -1;
+  const invoicesRange = invoiceDateRange(invoiceRecords);
+
+  return {
+    salon,
+    customers,
+    appointments: { count: appointmentsCount, ...appointmentsRange },
+    sales: { count: salesCount, ...salesRange },
+    invoices: {
+      count: invoiceRecords.length,
+      series,
+      from: invoicesRange.from,
+      to: invoicesRange.to,
+      chainResult,
+    },
+    otherSalonsUntouched,
+  };
+}
+
+/** Formatea un rango temporal (ISO) como `YYYY-MM-DD … YYYY-MM-DD` en la zona del salón. */
+function formatDateRange(range: DateRange, timezone: string): string {
+  if (range.from === null || range.to === null) return "(sin datos)";
+  const fromDay = localDateInZone(timezone, new Date(range.from));
+  const toDay = localDateInZone(timezone, new Date(range.to));
+  return fromDay === toDay ? fromDay : `${fromDay} … ${toDay}`;
+}
+
+/**
+ * Imprime el RESUMEN DE VERIFICACIÓN final (sub-9): identidad del salón demo,
+ * credenciales del owner (ID de acceso + contraseña si el seed la fijó), recuentos y
+ * rango de fechas de clientes/citas/ventas/facturas, el resultado de `verifyHashChain`
+ * (debe ser -1 ⇒ cadena de huella íntegra) y la confirmación de que ningún salón
+ * existente fue modificado.
+ */
+function logSeedSummary(
+  summary: SeedSummary,
+  owner: OwnerCredentials | null,
+  timezone: string,
+): void {
+  const rule = "─".repeat(66);
+  const chainOk = summary.invoices.chainResult === -1;
+
+  log("summary", rule);
+  log("summary", "RESUMEN DE VERIFICACIÓN DEL SALÓN DEMO (sub-9)");
+  log("summary", rule);
+  log(
+    "summary",
+    `Salón demo     · "${summary.salon.slug}" (${summary.salon.id})` +
+      `${summary.salon.created ? " · CREADO en esta ejecución" : " · reutilizado (idempotente)"}`,
+  );
+
+  if (owner !== null) {
+    log("summary", `Owner acceso   · ID "${owner.accessId}" · login ${owner.email}`);
+    log(
+      "summary",
+      owner.password !== null
+        ? `Owner clave    · ${owner.password}  (guárdala: no se puede recuperar)`
+        : "Owner clave    · (sin cambios; el usuario ya existía) — usa --reset-password para fijarla",
+    );
+  } else {
+    log("summary", "Owner          · (no resuelto en esta ejecución)");
+  }
+
+  log("summary", `Clientes       · ${summary.customers}`);
+  log(
+    "summary",
+    `Citas          · ${summary.appointments.count} · ` +
+      formatDateRange(summary.appointments, timezone),
+  );
+  log(
+    "summary",
+    `Ventas (TPV)   · ${summary.sales.count} · ${formatDateRange(summary.sales, timezone)}`,
+  );
+  log(
+    "summary",
+    `Facturas       · ${summary.invoices.count} en serie "${summary.invoices.series}" · ` +
+      formatDateRange(summary.invoices, timezone),
+  );
+  log(
+    "summary",
+    `Cadena huella  · verifyHashChain === ${summary.invoices.chainResult} ` +
+      `${chainOk ? "(-1 ⇒ cadena ÍNTEGRA ✓)" : "(¡CORRUPTA! ✗)"}`,
+  );
+  log(
+    "summary",
+    `Salones ajenos · ${summary.otherSalonsUntouched} verificado(s) INTACTO(s) · ` +
+      `salón real "${FORBIDDEN_SALON_SLUG}" jamás modificado`,
+  );
+  log("summary", rule);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Configuración y orquestación.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -2502,6 +2838,13 @@ export async function main(argv: readonly string[] = []): Promise<void> {
   // Reafirma la guarda con el id ya resuelto antes de delegar en el dominio.
   assertNotProductionSalon({ id: salon.id, slug: salon.slug });
 
+  // Línea base para la verificación final (sub-9): fotografía de los salones AJENOS
+  // (incluido el salón real) ANTES de sembrar nada de dominio, para confirmar al
+  // terminar que ninguno cambió. Solo en ejecución real (en dry-run no se escribe).
+  const otherSalonsBaseline = config.dryRun
+    ? null
+    : await snapshotOtherSalons(client, salon.id);
+
   const ctx: SeedContext = {
     client,
     salonId: salon.id,
@@ -2520,10 +2863,21 @@ export async function main(argv: readonly string[] = []): Promise<void> {
     logOwnerCredentials(owner);
   }
 
+  // Verificación y resumen final (sub-9): relee la BD para imprimir el estado del
+  // salón demo (recuentos + rango de fechas + verifyHashChain === -1) y CONFIRMAR que
+  // ningún salón existente fue modificado. Solo en ejecución real (en dry-run no se
+  // ha escrito nada, así que un resumen reflejaría el estado previo y confundiría).
+  if (!config.dryRun && otherSalonsBaseline !== null) {
+    const summary = await buildSeedSummary(ctx, salon, otherSalonsBaseline);
+    logSeedSummary(summary, owner, config.timezone);
+  }
+
   log(
     "done",
-    "Seed demo completado: salón, owner, membership, add-ons y marca listos. " +
-      "Los datos de dominio (clientes, citas, ventas…) se añaden en subtareas posteriores.",
+    config.dryRun
+      ? "Seed demo (DRY-RUN) completado: no se ha escrito en la base de datos."
+      : "Seed demo completado y verificado: salón demo, configuración, clientes, citas, " +
+          "ventas y facturas sembrados · cadena de huella íntegra · ningún salón existente modificado.",
   );
 }
 
