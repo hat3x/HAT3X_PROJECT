@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  BarChart3,
   CalendarClock,
   CalendarDays,
   FileText,
@@ -43,6 +44,17 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/products", label: "Productos", icon: Package },
 ];
+
+/**
+ * Analítica (rendimiento del salón por periodo: facturación, cobros, clientes y
+ * ocupación). Como Facturación, es materia de gestión → solo owner/manager
+ * (`showSettings`). Se coloca antes de Facturación (del «cómo va» al «papeleo»).
+ */
+const ANALITICA_ITEM: NavItem = {
+  href: "/analitica",
+  label: "Analítica",
+  icon: BarChart3,
+};
 
 /**
  * Facturación (libro de facturas + histórico de tickets/ventas). Al ser materia
@@ -106,7 +118,7 @@ export function DashboardNav({
   const [open, setOpen] = useState(false);
 
   const items = showSettings
-    ? [...NAV_ITEMS, FACTURACION_ITEM, SETTINGS_ITEM]
+    ? [...NAV_ITEMS, ANALITICA_ITEM, FACTURACION_ITEM, SETTINGS_ITEM]
     : NAV_ITEMS;
   const brand = brandName?.trim() ? brandName : "Salon OS";
   const logo = logoUrl?.trim() ? logoUrl : null;
