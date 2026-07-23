@@ -3,71 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  BarChart3,
-  CalendarClock,
-  CalendarDays,
-  FileText,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  Package,
-  Scissors,
-  Settings,
-  ShoppingBag,
-  Users,
-  Wallet,
-  X,
-} from "lucide-react";
+import { LogOut, Menu, Scissors, X } from "lucide-react";
 
 import type { MemberRole } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { buildDashboardNavItems } from "@/components/dashboard-nav-items";
+import { useHasPos } from "@/components/providers/salon-features-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-}
-
-/**
- * Secciones principales del panel. El orden refleja la jerarquía de uso
- * diario: primero la vista general y la operativa del día, luego venta/caja,
- * y por último los maestros (clientes/productos) y la configuración.
- */
-const NAV_ITEMS: readonly NavItem[] = [
-  { href: "/dashboard", label: "Panel", icon: LayoutDashboard },
-  { href: "/day-panel", label: "Panel del día", icon: CalendarDays },
-  { href: "/appointments", label: "Citas", icon: CalendarClock },
-  { href: "/tpv", label: "Caja", icon: ShoppingBag },
-  { href: "/arqueo", label: "Arqueo", icon: Wallet },
-  { href: "/customers", label: "Clientes", icon: Users },
-  { href: "/products", label: "Productos", icon: Package },
-];
-
-/**
- * Analítica (rendimiento del salón por periodo: facturación, cobros, clientes y
- * ocupación). Como Facturación, es materia de gestión → solo owner/manager
- * (`showSettings`). Se coloca antes de Facturación (del «cómo va» al «papeleo»).
- */
-const ANALITICA_ITEM: NavItem = {
-  href: "/analitica",
-  label: "Analítica",
-  icon: BarChart3,
-};
-
-/**
- * Facturación (libro de facturas + histórico de tickets/ventas). Al ser materia
- * fiscal/administrativa se muestra —igual que Ajustes— solo a owner/manager
- * (`showSettings`), y se coloca justo antes de la configuración.
- */
-const FACTURACION_ITEM: NavItem = {
-  href: "/facturacion",
-  label: "Facturación",
-  icon: FileText,
-};
-
-const SETTINGS_ITEM: NavItem = { href: "/ajustes", label: "Ajustes", icon: Settings };
 
 /** Etiqueta legible del rol para el bloque de cuenta. */
 const ROLE_LABEL: Record<MemberRole, string> = {
@@ -107,6 +49,12 @@ function isActivePath(pathname: string, href: string): boolean {
  *   derecha. Estado activo con acento suave y `aria-current`.
  * - **Responsive real:** navegación horizontal en `lg+`; en pantallas menores
  *   se colapsa en un menú desplegable accesible con foco y cierre por ruta.
+ *
+ * Gating por entitlements: la lista de secciones se compone con
+ * {@link buildDashboardNavItems} a partir del rol (`showSettings`) y del add-on
+ * `pos` (leído del provider con {@link useHasPos}). Sin `pos`, Facturación se
+ * OCULTA con gracia; la analítica de gestión permanece. Gate de presentación: el
+ * gate de datos sigue vivo en el servidor de cada dominio.
  */
 export function DashboardNav({
   brandName,
@@ -116,10 +64,9 @@ export function DashboardNav({
 }: DashboardNavProps): React.ReactElement {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const hasPos = useHasPos();
 
-  const items = showSettings
-    ? [...NAV_ITEMS, ANALITICA_ITEM, FACTURACION_ITEM, SETTINGS_ITEM]
-    : NAV_ITEMS;
+  const items = buildDashboardNavItems({ showSettings, hasPos });
   const brand = brandName?.trim() ? brandName : "Salon OS";
   const logo = logoUrl?.trim() ? logoUrl : null;
 

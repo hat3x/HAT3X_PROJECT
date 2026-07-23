@@ -7,7 +7,6 @@ import {
   CreditCard,
   Euro,
   Gauge,
-  Lock,
   Package,
   ReceiptText,
   Scissors,
@@ -23,6 +22,7 @@ import {
   PaymentMethodChart,
   SalesTrendChart,
 } from "@/app/(dashboard)/analitica/analitica-charts";
+import { FeatureGateNotice } from "@/components/feature-gate-notice";
 import {
   Card,
   CardContent,
@@ -627,25 +627,18 @@ function topItemRows(items: readonly TopItemRow[]): RankBarRow[] {
   }));
 }
 
-/** Aviso cuando el salón no tiene TPV: la analítica de ventas queda gated. */
+/**
+ * Aviso cuando el salón no tiene TPV: la analítica de ventas queda gated. Delega en
+ * el aviso compartido {@link FeatureGateNotice} para que el copy y el aspecto sean
+ * idénticos a los de Facturación (gating coherente); la ocupación de agenda sigue
+ * debajo, ajena a `pos`.
+ */
 function PosGateNotice(): React.ReactElement {
   return (
-    <Card className="animate-fade-up border-dashed">
-      <CardContent className="flex flex-col items-start gap-3 p-6 sm:flex-row sm:items-center">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground">
-          <Lock className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <div>
-          <p className="font-medium text-foreground">
-            La analítica de ventas necesita el TPV
-          </p>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Activa el módulo de TPV (caja) para ver facturación, cobros por método y
-            clientes. La ocupación de agenda ya está disponible aquí debajo.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <FeatureGateNotice
+      title="La analítica de ventas necesita el TPV"
+      description="Activa el módulo de TPV (caja) para ver facturación, cobros por método y clientes. La ocupación de agenda ya está disponible aquí debajo."
+    />
   );
 }
 
