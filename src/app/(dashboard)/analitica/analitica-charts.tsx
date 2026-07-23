@@ -2,7 +2,7 @@
 
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LineChart as LineChartIcon } from "lucide-react";
 import {
   Area,
@@ -19,6 +19,7 @@ import {
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type {
   NewVsReturningCustomers,
   PaymentMethodDistributionRow,
@@ -151,118 +152,255 @@ function ChartShell({
   );
 }
 
-// ── Gráfica 1: facturación en el tiempo (área) ────────────────────────────────
+// ── Gráfica 1: tendencia de ventas en el tiempo ───────────────────────────────
+//
+// Facturación, nº de tickets y ticket medio comparten la MISMA serie
+// (`salon_revenue_timeseries` devuelve las tres por bucket), así que un único
+// gráfico con selector de métrica las cubre sin volver a consultar: el rango lo
+// gobierna la página (Server Component); la métrica se cambia en cliente sobre
+// los datos ya traídos.
 
-interface RevenueRow {
+/** Métrica visible del gráfico de tendencia. */
+type TrendMetric = "revenue" | "tickets" | "avg";
+
+interface TrendPoint {
   x: string;
   revenueCents: number;
   salesCount: number;
+  avgTicketCents: number;
 }
 
-interface RevenueTooltipProps {
+/** Fila del área: el punto + el valor ya proyectado a la métrica activa. */
+interface TrendRow extends TrendPoint {
+  value: number;
+}
+
+interface TrendMetricDef {
+  label: string;
+  color: string;
+  /** El valor es dinero (céntimos) → se formatea como moneda; si no, es un conteo. */
+  money: boolean;
+  pick: (point: TrendPoint) => number;
+}
+
+const TREND_METRICS: Record<TrendMetric, TrendMetricDef> = {
+  revenue: {
+    label: "Facturación",
+    color: BRAND,
+    money: true,
+    pick: (p) => p.revenueCents,
+  },
+  tickets: {
+    label: "Tickets",
+    color: "hsl(190 74% 42%)",
+    money: false,
+    pick: (p) => p.salesCount,
+  },
+  avg: {
+    label: "Ticket medio",
+    color: "hsl(32 84% 52%)",
+    money: true,
+    pick: (p) => p.avgTicketCents,
+  },
+};
+
+const TREND_ORDER: readonly TrendMetric[] = ["revenue", "tickets", "avg"];
+
+/** Conteo compacto para ticks del eje Y de la métrica «tickets» (p. ej. «1,2 mil»). */
+function compactCount(value: number): string {
+  return new Intl.NumberFormat("es-ES", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+interface TrendTooltipProps {
   active?: boolean;
-  payload?: Array<{ payload: RevenueRow }>;
+  payload?: Array<{ payload: TrendRow }>;
   currency: string;
   granularity: RevenueGranularity;
+  metric: TrendMetric;
 }
 
-function RevenueTooltip({
+/** Tooltip que muestra las tres métricas del bucket y resalta la activa. */
+function TrendTooltip({
   active,
   payload,
   currency,
   granularity,
-}: RevenueTooltipProps): React.ReactElement | null {
+  metric,
+}: TrendTooltipProps): React.ReactElement | null {
   const entry = payload?.[0];
   if (!active || !entry) return null;
   const row = entry.payload;
+  const lines: Array<{ key: TrendMetric; text: string }> = [
+    { key: "revenue", text: formatMoney(row.revenueCents, currency) },
+    { key: "tickets", text: String(row.salesCount) },
+    { key: "avg", text: formatMoney(row.avgTicketCents, currency) },
+  ];
   return (
     <div className="rounded-lg border border-border/70 bg-popover px-3 py-2 text-sm shadow-md">
       <p className="mb-1 font-medium text-popover-foreground">
         {formatBucketLong(row.x, granularity)}
       </p>
-      <p className="text-muted-foreground">
-        Facturación:{" "}
-        <span className="font-semibold text-foreground">
-          {formatMoney(row.revenueCents, currency)}
-        </span>
-      </p>
-      <p className="text-muted-foreground">
-        Tickets:{" "}
-        <span className="font-semibold text-foreground">{row.salesCount}</span>
-      </p>
+      {lines.map((line) => {
+        const isActive = line.key === metric;
+        return (
+          <p
+            key={line.key}
+            className={cn(
+              "flex items-center gap-1.5 text-muted-foreground",
+              isActive && "text-foreground",
+            )}
+          >
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: TREND_METRICS[line.key].color }}
+              aria-hidden="true"
+            />
+            {TREND_METRICS[line.key].label}:{" "}
+            <span className="ml-auto pl-3 font-semibold tabular-nums text-foreground">
+              {line.text}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }
 
-interface RevenueAreaChartProps {
+interface SalesTrendChartProps {
   data: readonly RevenueTimeseriesPoint[];
   granularity: RevenueGranularity;
   currency?: string;
   height?: number;
 }
 
-/** Área de facturación por bucket temporal. El eje X se adapta a la granularidad. */
-export function RevenueAreaChart({
+/**
+ * Tendencia de ventas por bucket temporal con selector de métrica
+ * (facturación / nº de tickets / ticket medio). El eje X se adapta a la
+ * granularidad del rango; el eje Y y el tooltip, a si la métrica es dinero o
+ * conteo. Cambiar de métrica NO vuelve a consultar: reproyecta los datos ya
+ * traídos.
+ */
+export function SalesTrendChart({
   data,
   granularity,
   currency = "EUR",
   height = 300,
-}: RevenueAreaChartProps): React.ReactElement {
+}: SalesTrendChartProps): React.ReactElement {
   const reduced = usePrefersReducedMotion();
-  const rows: RevenueRow[] = data.map((point) => ({
-    x: point.bucket_start,
-    revenueCents: point.revenue_cents,
-    salesCount: point.sales_count,
-  }));
-  const isEmpty = rows.every((row) => row.revenueCents === 0);
+  const [metric, setMetric] = useState<TrendMetric>("revenue");
+  const def = TREND_METRICS[metric];
+
+  const rows: TrendRow[] = useMemo(() => {
+    return data.map((point) => {
+      const p: TrendPoint = {
+        x: point.bucket_start,
+        revenueCents: point.revenue_cents,
+        salesCount: point.sales_count,
+        avgTicketCents: point.avg_ticket_cents,
+      };
+      return { ...p, value: def.pick(p) };
+    });
+  }, [data, def]);
+
+  const isEmpty = rows.length === 0 || rows.every((row) => row.value === 0);
+  const gradientId = `analitica-trend-${metric}`;
 
   return (
-    <ChartShell
-      height={height}
-      isEmpty={rows.length === 0 || isEmpty}
-      emptyMessage="Sin facturación registrada en este periodo."
-    >
-      <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="analitica-revenue-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={BRAND} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={BRAND} stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid vertical={false} stroke={GRID} strokeOpacity={0.6} />
-        <XAxis
-          dataKey="x"
-          tickFormatter={(value: string) => formatBucketShort(value, granularity)}
-          tickLine={false}
-          axisLine={false}
-          minTickGap={28}
-          interval="preserveStartEnd"
-          tick={AXIS_TICK}
-          padding={{ left: 8, right: 8 }}
-        />
-        <YAxis
-          width={64}
-          tickFormatter={(value: number) => compactMoney(value, currency)}
-          tickLine={false}
-          axisLine={false}
-          tick={AXIS_TICK}
-        />
-        <Tooltip
-          content={<RevenueTooltip currency={currency} granularity={granularity} />}
-          cursor={{ stroke: BRAND, strokeOpacity: 0.25, strokeWidth: 1 }}
-        />
-        <Area
-          type="monotone"
-          dataKey="revenueCents"
-          stroke={BRAND}
-          strokeWidth={2}
-          fill="url(#analitica-revenue-fill)"
-          activeDot={{ r: 4, strokeWidth: 0 }}
-          isAnimationActive={!reduced}
-          animationDuration={450}
-        />
-      </AreaChart>
-    </ChartShell>
+    <div>
+      <div className="mb-4">
+        <div
+          role="group"
+          aria-label="Métrica de la tendencia"
+          className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-border/70 bg-secondary/50 p-0.5"
+        >
+          {TREND_ORDER.map((key) => {
+            const option = TREND_METRICS[key];
+            const active = key === metric;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setMetric(key)}
+                aria-pressed={active}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-apple-out",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-secondary",
+                  active
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: option.color }}
+                  aria-hidden="true"
+                />
+                <span className="whitespace-nowrap">{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <ChartShell
+        height={height}
+        isEmpty={isEmpty}
+        emptyMessage="Sin datos en este periodo para la métrica elegida."
+      >
+        <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={def.color} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={def.color} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} stroke={GRID} strokeOpacity={0.6} />
+          <XAxis
+            dataKey="x"
+            tickFormatter={(value: string) => formatBucketShort(value, granularity)}
+            tickLine={false}
+            axisLine={false}
+            minTickGap={28}
+            interval="preserveStartEnd"
+            tick={AXIS_TICK}
+            padding={{ left: 8, right: 8 }}
+          />
+          <YAxis
+            width={def.money ? 64 : 44}
+            tickFormatter={(value: number) =>
+              def.money ? compactMoney(value, currency) : compactCount(value)
+            }
+            tickLine={false}
+            axisLine={false}
+            tick={AXIS_TICK}
+            allowDecimals={false}
+          />
+          <Tooltip
+            content={
+              <TrendTooltip
+                currency={currency}
+                granularity={granularity}
+                metric={metric}
+              />
+            }
+            cursor={{ stroke: def.color, strokeOpacity: 0.25, strokeWidth: 1 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke={def.color}
+            strokeWidth={2}
+            fill={`url(#${gradientId})`}
+            activeDot={{ r: 4, strokeWidth: 0 }}
+            isAnimationActive={!reduced}
+            animationDuration={450}
+          />
+        </AreaChart>
+      </ChartShell>
+    </div>
   );
 }
 

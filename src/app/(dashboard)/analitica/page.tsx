@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import {
+  Building2,
   CalendarRange,
   Coins,
+  CreditCard,
   Euro,
   Gauge,
   Lock,
@@ -11,6 +13,7 @@ import {
   Scissors,
   Tag,
   TrendingUp,
+  UserRound,
   Users,
 } from "lucide-react";
 
@@ -18,7 +21,7 @@ import { RangeSelector } from "@/app/(dashboard)/analitica/range-selector";
 import {
   CustomersSplitChart,
   PaymentMethodChart,
-  RevenueAreaChart,
+  SalesTrendChart,
 } from "@/app/(dashboard)/analitica/analitica-charts";
 import {
   Card,
@@ -32,16 +35,21 @@ import {
   getAgendaOccupancy,
   getNewVsReturningCustomers,
   getPaymentMethodDistribution,
+  getRevenueByLocation,
+  getRevenueByProfessional,
   getRevenueTimeseries,
   getSalesSummary,
-  getTopItems,
+  getTopProducts,
+  getTopServices,
   type AgendaOccupancy,
+  type RevenueGranularity,
   type TopItemRow,
 } from "@/lib/metrics";
 import {
   localTodayIso,
   resolveMetricsRange,
   type RawSearchParams,
+  type ResolvedRange,
 } from "@/lib/metrics/range";
 import { canManageSettings, getActiveMembership, getActiveSalon } from "@/lib/salon";
 import { salonHasFeature } from "@/lib/salon-features";
@@ -55,9 +63,56 @@ export const metadata: Metadata = {
 /** Moneda del salón (Spain / VeriFactu → EUR por ahora). */
 const CURRENCY = "EUR";
 
+/** Cliente Supabase de servidor (sesión del usuario, con RLS del salón). */
+type ServerSupabase = ReturnType<typeof createClient>;
+
 interface AnaliticaPageProps {
   searchParams: RawSearchParams;
 }
+
+/**
+ * Carga TODAS las métricas de ventas del periodo en paralelo (un solo rango).
+ * Cada llamada es una RPC de agregación (`@/lib/metrics`) que ya hace el
+ * `group by` en base: nunca se traen ventas en crudo al servidor de Next.
+ */
+async function loadSalesAnalytics(
+  supabase: ServerSupabase,
+  salonId: string,
+  range: ResolvedRange,
+) {
+  const [
+    summary,
+    timeseries,
+    byLocation,
+    byProfessional,
+    topServices,
+    topProducts,
+    payments,
+    customers,
+  ] = await Promise.all([
+    getSalesSummary(supabase, salonId, range.period),
+    getRevenueTimeseries(supabase, salonId, range.period, range.granularity),
+    getRevenueByLocation(supabase, salonId, range.period),
+    getRevenueByProfessional(supabase, salonId, range.period, 8),
+    getTopServices(supabase, salonId, range.period, 6),
+    getTopProducts(supabase, salonId, range.period, 6),
+    getPaymentMethodDistribution(supabase, salonId, range.period),
+    getNewVsReturningCustomers(supabase, salonId, range.period),
+  ]);
+
+  return {
+    summary,
+    timeseries,
+    byLocation,
+    byProfessional,
+    topServices,
+    topProducts,
+    payments,
+    customers,
+  };
+}
+
+type SalesData = Awaited<ReturnType<typeof loadSalesAnalytics>>;
 
 /**
  * `/analitica` — panel de rendimiento del salón por periodo.
@@ -103,14 +158,8 @@ export default async function AnaliticaPage({
 
   // Ocupación (siempre); ventas (solo con TPV). Todo en paralelo, un solo periodo.
   const occupancyPromise = getAgendaOccupancy(supabase, salon.id, range.period);
-  const salesPromise = hasPos
-    ? (Promise.all([
-        getSalesSummary(supabase, salon.id, range.period),
-        getRevenueTimeseries(supabase, salon.id, range.period, range.granularity),
-        getPaymentMethodDistribution(supabase, salon.id, range.period),
-        getTopItems(supabase, salon.id, range.period, null, 8),
-        getNewVsReturningCustomers(supabase, salon.id, range.period),
-      ] as const))
+  const salesPromise: Promise<SalesData | null> = hasPos
+    ? loadSalesAnalytics(supabase, salon.id, range)
     : Promise.resolve(null);
 
   const [occupancy, sales] = await Promise.all([occupancyPromise, salesPromise]);
@@ -156,25 +205,23 @@ export default async function AnaliticaPage({
       )}
 
       <section aria-labelledby="ocupacion-heading" className="mt-8">
-        <div className={cn("grid gap-4", sales !== null && "lg:grid-cols-2")}>
-          <Card className="animate-fade-up" style={{ animationDelay: "120ms" }}>
-            <CardHeader>
-              <CardTitle
-                className="flex items-center gap-2 text-lg"
-                id="ocupacion-heading"
-              >
-                <Gauge className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-                Ocupación de agenda
-              </CardTitle>
-              <CardDescription>
-                Minutos reservados frente a la capacidad del personal.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <OccupancyMeter data={occupancy} />
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="animate-fade-up" style={{ animationDelay: "120ms" }}>
+          <CardHeader>
+            <CardTitle
+              className="flex items-center gap-2 text-lg"
+              id="ocupacion-heading"
+            >
+              <Gauge className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+              Ocupación de agenda
+            </CardTitle>
+            <CardDescription>
+              Minutos reservados frente a la capacidad del personal.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <OccupancyMeter data={occupancy} />
+          </CardContent>
+        </Card>
       </section>
     </main>
   );
@@ -185,16 +232,19 @@ function SalesAnalytics({
   range,
   sales,
 }: {
-  range: ReturnType<typeof resolveMetricsRange>;
-  sales: readonly [
-    Awaited<ReturnType<typeof getSalesSummary>>,
-    Awaited<ReturnType<typeof getRevenueTimeseries>>,
-    Awaited<ReturnType<typeof getPaymentMethodDistribution>>,
-    Awaited<ReturnType<typeof getTopItems>>,
-    Awaited<ReturnType<typeof getNewVsReturningCustomers>>,
-  ];
+  range: ResolvedRange;
+  sales: SalesData;
 }): React.ReactElement {
-  const [summary, timeseries, payments, topItems, customers] = sales;
+  const {
+    summary,
+    timeseries,
+    byLocation,
+    byProfessional,
+    topServices,
+    topProducts,
+    payments,
+    customers,
+  } = sales;
 
   return (
     <>
@@ -233,18 +283,21 @@ function SalesAnalytics({
         />
       </section>
 
-      {/* Facturación en el tiempo */}
+      {/* Tendencia de ventas en el tiempo (facturación / tickets / ticket medio) */}
       <section className="mt-8">
         <Card className="animate-fade-up" style={{ animationDelay: "220ms" }}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <TrendingUp className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-              Facturación en el tiempo
+              Tendencia de ventas
             </CardTitle>
-            <CardDescription>{granularityLabel(range.granularity)}</CardDescription>
+            <CardDescription>
+              Facturación, nº de tickets y ticket medio por{" "}
+              {granularityWord(range.granularity)}. Cambia la métrica sin recargar.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <RevenueAreaChart
+            <SalesTrendChart
               data={timeseries}
               granularity={range.granularity}
               currency={CURRENCY}
@@ -253,11 +306,109 @@ function SalesAnalytics({
         </Card>
       </section>
 
-      {/* Cobros por método + composición de clientes */}
+      {/* Ingresos por sede + ranking por profesional */}
       <section className="mt-8 grid gap-4 lg:grid-cols-2">
         <Card className="animate-fade-up" style={{ animationDelay: "260ms" }}>
           <CardHeader>
-            <CardTitle className="text-lg">Cobros por método</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Building2 className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+              Ingresos por sede
+            </CardTitle>
+            <CardDescription>Reparto de la facturación entre sedes.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RankBars
+              rows={byLocation.map((row) => ({
+                key: row.location_id ?? "sin-sede",
+                name: row.location_name,
+                valueCents: row.revenue_cents,
+                leading: (
+                  <Building2
+                    className="h-3.5 w-3.5 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                ),
+                sub: ticketsLabel(row.sales_count),
+              }))}
+              emptyMessage="Sin ventas con sede asignada en este periodo."
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="animate-fade-up" style={{ animationDelay: "300ms" }}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <UserRound className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+              Ingresos por profesional
+            </CardTitle>
+            <CardDescription>Ranking por facturación del periodo.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RankBars
+              showRank
+              rows={byProfessional.map((row) => ({
+                key: row.professional_id ?? "sin-profesional",
+                name: row.professional_name,
+                valueCents: row.revenue_cents,
+                leading: (
+                  <UserRound
+                    className="h-3.5 w-3.5 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                ),
+                sub: ticketsLabel(row.sales_count),
+              }))}
+              emptyMessage="Sin ventas atribuidas a profesionales en este periodo."
+            />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Top servicios + top productos */}
+      <section className="mt-8 grid gap-4 lg:grid-cols-2">
+        <Card className="animate-fade-up" style={{ animationDelay: "340ms" }}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Scissors className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+              Top servicios
+            </CardTitle>
+            <CardDescription>Servicios por ingresos en el periodo.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RankBars
+              showRank
+              rows={topItemRows(topServices)}
+              emptyMessage="Sin servicios vendidos en este periodo."
+            />
+          </CardContent>
+        </Card>
+
+        <Card className="animate-fade-up" style={{ animationDelay: "380ms" }}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Package className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+              Top productos
+            </CardTitle>
+            <CardDescription>Productos por ingresos en el periodo.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RankBars
+              showRank
+              rows={topItemRows(topProducts)}
+              emptyMessage="Sin productos vendidos en este periodo."
+            />
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Cobros por método + composición de clientes */}
+      <section className="mt-8 grid gap-4 lg:grid-cols-2">
+        <Card className="animate-fade-up" style={{ animationDelay: "420ms" }}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <CreditCard className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+              Cobros por método
+            </CardTitle>
             <CardDescription>Reparto del importe cobrado.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -265,26 +416,16 @@ function SalesAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="animate-fade-up" style={{ animationDelay: "300ms" }}>
+        <Card className="animate-fade-up" style={{ animationDelay: "460ms" }}>
           <CardHeader>
-            <CardTitle className="text-lg">Clientes</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Users className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+              Clientes
+            </CardTitle>
             <CardDescription>Nuevos, recurrentes y ventas anónimas.</CardDescription>
           </CardHeader>
           <CardContent>
             <CustomersSplitChart data={customers} />
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* Top de artículos */}
-      <section className="mt-8">
-        <Card className="animate-fade-up" style={{ animationDelay: "340ms" }}>
-          <CardHeader>
-            <CardTitle className="text-lg">Top servicios y productos</CardTitle>
-            <CardDescription>Artículos por ingresos en el periodo.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TopItemsList items={topItems} />
           </CardContent>
         </Card>
       </section>
@@ -394,46 +535,96 @@ function KindIcon({ kind }: { kind: TopItemRow["item_kind"] }): React.ReactEleme
   return <Tag className="h-3.5 w-3.5 text-muted-foreground" aria-label="Cargo manual" />;
 }
 
-/** Ranking de artículos por ingresos, con barra proporcional. */
-function TopItemsList({ items }: { items: readonly TopItemRow[] }): React.ReactElement {
-  if (items.length === 0) {
+/** «N tickets» / «1 ticket» (plural correcto para las sub-líneas del ranking). */
+function ticketsLabel(count: number): string {
+  return `${count} ${count === 1 ? "ticket" : "tickets"}`;
+}
+
+/** Fila de un ranking con barra proporcional (ingresos en céntimos). */
+interface RankBarRow {
+  /** Clave estable para React. */
+  key: string;
+  /** Nombre visible (sede / profesional / artículo). */
+  name: string;
+  /** Importe en CÉNTIMOS: gobierna el valor mostrado y la anchura de la barra. */
+  valueCents: number;
+  /** Icono a la izquierda del nombre. */
+  leading?: React.ReactNode;
+  /** Línea secundaria bajo la barra (p. ej. «12 tickets»). */
+  sub?: React.ReactNode;
+}
+
+/**
+ * Ranking por ingresos con barra proporcional al mayor de la lista. Reutilizado
+ * por ingresos por sede / profesional y por los tops de servicios / productos.
+ * `showRank` numera las filas (rankings) y sangra la barra bajo el número.
+ */
+function RankBars({
+  rows,
+  emptyMessage,
+  showRank = false,
+  barClassName = "bg-primary/70",
+}: {
+  rows: readonly RankBarRow[];
+  emptyMessage: string;
+  showRank?: boolean;
+  barClassName?: string;
+}): React.ReactElement {
+  if (rows.length === 0) {
     return (
-      <p className="py-6 text-center text-sm text-muted-foreground">
-        Sin ventas de artículos en este periodo.
-      </p>
+      <p className="py-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
     );
   }
-  const max = Math.max(...items.map((item) => item.revenue_cents), 1);
+  const max = Math.max(...rows.map((row) => row.valueCents), 1);
+  const indent = showRank ? "ml-6" : "";
 
   return (
     <ol className="space-y-3.5">
-      {items.map((item, index) => (
-        <li key={`${item.item_kind}-${item.item_id ?? item.name}-${index}`}>
+      {rows.map((row, index) => (
+        <li key={row.key}>
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="flex min-w-0 items-center gap-2">
-              <span className="w-4 shrink-0 text-right text-xs font-medium tabular-nums text-muted-foreground">
-                {index + 1}
-              </span>
-              <KindIcon kind={item.item_kind} />
-              <span className="truncate font-medium text-foreground">{item.name}</span>
+              {showRank && (
+                <span className="w-4 shrink-0 text-right text-xs font-medium tabular-nums text-muted-foreground">
+                  {index + 1}
+                </span>
+              )}
+              {row.leading}
+              <span className="truncate font-medium text-foreground">{row.name}</span>
             </span>
             <span className="shrink-0 font-semibold tabular-nums text-foreground">
-              {formatMoney(item.revenue_cents, CURRENCY)}
+              {formatMoney(row.valueCents, CURRENCY)}
             </span>
           </div>
-          <div className="ml-6 mt-1.5 h-1.5 overflow-hidden rounded-full bg-secondary">
+          <div
+            className={cn(
+              "mt-1.5 h-1.5 overflow-hidden rounded-full bg-secondary",
+              indent,
+            )}
+          >
             <div
-              className="h-full rounded-full bg-primary/70"
-              style={{ width: `${(item.revenue_cents / max) * 100}%` }}
+              className={cn("h-full rounded-full", barClassName)}
+              style={{ width: `${(row.valueCents / max) * 100}%` }}
             />
           </div>
-          <p className="ml-6 mt-1 text-xs text-muted-foreground">
-            {item.quantity} uds · {item.lines_count} líneas
-          </p>
+          {row.sub != null && (
+            <p className={cn("mt-1 text-xs text-muted-foreground", indent)}>{row.sub}</p>
+          )}
         </li>
       ))}
     </ol>
   );
+}
+
+/** Proyecta filas de `salon_top_items` a filas de {@link RankBars}. */
+function topItemRows(items: readonly TopItemRow[]): RankBarRow[] {
+  return items.map((item, index) => ({
+    key: `${item.item_kind}-${item.item_id ?? item.name}-${index}`,
+    name: item.name,
+    valueCents: item.revenue_cents,
+    leading: <KindIcon kind={item.item_kind} />,
+    sub: `${item.quantity} uds · ${item.lines_count} líneas`,
+  }));
 }
 
 /** Aviso cuando el salón no tiene TPV: la analítica de ventas queda gated. */
@@ -474,18 +665,18 @@ function NoSalonState(): React.ReactElement {
   );
 }
 
-/** Descripción legible de la granularidad de la serie. */
-function granularityLabel(granularity: string): string {
+/** Palabra del bucket de la serie según la granularidad (para descripciones). */
+function granularityWord(granularity: RevenueGranularity): string {
   switch (granularity) {
     case "day":
-      return "Facturación por día.";
+      return "día";
     case "week":
-      return "Facturación por semana.";
+      return "semana";
     case "month":
-      return "Facturación por mes.";
+      return "mes";
     case "year":
-      return "Facturación por año.";
+      return "año";
     default:
-      return "Facturación por periodo.";
+      return "periodo";
   }
 }
