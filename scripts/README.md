@@ -1,19 +1,72 @@
-# scripts/ — Utilidades de Node fuera del build de la app
+# scripts/ — Seed & teardown del salón **DEMO** de salon-os
 
-Scripts operativos que se ejecutan con [`tsx`](https://tsx.is) y **no forman parte
-del build de Next.js** (el `tsconfig.json` raíz excluye `scripts/`; este directorio
-tiene su propio `scripts/tsconfig.json`). Pueden importar código de la app vía el
-alias `@/*` (la dependencia es unidireccional: script → app, nunca al revés).
+Este directorio contiene el **par de scripts operativos** que crean y destruyen un
+salón de demostración completo y autocontenido para salon-os:
 
-## Requisitos
+| Script | npm | Qué hace |
+|---|---|---|
+| [`seed-demo-salon.ts`](./seed-demo-salon.ts) | `npm run seed:demo` | **Crea** (o reutiliza, idempotente) el salón demo y lo puebla con datos realistas: configuración base, catálogo, clientes, ~12 meses de citas, tickets, facturas y fidelización. |
+| [`teardown-demo-salon.ts`](./teardown-demo-salon.ts) | `npm run teardown:demo` | **Borra** el salón demo y **todo** lo que cuelga de él (facturas inmutables incluidas), dejando la BD lista para regenerarlo. |
 
-- Node ≥ 20 (probado en v24).
-- `.env.local` en la raíz del proyecto con, al menos:
-  - `NEXT_PUBLIC_SUPABASE_URL`
-  - `SUPABASE_SERVICE_ROLE_KEY` (solo servidor — **nunca** se commitea ni se imprime)
+Se ejecutan con [`tsx`](https://tsx.is) y **no forman parte del build de Next.js**
+(el `tsconfig.json` raíz los excluye; este directorio tiene su propio
+`scripts/tsconfig.json`). Pueden importar código de la app vía el alias `@/*` (la
+dependencia es unidireccional: script → app, nunca al revés). Cada `npm run` no es
+más que un envoltorio de `tsx` (p. ej. `seed:demo` → `tsx scripts/seed-demo-salon.ts`).
 
-  Las claves se leen del entorno; si no están ya presentes, se cargan de `.env.local`.
-  Ver `.env.example` para la lista completa.
+## ⚠️ Este salón es EXCLUSIVAMENTE para DEMO
+
+El salón que crean estos scripts (`Bella Studio`, slug `demo`, con su **propio
+`salon_id`**) es un **tenant aislado y desechable**, pensado para demostraciones,
+capturas y pruebas. **Nunca** es un entorno de producción ni contiene datos reales.
+
+- **No toca el salón real.** Es *imposible por diseño* que el seed o el teardown
+  escriban sobre **`denueveanueve`** (`abeef620-4fe3-4b29-a17b-6c51a8284f8f`): la
+  guarda `assertNotProductionSalon` los veta por id **y** por slug, y el teardown la
+  re-afirma **en el propio SQL** del `DELETE`. Solo operan sobre salones marcados por
+  el seed (`settings.seed_demo === true`); ante cualquier otro salón, **abortan**.
+- **Desechable.** El seed es additivo e idempotente (recréalo las veces que quieras
+  sin duplicar) y el teardown lo elimina de un tirón. Ciclo `seed → teardown → seed`
+  sin residuos.
+- **Datos ficticios.** NIF, razón social, dirección, teléfonos, emails y clientes son
+  inventados (válidos *en forma*, inexistentes en la realidad y en la AEAT).
+
+## Inicio rápido
+
+**Requisitos:** Node ≥ 20 (probado en v24) y un `.env.local` en la raíz del proyecto
+con, al menos:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY` (clave de **servidor** — **nunca** se commitea ni se imprime)
+
+Las claves se leen del entorno; si no están ya presentes, se cargan de `.env.local`
+(ver `.env.example` para la lista completa). El **teardown real** necesita además
+`SUPABASE_DB_URL` (ver [su sección](#dos-credenciales)).
+
+```bash
+npm run seed:demo            # 1. crea/rellena el salón demo e imprime las credenciales del owner
+npm run seed:demo:check      #    (opcional) valida entorno + credenciales SIN tocar la BD
+npm run teardown:demo        # 2. borra el salón demo y todo lo suyo (requiere SUPABASE_DB_URL)
+```
+
+> **Prueba en seco primero.** `npm run seed:demo -- --dry-run` y
+> `npm run teardown:demo -- --dry-run` describen el plan (recuentos, credenciales)
+> **sin escribir** en la base de datos.
+
+## Credenciales del owner demo
+
+Al crear el salón, el seed da de alta un **usuario owner** con el que entrar a la app:
+
+| Campo | Valor |
+|---|---|
+| **ID de acceso** | `demo` — el login es **por ID de acceso**, no por email. |
+| Email de login (sintético) | `demo@salonos.app` — lo deriva la app a partir del ID; el dominio nunca recibe correo. |
+| **Contraseña** | **Generada** y segura; el seed la **imprime una sola vez** en su salida (`[seed-demo:owner]` / resumen final). |
+
+> **Guarda la contraseña: no se puede recuperar.** El seed solo la muestra al **crear**
+> el owner (o al pasar `--reset-password`). Para fijar una estable y reproducible,
+> exporta `SEED_DEMO_OWNER_PASSWORD` antes de sembrar. Es una credencial *de demo,
+> pensada para usarse*; la `SUPABASE_SERVICE_ROLE_KEY`, en cambio, **jamás** se imprime.
 
 ## `seed-demo-salon.ts` — Seed de datos demo
 
