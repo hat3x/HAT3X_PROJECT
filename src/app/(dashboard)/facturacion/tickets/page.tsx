@@ -1,21 +1,33 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { ReceiptText } from "lucide-react";
 
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import { FacturacionEmpty } from "@/app/(dashboard)/facturacion/facturacion-empty";
+import { SalesTable } from "@/app/(dashboard)/facturacion/tickets/sales-table";
+import { fetchRecentSales, FACTURACION_LIST_LIMIT } from "@/lib/facturacion/queries";
+import { getActiveSalonId } from "@/lib/salon";
 
 export const metadata: Metadata = {
   title: "Tickets / Ventas",
 };
 
 /**
- * Facturación → Tickets / Ventas: histórico de ventas cerradas en caja.
+ * Facturación → Tickets / Ventas: histórico de ventas cerradas en caja (`pos_sales`).
  *
- * Andamiaje de la sección (sub-4): cabecera premium reutilizada de /ajustes y estado
- * vacío. El listado/histórico de `pos_sales` (con su detalle de líneas y cobros) fuera
- * del flujo del TPV lo cablea una tarea posterior.
+ * Server Component: resuelve el salón activo y lista las ventas más recientes
+ * (`sold_at` desc), con la sede (vía sesión de caja), el profesional, el cliente y
+ * los métodos de pago embebidos en una sola consulta. El acceso ya está guardado en
+ * el layout (owner/manager); aquí se scopea además por `salon_id`. Solo lectura.
  */
-export default function TicketsPage(): React.ReactElement {
+export default async function TicketsPage(): Promise<React.ReactElement> {
+  const salonId = await getActiveSalonId();
+  if (salonId === null) {
+    redirect("/login?next=/facturacion/tickets");
+  }
+
+  const sales = await fetchRecentSales(salonId);
+
   return (
     <div>
       <SectionHeader
@@ -24,11 +36,22 @@ export default function TicketsPage(): React.ReactElement {
         description="Histórico de los tickets y ventas cerradas en la caja, con su detalle de líneas, cobros e importes."
       />
 
-      <FacturacionEmpty
-        icon={ReceiptText}
-        title="Aún no hay ventas registradas"
-        description="Cada venta que cierres en la caja se listará aquí con su fecha, cliente, forma de pago e importe total."
-      />
+      {sales.length === 0 ? (
+        <FacturacionEmpty
+          icon={ReceiptText}
+          title="Aún no hay ventas registradas"
+          description="Cada venta que cierres en la caja se listará aquí con su fecha, cliente, forma de pago e importe total."
+        />
+      ) : (
+        <>
+          <SalesTable sales={sales} />
+          {sales.length === FACTURACION_LIST_LIMIT ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Se muestran las {FACTURACION_LIST_LIMIT} ventas más recientes.
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
