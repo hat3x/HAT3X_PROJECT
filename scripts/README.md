@@ -86,6 +86,30 @@ ficticios, sin efectos ni BD; testeado en
 > phone_e164)`) evita reinsertar. Ajusta el volumen con `SEED_DEMO_CUSTOMER_COUNT`
 > (saturado a 80–150). En `--dry-run` describe el plan sin escribir.
 
+### Citas que siembra (sub-6)
+
+El generador **puro y determinista** vive en
+[`seed-demo-appointments.ts`](./seed-demo-appointments.ts) (sin efectos ni BD;
+testeado en `src/tests/unit/seed-demo-appointments.test.ts`). Produce ~**12 meses**
+de citas con **estacionalidad** (más viernes/sábado + picos en fechas señaladas) y
+una **agenda futura** de ~4 semanas. Reutiliza el contrato de citas de
+[`docs/seed-demo-contracts.md`](../docs/seed-demo-contracts.md) §4. Todo additivo e
+idempotente:
+
+| Objeto | Qué crea |
+|---|---|
+| `appointments` | Citas vinculadas a **profesionales, servicios y sedes reales** ya sembrados. `starts_at` (UTC) se deriva de la hora local con `zonedWallTimeToUtc` (respeta DST); `ends_at = starts_at + (application+exposure+post)` minutos (**modelo de 3 fases**, igual que el motor de reservas). **Mayoría pasadas `completed`** con una minoría `cancelled`/`no_show`, y **futuras `confirmed`/`pending`** para poblar la agenda próxima. |
+| `appointment_blocks` | **Automáticos por trigger** `trg_appointment_blocks_sync` (fases `application`/`post_exposure`). El plan NO solapa por profesional ⇒ la exclusión `appointment_blocks_no_overlap` (23P01) nunca salta. **El seed no los toca.** |
+| `visits` | **Automáticas por trigger** `trg_appointments_create_visit`: las citas pasadas se insertan activas y se transicionan a `completed` (un INSERT directo con `completed` NO crearía la visita). Base del histórico de negocio y de la métrica de ocupación de agenda. |
+
+> **Estacionalidad (España/Madrid).** Factor por día de la semana (fin de semana
+> más cargado) y picos en campaña de **Navidad**, **Nochevieja**, **Semana Santa**
+> (calculada con el algoritmo de Gauss), **Día de la Madre**, **San Valentín**,
+> **pre-vacaciones de verano**, **Black Friday** y un **hueco de agosto**; más una
+> tendencia de crecimiento (los meses recientes cargan más que los de hace un año).
+> Ajusta el volumen con `SEED_DEMO_APPOINTMENT_DENSITY`. En `--dry-run` describe el
+> plan (recuentos por estado) sin escribir.
+
 ### Garantías de seguridad
 
 - **Salón real intocable.** El seed tiene *prohibido por diseño* escribir sobre
@@ -113,6 +137,7 @@ ficticios, sin efectos ni BD; testeado en
 | `SEED_DEMO_OWNER_ID` | `demo` | ID de acceso del owner (→ `demo@salonos.app`). |
 | `SEED_DEMO_OWNER_PASSWORD` | *(generada)* | Contraseña fija del owner (si se omite, se genera). |
 | `SEED_DEMO_CUSTOMER_COUNT` | `120` | Nº de clientes demo a sembrar; **saturado** al rango pedido 80–150. |
+| `SEED_DEMO_APPOINTMENT_DENSITY` | `1.2` | Densidad de citas (media/profesional/día antes de estacionalidad); **saturada** a 0.2–6. |
 | `SEED_DEMO_RESET_PASSWORD` | — | `1` equivale a `--reset-password`. |
 | `SEED_DRY_RUN` | — | `1` equivale a `--dry-run`. |
 | `SEED_CHECK` | — | `1` equivale a `--check`. |

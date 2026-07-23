@@ -55,6 +55,7 @@ import { resolve } from "node:path";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 import { idToEmail } from "@/lib/auth/id-email";
+import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
 import { normalizePhone } from "@/lib/customers/normalize-phone";
 import {
   SALON_LOGOS_BUCKET,
@@ -77,6 +78,11 @@ import {
   generateDemoCustomers,
   resolveCustomerCount,
 } from "./seed-demo-customers";
+import {
+  generateDemoAppointments,
+  resolveAppointmentDensity,
+  type DemoAppointmentPlan,
+} from "./seed-demo-appointments";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constantes de seguridad — el salón REAL jamás debe tocarse.
@@ -1121,6 +1127,284 @@ async function seedCustomers(ctx: SeedContext): Promise<CustomerSeedResult> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Citas del salón demo (sub-6): ~12 meses con estacionalidad, 3 fases y agenda futura.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Info de servicio necesaria para materializar una cita (fases + precio snapshot). */
+interface ServiceTiming {
+  id: string;
+  /** Duración total (minutos) = application_min + exposure_min + post_exposure_min. */
+  totalMinutes: number;
+  priceCents: number;
+}
+
+/** Resultado de la siembra de citas (para el log y los tests de integración). */
+interface AppointmentSeedResult {
+  /** Nº de citas del plan generado (antes de dedup/resolución). */
+  planned: number;
+  /** Nº de citas nuevas insertadas en esta ejecución. */
+  inserted: number;
+  /** Nº de citas ya presentes (dedup por (professional_id, starts_at)), no reinsertadas. */
+  skipped: number;
+  /** Nº de citas pasadas llevadas a `completed` (⇒ fila en `visits` por trigger). */
+  completed: number;
+}
+
+/** Parte una lista en trozos de `size` (para inserts/updates por lotes). */
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
+
+/** Clave natural estable de una cita: `${professional_id}|${epochMs(starts_at)}`. */
+function appointmentKey(professionalId: string, startsAtIso: string): string {
+  return `${professionalId}|${new Date(startsAtIso).getTime()}`;
+}
+
+/** Cuenta las citas del plan por estado (para los logs de resumen). */
+function countByStatus(
+  plan: readonly DemoAppointmentPlan[],
+): Record<DemoAppointmentPlan["status"], number> {
+  const counts: Record<DemoAppointmentPlan["status"], number> = {
+    completed: 0,
+    cancelled: 0,
+    no_show: 0,
+    confirmed: 0,
+    pending: 0,
+  };
+  for (const item of plan) counts[item.status] += 1;
+  return counts;
+}
+
+/**
+ * Siembra ~12 meses de CITAS del salón demo (sub-6) con estacionalidad (más
+ * viernes/sábado + picos en fechas señaladas), vinculadas a profesionales,
+ * servicios y sedes REALES ya sembrados. Reutiliza el contrato de citas de
+ * `docs/seed-demo-contracts.md` §4:
+ *
+ *  · Plan DETERMINISTA de `seed-demo-appointments` (hora local de pared + claves
+ *    naturales), que garantiza que las citas de un MISMO profesional NO se solapan.
+ *  · `starts_at` (UTC) se deriva con `zonedWallTimeToUtc` (el mismo helper del motor
+ *    de reservas, respeta DST); `ends_at = starts_at + (application+exposure+post)`
+ *    minutos, EXACTAMENTE como calcula el servidor (§4.4).
+ *  · MODELO DE 3 FASES + anti-solape: NO se tocan `appointment_blocks` (los genera
+ *    el trigger `trg_appointment_blocks_sync` por fase). Como el plan no solapa por
+ *    profesional, la exclusión `appointment_blocks_no_overlap` (23P01) nunca salta.
+ *  · MEZCLA DE ESTADOS: las citas se insertan ACTIVAS y las pasadas `completed` se
+ *    transicionan con `UPDATE status='completed'` para que el trigger
+ *    `trg_appointments_create_visit` cree su fila en `public.visits` (un INSERT
+ *    directo con `completed` NO la crearía). Las `cancelled`/`no_show` se insertan
+ *    con su estado final (no generan bloques ni visita).
+ *
+ * ADITIVO E IDEMPOTENTE: dedup por la clave natural `(professional_id, starts_at)`.
+ * El plan es determinista, así que reejecutar reconoce las citas ya sembradas y no
+ * inserta duplicados. Nunca hace UPDATE/DELETE de citas ajenas.
+ */
+async function seedAppointments(ctx: SeedContext): Promise<AppointmentSeedResult> {
+  assertNotProductionSalon({ id: ctx.salonId, slug: ctx.slug });
+  const { client, salonId } = ctx;
+  const density = resolveAppointmentDensity(process.env.SEED_DEMO_APPOINTMENT_DENSITY);
+
+  if (ctx.dryRun) {
+    // En dry-run no se consulta la BD; la zona del salón se aproxima a Europe/Madrid
+    // (el valor real solo cambia el reparto horario, no el recuento del plan).
+    const todayStr = localDateInZone("Europe/Madrid", ctx.now);
+    const plan = generateDemoAppointments({
+      todayStr,
+      customerCount: ctx.customerCount,
+      density,
+    });
+    const byStatus = countByStatus(plan);
+    log(
+      "appointments",
+      `DRY-RUN: se sembrarían ~${plan.length} citas (${byStatus.completed} completed, ` +
+        `${byStatus.cancelled} cancelled, ${byStatus.no_show} no_show, ${byStatus.confirmed} ` +
+        `confirmed, ${byStatus.pending} pending) en ~12 meses con estacionalidad. Las ` +
+        "completed se transicionarían para generar su visita (no se escribe).",
+    );
+    return { planned: plan.length, inserted: 0, skipped: plan.length, completed: 0 };
+  }
+
+  // Zona del salón demo: base de la conversión hora local → instante UTC.
+  const { data: salonRow, error: salonError } = await client
+    .from("salons")
+    .select("timezone")
+    .eq("id", salonId)
+    .single();
+  if (salonError || !salonRow) {
+    throw new Error(
+      `No se pudo leer la zona horaria del salón demo: ${salonError?.message ?? "sin fila"}.`,
+    );
+  }
+  const timezone = salonRow.timezone;
+  const todayStr = localDateInZone(timezone, ctx.now);
+
+  // Mapas de resolución: profesional/servicio por clave natural.
+  const { data: pros, error: prosError } = await client
+    .from("professionals")
+    .select("id, full_name")
+    .eq("salon_id", salonId);
+  if (prosError) throw new Error(`No se pudieron leer los profesionales: ${prosError.message}`);
+  const proIdByName = new Map<string, string>((pros ?? []).map((p) => [p.full_name, p.id]));
+
+  const { data: svcs, error: svcsError } = await client
+    .from("services")
+    .select("id, name, application_min, exposure_min, post_exposure_min, price_cents")
+    .eq("salon_id", salonId);
+  if (svcsError) throw new Error(`No se pudieron leer los servicios: ${svcsError.message}`);
+  const svcByName = new Map<string, ServiceTiming>(
+    (svcs ?? []).map((s) => [
+      s.name,
+      {
+        id: s.id,
+        totalMinutes: s.application_min + s.exposure_min + s.post_exposure_min,
+        priceCents: s.price_cents,
+      },
+    ]),
+  );
+
+  // Clientes por índice: se regeneran de forma determinista (misma lista que sembró
+  // `seedCustomers`) y se resuelven a su id por el teléfono canónico `phone_e164`.
+  const customerSeeds = generateDemoCustomers(ctx.customerCount);
+  const { data: custRows, error: custError } = await client
+    .from("customers")
+    .select("id, phone_e164")
+    .eq("salon_id", salonId);
+  if (custError) throw new Error(`No se pudieron leer los clientes: ${custError.message}`);
+  const idByE164 = new Map<string, string>(
+    (custRows ?? [])
+      .filter((c): c is { id: string; phone_e164: string } => c.phone_e164 !== null)
+      .map((c) => [c.phone_e164, c.id]),
+  );
+  const customerIdByIndex = customerSeeds.map((seed) => {
+    const e164 = normalizePhone(seed.phone);
+    return e164 !== null ? idByE164.get(e164) ?? null : null;
+  });
+
+  // Citas ya existentes en el salón → dedup por clave natural (idempotencia).
+  const { data: existingAppts, error: existingError } = await client
+    .from("appointments")
+    .select("professional_id, starts_at")
+    .eq("salon_id", salonId);
+  if (existingError) {
+    throw new Error(`No se pudieron leer las citas existentes: ${existingError.message}`);
+  }
+  const existingKeys = new Set<string>(
+    (existingAppts ?? []).map((a) => appointmentKey(a.professional_id, a.starts_at)),
+  );
+
+  // Materializa el plan → filas de `appointments` (resolviendo IDs y tiempos UTC).
+  const plan = generateDemoAppointments({
+    todayStr,
+    customerCount: ctx.customerCount,
+    density,
+  });
+  const inserts: Database["public"]["Tables"]["appointments"]["Insert"][] = [];
+  const completedKeys = new Set<string>();
+  const seenKeys = new Set<string>();
+  let skippedExisting = 0;
+  let unresolved = 0;
+
+  for (const item of plan) {
+    const professionalId = proIdByName.get(item.professionalName);
+    const service = svcByName.get(item.serviceName);
+    const customerId = customerIdByIndex[item.customerIndex] ?? null;
+    if (professionalId === undefined || service === undefined || customerId === null) {
+      unresolved += 1;
+      continue;
+    }
+
+    const startsAt = zonedWallTimeToUtc(item.dateStr, item.startTime, timezone);
+    const startsAtIso = startsAt.toISOString();
+    const key = appointmentKey(professionalId, startsAtIso);
+    if (existingKeys.has(key) || seenKeys.has(key)) {
+      skippedExisting += 1;
+      continue;
+    }
+    seenKeys.add(key);
+
+    const endsAtIso = new Date(
+      startsAt.getTime() + service.totalMinutes * 60_000,
+    ).toISOString();
+    // Las `completed` se insertan ACTIVAS (`confirmed`) y luego se transicionan para
+    // que el trigger cree la `visits`; el resto se inserta con su estado final.
+    const insertStatus = item.status === "completed" ? "confirmed" : item.status;
+    inserts.push({
+      salon_id: salonId,
+      customer_id: customerId,
+      professional_id: professionalId,
+      service_id: service.id,
+      status: insertStatus,
+      starts_at: startsAtIso,
+      ends_at: endsAtIso,
+      price_cents: service.priceCents,
+      cancelled_reason: item.status === "cancelled" ? "Cancelada por el cliente." : null,
+    });
+    if (item.status === "completed") completedKeys.add(key);
+  }
+
+  if (inserts.length === 0) {
+    log(
+      "appointments",
+      `Citas ya sembradas (${existingKeys.size} en el salón); nada que insertar (idempotente).` +
+        (unresolved > 0
+          ? ` ${unresolved} del plan sin resolver (cliente/servicio/profesional).`
+          : ""),
+    );
+    return { planned: plan.length, inserted: 0, skipped: skippedExisting, completed: 0 };
+  }
+
+  // INSERT por lotes; se capturan los ids por clave natural para la transición.
+  const idByKey = new Map<string, string>();
+  for (const batch of chunk(inserts, 500)) {
+    const { data: created, error: insertError } = await client
+      .from("appointments")
+      .insert(batch)
+      .select("id, professional_id, starts_at");
+    if (insertError) {
+      throw new Error(`No se pudieron sembrar las citas demo: ${insertError.message}`);
+    }
+    for (const row of created ?? []) {
+      idByKey.set(appointmentKey(row.professional_id, row.starts_at), row.id);
+    }
+  }
+
+  // Transición de las pasadas → `completed` (dispara `trg_appointments_create_visit`).
+  const completedIds = [...completedKeys]
+    .map((key) => idByKey.get(key))
+    .filter((id): id is string => id !== undefined);
+  for (const batch of chunk(completedIds, 200)) {
+    const { error: updateError } = await client
+      .from("appointments")
+      .update({ status: "completed" })
+      .eq("salon_id", salonId)
+      .in("id", batch);
+    if (updateError) {
+      throw new Error(`No se pudieron completar las citas pasadas demo: ${updateError.message}`);
+    }
+  }
+
+  const byStatus = countByStatus(plan);
+  log(
+    "appointments",
+    `Citas: +${inserts.length} nuevas de ${plan.length} planificadas ` +
+      `(${completedIds.length} completed → visita; ${byStatus.cancelled} cancelled, ` +
+      `${byStatus.no_show} no_show, ${byStatus.confirmed} confirmed, ${byStatus.pending} pending). ` +
+      `${skippedExisting} ya existían.` +
+      (unresolved > 0 ? ` ${unresolved} sin resolver.` : ""),
+  );
+  return {
+    planned: plan.length,
+    inserted: inserts.length,
+    skipped: skippedExisting,
+    completed: completedIds.length,
+  };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Pasos de dominio — punto de extensión para subtareas posteriores.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1144,7 +1428,11 @@ async function seedDomainData(ctx: SeedContext): Promise<void> {
   // Clientes (sub-5): fichas con teléfono único → cuenta de puntos + cupón + qr_token.
   await seedCustomers(ctx);
 
-  // TODO(subtarea citas):          await seedAppointments(ctx);
+  // Citas (sub-6): ~12 meses con estacionalidad (más viernes/sábado + picos), mayoría
+  // pasadas (completed → visita) y algunas futuras (confirmed/pending). Requiere
+  // profesionales, servicios y clientes ya sembrados.
+  await seedAppointments(ctx);
+
   // TODO(subtarea tickets/ventas): await seedSales(ctx);
   // TODO(subtarea facturas):       await seedInvoices(ctx);
   // TODO(subtarea fidelización):   await seedLoyaltyHistory(ctx);
