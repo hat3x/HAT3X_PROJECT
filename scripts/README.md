@@ -49,6 +49,25 @@ Todo idempotente y acotado por las guardas de seguridad:
 > (Esto es una credencial de demo pensada para usarse; la `SUPABASE_SERVICE_ROLE_KEY`
 > jamás se imprime.)
 
+### Configuración operativa que siembra (sub-4)
+
+El catálogo declarativo vive en [`seed-demo-data.ts`](./seed-demo-data.ts) (datos
+**puros**, sin efectos, testeados en `src/tests/unit/seed-demo-operational.test.ts`).
+Todo idempotente y additivo (no altera filas existentes):
+
+| Objeto | Qué crea |
+|---|---|
+| `locations` | **2 sedes** en Madrid: `Bella Studio Centro` (`centro`, 09:30–20:30) y `Bella Studio Norte` (`norte`, 09:00–19:00), con dirección y teléfono. Idempotente por `(salon_id, slug)`. |
+| `professionals` | **8 profesionales** con nombres realistas (5 en Centro, 3 en Norte), con `specialties` y color de agenda `#rrggbb`. Idempotente por `(salon_id, full_name)`. |
+| `services` | **23 servicios** en 6 categorías (Corte, Peinado, Color, Mechas, Tratamiento, Barbería) con el modelo de **3 fases** (`application_min`/`exposure_min`/`post_exposure_min`) y **precios realistas en céntimos**. `duration_minutes(_total)` son generadas (no se insertan). Idempotente por `(salon_id, name)`. |
+| `products` | **10 productos** retail (champús, mascarillas, etc.) con `price_cents`, `vat_rate` (21 %) y `stock`. Idempotente por `(salon_id, name)`. |
+| `professional_services` | Enlaces servicio↔profesional derivados de las especialidades (espejo de `professionalCoversService`). Es lo que hace **reservable** cada servicio. UPSERT `ON CONFLICT DO NOTHING`. |
+| `professional_schedules` | Horario recurrente **L–S** (`weekday` 1..6) de cada profesional con las horas de apertura de **su** sede. Idempotente por profesional (si ya tiene tramos, se respeta). |
+
+> **Orden de siembra** (dependencias de FK): sedes → profesionales → servicios →
+> productos → enlaces servicio↔profesional → horarios. En `--dry-run` se describe el
+> plan sin escribir.
+
 ### Garantías de seguridad
 
 - **Salón real intocable.** El seed tiene *prohibido por diseño* escribir sobre

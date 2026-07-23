@@ -63,6 +63,16 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json, SalonFeature } from "@/types/database";
 
+import {
+  DEMO_LOCATIONS,
+  DEMO_OPEN_WEEKDAYS,
+  DEMO_PRODUCTS,
+  DEMO_PROFESSIONALS,
+  DEMO_SERVICES,
+  professionalCoversService,
+  type DemoLocation,
+} from "./seed-demo-data";
+
 // ───────────────────────────────────────────────────────────────────────────
 // Constantes de seguridad — el salón REAL jamás debe tocarse.
 // ───────────────────────────────────────────────────────────────────────────
@@ -715,6 +725,295 @@ async function seedSalonCoreConfig(
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Configuración operativa del salón demo (sub-4): sedes, profesionales,
+// servicios (3 fases), productos, servicios-por-profesional y horarios L–S.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Lee `row.id` (de `ensureRow`) como `string`, o lanza si falta/no es texto. */
+function rowId(row: Record<string, unknown>, table: PublicTable): string {
+  const id = row.id;
+  if (typeof id !== "string" || id.length === 0) {
+    throw new Error(`La fila de "${table}" no devolvió un id de texto válido.`);
+  }
+  return id;
+}
+
+/** Resuelve un valor de un `Map` por clave, o lanza con un mensaje claro. */
+function resolveOrThrow<V>(map: ReadonlyMap<string, V>, key: string, what: string): V {
+  const value = map.get(key);
+  if (value === undefined) {
+    throw new Error(`No se pudo resolver ${what} para la clave "${key}".`);
+  }
+  return value;
+}
+
+/**
+ * Siembra las sedes del salón demo (idempotente por `(salon_id, slug)`). Devuelve
+ * un mapa `slug → { id, location }` para que profesionales y horarios cuelguen de
+ * la sede correcta.
+ */
+async function seedLocations(
+  client: SupabaseClient<Database>,
+  salonId: string,
+): Promise<Map<string, { id: string; location: DemoLocation }>> {
+  const bySlug = new Map<string, { id: string; location: DemoLocation }>();
+  let created = 0;
+  for (const location of DEMO_LOCATIONS) {
+    const values = {
+      salon_id: salonId,
+      name: location.name,
+      slug: location.slug,
+      address: location.address,
+      phone: location.phone,
+      active: true,
+    } satisfies Database["public"]["Tables"]["locations"]["Insert"];
+    const result = await ensureRow(
+      client,
+      "locations",
+      { salon_id: salonId, slug: location.slug },
+      values,
+    );
+    if (result.created) created += 1;
+    bySlug.set(location.slug, { id: rowId(result.row, "locations"), location });
+  }
+  log("locations", `Sedes: ${DEMO_LOCATIONS.length} (${created} nuevas). `);
+  return bySlug;
+}
+
+/**
+ * Siembra los profesionales (idempotente por `(salon_id, full_name)`; los nombres
+ * del catálogo demo son únicos). Cada profesional cuelga de su sede. Devuelve un
+ * mapa `full_name → professional_id`.
+ */
+async function seedProfessionals(
+  client: SupabaseClient<Database>,
+  salonId: string,
+  locationsBySlug: ReadonlyMap<string, { id: string; location: DemoLocation }>,
+): Promise<Map<string, string>> {
+  const byName = new Map<string, string>();
+  let created = 0;
+  for (const professional of DEMO_PROFESSIONALS) {
+    const sede = resolveOrThrow(
+      locationsBySlug,
+      professional.locationSlug,
+      `la sede del profesional "${professional.fullName}"`,
+    );
+    const values = {
+      salon_id: salonId,
+      location_id: sede.id,
+      full_name: professional.fullName,
+      specialties: [...professional.specialties],
+      color: professional.color,
+      active: true,
+    } satisfies Database["public"]["Tables"]["professionals"]["Insert"];
+    const result = await ensureRow(
+      client,
+      "professionals",
+      { salon_id: salonId, full_name: professional.fullName },
+      values,
+    );
+    if (result.created) created += 1;
+    byName.set(professional.fullName, rowId(result.row, "professionals"));
+  }
+  log("professionals", `Profesionales: ${DEMO_PROFESSIONALS.length} (${created} nuevos).`);
+  return byName;
+}
+
+/**
+ * Siembra el catálogo de servicios con el modelo de 3 fases (idempotente por
+ * `(salon_id, name)`). `duration_minutes(_total)` son columnas generadas: NO se
+ * insertan (las calcula Postgres). Devuelve un mapa `name → service_id`.
+ */
+async function seedServices(
+  client: SupabaseClient<Database>,
+  salonId: string,
+): Promise<Map<string, string>> {
+  const byName = new Map<string, string>();
+  let created = 0;
+  for (const service of DEMO_SERVICES) {
+    const values = {
+      salon_id: salonId,
+      name: service.name,
+      category: service.category,
+      application_min: service.applicationMin,
+      exposure_min: service.exposureMin,
+      post_exposure_min: service.postExposureMin,
+      price_cents: service.priceCents,
+      active: true,
+    } satisfies Database["public"]["Tables"]["services"]["Insert"];
+    const result = await ensureRow(
+      client,
+      "services",
+      { salon_id: salonId, name: service.name },
+      values,
+    );
+    if (result.created) created += 1;
+    byName.set(service.name, rowId(result.row, "services"));
+  }
+  log("services", `Servicios (3 fases): ${DEMO_SERVICES.length} (${created} nuevos).`);
+  return byName;
+}
+
+/** Siembra el catálogo de productos retail (idempotente por `(salon_id, name)`). */
+async function seedProducts(
+  client: SupabaseClient<Database>,
+  salonId: string,
+): Promise<void> {
+  let created = 0;
+  for (const product of DEMO_PRODUCTS) {
+    const values = {
+      salon_id: salonId,
+      name: product.name,
+      description: product.description,
+      price_cents: product.priceCents,
+      vat_rate: product.vatRate,
+      stock: product.stock,
+      active: true,
+    } satisfies Database["public"]["Tables"]["products"]["Insert"];
+    const result = await ensureRow(
+      client,
+      "products",
+      { salon_id: salonId, name: product.name },
+      values,
+    );
+    if (result.created) created += 1;
+  }
+  log("products", `Productos: ${DEMO_PRODUCTS.length} (${created} nuevos).`);
+}
+
+/**
+ * Enlaza qué servicios presta cada profesional (`professional_services`, N:M). Se
+ * deriva de las especialidades (espejo de `professionalCoversService`). Idempotente
+ * vía UPSERT `ON CONFLICT (professional_id, service_id) DO NOTHING`. Es lo que hace
+ * reservable cada servicio (la disponibilidad filtra por esta tabla).
+ */
+async function seedProfessionalServices(
+  client: SupabaseClient<Database>,
+  salonId: string,
+  professionalIdByName: ReadonlyMap<string, string>,
+  serviceIdByName: ReadonlyMap<string, string>,
+): Promise<void> {
+  const rows: Database["public"]["Tables"]["professional_services"]["Insert"][] = [];
+  for (const professional of DEMO_PROFESSIONALS) {
+    const professionalId = resolveOrThrow(
+      professionalIdByName,
+      professional.fullName,
+      `el id del profesional "${professional.fullName}"`,
+    );
+    for (const service of DEMO_SERVICES) {
+      if (!professionalCoversService(professional, service)) continue;
+      const serviceId = resolveOrThrow(
+        serviceIdByName,
+        service.name,
+        `el id del servicio "${service.name}"`,
+      );
+      rows.push({ salon_id: salonId, professional_id: professionalId, service_id: serviceId });
+    }
+  }
+
+  const { error } = await client
+    .from("professional_services")
+    .upsert(rows, { onConflict: "professional_id,service_id", ignoreDuplicates: true });
+  if (error) {
+    throw new Error(`No se pudieron enlazar servicios↔profesionales: ${error.message}`);
+  }
+  log("prof-services", `Enlaces servicio↔profesional asegurados: ${rows.length}.`);
+}
+
+/**
+ * Siembra los horarios recurrentes L–S de cada profesional con las horas de
+ * apertura de SU sede (`professional_schedules`). Idempotente por profesional:
+ * si ya tiene algún tramo, se respeta (additivo, no duplica). weekday 1..6 = L..S.
+ */
+async function seedSchedules(
+  client: SupabaseClient<Database>,
+  salonId: string,
+  professionalIdByName: ReadonlyMap<string, string>,
+  locationsBySlug: ReadonlyMap<string, { id: string; location: DemoLocation }>,
+): Promise<void> {
+  let seeded = 0;
+  for (const professional of DEMO_PROFESSIONALS) {
+    const professionalId = resolveOrThrow(
+      professionalIdByName,
+      professional.fullName,
+      `el id del profesional "${professional.fullName}"`,
+    );
+    const sede = resolveOrThrow(
+      locationsBySlug,
+      professional.locationSlug,
+      `la sede del profesional "${professional.fullName}"`,
+    );
+
+    // Guarda de idempotencia: si el profesional ya tiene horario, no lo re-siembra.
+    const { data: existing, error: findError } = await client
+      .from("professional_schedules")
+      .select("id")
+      .eq("salon_id", salonId)
+      .eq("professional_id", professionalId)
+      .limit(1)
+      .maybeSingle();
+    if (findError) {
+      throw new Error(
+        `No se pudo consultar el horario de "${professional.fullName}": ${findError.message}`,
+      );
+    }
+    if (existing) continue;
+
+    const rows: Database["public"]["Tables"]["professional_schedules"]["Insert"][] =
+      DEMO_OPEN_WEEKDAYS.map((weekday) => ({
+        salon_id: salonId,
+        professional_id: professionalId,
+        weekday,
+        start_time: sede.location.openStart,
+        end_time: sede.location.openEnd,
+      }));
+
+    const { error: insertError } = await client
+      .from("professional_schedules")
+      .insert(rows);
+    if (insertError) {
+      throw new Error(
+        `No se pudo sembrar el horario de "${professional.fullName}": ${insertError.message}`,
+      );
+    }
+    seeded += 1;
+  }
+  log(
+    "schedules",
+    `Horarios L–S sembrados para ${seeded} profesional(es) ` +
+      `(${DEMO_PROFESSIONALS.length - seeded} ya tenían).`,
+  );
+}
+
+/**
+ * Configuración operativa del salón demo (sub-4). Additiva e idempotente y acotada
+ * por la guarda maestra. En `dryRun` describe el plan sin escribir. Orden: sedes →
+ * profesionales → servicios → productos → enlaces servicio↔profesional → horarios
+ * (las dependencias de FK obligan este orden).
+ */
+async function seedOperationalConfig(ctx: SeedContext): Promise<void> {
+  assertNotProductionSalon({ id: ctx.salonId, slug: ctx.slug });
+
+  if (ctx.dryRun) {
+    log(
+      "ops",
+      `DRY-RUN: se sembrarían ${DEMO_LOCATIONS.length} sedes, ` +
+        `${DEMO_PROFESSIONALS.length} profesionales, ${DEMO_SERVICES.length} servicios ` +
+        `(3 fases), ${DEMO_PRODUCTS.length} productos y horarios L–S por sede (no se escribe).`,
+    );
+    return;
+  }
+
+  const { client, salonId } = ctx;
+  const locationsBySlug = await seedLocations(client, salonId);
+  const professionalIdByName = await seedProfessionals(client, salonId, locationsBySlug);
+  const serviceIdByName = await seedServices(client, salonId);
+  await seedProducts(client, salonId);
+  await seedProfessionalServices(client, salonId, professionalIdByName, serviceIdByName);
+  await seedSchedules(client, salonId, professionalIdByName, locationsBySlug);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Pasos de dominio — punto de extensión para subtareas posteriores.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -732,13 +1031,14 @@ async function seedSalonCoreConfig(
 async function seedDomainData(ctx: SeedContext): Promise<void> {
   assertNotProductionSalon({ id: ctx.salonId, slug: ctx.slug });
 
+  // Configuración operativa (sub-4): prerrequisito de clientes/citas/ventas.
+  await seedOperationalConfig(ctx);
+
   // TODO(subtarea clientes):       await seedCustomers(ctx);
   // TODO(subtarea citas):          await seedAppointments(ctx);
   // TODO(subtarea tickets/ventas): await seedSales(ctx);
   // TODO(subtarea facturas):       await seedInvoices(ctx);
   // TODO(subtarea fidelización):   await seedLoyaltyHistory(ctx);
-
-  log("domain", "Sin pasos de dominio en el scaffold (pendientes de subtareas).");
 }
 
 // ───────────────────────────────────────────────────────────────────────────
