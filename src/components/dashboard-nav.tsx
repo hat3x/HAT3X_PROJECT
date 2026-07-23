@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   CalendarClock,
   CalendarDays,
+  FileText,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -42,6 +43,17 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/products", label: "Productos", icon: Package },
 ];
+
+/**
+ * Facturación (libro de facturas + histórico de tickets/ventas). Al ser materia
+ * fiscal/administrativa se muestra —igual que Ajustes— solo a owner/manager
+ * (`showSettings`), y se coloca justo antes de la configuración.
+ */
+const FACTURACION_ITEM: NavItem = {
+  href: "/facturacion",
+  label: "Facturación",
+  icon: FileText,
+};
 
 const SETTINGS_ITEM: NavItem = { href: "/ajustes", label: "Ajustes", icon: Settings };
 
@@ -93,7 +105,9 @@ export function DashboardNav({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  const items = showSettings ? [...NAV_ITEMS, SETTINGS_ITEM] : NAV_ITEMS;
+  const items = showSettings
+    ? [...NAV_ITEMS, FACTURACION_ITEM, SETTINGS_ITEM]
+    : NAV_ITEMS;
   const brand = brandName?.trim() ? brandName : "Salon OS";
   const logo = logoUrl?.trim() ? logoUrl : null;
 
