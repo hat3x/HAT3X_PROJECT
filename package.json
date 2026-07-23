@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "typecheck:scripts": "tsc -p scripts/tsconfig.json --noEmit",
+    "seed:demo": "tsx scripts/seed-demo-salon.ts",
+    "seed:demo:check": "tsx scripts/seed-demo-salon.ts --check"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.19",
@@ -48,6 +51,7 @@
     "jsdom": "^29.1.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.2",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.10"

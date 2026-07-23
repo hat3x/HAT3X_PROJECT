@@ -1,0 +1,22 @@
+{
+  // tsconfig DEDICADO a los scripts de Node (tsx). Vive fuera del build de la
+  // app: el tsconfig raíz excluye `scripts/`. Este archivo permite tipar y
+  // ejecutar los scripts de forma aislada. Es también el tsconfig que `tsx`
+  // detecta al ejecutar `scripts/*.ts`, resolviendo el alias `@/*`.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "types": ["node"],
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "noEmit": true,
+    "incremental": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["../node_modules"]
+}
