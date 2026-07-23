@@ -110,6 +110,33 @@ idempotente:
 > Ajusta el volumen con `SEED_DEMO_APPOINTMENT_DENSITY`. En `--dry-run` describe el
 > plan (recuentos por estado) sin escribir.
 
+### Ventas y arqueo que siembra (sub-7)
+
+El generador **puro y determinista** vive en
+[`seed-demo-sales.ts`](./seed-demo-sales.ts) (sin efectos ni BD; testeado en
+`src/tests/unit/seed-demo-sales.test.ts`). Convierte cada **cita pasada
+`completed`** en un **ticket del TPV**, agrupado en **sesiones de caja (arqueo)**
+por sede y día. Reutiliza la aritmética de venta de
+[`docs/seed-demo-contracts.md`](../docs/seed-demo-contracts.md) §2 y la
+fidelización de §5. Todo additivo e idempotente:
+
+| Objeto | Qué crea |
+|---|---|
+| `pos_sessions` | Una **sesión de caja por (sede, día)**, ya **cerrada** (histórico), con fondo de caja, **efectivo esperado** (= fondo + ventas en efectivo), **contado** y **descuadre** (la mayoría cuadra; algunas ± unos euros), y un snapshot de totales por método en `closing_totals`. Dedup por la marca `notes='seed_demo_session:<sede|fecha>'`. |
+| `pos_sales` | Un **ticket por cita completada** (`status='completed'`, `sold_at` retrodatado al fin del servicio), atribuido a su cliente/profesional y colgado de su sesión. Totales (`subtotal/discount/tax/total`) calculados con `computeSaleTotals` (**fuente única**, la misma del TPV real y la factura). Dedup por `appointment_id`. |
+| `pos_sale_lines` | Línea de **servicio** (snapshot de precio/IVA) y, **a veces (~30 %), una línea de producto** retail (venta cruzada). `Σ line_total_cents === total_cents`. |
+| `pos_payments` | Cobros construidos por la **pasarela `manual`** (`getPaymentGateway`), que valida que cubren **exactamente** el total. Mezcla real de **efectivo/tarjeta/bizum** con algún **pago mixto** (varias filas). |
+| `points_movements` · `loyalty_accounts` · `rewards` | **Fidelización acreditada** replicando `awardVisit` (§5.4): puntos por ticket (`ceil(price_cents/200)`), saldo/visitas sumados sobre el saldo **real** (no se inventan), e **hitos 3/5/8/10** → recompensa. Idempotente por el EARN `(ref_type='pos_sale', ref_id)`. |
+
+> **Clientes nuevos vs recurrentes.** El reparto de citas de sub-6 concentra las
+> visitas en unos pocos habituales y deja una cola larga de esporádicos; al
+> acreditar los puntos **en orden cronológico** por cliente, los recurrentes van
+> alcanzando los hitos de fidelización de forma natural.
+>
+> **Sin factura (solo ticket).** Esta subtarea **no emite facturas**: todas las
+> ventas quedan como ticket simple; una subtarea posterior factura un subconjunto.
+> En `--dry-run` estima el nº de ventas desde el plan de citas sin escribir.
+
 ### Garantías de seguridad
 
 - **Salón real intocable.** El seed tiene *prohibido por diseño* escribir sobre

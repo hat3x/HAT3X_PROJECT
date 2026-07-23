@@ -48,7 +48,7 @@
  *   SEED_DEMO_OWNER_PASSWORD    (def. generada)          — contraseña fija del owner
  */
 
-import { randomInt, randomUUID } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -57,6 +57,15 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { idToEmail } from "@/lib/auth/id-email";
 import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
 import { normalizePhone } from "@/lib/customers/normalize-phone";
+import {
+  addDaysIso,
+  computeVisitPoints,
+  formatRewardCode,
+  milestoneForVisitCount,
+  randomRewardSuffix,
+} from "@/lib/loyalty/points";
+import { DEFAULT_LOYALTY_CONFIG } from "@/lib/loyalty/types";
+import { computeLineTotals, getPaymentGateway, type PaymentInsert } from "@/lib/payments";
 import {
   SALON_LOGOS_BUCKET,
   buildLogoObjectPath,
@@ -83,6 +92,13 @@ import {
   resolveAppointmentDensity,
   type DemoAppointmentPlan,
 } from "./seed-demo-appointments";
+import {
+  generateDemoSales,
+  saleLoyaltyLineItems,
+  type DemoRetailProduct,
+  type DemoSaleAppointmentInput,
+  type DemoSalePlan,
+} from "./seed-demo-sales";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constantes de seguridad — el salón REAL jamás debe tocarse.
@@ -1405,6 +1421,600 @@ async function seedAppointments(ctx: SeedContext): Promise<AppointmentSeedResult
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Ventas del salón demo (sub-7): tickets del TPV sobre sesiones de caja (arqueo)
+// por día/sede, con pagos reales y acreditación de puntos de fidelización.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Resultado de la siembra de ventas (para el log y los tests de integración). */
+interface SalesSeedResult {
+  /** Nº de citas completadas elegibles como base de venta (tras dedup). */
+  eligible: number;
+  /** Nº de tickets (pos_sales) insertados en esta ejecución. */
+  sales: number;
+  /** Nº de sesiones de caja (pos_sessions) creadas en esta ejecución. */
+  sessions: number;
+  /** Nº de citas ya facturadas como ticket (dedup por appointment_id), no reinsertadas. */
+  skipped: number;
+  /** Puntos de fidelización acreditados en esta ejecución. */
+  pointsAwarded: number;
+  /** Recompensas de hito (3/5/8/10 visitas) generadas en esta ejecución. */
+  rewards: number;
+}
+
+/** Motivo del movimiento EARN a partir de las etiquetas de línea (espejo de awardVisit). */
+function buildSaleEarnReason(items: readonly { label: string }[]): string {
+  const labels = items
+    .map((item) => item.label.trim())
+    .filter((label) => label.length > 0);
+  const detail = labels.length > 0 ? labels.join(", ") : `${items.length} línea(s)`;
+  return `Venta TPV: ${detail}`.slice(0, 500);
+}
+
+/**
+ * Inserta la recompensa de un hito reintentando ante colisión del código único
+ * `(salon_id, code)` (espejo de `maybeCreateMilestoneReward` de `@/lib/loyalty/server`).
+ * Devuelve `true` si se creó; `false` si se agotan los 5 intentos (astronómicamente
+ * improbable) sin abortar la acreditación ya realizada.
+ */
+async function insertMilestoneReward(
+  client: SupabaseClient<Database>,
+  salonId: string,
+  reward: { customerId: string; type: string; expiresAt: string; createdAt: string },
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = formatRewardCode(
+      reward.type,
+      randomRewardSuffix((n) => randomBytes(n)),
+    );
+    const insert: Database["public"]["Tables"]["rewards"]["Insert"] = {
+      salon_id: salonId,
+      customer_id: reward.customerId,
+      type: reward.type,
+      code,
+      status: "AVAILABLE",
+      expires_at: reward.expiresAt,
+      created_at: reward.createdAt,
+    };
+    const { error } = await client.from("rewards").insert(insert);
+    if (error === null) return true;
+    // 23505 = unique_violation → reintentar con otro código; otro error → aborta.
+    if (error.code !== "23505") {
+      throw new Error(`No se pudo crear la recompensa de hito: ${error.message}`);
+    }
+  }
+  return false;
+}
+
+/**
+ * Acredita los puntos de fidelización de las ventas recién creadas REPLICANDO las
+ * escrituras de `awardVisit` (`@/lib/loyalty/server`) con el cliente admin, sin
+ * reimplementar la aritmética (usa `computeVisitPoints` y los hitos puros). No es
+ * invocable el orquestador de servidor desde un seed headless (exige sesión), así
+ * que se replican sus efectos (contratos §5.4):
+ *   · Recorre las ventas en ORDEN CRONOLÓGICO por cliente: los hitos 3/5/8/10
+ *     dependen del recuento acumulado de visitas.
+ *   · Ancla la IDEMPOTENCIA en `(ref_type='pos_sale', ref_id=saleId)`: una venta ya
+ *     acreditada (EARN existente) no vuelve a sumar (patrón `findExistingEarn`).
+ *   · Suma sobre el saldo REAL leído de `loyalty_accounts` (no inventa saldos): el
+ *     upsert final deja el saldo/visitas correctos aunque se reejecute parcialmente.
+ *   · Backdatea el movimiento y la recompensa al instante de la venta (histórico).
+ */
+async function creditSalesLoyalty(
+  client: SupabaseClient<Database>,
+  salonId: string,
+  sales: readonly DemoSalePlan[],
+  saleIdByAppointment: ReadonlyMap<string, string>,
+): Promise<{ pointsAwarded: number; rewards: number }> {
+  // Solo las ventas realmente insertadas (con saleId resuelto).
+  const created = sales
+    .map((sale) => ({ sale, saleId: saleIdByAppointment.get(sale.appointmentId) }))
+    .filter((x): x is { sale: DemoSalePlan; saleId: string } => x.saleId !== undefined);
+  if (created.length === 0) return { pointsAwarded: 0, rewards: 0 };
+
+  // Idempotencia: EARN de tipo pos_sale ya presentes → saleIds ya acreditados.
+  const { data: earns, error: earnError } = await client
+    .from("points_movements")
+    .select("ref_id")
+    .eq("salon_id", salonId)
+    .eq("type", "EARN")
+    .eq("ref_type", "pos_sale");
+  if (earnError !== null) {
+    throw new Error(`No se pudieron leer los movimientos de puntos: ${earnError.message}`);
+  }
+  const alreadyEarned = new Set<string>(
+    (earns ?? []).map((e) => e.ref_id).filter((id): id is string => id !== null),
+  );
+
+  // Saldos actuales de las cuentas del salón (base del read-modify-write). El trigger
+  // de bootstrap ya crea la cuenta al alta del cliente; el upsert final cubre huecos.
+  const { data: accounts, error: accError } = await client
+    .from("loyalty_accounts")
+    .select("customer_id, points_balance, visits_total")
+    .eq("salon_id", salonId);
+  if (accError !== null) {
+    throw new Error(`No se pudieron leer las cuentas de fidelización: ${accError.message}`);
+  }
+  interface AccountState {
+    points: number;
+    visits: number;
+    lastVisitAt: string | null;
+    touched: boolean;
+  }
+  const state = new Map<string, AccountState>();
+  for (const account of accounts ?? []) {
+    state.set(account.customer_id, {
+      points: account.points_balance,
+      visits: account.visits_total,
+      lastVisitAt: null,
+      touched: false,
+    });
+  }
+
+  // Orden cronológico estable por instante de cobro (empates → orden de entrada).
+  const ordered = [...created].sort((a, b) =>
+    a.sale.soldAtIso < b.sale.soldAtIso ? -1 : a.sale.soldAtIso > b.sale.soldAtIso ? 1 : 0,
+  );
+
+  const movementInserts: Database["public"]["Tables"]["points_movements"]["Insert"][] = [];
+  const rewardPlans: { customerId: string; type: string; expiresAt: string; createdAt: string }[] =
+    [];
+  let pointsAwarded = 0;
+
+  for (const { sale, saleId } of ordered) {
+    if (alreadyEarned.has(saleId)) continue; // no-op idempotente
+
+    let account = state.get(sale.customerId);
+    if (account === undefined) {
+      account = { points: 0, visits: 0, lastVisitAt: null, touched: false };
+      state.set(sale.customerId, account);
+    }
+
+    // Puntos sobre lo REALMENTE cobrado (bruto por línea), regla ceil(price/200).
+    const lineItems = saleLoyaltyLineItems(sale);
+    const { pointsTotal } = computeVisitPoints(lineItems);
+
+    account.points += pointsTotal;
+    account.visits += 1;
+    account.lastVisitAt = sale.soldAtIso;
+    account.touched = true;
+    pointsAwarded += pointsTotal;
+    alreadyEarned.add(saleId);
+
+    movementInserts.push({
+      salon_id: salonId,
+      customer_id: sale.customerId,
+      type: "EARN",
+      points: pointsTotal,
+      reason: buildSaleEarnReason(lineItems),
+      ref_type: "pos_sale",
+      ref_id: saleId,
+      created_at: sale.soldAtIso,
+    });
+
+    // Hito 3/5/8/10 → recompensa AVAILABLE (a lo sumo una por visita).
+    const milestone = milestoneForVisitCount(account.visits);
+    if (milestone !== null) {
+      rewardPlans.push({
+        customerId: sale.customerId,
+        type: milestone.rewardType,
+        expiresAt: addDaysIso(new Date(sale.soldAtIso), DEFAULT_LOYALTY_CONFIG.rewardValidityDays),
+        createdAt: sale.soldAtIso,
+      });
+    }
+  }
+
+  // Libro mayor: movimientos EARN (append-only), en lotes.
+  for (const batch of chunk(movementInserts, 500)) {
+    const { error } = await client.from("points_movements").insert(batch);
+    if (error !== null) {
+      throw new Error(`No se pudieron registrar los movimientos de puntos: ${error.message}`);
+    }
+  }
+
+  // Cuentas: upsert al saldo/visitas finales de los clientes tocados (idempotente
+  // por `unique (salon_id, customer_id)`). Los no tocados no se alteran.
+  const accountUpserts = [...state.entries()]
+    .filter(([, account]) => account.touched)
+    .map(([customerId, account]) => ({
+      salon_id: salonId,
+      customer_id: customerId,
+      points_balance: account.points,
+      visits_total: account.visits,
+      last_visit_at: account.lastVisitAt,
+      last_activity_at: account.lastVisitAt,
+    }));
+  for (const batch of chunk(accountUpserts, 500)) {
+    const { error } = await client
+      .from("loyalty_accounts")
+      .upsert(batch, { onConflict: "salon_id,customer_id" });
+    if (error !== null) {
+      throw new Error(`No se pudieron actualizar las cuentas de fidelización: ${error.message}`);
+    }
+  }
+
+  // Recompensas de hito (pocas; una a una con reintento de código único).
+  let rewardsCreated = 0;
+  for (const reward of rewardPlans) {
+    if (await insertMilestoneReward(client, salonId, reward)) rewardsCreated += 1;
+  }
+
+  return { pointsAwarded, rewards: rewardsCreated };
+}
+
+/**
+ * Siembra las VENTAS del salón demo (sub-7): un ticket del TPV por cada cita PASADA
+ * completada, agrupados en SESIONES DE CAJA (arqueo) por sede y día. Reutiliza los
+ * contratos de `docs/seed-demo-contracts.md`:
+ *
+ *  · IMPORTES — `generateDemoSales` (puro) calcula los totales con `computeSaleTotals`
+ *    (la MISMA fuente que el TPV real), así cabecera, líneas y pagos cuadran al
+ *    céntimo. Cada ticket lleva su línea de servicio y, a veces, un producto retail.
+ *  · PAGOS — filas de `pos_payments` construidas por la pasarela `manual`
+ *    (`getPaymentGateway`), que valida que los tenders cubren EXACTAMENTE el total
+ *    (mezcla real de efectivo/tarjeta/bizum + algún pago mixto).
+ *  · ARQUEO — cada sesión (`pos_sessions`) lleva fondo de caja, efectivo esperado
+ *    (= fondo + ventas en efectivo), contado y descuadre; snapshot de totales por
+ *    método en `closing_totals`. Las sesiones nacen CERRADAS (histórico).
+ *  · FIDELIZACIÓN — se acreditan los puntos replicando `awardVisit` (contratos §5.4),
+ *    reutilizando la matemática pura de puntos e hitos. No se inventan saldos.
+ *  · FACTURAS — NO se emiten aquí: todas las ventas quedan como ticket simple; una
+ *    subtarea posterior factura un subconjunto (así "algunas ventas sin factura").
+ *
+ * ADITIVO E IDEMPOTENTE: dedup de ventas por `appointment_id` (una venta por cita) y
+ * de sesiones por la marca `notes='seed_demo_session:<clave>'`; la fidelización por
+ * el EARN existente `(ref_type='pos_sale', ref_id)`. Reejecutar no duplica nada.
+ */
+async function seedSales(ctx: SeedContext): Promise<SalesSeedResult> {
+  assertNotProductionSalon({ id: ctx.salonId, slug: ctx.slug });
+  const { client, salonId } = ctx;
+
+  if (ctx.dryRun) {
+    // En dry-run no se consulta la BD; se estima con el plan de citas (puro), igual
+    // que `seedAppointments`: la base de ventas = citas `completed`.
+    const todayStr = localDateInZone("Europe/Madrid", ctx.now);
+    const plan = generateDemoAppointments({
+      todayStr,
+      customerCount: ctx.customerCount,
+      density: resolveAppointmentDensity(process.env.SEED_DEMO_APPOINTMENT_DENSITY),
+    });
+    const completed = plan.filter((item) => item.status === "completed").length;
+    log(
+      "sales",
+      `DRY-RUN: se generarían ~${completed} ventas (tickets) sobre las citas completadas, ` +
+        "agrupadas en sesiones de caja (arqueo) por sede/día, con mezcla real de métodos de " +
+        "pago y acreditación de puntos. No se emiten facturas (ticket simple). (no se escribe).",
+    );
+    return {
+      eligible: completed,
+      sales: 0,
+      sessions: 0,
+      skipped: completed,
+      pointsAwarded: 0,
+      rewards: 0,
+    };
+  }
+
+  // 1) Zona horaria del salón (fecha local de sesión + horas de apertura de la sede).
+  const { data: salonRow, error: salonError } = await client
+    .from("salons")
+    .select("timezone")
+    .eq("id", salonId)
+    .single();
+  if (salonError !== null || salonRow === null) {
+    throw new Error(
+      `No se pudo leer la zona horaria del salón demo: ${salonError?.message ?? "sin fila"}.`,
+    );
+  }
+  const timezone = salonRow.timezone;
+
+  // 2) Un usuario del salón (owner) para sold_by/opened_by/closed_by (opcional; NULL si falta).
+  const { data: memberRow, error: memberError } = await client
+    .from("salon_members")
+    .select("user_id")
+    .eq("salon_id", salonId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (memberError !== null) {
+    throw new Error(`No se pudo leer el personal del salón demo: ${memberError.message}`);
+  }
+  const staffUserId = memberRow?.user_id ?? null;
+
+  // 3) Profesional → sede (la venta cuelga de la sesión de caja de esa sede).
+  const { data: pros, error: prosError } = await client
+    .from("professionals")
+    .select("id, location_id")
+    .eq("salon_id", salonId);
+  if (prosError !== null) {
+    throw new Error(`No se pudieron leer los profesionales: ${prosError.message}`);
+  }
+  const locationByPro = new Map<string, string | null>(
+    (pros ?? []).map((p) => [p.id, p.location_id]),
+  );
+
+  // 4) Sede → horas de apertura (se derivan del catálogo DEMO_LOCATIONS por slug).
+  const { data: locs, error: locsError } = await client
+    .from("locations")
+    .select("id, slug")
+    .eq("salon_id", salonId);
+  if (locsError !== null) {
+    throw new Error(`No se pudieron leer las sedes: ${locsError.message}`);
+  }
+  const openHoursByLocation = new Map<string, { open: string; close: string }>();
+  for (const loc of locs ?? []) {
+    const demo = DEMO_LOCATIONS.find((l) => l.slug === loc.slug);
+    if (demo !== undefined) {
+      openHoursByLocation.set(loc.id, { open: demo.openStart, close: demo.openEnd });
+    }
+  }
+
+  // 5) Servicio → nombre (snapshot de la descripción de la línea de servicio).
+  const { data: svcs, error: svcsError } = await client
+    .from("services")
+    .select("id, name")
+    .eq("salon_id", salonId);
+  if (svcsError !== null) {
+    throw new Error(`No se pudieron leer los servicios: ${svcsError.message}`);
+  }
+  const serviceNameById = new Map<string, string>((svcs ?? []).map((s) => [s.id, s.name]));
+
+  // 6) Productos retail activos → catálogo de venta cruzada del generador.
+  const { data: prods, error: prodsError } = await client
+    .from("products")
+    .select("id, name, price_cents, vat_rate")
+    .eq("salon_id", salonId)
+    .eq("active", true);
+  if (prodsError !== null) {
+    throw new Error(`No se pudieron leer los productos: ${prodsError.message}`);
+  }
+  const products: DemoRetailProduct[] = (prods ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    priceCents: p.price_cents,
+    vatRate: p.vat_rate,
+  }));
+
+  // 7) Citas completadas del salón (base de las ventas).
+  const { data: appts, error: apptsError } = await client
+    .from("appointments")
+    .select("id, customer_id, professional_id, service_id, starts_at, ends_at, price_cents")
+    .eq("salon_id", salonId)
+    .eq("status", "completed");
+  if (apptsError !== null) {
+    throw new Error(`No se pudieron leer las citas completadas: ${apptsError.message}`);
+  }
+
+  // 8) Ventas ya existentes → dedup por appointment_id (idempotencia additiva).
+  const { data: existingSales, error: existingSalesError } = await client
+    .from("pos_sales")
+    .select("appointment_id")
+    .eq("salon_id", salonId);
+  if (existingSalesError !== null) {
+    throw new Error(`No se pudieron leer las ventas existentes: ${existingSalesError.message}`);
+  }
+  const soldAppointmentIds = new Set<string>(
+    (existingSales ?? [])
+      .map((s) => s.appointment_id)
+      .filter((id): id is string => id !== null),
+  );
+
+  // Materializa las entradas del generador (resuelve sede, fecha local y servicio).
+  const inputs: DemoSaleAppointmentInput[] = [];
+  let unresolved = 0;
+  for (const appt of appts ?? []) {
+    if (soldAppointmentIds.has(appt.id)) continue; // ya facturada como ticket
+    const serviceName = serviceNameById.get(appt.service_id);
+    if (serviceName === undefined || appt.price_cents <= 0) {
+      unresolved += 1;
+      continue;
+    }
+    inputs.push({
+      appointmentId: appt.id,
+      customerId: appt.customer_id,
+      professionalId: appt.professional_id,
+      serviceId: appt.service_id,
+      serviceName,
+      servicePriceCents: appt.price_cents,
+      locationId: locationByPro.get(appt.professional_id) ?? null,
+      localDateStr: localDateInZone(timezone, new Date(appt.starts_at)),
+      soldAtIso: appt.ends_at, // el cobro ocurre al terminar el servicio
+    });
+  }
+
+  if (inputs.length === 0) {
+    log(
+      "sales",
+      `Ventas ya sembradas (${soldAppointmentIds.size} citas con ticket); nada que insertar ` +
+        `(idempotente).` +
+        (unresolved > 0 ? ` ${unresolved} citas sin resolver (servicio/precio).` : ""),
+    );
+    return {
+      eligible: soldAppointmentIds.size,
+      sales: 0,
+      sessions: 0,
+      skipped: soldAppointmentIds.size,
+      pointsAwarded: 0,
+      rewards: 0,
+    };
+  }
+
+  // Plan de ventas + sesiones (puro y determinista).
+  const plan = generateDemoSales({ appointments: inputs, products });
+
+  // 9) Sesiones de caja: dedup por la marca `notes='seed_demo_session:<clave>'`.
+  const { data: existingSessions, error: sessError } = await client
+    .from("pos_sessions")
+    .select("id, notes")
+    .eq("salon_id", salonId);
+  if (sessError !== null) {
+    throw new Error(`No se pudieron leer las sesiones de caja: ${sessError.message}`);
+  }
+  const sessionIdByKey = new Map<string, string>();
+  const sessionMarker = /^seed_demo_session:(.+)$/;
+  for (const session of existingSessions ?? []) {
+    const match = typeof session.notes === "string" ? session.notes.match(sessionMarker) : null;
+    if (match?.[1] !== undefined) sessionIdByKey.set(match[1], session.id);
+  }
+
+  // Crea las sesiones que falten (CERRADAS, con su arqueo del plan). Las ventas de una
+  // sesión reutilizada (reejecución parcial) se cuelgan de la existente sin rehacer su
+  // arqueo (additivo: no altera filas de ejecuciones anteriores).
+  const sessionInserts: Database["public"]["Tables"]["pos_sessions"]["Insert"][] = [];
+  for (const session of plan.sessions) {
+    if (sessionIdByKey.has(session.sessionKey)) continue;
+    const hours = session.locationId
+      ? openHoursByLocation.get(session.locationId)
+      : undefined;
+    const openTime = hours?.open ?? "09:00";
+    const closeTime = hours?.close ?? "21:00";
+    sessionInserts.push({
+      salon_id: salonId,
+      location_id: session.locationId,
+      status: "closed",
+      currency: "EUR",
+      opened_by: staffUserId,
+      opened_at: zonedWallTimeToUtc(session.localDateStr, openTime, timezone).toISOString(),
+      opening_float_cents: session.openingFloatCents,
+      closed_by: staffUserId,
+      closed_at: zonedWallTimeToUtc(session.localDateStr, closeTime, timezone).toISOString(),
+      expected_cash_cents: session.expectedCashCents,
+      counted_cash_cents: session.countedCashCents,
+      cash_variance_cents: session.cashVarianceCents,
+      closing_totals: {
+        efectivo: session.totalsByMethod.efectivo,
+        tarjeta: session.totalsByMethod.tarjeta,
+        bizum: session.totalsByMethod.bizum,
+      },
+      notes: `seed_demo_session:${session.sessionKey}`,
+    });
+  }
+  for (const batch of chunk(sessionInserts, 500)) {
+    const { data: created, error } = await client
+      .from("pos_sessions")
+      .insert(batch)
+      .select("id, notes");
+    if (error !== null) {
+      throw new Error(`No se pudieron crear las sesiones de caja: ${error.message}`);
+    }
+    for (const row of created ?? []) {
+      const match = typeof row.notes === "string" ? row.notes.match(sessionMarker) : null;
+      if (match?.[1] !== undefined) sessionIdByKey.set(match[1], row.id);
+    }
+  }
+
+  // 10) Cabeceras de venta (pos_sales), capturando el id por appointment_id.
+  const saleInserts: Database["public"]["Tables"]["pos_sales"]["Insert"][] = plan.sales.map(
+    (sale) => ({
+      salon_id: salonId,
+      session_id: sessionIdByKey.get(sale.sessionKey) ?? null,
+      appointment_id: sale.appointmentId,
+      customer_id: sale.customerId,
+      professional_id: sale.professionalId,
+      status: "completed",
+      subtotal_cents: sale.subtotalCents,
+      discount_cents: sale.discountCents,
+      tax_cents: sale.taxCents,
+      total_cents: sale.totalCents,
+      currency: "EUR",
+      sold_by: staffUserId,
+      sold_at: sale.soldAtIso,
+    }),
+  );
+  const saleIdByAppointment = new Map<string, string>();
+  for (const batch of chunk(saleInserts, 500)) {
+    const { data: created, error } = await client
+      .from("pos_sales")
+      .insert(batch)
+      .select("id, appointment_id");
+    if (error !== null) {
+      throw new Error(`No se pudieron crear las ventas demo: ${error.message}`);
+    }
+    for (const row of created ?? []) {
+      if (row.appointment_id !== null) saleIdByAppointment.set(row.appointment_id, row.id);
+    }
+  }
+
+  // 11) Líneas (snapshot de importe por línea) y cobros (pasarela manual valida el total).
+  const gateway = getPaymentGateway(); // 'manual' — registro, sin cobro real
+  const lineInserts: Database["public"]["Tables"]["pos_sale_lines"]["Insert"][] = [];
+  const paymentInserts: PaymentInsert[] = [];
+  for (const sale of plan.sales) {
+    const saleId = saleIdByAppointment.get(sale.appointmentId);
+    if (saleId === undefined) continue; // (no debería: se acaba de insertar)
+    const sessionId = sessionIdByKey.get(sale.sessionKey) ?? null;
+
+    for (const line of sale.lines) {
+      const lineTotals = computeLineTotals({
+        quantity: line.quantity,
+        unitPriceCents: line.unitPriceCents,
+        vatRate: line.vatRate,
+      });
+      lineInserts.push({
+        salon_id: salonId,
+        sale_id: saleId,
+        service_id: line.kind === "service" ? line.refId : null,
+        product_id: line.kind === "product" ? line.refId : null,
+        description: line.description,
+        quantity: line.quantity,
+        unit_price_cents: line.unitPriceCents,
+        discount_cents: 0,
+        vat_rate: line.vatRate,
+        line_total_cents: lineTotals.grossCents,
+      });
+    }
+
+    const result = await gateway.registerPayment({
+      salonId,
+      saleId,
+      sessionId,
+      totalCents: sale.totalCents,
+      tenders: sale.tenders.map((tender) => ({
+        method: tender.method,
+        amountCents: tender.amountCents,
+      })),
+      paidAt: sale.soldAtIso,
+    });
+    paymentInserts.push(...result.payments);
+  }
+
+  for (const batch of chunk(lineInserts, 500)) {
+    const { error } = await client.from("pos_sale_lines").insert(batch);
+    if (error !== null) {
+      throw new Error(`No se pudieron guardar las líneas de venta: ${error.message}`);
+    }
+  }
+  for (const batch of chunk(paymentInserts, 500)) {
+    const { error } = await client.from("pos_payments").insert(batch);
+    if (error !== null) {
+      throw new Error(`No se pudieron registrar los cobros: ${error.message}`);
+    }
+  }
+
+  // 12) Fidelización: acredita los puntos de las ventas (replica awardVisit).
+  const loyalty = await creditSalesLoyalty(client, salonId, plan.sales, saleIdByAppointment);
+
+  const withProduct = plan.sales.filter((sale) => sale.lines.length > 1).length;
+  const mixedPayments = plan.sales.filter((sale) => sale.tenders.length > 1).length;
+  log(
+    "sales",
+    `Ventas: +${plan.sales.length} tickets en ${sessionInserts.length} sesiones de caja nuevas ` +
+      `(${plan.sessions.length - sessionInserts.length} reutilizadas) · ${withProduct} con producto · ` +
+      `${mixedPayments} pago mixto · +${loyalty.pointsAwarded} puntos, ${loyalty.rewards} recompensas de hito. ` +
+      `${soldAppointmentIds.size} citas ya tenían ticket.` +
+      (unresolved > 0 ? ` ${unresolved} sin resolver.` : ""),
+  );
+
+  return {
+    eligible: inputs.length,
+    sales: plan.sales.length,
+    sessions: sessionInserts.length,
+    skipped: soldAppointmentIds.size,
+    pointsAwarded: loyalty.pointsAwarded,
+    rewards: loyalty.rewards,
+  };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Pasos de dominio — punto de extensión para subtareas posteriores.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1433,7 +2043,11 @@ async function seedDomainData(ctx: SeedContext): Promise<void> {
   // profesionales, servicios y clientes ya sembrados.
   await seedAppointments(ctx);
 
-  // TODO(subtarea tickets/ventas): await seedSales(ctx);
+  // Ventas (sub-7): un ticket del TPV por cita completada, agrupados en sesiones de
+  // caja (arqueo) por sede/día, con mezcla real de métodos de pago y acreditación de
+  // puntos de fidelización. Requiere clientes, citas y catálogo ya sembrados.
+  await seedSales(ctx);
+
   // TODO(subtarea facturas):       await seedInvoices(ctx);
   // TODO(subtarea fidelización):   await seedLoyaltyHistory(ctx);
 }
