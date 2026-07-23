@@ -13,6 +13,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  EMPTY_INVOICE_TOTALS,
   INVOICE_TYPE_CODE,
   INVOICE_TYPE_LABEL,
   PAYMENT_METHOD_LABEL,
@@ -22,8 +23,10 @@ import {
   parseRecipientName,
   summarizePaymentMethods,
   toInvoiceRow,
+  toInvoiceTotals,
   toSaleRow,
   type RawInvoice,
+  type RawInvoiceTotals,
   type RawSale,
 } from "@/lib/facturacion/rows";
 import type { PosInvoiceType, PosPaymentMethod, PosSaleStatus } from "@/types/database";
@@ -171,6 +174,32 @@ describe("toInvoiceRow", () => {
       recipient_data: null,
     };
     expect(toInvoiceRow(ticket).recipientName).toBeNull();
+  });
+});
+
+describe("toInvoiceTotals", () => {
+  it("mapea nº de facturas y sumas de la RPC al modelo de la vista", () => {
+    const raw: RawInvoiceTotals = {
+      invoice_count: 3,
+      taxable_base_cents: 30_000,
+      tax_cents: 6_300,
+      total_cents: 36_300,
+    };
+    expect(toInvoiceTotals(raw)).toEqual({
+      invoiceCount: 3,
+      taxableBaseCents: 30_000,
+      taxCents: 6_300,
+      totalCents: 36_300,
+    });
+  });
+
+  it("los totales vacíos son cero (periodo sin facturas)", () => {
+    expect(EMPTY_INVOICE_TOTALS).toEqual({
+      invoiceCount: 0,
+      taxableBaseCents: 0,
+      taxCents: 0,
+      totalCents: 0,
+    });
   });
 });
 

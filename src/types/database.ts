@@ -1885,6 +1885,58 @@ export interface Database {
           occupancy_rate: number;
         }[];
       };
+
+      /**
+       * FILTROS de facturación en servidor (migración
+       * `20260723110000_rpc_invoices_filtered`). SOLO LECTURA, SECURITY INVOKER
+       * (aislamiento por RLS). Todos los filtros son opcionales (null = sin
+       * filtro); `p_from`/`p_to` son fechas locales del salón (`p_to` inclusivo).
+       * Ver `@/lib/facturacion/queries` para los envoltorios tipados.
+       */
+
+      /** Libro de facturas filtrado (rango, sede, tipo, método, búsqueda). */
+      salon_invoices_filtered: {
+        Args: {
+          p_salon_id: string;
+          p_from?: string | null;
+          p_to?: string | null;
+          p_location_id?: string | null;
+          p_invoice_type?: string | null;
+          p_payment_method?: string | null;
+          p_search?: string | null;
+          p_limit?: number;
+        };
+        Returns: {
+          id: string;
+          full_number: string;
+          invoice_type: PosInvoiceType;
+          issued_at: string;
+          recipient_data: Json | null;
+          taxable_base_cents: number;
+          tax_cents: number;
+          total_cents: number;
+          currency: string;
+        }[];
+      };
+
+      /** Totales del periodo filtrado (nº de facturas + Σ base, IVA, total). */
+      salon_invoices_totals: {
+        Args: {
+          p_salon_id: string;
+          p_from?: string | null;
+          p_to?: string | null;
+          p_location_id?: string | null;
+          p_invoice_type?: string | null;
+          p_payment_method?: string | null;
+          p_search?: string | null;
+        };
+        Returns: {
+          invoice_count: number;
+          taxable_base_cents: number;
+          tax_cents: number;
+          total_cents: number;
+        }[];
+      };
     };
     Enums: {
       member_role: MemberRole;

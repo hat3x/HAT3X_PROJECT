@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -13,23 +14,38 @@ import {
   INVOICE_TYPE_CODE,
   INVOICE_TYPE_LABEL,
   type InvoiceRow,
+  type InvoiceTotals,
 } from "@/lib/facturacion/rows";
 import { formatDate, formatMoney } from "@/lib/format";
 
 interface InvoicesTableProps {
   invoices: InvoiceRow[];
+  /** Totales del periodo FILTRADO (no solo de las filas mostradas). */
+  totals: InvoiceTotals;
+  /** Moneda para formatear el pie de totales (el proyecto opera en EUR). */
+  currency?: string;
 }
 
 /**
- * Libro registro de facturas (`pos_invoices`) como tabla de solo lectura.
+ * Libro registro de facturas (`pos_invoices`) como tabla de solo lectura, con una
+ * fila de TOTALES del periodo filtrado en el pie.
  *
  * Cada fila enlaza al documento imprimible (`GET /api/facturacion/documento/[id]`,
  * F1/F2) que se abre en una pestaña nueva. Los importes usan el snapshot cerrado
  * del registro (base, IVA, total ya cuadran por construcción) y se formatean con
  * `formatMoney`; las columnas de dinero van alineadas a la derecha y con cifras
  * tabulares para que comparen en vertical.
+ *
+ * El pie (`TableFooter`) suma base imponible, IVA y total de TODO el periodo
+ * filtrado —no solo de las filas visibles— porque procede de la agregación en
+ * servidor (`salon_invoices_totals`). Por eso incluye el nº de facturas: si supera
+ * las filas mostradas, la vista avisa del recorte.
  */
-export function InvoicesTable({ invoices }: InvoicesTableProps): React.ReactElement {
+export function InvoicesTable({
+  invoices,
+  totals,
+  currency = "EUR",
+}: InvoicesTableProps): React.ReactElement {
   return (
     <div className="animate-fade-up overflow-hidden rounded-xl border [animation-delay:60ms]">
       <Table>
@@ -80,7 +96,8 @@ export function InvoicesTable({ invoices }: InvoicesTableProps): React.ReactElem
                   href={`/api/facturacion/documento/${invoice.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={`Ver el documento de la factura ${invoice.fullNumber}`}
+                  aria-label={`Abrir el documento de la factura ${invoice.fullNumber} para imprimir o descargar`}
+                  title="Abrir para imprimir o guardar como PDF"
                   className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-primary transition-colors duration-150 ease-apple-out hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <FileText className="h-4 w-4" aria-hidden="true" />
@@ -90,6 +107,27 @@ export function InvoicesTable({ invoices }: InvoicesTableProps): React.ReactElem
             </TableRow>
           ))}
         </TableBody>
+        <TableFooter>
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={4} className="text-xs font-medium text-muted-foreground">
+              Totales del periodo
+              <span className="ml-1.5 font-normal tabular-nums">
+                · {totals.invoiceCount}{" "}
+                {totals.invoiceCount === 1 ? "factura" : "facturas"}
+              </span>
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {formatMoney(totals.taxableBaseCents, currency)}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {formatMoney(totals.taxCents, currency)}
+            </TableCell>
+            <TableCell className="text-right font-semibold tabular-nums">
+              {formatMoney(totals.totalCents, currency)}
+            </TableCell>
+            <TableCell aria-hidden="true" />
+          </TableRow>
+        </TableFooter>
       </Table>
     </div>
   );

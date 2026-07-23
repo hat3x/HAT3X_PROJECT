@@ -36,6 +36,23 @@ const TableBody = React.forwardRef<
 ));
 TableBody.displayName = "TableBody";
 
+const TableFooter = React.forwardRef<
+  HTMLTableSectionElement,
+  React.HTMLAttributes<HTMLTableSectionElement>
+>(({ className, ...props }, ref) => (
+  <tfoot
+    ref={ref}
+    className={cn(
+      // Pie de tabla para totales: borde superior marcado, tinte sutil y cifras en
+      // seminegrita. La última fila no lleva borde para cerrar limpio.
+      "border-t border-border bg-muted/40 font-medium [&>tr]:last:border-b-0",
+      className,
+    )}
+    {...props}
+  />
+));
+TableFooter.displayName = "TableFooter";
+
 const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
@@ -80,4 +97,12 @@ const TableCell = React.forwardRef<
 ));
 TableCell.displayName = "TableCell";
 
-export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell };
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+};

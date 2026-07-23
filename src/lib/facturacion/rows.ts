@@ -114,6 +114,46 @@ export function toInvoiceRow(raw: RawInvoice): InvoiceRow {
   };
 }
 
+/**
+ * TOTALES del periodo filtrado del libro de facturas (nº de facturas + sumas). Los
+ * calcula la RPC `salon_invoices_totals` sobre EXACTAMENTE el mismo conjunto que la
+ * lista, así que cuadran con lo filtrado (aunque la tabla muestre solo las N más
+ * recientes). Importes en céntimos: la vista formatea con `formatMoney`.
+ */
+export interface InvoiceTotals {
+  /** Nº de facturas del periodo filtrado (puede superar las filas mostradas). */
+  invoiceCount: number;
+  taxableBaseCents: number;
+  taxCents: number;
+  totalCents: number;
+}
+
+/** Totales a cero (periodo sin facturas). */
+export const EMPTY_INVOICE_TOTALS: InvoiceTotals = {
+  invoiceCount: 0,
+  taxableBaseCents: 0,
+  taxCents: 0,
+  totalCents: 0,
+};
+
+/** Forma cruda de los totales tal como los devuelve la RPC (`*_cents` bigint→number). */
+export interface RawInvoiceTotals {
+  invoice_count: number;
+  taxable_base_cents: number;
+  tax_cents: number;
+  total_cents: number;
+}
+
+/** Normaliza los totales crudos de la RPC al modelo de la vista. */
+export function toInvoiceTotals(raw: RawInvoiceTotals): InvoiceTotals {
+  return {
+    invoiceCount: raw.invoice_count,
+    taxableBaseCents: raw.taxable_base_cents,
+    taxCents: raw.tax_cents,
+    totalCents: raw.total_cents,
+  };
+}
+
 // ── TICKETS / VENTAS (pos_sales) ──────────────────────────────────────────────
 
 /** Etiqueta legible del estado de una venta (es-ES). */
