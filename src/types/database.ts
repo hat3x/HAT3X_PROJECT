@@ -1762,7 +1762,130 @@ export interface Database {
       };
     };
     Views: Record<never, never>;
-    Functions: Record<never, never>;
+    Functions: {
+      /**
+       * Capa de AGREGACIÓN en servidor para el panel (migración
+       * `20260723100000_rpc_dashboard_metrics`). Todas son SOLO LECTURA,
+       * SECURITY INVOKER (aislamiento por RLS), reciben el rango como fechas
+       * locales `p_from`/`p_to` (ISO `YYYY-MM-DD`, `p_to` inclusivo) y devuelven
+       * importes en CÉNTIMOS. Ver `@/lib/metrics` para los envoltorios tipados.
+       */
+
+      /** KPIs de facturación del periodo (una fila). */
+      salon_sales_summary: {
+        Args: { p_salon_id: string; p_from: string; p_to: string };
+        Returns: {
+          sales_count: number;
+          customers_count: number;
+          gross_revenue_cents: number;
+          taxable_base_cents: number;
+          discount_cents: number;
+          tax_cents: number;
+          avg_ticket_cents: number;
+        }[];
+      };
+
+      /** Facturación / nº de tickets / ticket medio en el tiempo. */
+      salon_revenue_timeseries: {
+        Args: {
+          p_salon_id: string;
+          p_from: string;
+          p_to: string;
+          p_granularity?: string;
+        };
+        Returns: {
+          bucket_start: string;
+          sales_count: number;
+          revenue_cents: number;
+          avg_ticket_cents: number;
+        }[];
+      };
+
+      /** Ingresos por sede. */
+      salon_revenue_by_location: {
+        Args: { p_salon_id: string; p_from: string; p_to: string };
+        Returns: {
+          location_id: string | null;
+          location_name: string;
+          sales_count: number;
+          revenue_cents: number;
+        }[];
+      };
+
+      /** Ingresos por profesional (ranking). */
+      salon_revenue_by_professional: {
+        Args: {
+          p_salon_id: string;
+          p_from: string;
+          p_to: string;
+          p_limit?: number;
+        };
+        Returns: {
+          professional_id: string | null;
+          professional_name: string;
+          sales_count: number;
+          revenue_cents: number;
+        }[];
+      };
+
+      /** Top servicios / productos por ingresos. */
+      salon_top_items: {
+        Args: {
+          p_salon_id: string;
+          p_from: string;
+          p_to: string;
+          p_item_kind?: string | null;
+          p_limit?: number;
+        };
+        Returns: {
+          item_kind: PosSaleLineItemKind;
+          item_id: string | null;
+          name: string;
+          quantity: number;
+          revenue_cents: number;
+          lines_count: number;
+        }[];
+      };
+
+      /** Distribución por método de pago. */
+      salon_payment_method_distribution: {
+        Args: { p_salon_id: string; p_from: string; p_to: string };
+        Returns: {
+          method: PosPaymentMethod;
+          payments_count: number;
+          amount_cents: number;
+        }[];
+      };
+
+      /** Clientes nuevos vs recurrentes (una fila). */
+      salon_new_vs_returning_customers: {
+        Args: { p_salon_id: string; p_from: string; p_to: string };
+        Returns: {
+          new_customers: number;
+          returning_customers: number;
+          anonymous_sales: number;
+          new_revenue_cents: number;
+          returning_revenue_cents: number;
+          anonymous_revenue_cents: number;
+        }[];
+      };
+
+      /** Ocupación de agenda (reservado / capacidad; una fila). */
+      salon_agenda_occupancy: {
+        Args: {
+          p_salon_id: string;
+          p_from: string;
+          p_to: string;
+          p_location_id?: string | null;
+        };
+        Returns: {
+          capacity_minutes: number;
+          booked_minutes: number;
+          booked_appointments: number;
+          occupancy_rate: number;
+        }[];
+      };
+    };
     Enums: {
       member_role: MemberRole;
       appointment_status: AppointmentStatus;
