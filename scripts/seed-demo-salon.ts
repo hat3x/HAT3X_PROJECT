@@ -55,6 +55,7 @@ import { resolve } from "node:path";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 import { idToEmail } from "@/lib/auth/id-email";
+import { normalizePhone } from "@/lib/customers/normalize-phone";
 import {
   SALON_LOGOS_BUCKET,
   buildLogoObjectPath,
@@ -72,6 +73,10 @@ import {
   professionalCoversService,
   type DemoLocation,
 } from "./seed-demo-data";
+import {
+  generateDemoCustomers,
+  resolveCustomerCount,
+} from "./seed-demo-customers";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constantes de seguridad — el salón REAL jamás debe tocarse.
@@ -158,6 +163,8 @@ export interface SeedConfig {
   dryRun: boolean;
   /** Valida entorno/credenciales y termina sin tocar la base de datos. */
   checkOnly: boolean;
+  /** Nº de clientes demo a sembrar (sub-5); saturado al rango pedido 80–150. */
+  customerCount: number;
 }
 
 /** Referencia mínima al salón demo resuelto. */
@@ -175,6 +182,8 @@ export interface SeedContext {
   slug: string;
   dryRun: boolean;
   now: Date;
+  /** Nº de clientes demo a sembrar (sub-5); saturado al rango 80–150. */
+  customerCount: number;
 }
 
 type PublicTable = keyof Database["public"]["Tables"];
@@ -1014,6 +1023,104 @@ async function seedOperationalConfig(ctx: SeedContext): Promise<void> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Clientes del salón demo (sub-5): fichas con teléfono único → puntos + cupón + qr.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Resultado de la siembra de clientes (para el log; útil también en tests). */
+interface CustomerSeedResult {
+  /** Nº de fichas generadas (= recuento pedido). */
+  planned: number;
+  /** Nº de fichas nuevas insertadas en esta ejecución. */
+  inserted: number;
+  /** Nº de fichas ya presentes (dedup por `phone_e164`), no reinsertadas. */
+  skipped: number;
+}
+
+/**
+ * Siembra 80–150 clientes demo con nombres españoles realistas y teléfonos ÚNICOS
+ * y normalizables. Al INSERTAR cada ficha, los disparadores del esquema hacen el
+ * resto GRATIS (ver docs/seed-demo-contracts.md §5.1):
+ *   · `customers.qr_token`             — token de fidelización (DEFAULT de la columna).
+ *   · `trg_customers_bootstrap_loyalty` → `loyalty_accounts` + `welcome_coupons`.
+ *
+ * ADITIVO E IDEMPOTENTE: el dedup se hace por `phone_e164` (columna GENERADA =
+ * `app.normalize_phone(phone)`, con único parcial `(salon_id, phone_e164)`). El
+ * generador es DETERMINISTA, así que al reejecutar produce los mismos números y
+ * ninguno se reinserta. Nunca hace UPDATE/DELETE.
+ */
+async function seedCustomers(ctx: SeedContext): Promise<CustomerSeedResult> {
+  assertNotProductionSalon({ id: ctx.salonId, slug: ctx.slug });
+
+  const seeds = generateDemoCustomers(ctx.customerCount);
+  const withEmail = seeds.filter((seed) => seed.email !== null).length;
+
+  if (ctx.dryRun) {
+    log(
+      "customers",
+      `DRY-RUN: se sembrarían ${seeds.length} clientes (${withEmail} con email, ` +
+        `${seeds.length - withEmail} sin), con teléfonos E.164 únicos. El trigger crearía ` +
+        "por cada uno su cuenta de puntos + cupón de bienvenida (no se escribe).",
+    );
+    return { planned: seeds.length, inserted: 0, skipped: seeds.length };
+  }
+
+  // Dedup por teléfono canónico ya presente en el salón (idempotencia additiva).
+  const { data: existingRows, error: findError } = await ctx.client
+    .from("customers")
+    .select("phone_e164")
+    .eq("salon_id", ctx.salonId);
+  if (findError) {
+    throw new Error(`No se pudieron consultar los clientes existentes: ${findError.message}`);
+  }
+  const existing = new Set<string>(
+    (existingRows ?? [])
+      .map((row) => row.phone_e164)
+      .filter((value): value is string => value !== null),
+  );
+
+  // Construye las filas a insertar, saltando las que ya existen o colisionarían.
+  const seenE164 = new Set<string>();
+  const toInsert: Database["public"]["Tables"]["customers"]["Insert"][] = [];
+  for (const seed of seeds) {
+    const e164 = normalizePhone(seed.phone); // espejo TS de la columna generada
+    if (e164 === null || existing.has(e164) || seenE164.has(e164)) continue;
+    seenE164.add(e164);
+    toInsert.push({
+      salon_id: ctx.salonId,
+      full_name: seed.fullName,
+      phone: seed.phone,
+      email: seed.email,
+      birth_date: seed.birthDate,
+      marketing_consent: seed.marketingConsent,
+      notes: seed.notes,
+      // qr_token: lo pone el DEFAULT; cuenta+cupón: el trigger AFTER INSERT.
+    });
+  }
+
+  if (toInsert.length === 0) {
+    log(
+      "customers",
+      `Clientes ya sembrados (${existing.size} en el salón); nada que insertar (idempotente).`,
+    );
+    return { planned: seeds.length, inserted: 0, skipped: seeds.length };
+  }
+
+  const { error: insertError } = await ctx.client.from("customers").insert(toInsert);
+  if (insertError) {
+    throw new Error(`No se pudieron sembrar los clientes demo: ${insertError.message}`);
+  }
+
+  const inserted = toInsert.length;
+  const skipped = seeds.length - inserted;
+  log(
+    "customers",
+    `Clientes: +${inserted} nuevos de ${seeds.length} (${withEmail} con email) → el trigger ` +
+      `creó su cuenta de puntos + cupón de bienvenida; qr_token por DEFAULT. ${skipped} ya existían.`,
+  );
+  return { planned: seeds.length, inserted, skipped };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Pasos de dominio — punto de extensión para subtareas posteriores.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1034,7 +1141,9 @@ async function seedDomainData(ctx: SeedContext): Promise<void> {
   // Configuración operativa (sub-4): prerrequisito de clientes/citas/ventas.
   await seedOperationalConfig(ctx);
 
-  // TODO(subtarea clientes):       await seedCustomers(ctx);
+  // Clientes (sub-5): fichas con teléfono único → cuenta de puntos + cupón + qr_token.
+  await seedCustomers(ctx);
+
   // TODO(subtarea citas):          await seedAppointments(ctx);
   // TODO(subtarea tickets/ventas): await seedSales(ctx);
   // TODO(subtarea facturas):       await seedInvoices(ctx);
@@ -1084,6 +1193,7 @@ function readConfig(argv: readonly string[]): SeedConfig {
       flags.has("--reset-password") || process.env.SEED_DEMO_RESET_PASSWORD === "1",
     dryRun: flags.has("--dry-run") || process.env.SEED_DRY_RUN === "1",
     checkOnly: flags.has("--check") || process.env.SEED_CHECK === "1",
+    customerCount: resolveCustomerCount(process.env.SEED_DEMO_CUSTOMER_COUNT),
   };
 }
 
@@ -1163,6 +1273,7 @@ export async function main(argv: readonly string[] = []): Promise<void> {
     slug: salon.slug,
     dryRun: config.dryRun,
     now: new Date(),
+    customerCount: config.customerCount,
   };
 
   // Configuración base del salón demo (sub-3): owner + membership + add-ons + marca.

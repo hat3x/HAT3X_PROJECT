@@ -68,6 +68,24 @@ Todo idempotente y additivo (no altera filas existentes):
 > productos → enlaces servicio↔profesional → horarios. En `--dry-run` se describe el
 > plan sin escribir.
 
+### Clientes que siembra (sub-5)
+
+El generador **puro y determinista** vive en
+[`seed-demo-customers.ts`](./seed-demo-customers.ts) (nombres, teléfonos y emails
+ficticios, sin efectos ni BD; testeado en
+`src/tests/unit/seed-demo-customers.test.ts`). Todo additivo e idempotente:
+
+| Objeto | Qué crea |
+|---|---|
+| `customers` | **80–150 fichas** (por defecto **120**) con **nombres españoles realistas** (nombre de pila + dos apellidos), **teléfonos únicos y normalizables** (formatos variados que `app.normalize_phone` canonicaliza a E.164) y **mezcla con y sin email** (~⅔ con email, únicos). Dedup por `phone_e164`. |
+| `customers.qr_token` | Token de fidelización (QR). Lo pone el **DEFAULT** de la columna, no el seed. |
+| `loyalty_accounts` + `welcome_coupons` | **Automáticos por ficha** vía el trigger `trg_customers_bootstrap_loyalty` (cuenta de puntos a 0 + cupón de bienvenida 10 % / 90 días). |
+
+> **Idempotencia por teléfono.** El generador es determinista: al reejecutar produce
+> los mismos números y el dedup por `phone_e164` (único parcial `(salon_id,
+> phone_e164)`) evita reinsertar. Ajusta el volumen con `SEED_DEMO_CUSTOMER_COUNT`
+> (saturado a 80–150). En `--dry-run` describe el plan sin escribir.
+
 ### Garantías de seguridad
 
 - **Salón real intocable.** El seed tiene *prohibido por diseño* escribir sobre
@@ -94,6 +112,7 @@ Todo idempotente y additivo (no altera filas existentes):
 | `SEED_DEMO_SECONDARY_COLOR` | `#0F766E` | Color de marca secundario (`#rrggbb`). |
 | `SEED_DEMO_OWNER_ID` | `demo` | ID de acceso del owner (→ `demo@salonos.app`). |
 | `SEED_DEMO_OWNER_PASSWORD` | *(generada)* | Contraseña fija del owner (si se omite, se genera). |
+| `SEED_DEMO_CUSTOMER_COUNT` | `120` | Nº de clientes demo a sembrar; **saturado** al rango pedido 80–150. |
 | `SEED_DEMO_RESET_PASSWORD` | — | `1` equivale a `--reset-password`. |
 | `SEED_DRY_RUN` | — | `1` equivale a `--dry-run`. |
 | `SEED_CHECK` | — | `1` equivale a `--check`. |
