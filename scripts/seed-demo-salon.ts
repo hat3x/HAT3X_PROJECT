@@ -58,6 +58,14 @@ import { idToEmail } from "@/lib/auth/id-email";
 import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
 import { normalizePhone } from "@/lib/customers/normalize-phone";
 import {
+  emitInvoice,
+  verifyHashChain,
+  InvoiceEmissionError,
+  type HashableInvoiceRecord,
+  type IssuerData,
+  type RecipientData,
+} from "@/lib/invoicing";
+import {
   addDaysIso,
   computeVisitPoints,
   formatRewardCode,
@@ -65,7 +73,14 @@ import {
   randomRewardSuffix,
 } from "@/lib/loyalty/points";
 import { DEFAULT_LOYALTY_CONFIG } from "@/lib/loyalty/types";
-import { computeLineTotals, getPaymentGateway, type PaymentInsert } from "@/lib/payments";
+import {
+  computeLineTotals,
+  computeSaleTotals,
+  getPaymentGateway,
+  type PaymentInsert,
+  type SaleLineInput,
+  type SaleTotals,
+} from "@/lib/payments";
 import {
   SALON_LOGOS_BUCKET,
   buildLogoObjectPath,
@@ -99,6 +114,13 @@ import {
   type DemoSaleAppointmentInput,
   type DemoSalePlan,
 } from "./seed-demo-sales";
+import {
+  DEFAULT_F1_RATE,
+  DEMO_INVOICE_SERIES,
+  resolveInvoiceCount,
+  selectInvoicePlan,
+  type DemoInvoiceSaleInput,
+} from "./seed-demo-invoices";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constantes de seguridad — el salón REAL jamás debe tocarse.
@@ -2015,6 +2037,311 @@ async function seedSales(ctx: SeedContext): Promise<SalesSeedResult> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Facturas del salón demo (sub-8): factura un SUBCONJUNTO de las ventas creando
+// registros Veri*factu (pos_invoices) inmutables y encadenados por huella SHA-256
+// por (salon_id, series), reutilizando @/lib/invoicing (NO se reimplementa la huella).
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Resultado de la siembra de facturas (para el log y los tests de integración). */
+interface InvoicesSeedResult {
+  /** Serie de facturación demo empleada (cadena de huella por `(salon_id, series)`). */
+  series: string;
+  /** Nº de facturas del plan (subconjunto seleccionado de las ventas). */
+  planned: number;
+  /** Nº de facturas emitidas en esta ejecución (alta nueva en la serie). */
+  emitted: number;
+  /** De las emitidas, cuántas son F1/completa (con destinatario). */
+  completa: number;
+  /** De las emitidas, cuántas son F2/ticket (simplificadas). */
+  ticket: number;
+  /** Ventas del plan ya facturadas antes (dedup por `sale_id`), no reemitidas. */
+  skipped: number;
+}
+
+/** Extrae el NIF del emisor del snapshot jsonb `issuer_data` (o "" si falta/no es texto). */
+function issuerTaxIdFromSnapshot(issuerData: Json): string {
+  if (
+    typeof issuerData === "object" &&
+    issuerData !== null &&
+    !Array.isArray(issuerData)
+  ) {
+    const taxId = (issuerData as Record<string, Json>).tax_id;
+    if (typeof taxId === "string") return taxId;
+  }
+  return "";
+}
+
+/**
+ * Reverifica que la cadena de huella de la serie es ÍNTEGRA releyendo TODOS sus
+ * registros de la BD (ordenados por número ascendente) y pasándolos por
+ * `verifyHashChain` (`@/lib/invoicing`), que recalcula la huella de cada registro y
+ * comprueba el eslabón `previous_hash`. Aserción post-seed exigida por el contrato
+ * (docs/seed-demo-contracts.md §3.4): debe devolver -1. Reconstruye el
+ * `HashableInvoiceRecord` EXACTAMENTE con los campos que se firmaron (emisor, número
+ * visible, fechas, tipo, cuota/total, eslabón) — sin reimplementar la huella.
+ */
+async function assertInvoiceChainIntact(
+  client: SupabaseClient<Database>,
+  salonId: string,
+  series: string,
+): Promise<void> {
+  const { data, error } = await client
+    .from("pos_invoices")
+    .select(
+      "full_number, issued_at, invoice_type, tax_cents, total_cents, previous_hash, current_hash, created_at, issuer_data",
+    )
+    .eq("salon_id", salonId)
+    .eq("series", series)
+    .order("sequential_number", { ascending: true });
+  if (error !== null) {
+    throw new Error(
+      `No se pudo releer la serie "${series}" para verificar la cadena: ${error.message}`,
+    );
+  }
+  const rows = data ?? [];
+  if (rows.length === 0) return;
+
+  const records = rows.map(
+    (row) =>
+      ({
+        issuerTaxId: issuerTaxIdFromSnapshot(row.issuer_data),
+        invoiceNumber: row.full_number,
+        issuedAt: new Date(row.issued_at),
+        invoiceCode: row.invoice_type === "completa" ? "F1" : "F2",
+        taxCents: row.tax_cents,
+        totalCents: row.total_cents,
+        previousHash: row.previous_hash,
+        generatedAt: new Date(row.created_at),
+        currentHash: row.current_hash,
+      }) satisfies HashableInvoiceRecord & { currentHash: string },
+  );
+
+  const corruptIndex = verifyHashChain(records);
+  if (corruptIndex !== -1) {
+    throw new Error(
+      `La cadena de huella de la serie "${series}" está CORRUPTA en el índice ${corruptIndex} ` +
+        "(verifyHashChain !== -1). Aborta para no dejar una cadena de facturación inválida.",
+    );
+  }
+}
+
+/**
+ * Siembra las FACTURAS del salón demo (sub-8): emite un SUBCONJUNTO de las ventas ya
+ * sembradas como registros de facturación Veri*factu (`pos_invoices`), REUTILIZANDO
+ * `@/lib/invoicing` (docs/seed-demo-contracts.md §3) — sin reimplementar la huella:
+ *
+ *  · EMISIÓN — `emitInvoice(adminClient, …)` resuelve por cada factura la NUMERACIÓN
+ *    correlativa sin huecos, el `previous_hash` y la HUELLA SHA-256 encadenada por
+ *    `(salon_id, series)`, y persiste el alta inmutable. Se emite en ORDEN CRONOLÓGICO
+ *    con `issuedAt` retrodatado al cobro ⇒ `issued_at` ASCENDENTE dentro de la serie.
+ *  · IMPORTES — los totales/IVA salen de `computeSaleTotals` sobre las líneas REALES de
+ *    la venta (fuente única; la misma aritmética de la caja y el TPV), así base/cuota/
+ *    total cuadran al céntimo con `pos_sale_lines`.
+ *  · MEZCLA — `selectInvoicePlan` (puro) elige el subconjunto (~100–300) y asigna la
+ *    MAYORÍA a F2/ticket (simplificada, anónima) y una MINORÍA a F1/completa con
+ *    DESTINATARIO ficticio (nombre del cliente demo + NIF de forma válida).
+ *  · EMISOR — snapshot de los datos fiscales FICTICIOS del salón demo (tax_id/legal_name/
+ *    fiscal_address, sub-3); sin ellos `emitInvoice` no puede firmar (se omite con aviso).
+ *  · VERIFICACIÓN — al final relee la serie y exige `verifyHashChain === -1` (cadena
+ *    íntegra); si no, aborta.
+ *
+ * ADITIVO E IDEMPOTENTE: las facturas son INMUTABLES (no se borran ni rehacen), así que
+ * el dedup es por `sale_id` ya facturado en la serie: reejecutar NO reemite (la serie
+ * solo crece). La selección es determinista ⇒ estable entre ejecuciones. El resto de
+ * ventas queda SIN factura (solo ticket), como pidió el cliente.
+ */
+async function seedInvoices(ctx: SeedContext): Promise<InvoicesSeedResult> {
+  assertNotProductionSalon({ id: ctx.salonId, slug: ctx.slug });
+  const { client, salonId } = ctx;
+
+  const seriesEnv = process.env.SEED_DEMO_INVOICE_SERIES?.trim();
+  const series = seriesEnv !== undefined && seriesEnv.length > 0 ? seriesEnv : DEMO_INVOICE_SERIES;
+  const targetCount = resolveInvoiceCount(process.env.SEED_DEMO_INVOICE_COUNT);
+
+  if (ctx.dryRun) {
+    // Sin BD: estima con el plan de citas (base de las ventas), igual que seedSales.
+    const todayStr = localDateInZone("Europe/Madrid", ctx.now);
+    const plan = generateDemoAppointments({
+      todayStr,
+      customerCount: ctx.customerCount,
+      density: resolveAppointmentDensity(process.env.SEED_DEMO_APPOINTMENT_DENSITY),
+    });
+    const completed = plan.filter((item) => item.status === "completed").length;
+    const estimate = Math.min(targetCount, completed);
+    log(
+      "invoices",
+      `DRY-RUN: se emitirían ~${estimate} facturas en la serie "${series}" (mayoría F2/ticket + ` +
+        `~${Math.round(DEFAULT_F1_RATE * 100)} % F1/completa con destinatario) sobre las ventas, con la ` +
+        "numeración correlativa y la huella encadenada de @/lib/invoicing. El resto de ventas queda sin factura. No se escribe.",
+    );
+    return { series, planned: estimate, emitted: 0, completa: 0, ticket: 0, skipped: 0 };
+  }
+
+  // 1) Emisor: datos fiscales (ficticios) del salón demo. Obligatorio para firmar la huella.
+  const { data: salonRow, error: salonError } = await client
+    .from("salons")
+    .select("tax_id, legal_name, fiscal_address")
+    .eq("id", salonId)
+    .maybeSingle();
+  if (salonError !== null) {
+    throw new Error(`No se pudo leer el emisor del salón demo: ${salonError.message}`);
+  }
+  if (salonRow === null || salonRow.tax_id === null || salonRow.legal_name === null) {
+    log(
+      "invoices",
+      "El salón demo no tiene datos fiscales (tax_id/legal_name); no se emiten facturas. " +
+        "Los siembra sub-3; complétalos y reejecuta.",
+    );
+    return { series, planned: 0, emitted: 0, completa: 0, ticket: 0, skipped: 0 };
+  }
+  const issuer: IssuerData = {
+    taxId: salonRow.tax_id,
+    legalName: salonRow.legal_name,
+    fiscalAddress: salonRow.fiscal_address,
+  };
+
+  // 2) Ventas completadas del salón (base de las facturas).
+  const { data: sales, error: salesError } = await client
+    .from("pos_sales")
+    .select("id, customer_id, sold_at")
+    .eq("salon_id", salonId)
+    .eq("status", "completed");
+  if (salesError !== null) {
+    throw new Error(`No se pudieron leer las ventas para facturar: ${salesError.message}`);
+  }
+
+  // 3) Líneas de venta → totales por venta con `computeSaleTotals` (fuente única de IVA).
+  const { data: saleLines, error: linesError } = await client
+    .from("pos_sale_lines")
+    .select("sale_id, quantity, unit_price_cents, discount_cents, vat_rate")
+    .eq("salon_id", salonId);
+  if (linesError !== null) {
+    throw new Error(`No se pudieron leer las líneas de venta: ${linesError.message}`);
+  }
+  const lineInputsBySale = new Map<string, SaleLineInput[]>();
+  for (const line of saleLines ?? []) {
+    const list = lineInputsBySale.get(line.sale_id) ?? [];
+    list.push({
+      quantity: line.quantity,
+      unitPriceCents: line.unit_price_cents,
+      vatRate: line.vat_rate,
+      discountCents: line.discount_cents,
+    });
+    lineInputsBySale.set(line.sale_id, list);
+  }
+
+  // 4) Clientes → nombre/dirección para el DESTINATARIO de las facturas completas (F1).
+  const { data: customers, error: custError } = await client
+    .from("customers")
+    .select("id, full_name, address")
+    .eq("salon_id", salonId);
+  if (custError !== null) {
+    throw new Error(`No se pudieron leer los clientes: ${custError.message}`);
+  }
+  const customerById = new Map(
+    (customers ?? []).map(
+      (c): [string, { fullName: string | null; address: string | null }] => [
+        c.id,
+        { fullName: c.full_name, address: c.address },
+      ],
+    ),
+  );
+
+  // 5) Facturas ya emitidas en la serie → dedup por sale_id (inmutables; la serie solo crece).
+  const { data: existingInvoices, error: existingError } = await client
+    .from("pos_invoices")
+    .select("sale_id")
+    .eq("salon_id", salonId)
+    .eq("series", series);
+  if (existingError !== null) {
+    throw new Error(`No se pudieron leer las facturas existentes: ${existingError.message}`);
+  }
+  const invoicedSaleIds = new Set<string>(
+    (existingInvoices ?? [])
+      .map((r) => r.sale_id)
+      .filter((id): id is string => id !== null),
+  );
+
+  // 6) Entradas del planificador: ventas con líneas → total calculable (> 0).
+  const inputs: DemoInvoiceSaleInput[] = [];
+  const totalsBySale = new Map<string, SaleTotals>();
+  for (const sale of sales ?? []) {
+    const lineInputs = lineInputsBySale.get(sale.id);
+    if (lineInputs === undefined || lineInputs.length === 0) continue;
+    const totals = computeSaleTotals(lineInputs);
+    if (totals.totalCents <= 0) continue;
+    totalsBySale.set(sale.id, totals);
+    const customer = sale.customer_id !== null ? customerById.get(sale.customer_id) : undefined;
+    inputs.push({
+      saleId: sale.id,
+      soldAtIso: sale.sold_at,
+      customerId: sale.customer_id,
+      customerName: customer?.fullName ?? null,
+      customerAddress: customer?.address ?? null,
+      totalCents: totals.totalCents,
+    });
+  }
+
+  if (inputs.length === 0) {
+    log("invoices", "No hay ventas facturables (con líneas y total > 0); nada que emitir.");
+    return { series, planned: 0, emitted: 0, completa: 0, ticket: 0, skipped: 0 };
+  }
+
+  // 7) Selección determinista del subconjunto a facturar (F2 mayoría + algunas F1).
+  const plan = selectInvoicePlan({ sales: inputs, targetCount });
+
+  // 8) Emisión en ORDEN CRONOLÓGICO ascendente; salta las ventas ya facturadas.
+  let emitted = 0;
+  let completa = 0;
+  let ticket = 0;
+  let skipped = 0;
+  for (const item of plan) {
+    if (invoicedSaleIds.has(item.saleId)) {
+      skipped += 1;
+      continue;
+    }
+    const totals = totalsBySale.get(item.saleId);
+    if (totals === undefined) continue; // inalcanzable: el plan sale de estos mismos ids
+
+    try {
+      await emitInvoice(client, {
+        salonId,
+        saleId: item.saleId,
+        invoiceType: item.invoiceType,
+        series,
+        totals,
+        issuer,
+        recipient: item.recipient,
+        issuedAt: new Date(item.issuedAtIso),
+      });
+    } catch (error) {
+      const detail =
+        error instanceof InvoiceEmissionError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      throw new Error(`No se pudo emitir la factura demo de la venta ${item.saleId}: ${detail}`);
+    }
+    emitted += 1;
+    if (item.invoiceType === "completa") completa += 1;
+    else ticket += 1;
+  }
+
+  // 9) Aserción post-seed: la cadena de huella de la serie es ÍNTEGRA (verifyHashChain === -1).
+  await assertInvoiceChainIntact(client, salonId, series);
+
+  log(
+    "invoices",
+    `Facturas: +${emitted} en la serie "${series}" (${completa} F1/completa con destinatario, ` +
+      `${ticket} F2/ticket) · ${skipped} ventas ya facturadas · cadena de huella verificada ` +
+      "(verifyHashChain === -1). El resto de ventas queda sin factura.",
+  );
+
+  return { series, planned: plan.length, emitted, completa, ticket, skipped };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Pasos de dominio — punto de extensión para subtareas posteriores.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -2048,7 +2375,13 @@ async function seedDomainData(ctx: SeedContext): Promise<void> {
   // puntos de fidelización. Requiere clientes, citas y catálogo ya sembrados.
   await seedSales(ctx);
 
-  // TODO(subtarea facturas):       await seedInvoices(ctx);
+  // Facturas (sub-8): factura un SUBCONJUNTO de las ventas (~100–300) creando registros
+  // Veri*factu (pos_invoices), mezcla F2/ticket (mayoría) + algunas F1/completa con
+  // destinatario, reutilizando @/lib/invoicing (emitInvoice → numeración correlativa +
+  // huella SHA-256 encadenada por (salon_id, series)). Requiere ventas ya sembradas y
+  // datos fiscales del salón. El resto de ventas queda sin factura (solo ticket).
+  await seedInvoices(ctx);
+
   // TODO(subtarea fidelización):   await seedLoyaltyHistory(ctx);
 }
 

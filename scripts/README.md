@@ -137,6 +137,31 @@ fidelización de §5. Todo additivo e idempotente:
 > ventas quedan como ticket simple; una subtarea posterior factura un subconjunto.
 > En `--dry-run` estima el nº de ventas desde el plan de citas sin escribir.
 
+### Facturas que siembra (sub-8)
+
+El planificador **puro y determinista** vive en
+[`seed-demo-invoices.ts`](./seed-demo-invoices.ts) (sin efectos ni BD; testeado en
+`src/tests/unit/seed-demo-invoices.test.ts`): decide **qué** ventas se facturan y de
+**qué** tipo. La emisión (numeración correlativa + **huella SHA-256 encadenada**) la
+resuelve `@/lib/invoicing` (`emitInvoice`), **sin reimplementar el hash** (ver
+[`docs/seed-demo-contracts.md`](../docs/seed-demo-contracts.md) §3). Todo additivo e
+idempotente:
+
+| Objeto | Qué crea |
+|---|---|
+| `pos_invoices` | Un **subconjunto de las ventas** se factura (**~100–300**, por defecto 200; el resto queda sin factura). **Mezcla F2/ticket (mayoría)** simplificadas + **algunas F1/completa (~20 %) con destinatario** ficticio (nombre del cliente demo + **NIF de forma válida** vía `syntheticNif`, inexistente en la AEAT). Registros **inmutables y encadenados por huella** por `(salon_id, series)`. |
+| Numeración + huella | Las asigna `emitInvoice`: **correlativa sin huecos**, `previous_hash` = huella del anterior, `current_hash` = SHA-256 del registro. **Emisor** = datos fiscales ficticios del salón demo (`tax_id`/`legal_name`/`fiscal_address`, sub-3). |
+| Importes | `taxable_base_cents`/`tax_cents`/`total_cents` + desglose de IVA calculados con **`computeSaleTotals`** sobre las líneas reales de la venta (**fuente única**, la misma del TPV y la caja) ⇒ cuadran al céntimo. |
+
+> **Serie dedicada + orden temporal.** Se usa una serie propia (`DEMO-2026`) para no
+> mezclarse con series reales; se emite en **orden cronológico** con `issued_at`
+> retrodatado al cobro, así el número y la fecha quedan **ascendentes**. Al terminar,
+> el seed **relee la serie y exige `verifyHashChain === -1`** (cadena íntegra) o aborta.
+>
+> **Idempotente por diseño.** Las facturas son **inmutables** (no se borran ni rehacen):
+> el dedup es por `sale_id` ya facturado en la serie ⇒ reejecutar **no reemite** (la
+> serie solo crece). En `--dry-run` estima el nº de facturas sin escribir.
+
 ### Garantías de seguridad
 
 - **Salón real intocable.** El seed tiene *prohibido por diseño* escribir sobre
@@ -165,6 +190,8 @@ fidelización de §5. Todo additivo e idempotente:
 | `SEED_DEMO_OWNER_PASSWORD` | *(generada)* | Contraseña fija del owner (si se omite, se genera). |
 | `SEED_DEMO_CUSTOMER_COUNT` | `120` | Nº de clientes demo a sembrar; **saturado** al rango pedido 80–150. |
 | `SEED_DEMO_APPOINTMENT_DENSITY` | `1.2` | Densidad de citas (media/profesional/día antes de estacionalidad); **saturada** a 0.2–6. |
+| `SEED_DEMO_INVOICE_COUNT` | `200` | Nº de facturas demo a emitir; **saturado** al rango pedido 100–300 (y al nº de ventas facturables). |
+| `SEED_DEMO_INVOICE_SERIES` | `DEMO-2026` | Serie de facturación demo (cadena de huella por `(salon_id, series)`). |
 | `SEED_DEMO_RESET_PASSWORD` | — | `1` equivale a `--reset-password`. |
 | `SEED_DRY_RUN` | — | `1` equivale a `--dry-run`. |
 | `SEED_CHECK` | — | `1` equivale a `--check`. |
