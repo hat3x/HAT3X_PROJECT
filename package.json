@@ -13,7 +13,9 @@
     "test:coverage": "vitest run --coverage",
     "typecheck:scripts": "tsc -p scripts/tsconfig.json --noEmit",
     "seed:demo": "tsx scripts/seed-demo-salon.ts",
-    "seed:demo:check": "tsx scripts/seed-demo-salon.ts --check"
+    "seed:demo:check": "tsx scripts/seed-demo-salon.ts --check",
+    "teardown:demo": "tsx scripts/teardown-demo-salon.ts",
+    "teardown:demo:check": "tsx scripts/teardown-demo-salon.ts --check"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.19",
@@ -43,12 +45,14 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20.16.10",
+    "@types/pg": "^8.20.0",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.13",
     "jsdom": "^29.1.1",
+    "pg": "^8.22.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "tsx": "^4.19.2",

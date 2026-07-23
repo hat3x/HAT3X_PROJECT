@@ -125,3 +125,69 @@ ficticios, sin efectos ni BD; testeado en
 3. Reutilizar la lógica ya existente descrita en `docs/seed-demo-contracts.md`
    (`computeSaleTotals`, `emitInvoice`, `createBookingForSalon`, matemática de puntos…)
    en lugar de reimplementar reglas de negocio.
+
+## `teardown-demo-salon.ts` — Teardown del salón demo
+
+Contrapartida **destructiva** del seed: borra por completo el salón demo (`demo`) y
+**todo lo que cuelga de él** por `salon_id` (clientes, citas, tickets, pagos,
+**facturas**, fidelización, marca, membership, add-ons), su **logo** en Storage y el
+**usuario auth del owner**. Deja la BD limpia para regenerarla con `npm run seed:demo`.
+
+```bash
+npm run teardown:demo                 # borra el salón demo y todo lo suyo
+npm run teardown:demo:check           # valida entorno + resuelve el salón SIN escribir
+npm run teardown:demo -- --dry-run    # detalla el plan de borrado (recuentos) sin escribir
+npm run teardown:demo -- --keep-owner # borra el salón pero conserva el usuario owner
+```
+
+### El reto: facturas inmutables (Veri\*factu)
+
+`pos_invoices` es un registro fiscal **inmutable**: el trigger
+`trg_pos_invoices_immutable` (BEFORE UPDATE OR DELETE) aborta cualquier borrado
+**incluso para `service_role`**. Como todo cuelga de `salons` con `ON DELETE CASCADE`,
+borrar el salón dispararía el borrado en cascada de sus facturas… que el trigger
+bloquea. El teardown lo resuelve **dentro de una transacción**:
+
+```sql
+begin;
+alter table public.pos_invoices disable trigger trg_pos_invoices_immutable;
+delete from public.salons where id = $demo and id <> $real and settings->>'seed_demo' = 'true';
+alter table public.pos_invoices enable trigger trg_pos_invoices_immutable;
+commit;
+```
+
+Si algo falla, el `rollback` revierte también el `disable` (es transaccional); un
+`finally` re-habilita el trigger de forma idempotente y una aserción post-commit
+sobre `pg_trigger` verifica que quedó habilitado. **La inmutabilidad fiscal nunca se
+queda desactivada.**
+
+### Dos credenciales
+
+`DISABLE TRIGGER` es **DDL**: la `SUPABASE_SERVICE_ROLE_KEY` (un JWT de PostgREST) no
+puede ejecutarlo. Por eso el borrado real necesita **también**:
+
+| Variable | Uso |
+|---|---|
+| `SUPABASE_DB_URL` | Conexión Postgres **directa** (rol `postgres`, dueño de las tablas). Solo para la transacción trigger-toggle + `delete from salons`. **Obligatoria** para el borrado real; no para `--check`/`--dry-run`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Lo que vive fuera de Postgres: borrar el logo en Storage y el usuario owner (`auth.admin.deleteUser`). |
+
+Consíguela en **Project Settings › Database › Connection string (URI)** y añádela a
+`.env.local` (ver `.env.example`).
+
+### Garantías de seguridad
+
+- **Salón real intocable.** `assertNotProductionSalon` (importada del seed) veta
+  `denueveanueve` por id y por slug, y el propio `DELETE` re-afirma la guarda **en
+  SQL** (`id <> <real>` + `settings.seed_demo = true`); exige borrar **exactamente 1**
+  fila o revierte.
+- **Solo salones propios.** Si el slug existe pero no lleva `settings.seed_demo`, aborta.
+- **Idempotente.** Si el salón ya no existe, es un no-op limpio (y limpia un usuario
+  owner demo huérfano si quedara). Re-ejecutar no rompe.
+
+### Verificar reset limpio y regeneración
+
+```bash
+npm run teardown:demo        # → borra el salón demo (facturas incluidas)
+npm run teardown:demo:check  # → "No existe ningún salón con slug 'demo'": limpio
+npm run seed:demo            # → recrea el salón demo desde cero
+```
