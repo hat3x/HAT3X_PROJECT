@@ -23,6 +23,8 @@ Sistema de gestión integral para salones de belleza con soporte multi-sede.
 - [Productización: planes (add-ons) y white-label](#productización-planes-add-ons-y-white-label)
 - [Capa de pagos y facturación](#capa-de-pagos-y-facturación)
 - [Aviso de conformidad fiscal (Veri\*factu)](#aviso-de-conformidad-fiscal-veri-factu)
+- [Facturación (panel de gestión)](#facturación-panel-de-gestión)
+- [Analítica](#analítica)
 - [WhatsApp / Twilio](#whatsapp--twilio)
 - [Testing](#testing)
 - [Despliegue](#despliegue)
@@ -172,6 +174,8 @@ salon-os/
 │   │   │   ├── customers/            # Fichas de cliente + timeline de visitas
 │   │   │   ├── tpv/                  # Terminal Punto de Venta: carrito, cobro, emisión de factura
 │   │   │   ├── arqueo/               # Caja: apertura/cierre de sesión con descuadres
+│   │   │   ├── facturacion/          # Facturación: libro de facturas + tickets, filtros y export (gated por `pos`)
+│   │   │   ├── analitica/            # Analítica: KPIs y gráficas por periodo (recharts), gated por `pos`
 │   │   │   ├── ajustes/fiscal/       # Datos fiscales del salón (emisor de facturas)
 │   │   │   └── dashboard/            # Panel resumen
 │   │   ├── (public)/reservar/[slug]/ # Asistente de reserva online (público)
@@ -185,6 +189,8 @@ salon-os/
 │   │   ├── booking/                  # Disponibilidad, esquemas Zod, formatos de fecha/precio
 │   │   ├── payments/                  # Capa de pagos: totales/IVA + PaymentGateway abstracto (README propio)
 │   │   ├── invoicing/                 # Motor Veri*factu: emisión, huella, QR, export (README propio)
+│   │   ├── facturacion/            # Filtros del libro (puro) + queries de facturas/tickets
+│   │   ├── metrics/                # RPCs de agregación de la analítica + resolución de rango (README propio)
 │   │   ├── queries/                  # Queries de Supabase (customers, appointments)
 │   │   ├── react-query/              # Provider y query keys de TanStack Query
 │   │   ├── supabase/                 # Clientes Supabase: browser, server, admin, middleware
@@ -267,6 +273,18 @@ por pantalla— está en **[DESIGN.md](./DESIGN.md)**.
 > El detalle técnico del modelo de datos, la caja, la capa de pagos y el troubleshooting está en
 > [MANTENIMIENTO.md](./MANTENIMIENTO.md#tpv-caja-y-facturación) y en los README de
 > [`src/lib/payments`](./src/lib/payments/README.md) y [`src/lib/invoicing`](./src/lib/invoicing/README.md).
+
+### Panel de facturación (consulta)
+- Libro de **facturas** e histórico de **tickets / ventas** en `/facturacion`, en dos pestañas de **solo lectura**
+- **Filtros en servidor** del libro (rango, sede, tipo F1/F2, método, búsqueda) con estado en la URL y fila de **TOTALES** del periodo
+- **Exportar para la gestoría** (CSV/JSON) del libro registro del periodo
+- **Nota de inmutabilidad**: las facturas y ventas son registros legales; se corrigen con una rectificativa, nunca editando
+- Requiere el add-on **`pos`** (TPV) y rol owner/manager → [detalle](#facturación-panel-de-gestión)
+
+### Analítica del salón
+- **KPIs reales** y **gráficas históricas** (recharts) por periodo en `/analitica`
+- **Selector de rango** (Hoy · 7 días · 30 días · Este mes · Este año · Personalizado) que gobierna toda la vista
+- **Gating por `pos`**: la analítica de ventas exige TPV; la ocupación de agenda se muestra siempre → [detalle](#analítica)
 
 ### WhatsApp / Recordatorios
 - Recordatorio 24 h y 2 h antes de la cita
@@ -671,6 +689,137 @@ El TPV, la caja y la facturación se apoyan en dos capas de dominio puras (sin R
 >
 > **4. La pasarela de cobro es de registro manual (no cobra de verdad).**
 > El TPV **registra** el medio de pago, pero **no ejecuta cobros** contra ningún datáfono ni proveedor. Integrar SumUp/Stripe/Redsys es un TODO (ver [Capa de pagos y facturación](#capa-de-pagos-y-facturación)).
+
+---
+
+## Facturación (panel de gestión)
+
+`/facturacion` es la superficie de **solo lectura** donde owner/manager consultan el papeleo
+fiscal que el TPV va generando. La navegación es una fila de **pestañas** horizontales (a ancho
+completo: son tablas anchas con número, fecha, cliente, base, IVA y total):
+
+| Pestaña | Ruta | Qué muestra |
+|---|---|---|
+| **Facturas** | `/facturacion/facturas` | Libro registro de las facturas expedidas (`pos_invoices`): serie/número, fecha, tipo (F1/F2), base, IVA, total y acceso al documento imprimible. |
+| **Tickets / Ventas** | `/facturacion/tickets` | Histórico de ventas cerradas en caja (`pos_sales`) con su detalle de líneas, cobros e importes. |
+
+Ambas vistas son **Server Components**: resuelven el salón activo, listan solo las más recientes
+(límite `FACTURACION_LIST_LIMIT`) y se scopean por `salon_id` (además de la RLS). No hay escritura.
+
+### Filtros en servidor (libro de facturas)
+
+La barra de filtros de *Facturas* se resuelve **en el servidor**, no en cliente: el estado vive
+en la **URL** (enlace compartible/marcable) y el Server Component vuelve a consultar con cada
+cambio. Filtros disponibles:
+
+| Filtro | Parámetro URL | Valores |
+|---|---|---|
+| Rango de fechas | `desde` / `hasta` | `YYYY-MM-DD` (independientes; `hasta` **inclusive**) |
+| Sede | `sede` | uuid de una sede real del salón |
+| Tipo | `tipo` | `f1` (factura completa) · `f2` (simplificada) |
+| Método de pago | `metodo` | `efectivo` · `tarjeta` · `bizum` · `transferencia` · `otro` |
+| Búsqueda | `q` | nº de factura o cliente |
+
+El parseo es **puro y defensivo** ([`@/lib/facturacion/filters`](./src/lib/facturacion/filters.ts),
+sin React ni Supabase, reutilizable por la página y por la barra cliente): un parámetro inválido se
+ignora y cae a «sin filtro» (una URL manipulada no rompe la página, solo filtra de menos); un rango
+imposible (`desde > hasta`) se descarta entero; la sede se valida contra las sedes reales del salón.
+
+La página añade una **fila de TOTALES del periodo filtrado** (base, IVA, total y nº de facturas),
+calculada sobre **todo** el conjunto por una RPC de agregación —nunca sumando facturas en crudo en
+Next—: la tabla muestra las más recientes, pero los totales cubren el periodo completo (con aviso
+cuando la lista se trunca).
+
+Estados cubiertos: **carga** (`loading.tsx`), **error** (`error.tsx`) y **dos vacíos** distintos —
+sin facturas en absoluto (estado inicial, sin barra de filtros) frente a sin resultados para los
+filtros (con acción «Limpiar»).
+
+### Exportar para la gestoría
+
+El botón **«Exportar»** abre un diálogo que descarga el **libro registro** del periodo desde
+`GET /api/facturacion/export`, en dos formatos:
+
+- **CSV** (recomendado) — libro registro AEAT: una fila por tipo de IVA, separador `;` y UTF-8,
+  listo para Excel y para la gestoría.
+- **JSON** — datos completos con el desglose de IVA y la cadena de huellas Veri\*factu, para
+  integrar con software de la gestoría.
+
+> ⚠️ **El libro fiscal es completo por periodo.** La exportación acota **solo** por rango de fechas
+> (y opcionalmente serie): sede, tipo, método y búsqueda ordenan la **tabla en pantalla**, no el
+> archivo. Cuando hay filtros no-fiscales activos, el diálogo lo **advierte de forma explícita**
+> para no inducir a pensar que el archivo respeta lo que se ve filtrado. Sin rango, la descarga es
+> el **histórico completo**.
+
+El Route Handler exige rol de administración (`owner`/`manager`) y aísla por salón con doble barrera
+(RLS + `.eq("salon_id", …)` explícito); `staff` no puede descargar el libro. Detalle del
+serializador en [`src/lib/invoicing`](./src/lib/invoicing/README.md).
+
+### Inmutabilidad (registro legal)
+
+Ambas pestañas muestran una **nota de inmutabilidad** calmada: las facturas y las ventas son
+**registros legales**, no se editan ni se borran. La corrección de una factura es una **factura
+rectificativa** (flujo aparte), nunca una edición. La nota es solo informativa — la inmutabilidad
+real la garantiza el **motor**: un trigger de BD aborta `UPDATE`/`DELETE` sobre `pos_invoices`,
+incluso para `service_role`. Evita que el usuario busque un botón de «editar/eliminar» que, por
+diseño, no existe ni debe existir.
+
+### Acceso y gating por `pos`
+
+- **Rol:** materia fiscal/administrativa → solo **owner/manager** (mismo criterio que Ajustes). El
+  layout redirige a `staff` al panel.
+- **Add-on `pos` (TPV):** las facturas y tickets **nacen** del TPV, así que sin `pos` la sección se
+  **oculta del nav** ([`buildDashboardNavItems`](./src/components/dashboard-nav-items.ts)) y, si se
+  fuerza la URL, el layout lo explica con gracia (`FeatureGateNotice`) en vez de un 404 —defensa en
+  profundidad—. La agenda, los clientes y la analítica de gestión siguen disponibles.
+
+---
+
+## Analítica
+
+`/analitica` es el **panel de rendimiento del salón por periodo**. Un único mando —el **selector de
+rango**— gobierna toda la vista: KPIs y gráficas se recalculan con el mismo periodo. Es un Server
+Component: resuelve el rango a un `{ from, to }` en la zona horaria del salón y con ese único
+periodo consulta todas las métricas ya agregadas en base.
+
+### KPIs reales y gráficas históricas
+
+Todas las métricas se leen de **RPCs de agregación** ([`@/lib/metrics`](./src/lib/metrics/README.md))
+que hacen el `group by` **en base**: nunca se traen ventas en crudo al servidor de Next. Con `pos`
+activo se muestran:
+
+- **KPIs de facturación:** facturación (ingresos), tickets (ventas completadas), ticket medio y
+  clientes atendidos.
+- **Tendencia de ventas** (gráfica de líneas, **recharts**) — facturación / nº de tickets / ticket
+  medio por día, semana, mes o año según la granularidad del rango; se cambia la métrica sin recargar.
+- **Ingresos por sede** e **ingresos por profesional** (rankings con barra proporcional).
+- **Top servicios** y **top productos** por ingresos del periodo.
+- **Cobros por método** (efectivo/tarjeta/Bizum…) y **composición de clientes** (nuevos, recurrentes
+  y ventas anónimas).
+- **Ocupación de agenda** — minutos reservados frente a la capacidad del personal.
+
+Cada gráfica de recharts se acompaña de una **tabla de datos accesible** equivalente para lectores de
+pantalla (ver [`docs/accesibilidad-graficas-tablas-audit.md`](./docs/accesibilidad-graficas-tablas-audit.md)).
+
+### Selector de rango
+
+Un control **segmentado** con presets y un rango personalizado escribe el periodo en la **URL**
+(estado compartible/marcable) y deja que el Server Component re-resuelva el periodo y re-consulte
+todo. Presets: **Hoy**, **7 días**, **30 días**, **Este mes**, **Este año** y **Personalizado**
+(`desde`/`hasta`). Navega con `useTransition` (selección optimista + estado ocupado `aria-busy`)
+para no bloquear la UI mientras el servidor recalcula.
+
+### Gating por `pos`
+
+La analítica combina dos planos con gating distinto:
+
+- **Analítica de VENTAS** (facturación, cobros, clientes, tops) → requiere el add-on **`pos`** (TPV).
+  Es **defensa en profundidad**: sin `pos` ni siquiera se **consultan** esas métricas, y un aviso
+  (`FeatureGateNotice`, mismo copy que Facturación) invita a activar el TPV.
+- **Ocupación de agenda** → **no** depende de `pos` (nace de la agenda, no del TPV): se muestra
+  **siempre**.
+
+Como el resto de materia de gestión, la página es solo **owner/manager**. A diferencia de
+Facturación, **Analítica sí aparece en el nav sin `pos`** (conserva la ocupación de agenda).
 
 ---
 
