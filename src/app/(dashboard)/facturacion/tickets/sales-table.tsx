@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
+  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -42,17 +43,25 @@ function Placeholder({ children }: { children: React.ReactNode }): React.ReactEl
 export function SalesTable({ sales }: SalesTableProps): React.ReactElement {
   return (
     <div className="animate-fade-up overflow-hidden rounded-xl border [animation-delay:60ms]">
-      <Table>
+      <Table scrollRegionLabel="Histórico de tickets y ventas (desplázate en horizontal para ver todas las columnas)">
+        <TableCaption className="sr-only">
+          Histórico de tickets y ventas: fecha, sede, profesional, cliente, método de
+          pago, total y estado de cada venta, con acceso al detalle y a la reimpresión.
+        </TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead>Fecha</TableHead>
-            <TableHead>Sede</TableHead>
-            <TableHead>Profesional</TableHead>
-            <TableHead>Cliente</TableHead>
-            <TableHead>Pago</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-            <TableHead>Estado</TableHead>
-            <TableHead className="w-[1%] text-right">Detalle</TableHead>
+            <TableHead scope="col">Fecha</TableHead>
+            <TableHead scope="col">Sede</TableHead>
+            <TableHead scope="col">Profesional</TableHead>
+            <TableHead scope="col">Cliente</TableHead>
+            <TableHead scope="col">Pago</TableHead>
+            <TableHead scope="col" className="text-right">
+              Total
+            </TableHead>
+            <TableHead scope="col">Estado</TableHead>
+            <TableHead scope="col" className="w-[1%] text-right">
+              Detalle
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

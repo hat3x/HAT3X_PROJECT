@@ -2,18 +2,48 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<
-  HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
-    />
-  </div>
-));
+interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+  /**
+   * Nombre accesible de la región desplazable. Si se indica, el contenedor pasa a
+   * ser una región enfocable por teclado (`role="region"`, `tabIndex={0}`) para
+   * poder desplazar la tabla en horizontal en móvil SIN ratón (WCAG 2.1.1): un
+   * usuario de teclado la enfoca con Tab y desplaza con las flechas. Sin él, se
+   * mantiene el contenedor simple con scroll táctil/ratón.
+   *
+   * Empareja con un `<TableCaption className="sr-only">` para que la tabla tenga
+   * también un nombre para lectores de pantalla.
+   */
+  scrollRegionLabel?: string;
+  /** Clases extra para el contenedor desplazable (no para el `<table>`). */
+  containerClassName?: string;
+}
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+  ({ className, scrollRegionLabel, containerClassName, ...props }, ref) => {
+    const scrollable = scrollRegionLabel !== undefined;
+    return (
+      <div
+        className={cn(
+          "relative w-full overflow-x-auto",
+          // Región enfocable: heredamos el radio del contenedor y mostramos el
+          // anillo de foco de marca por dentro para que se vea sobre el borde.
+          scrollable &&
+            "rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          containerClassName,
+        )}
+        {...(scrollable
+          ? { role: "region", "aria-label": scrollRegionLabel, tabIndex: 0 }
+          : {})}
+      >
+        <table
+          ref={ref}
+          className={cn("w-full caption-bottom text-sm", className)}
+          {...props}
+        />
+      </div>
+    );
+  },
+);
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<
@@ -97,6 +127,20 @@ const TableCell = React.forwardRef<
 ));
 TableCell.displayName = "TableCell";
 
+const TableCaption = React.forwardRef<
+  HTMLTableCaptionElement,
+  React.HTMLAttributes<HTMLTableCaptionElement>
+>(({ className, ...props }, ref) => (
+  // `caption-bottom` en `<table>` la coloca al pie cuando es visible; casi siempre
+  // se usa con `sr-only` para dar un nombre accesible a la tabla sin ruido visual.
+  <caption
+    ref={ref}
+    className={cn("mt-4 text-sm text-muted-foreground", className)}
+    {...props}
+  />
+));
+TableCaption.displayName = "TableCaption";
+
 export {
   Table,
   TableHeader,
@@ -105,4 +149,5 @@ export {
   TableRow,
   TableHead,
   TableCell,
+  TableCaption,
 };

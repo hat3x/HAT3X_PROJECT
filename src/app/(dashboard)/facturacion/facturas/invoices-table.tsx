@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
+  TableCaption,
   TableCell,
   TableFooter,
   TableHead,
@@ -48,17 +49,29 @@ export function InvoicesTable({
 }: InvoicesTableProps): React.ReactElement {
   return (
     <div className="animate-fade-up overflow-hidden rounded-xl border [animation-delay:60ms]">
-      <Table>
+      <Table scrollRegionLabel="Libro registro de facturas (desplázate en horizontal para ver todas las columnas)">
+        <TableCaption className="sr-only">
+          Libro registro de facturas del periodo: número, tipo, fecha, destinatario,
+          base imponible, IVA y total por documento, con la fila de totales al pie.
+        </TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead>Número</TableHead>
-            <TableHead>Tipo</TableHead>
-            <TableHead>Fecha</TableHead>
-            <TableHead>Destinatario</TableHead>
-            <TableHead className="text-right">Base imponible</TableHead>
-            <TableHead className="text-right">IVA</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-            <TableHead className="w-[1%] text-right">Documento</TableHead>
+            <TableHead scope="col">Número</TableHead>
+            <TableHead scope="col">Tipo</TableHead>
+            <TableHead scope="col">Fecha</TableHead>
+            <TableHead scope="col">Destinatario</TableHead>
+            <TableHead scope="col" className="text-right">
+              Base imponible
+            </TableHead>
+            <TableHead scope="col" className="text-right">
+              IVA
+            </TableHead>
+            <TableHead scope="col" className="text-right">
+              Total
+            </TableHead>
+            <TableHead scope="col" className="w-[1%] text-right">
+              Documento
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

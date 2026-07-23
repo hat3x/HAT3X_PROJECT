@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
+  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -93,14 +94,26 @@ export function TicketDetailView({ detail }: TicketDetailViewProps): React.React
           </p>
         ) : (
           <div className="animate-fade-up overflow-hidden rounded-xl border [animation-delay:80ms]">
-            <Table>
+            <Table scrollRegionLabel="Líneas del ticket (desplázate en horizontal para ver todas las columnas)">
+              <TableCaption className="sr-only">
+                Líneas de detalle del ticket: concepto, cantidad, precio unitario, IVA
+                e importe de cada línea.
+              </TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Concepto</TableHead>
-                  <TableHead className="text-right">Cant.</TableHead>
-                  <TableHead className="text-right">P. unit.</TableHead>
-                  <TableHead className="text-right">IVA</TableHead>
-                  <TableHead className="text-right">Importe</TableHead>
+                  <TableHead scope="col">Concepto</TableHead>
+                  <TableHead scope="col" className="text-right">
+                    Cant.
+                  </TableHead>
+                  <TableHead scope="col" className="text-right">
+                    P. unit.
+                  </TableHead>
+                  <TableHead scope="col" className="text-right">
+                    IVA
+                  </TableHead>
+                  <TableHead scope="col" className="text-right">
+                    Importe
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

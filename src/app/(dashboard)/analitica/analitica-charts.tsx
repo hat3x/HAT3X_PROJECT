@@ -17,6 +17,11 @@ import {
   YAxis,
 } from "recharts";
 
+import {
+  ChartDataTable,
+  type ChartDataColumn,
+  type ChartDataRow,
+} from "@/app/(dashboard)/analitica/chart-data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -81,6 +86,22 @@ function formatBucketLong(iso: string, g: RevenueGranularity): string {
   return format(d, "d MMM yyyy", { locale: es });
 }
 
+/** Sustantivo del bucket según la granularidad, para los resúmenes accesibles. */
+function granularityNoun(g: RevenueGranularity): string {
+  switch (g) {
+    case "day":
+      return "día";
+    case "week":
+      return "semana";
+    case "month":
+      return "mes";
+    case "year":
+      return "año";
+    default:
+      return "periodo";
+  }
+}
+
 // ── Hooks de presentación ─────────────────────────────────────────────────────
 
 /**
@@ -113,6 +134,14 @@ interface ChartShellProps {
   height: number;
   isEmpty: boolean;
   emptyMessage: string;
+  /**
+   * Resumen textual de la gráfica para lectores de pantalla. El contenedor se
+   * expone como `role="img"` con este texto, de modo que el SVG (irrecorrible por
+   * un lector) se anuncia como una sola imagen con nombre; sus descendientes
+   * (ejes, sectores, overlay) pasan a ser presentacionales. La alternativa con el
+   * detalle numérico exacto es la tabla de datos (`ChartDataTable`) / la leyenda.
+   */
+  summary: string;
   /** Contenido superpuesto y centrado (p. ej. el total del donut). */
   overlay?: React.ReactNode;
   /** Único hijo: el gráfico recharts. */
@@ -123,17 +152,24 @@ function ChartShell({
   height,
   isEmpty,
   emptyMessage,
+  summary,
   overlay,
   children,
 }: ChartShellProps): React.ReactElement {
   const mounted = useMounted();
 
   if (!mounted) {
-    return <Skeleton className="w-full rounded-lg" style={{ height }} />;
+    return (
+      <div role="img" aria-label="Cargando la gráfica…">
+        <Skeleton className="w-full rounded-lg" style={{ height }} />
+      </div>
+    );
   }
   if (isEmpty) {
     return (
       <div
+        role="img"
+        aria-label={emptyMessage}
         style={{ height }}
         className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 bg-muted/30 text-center"
       >
@@ -143,7 +179,7 @@ function ChartShell({
     );
   }
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div className="relative w-full" role="img" aria-label={summary} style={{ height }}>
       <ResponsiveContainer width="100%" height={height}>
         {children}
       </ResponsiveContainer>
@@ -308,6 +344,45 @@ export function SalesTrendChart({
   const isEmpty = rows.length === 0 || rows.every((row) => row.value === 0);
   const gradientId = `analitica-trend-${metric}`;
 
+  // Resumen textual (leído por `role="img"`) de la métrica ACTIVA: rango temporal
+  // y pico. El detalle exacto de las tres métricas vive en la tabla de datos.
+  const summary = useMemo(() => {
+    const firstRow = rows[0];
+    if (firstRow === undefined) {
+      return "Gráfica de tendencia de ventas sin datos en el periodo.";
+    }
+    const lastRow = rows[rows.length - 1] ?? firstRow;
+    const fmt = (value: number): string =>
+      def.money ? formatMoney(value, currency) : String(value);
+    const first = formatBucketLong(firstRow.x, granularity);
+    const last = formatBucketLong(lastRow.x, granularity);
+    const peak = rows.reduce((best, row) => (row.value > best.value ? row : best), firstRow);
+    const points = `${rows.length} ${rows.length === 1 ? "punto" : "puntos"}`;
+    return `Gráfica de área: ${def.label.toLowerCase()} por ${granularityNoun(
+      granularity,
+    )}, ${points} de ${first} a ${last}. Máximo ${fmt(peak.value)} en ${formatBucketLong(
+      peak.x,
+      granularity,
+    )}. Detalle exacto en la tabla de datos siguiente.`;
+  }, [rows, def, granularity, currency]);
+
+  // Tabla de datos alternativa: TODAS las métricas por bucket (no solo la activa).
+  const tableColumns: ChartDataColumn[] = [
+    { key: "period", header: "Periodo" },
+    { key: "revenue", header: "Facturación", numeric: true },
+    { key: "tickets", header: "Tickets", numeric: true },
+    { key: "avg", header: "Ticket medio", numeric: true },
+  ];
+  const tableRows: ChartDataRow[] = rows.map((row) => ({
+    key: row.x,
+    cells: [
+      formatBucketLong(row.x, granularity),
+      formatMoney(row.revenueCents, currency),
+      String(row.salesCount),
+      formatMoney(row.avgTicketCents, currency),
+    ],
+  }));
+
   return (
     <div>
       <div className="mb-4">
@@ -349,6 +424,7 @@ export function SalesTrendChart({
         height={height}
         isEmpty={isEmpty}
         emptyMessage="Sin datos en este periodo para la métrica elegida."
+        summary={summary}
       >
         <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
@@ -400,6 +476,14 @@ export function SalesTrendChart({
           />
         </AreaChart>
       </ChartShell>
+
+      <ChartDataTable
+        caption={`Detalle de la tendencia de ventas por ${granularityNoun(
+          granularity,
+        )}: facturación, número de tickets y ticket medio.`}
+        columns={tableColumns}
+        rows={tableRows}
+      />
     </div>
   );
 }
@@ -472,12 +556,27 @@ function Donut({
   const visible = slices.filter((slice) => slice.value > 0);
   const isEmpty = total <= 0;
 
+  // Resumen textual (leído por `role="img"`): total + cada sector con su %. El
+  // desglose exacto también está en la leyenda de abajo (lista con texto, no solo
+  // color), que hace de alternativa accesible a los sectores del anillo.
+  const summary = isEmpty
+    ? `${ariaLabel}: sin datos en este periodo.`
+    : `Gráfica de anillo: ${ariaLabel}. Total ${centerValue} ${centerLabel}. ${visible
+        .map(
+          (slice) =>
+            `${slice.label} ${formatValue(slice.value)} (${Math.round(
+              (slice.value / total) * 100,
+            )}%)`,
+        )
+        .join("; ")}. Desglose también en la lista siguiente.`;
+
   return (
     <div>
       <ChartShell
         height={height}
         isEmpty={isEmpty}
         emptyMessage="Sin datos en este periodo."
+        summary={summary}
         overlay={
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-xl font-semibold tracking-tight text-foreground">
@@ -501,7 +600,6 @@ function Donut({
             strokeWidth={2}
             isAnimationActive={!reduced}
             animationDuration={450}
-            aria-label={ariaLabel}
           >
             {visible.map((slice) => (
               <Cell key={slice.key} fill={slice.color} />
@@ -511,7 +609,10 @@ function Donut({
         </PieChart>
       </ChartShell>
 
-      <ul className="mt-4 grid gap-x-4 gap-y-2 sm:grid-cols-2">
+      <ul
+        aria-label={`Desglose: ${ariaLabel}`}
+        className="mt-4 grid gap-x-4 gap-y-2 sm:grid-cols-2"
+      >
         {slices.map((slice) => {
           const pct = total > 0 ? Math.round((slice.value / total) * 100) : 0;
           return (
