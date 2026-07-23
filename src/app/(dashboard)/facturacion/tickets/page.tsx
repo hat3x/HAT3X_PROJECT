@@ -4,6 +4,7 @@ import { ReceiptText } from "lucide-react";
 
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import { FacturacionEmpty } from "@/app/(dashboard)/facturacion/facturacion-empty";
+import { ImmutabilityNote } from "@/app/(dashboard)/facturacion/immutability-note";
 import { SalesTable } from "@/app/(dashboard)/facturacion/tickets/sales-table";
 import { fetchRecentSales, FACTURACION_LIST_LIMIT } from "@/lib/facturacion/queries";
 import { getActiveSalonId } from "@/lib/salon";
@@ -35,6 +36,8 @@ export default async function TicketsPage(): Promise<React.ReactElement> {
         title="Tickets / Ventas"
         description="Histórico de los tickets y ventas cerradas en la caja, con su detalle de líneas, cobros e importes."
       />
+
+      <ImmutabilityNote variant="sale" className="mb-6" />
 
       {sales.length === 0 ? (
         <FacturacionEmpty

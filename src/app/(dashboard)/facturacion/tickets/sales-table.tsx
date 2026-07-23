@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { ChevronRight, Printer } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -12,6 +15,7 @@ import {
   SALE_STATUS_VARIANT,
   type SaleRow,
 } from "@/lib/facturacion/rows";
+import { formatSaleRef } from "@/lib/facturacion/sale-ticket";
 import { formatDateTime, formatMoney } from "@/lib/format";
 
 interface SalesTableProps {
@@ -30,6 +34,10 @@ function Placeholder({ children }: { children: React.ReactNode }): React.ReactEl
  * profesional, cliente (si lo hubo), método(s) de pago, total (`formatMoney`) y
  * estado. El total va alineado a la derecha con cifras tabulares; el estado y el
  * pago mixto se comunican con `Badge`.
+ *
+ * Cada fila abre el DETALLE de la venta (`/facturacion/tickets/[id]`, líneas y
+ * cobros) y permite REIMPRIMIR el ticket térmico (`/api/facturacion/ticket/[id]`,
+ * que reutiliza el generador del TPV). Ambas acciones son de solo lectura.
  */
 export function SalesTable({ sales }: SalesTableProps): React.ReactElement {
   return (
@@ -44,6 +52,7 @@ export function SalesTable({ sales }: SalesTableProps): React.ReactElement {
             <TableHead>Pago</TableHead>
             <TableHead className="text-right">Total</TableHead>
             <TableHead>Estado</TableHead>
+            <TableHead className="w-[1%] text-right">Detalle</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -82,6 +91,28 @@ export function SalesTable({ sales }: SalesTableProps): React.ReactElement {
                 <Badge variant={SALE_STATUS_VARIANT[sale.status]}>
                   {SALE_STATUS_LABEL[sale.status]}
                 </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-0.5">
+                  <Link
+                    href={`/facturacion/tickets/${sale.id}`}
+                    aria-label={`Ver el detalle de la venta ${formatSaleRef(sale.id)}`}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-primary transition-colors duration-150 ease-apple-out hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <span className="sr-only sm:not-sr-only">Detalle</span>
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                  <a
+                    href={`/api/facturacion/ticket/${sale.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Reimprimir el ticket de la venta ${formatSaleRef(sale.id)}`}
+                    title="Reimprimir ticket"
+                    className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors duration-150 ease-apple-out hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <Printer className="h-4 w-4" aria-hidden="true" />
+                  </a>
+                </div>
               </TableCell>
             </TableRow>
           ))}
