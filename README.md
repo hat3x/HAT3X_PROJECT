@@ -245,6 +245,8 @@ por pantalla— está en **[DESIGN.md](./DESIGN.md)**.
 ### Reservas online (público)
 - Asistente multi-paso en `/reservar/[slug]` sin necesidad de cuenta
 - Validación de disponibilidad en tiempo real
+- **Rejilla del día**: con un profesional concreto, el paso «Fecha y hora» pinta la **jornada completa** como cuadrícula, con los huecos **ocupados / pasados / cerrados deshabilitados** (atenuados, tachados y con su motivo), no solo los libres
+- **Modelo de 3 fases** (aplicación · exposición · post): la agenda **solo bloquea aplicación + post‑exposición**, así que un hueco que cae en la **exposición** de otra cita **es reservable a propósito** — aprovecha el tiempo en que el profesional está libre → [detalle](./docs/booking-availability-grid.md)
 - API REST en `/api/public/booking/[slug]`
 
 ### Multi-sede
@@ -365,10 +367,12 @@ ausencia de fila también exige verificación** (el gate resuelve a "exigir" sal
 | Método | Endpoint | Descripción |
 |---|---|---|
 | `GET` | `/api/public/booking/[slug]` | Salón + catálogo (servicios y profesionales) |
-| `GET` | `/api/public/booking/[slug]/availability` | Slots disponibles para fecha y servicio |
+| `GET` | `/api/public/booking/[slug]/availability` | Slots disponibles para fecha y servicio (opcional `view=day` → rejilla completa del profesional) |
 | `POST` | `/api/public/booking/[slug]` | Crea una reserva (estado `pending`) |
 
 La API valida con Zod y usa el cliente admin de Supabase con validaciones de dominio explícitas (salón, servicio y profesional deben pertenecer al mismo tenant).
+
+El endpoint de disponibilidad tiene **dos vistas** elegidas por el parámetro opt‑in `view` (aditivo, no versiona la URL): la de **solo huecos libres** (`{ slots }`, por defecto) y la de **rejilla completa** de un profesional concreto (`view=day` → `{ daySlots }` con `available` + `reason` por paso). La rejilla es la que pinta la jornada íntegra con los huecos ocupados/pasados/cerrados deshabilitados; y, por el modelo de 3 fases, la **exposición** de otra cita queda como hueco **reservable a propósito**. Detalle: **[`docs/booking-availability-grid.md`](./docs/booking-availability-grid.md)**.
 
 ---
 
