@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
+import { DaySlots, DaySlotsSkeleton } from "@/components/booking/day-slots";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,7 @@ import { formatDuration, formatPrice, formatSlotTime } from "@/lib/booking/forma
 import { localDateInZone } from "@/lib/booking/timezone";
 import type { PublicSlot } from "@/lib/booking/types";
 import {
-  useAvailabilitySlots,
+  useAvailabilityDaySlots,
   useCreateAppointment,
   useProfessionals,
   useServiceProfessionalsMap,
@@ -60,7 +61,12 @@ export function AppointmentForm({
   const servicesQuery = useServices(salonId);
   const professionalsQuery = useProfessionals(salonId);
   const serviceProfMap = useServiceProfessionalsMap(salonId);
-  const slotsQuery = useAvailabilitySlots(salonSlug, serviceId || null, professionalId, date);
+  const slotsQuery = useAvailabilityDaySlots(
+    salonSlug,
+    serviceId || null,
+    professionalId,
+    date,
+  );
   const createMutation = useCreateAppointment(salonId);
 
   const eligibleProfessionals = useMemo(() => {
@@ -176,46 +182,24 @@ export function AppointmentForm({
         />
       </div>
 
-      {/* Huecos disponibles */}
+      {/* Huecos: MISMA rejilla que la reserva pública (libres + ocupados/pasados
+          deshabilitados). Solo las celdas libres son clicables, así que el panel sigue
+          reservando únicamente huecos disponibles. */}
       {serviceId && date && (
         <div className="space-y-2">
           <Label>Hora *</Label>
-          {slotsQuery.isLoading && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Buscando huecos…
-            </p>
-          )}
+          {slotsQuery.isLoading && <DaySlotsSkeleton />}
           {slotsQuery.isError && (
             <p className="text-sm text-destructive">Error al cargar disponibilidad.</p>
           )}
-          {slotsQuery.isSuccess && slotsQuery.data.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No hay huecos disponibles este día.
-            </p>
-          )}
-          {slotsQuery.isSuccess && slotsQuery.data.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {slotsQuery.data.map((slot) => {
-                const isSelected = selectedSlot?.startsAt === slot.startsAt;
-                return (
-                  <button
-                    key={slot.startsAt}
-                    type="button"
-                    onClick={() => setSelectedSlot(slot)}
-                    className={
-                      "flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm transition-colors " +
-                      (isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-input hover:border-primary hover:bg-accent")
-                    }
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                    {formatSlotTime(slot.startsAt, timezone)}
-                  </button>
-                );
-              })}
-            </div>
+          {slotsQuery.isSuccess && (
+            <DaySlots
+              slots={slotsQuery.data}
+              timeZone={timezone}
+              selected={selectedSlot}
+              anyProfessional={professionalId === "any"}
+              onSelect={(slot) => setSelectedSlot(slot)}
+            />
           )}
         </div>
       )}

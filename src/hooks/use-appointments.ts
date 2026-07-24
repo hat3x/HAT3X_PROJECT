@@ -16,7 +16,12 @@ import {
   fetchServiceProfessionalsMap,
   fetchServicesForDashboard,
 } from "@/lib/queries/appointments";
-import type { PublicSlot } from "@/lib/booking/types";
+import type {
+  AvailabilityResponse,
+  DayAvailabilityResponse,
+  PublicDaySlot,
+  PublicSlot,
+} from "@/lib/booking/types";
 import type { AppointmentStatus } from "@/types/database";
 
 /** Citas del día (re-fetches cuando cambia fecha o profesional). */
@@ -78,6 +83,58 @@ export function useAvailabilitySlots(
       if (!res.ok) throw new Error("Error al cargar disponibilidad");
       const json = (await res.json()) as { slots: PublicSlot[] };
       return json.slots;
+    },
+  });
+}
+
+/**
+ * Rejilla COMPLETA de la jornada (`view=day`) para el selector de creación de cita del
+ * panel: pinta la MISMA cuadrícula que la reserva pública (libres + ocupados/pasados/
+ * cerrados con su motivo), reutilizando el componente `DaySlots`.
+ *
+ * Con un profesional CONCRETO pide la vista de rejilla al endpoint. Con «cualquiera» esa
+ * vista no aplica (es per-profesional): cae en la vista de solo-libres y los normaliza a
+ * la misma forma (`available: true`) para pintarlos con el MISMO componente sin ramas.
+ * En cualquier caso, solo los `available` son reservables, así que el panel sigue
+ * reservando únicamente huecos libres.
+ */
+export function useAvailabilityDaySlots(
+  salonSlug: string,
+  serviceId: string | null,
+  professionalId: string,
+  date: string,
+) {
+  return useQuery({
+    queryKey: appointmentKeys.availabilityDay(
+      salonSlug,
+      serviceId ?? "",
+      professionalId,
+      date,
+    ),
+    enabled: Boolean(serviceId) && Boolean(date),
+    queryFn: async (): Promise<PublicDaySlot[]> => {
+      const params = new URLSearchParams({ serviceId: serviceId ?? "", date });
+      const concrete = professionalId !== "any";
+      if (concrete) {
+        params.set("professionalId", professionalId);
+        params.set("view", "day");
+      }
+      const res = await fetch(
+        `/api/public/booking/${salonSlug}/availability?${params.toString()}`,
+      );
+      if (!res.ok) throw new Error("Error al cargar disponibilidad");
+      const json = (await res.json()) as
+        | DayAvailabilityResponse
+        | AvailabilityResponse;
+      if (concrete) {
+        return (json as DayAvailabilityResponse).daySlots;
+      }
+      return (json as AvailabilityResponse).slots.map((slot) => ({
+        startsAt: slot.startsAt,
+        endsAt: slot.endsAt,
+        professionalId: slot.professionalId,
+        available: true,
+      }));
     },
   });
 }

@@ -99,4 +99,13 @@ export const appointmentKeys = {
   serviceProfessionals: (salonId: string) => ["appt-service-prof", salonId] as const,
   availability: (salonSlug: string, serviceId: string, professionalId: string, date: string) =>
     ["appt-availability", salonSlug, serviceId, professionalId, date] as const,
+  // Clave distinta de `availability`: la vista de REJILLA (`view=day`) devuelve una forma
+  // distinta (`PublicDaySlot[]`, jornada completa) que NO debe compartir caché con la de
+  // solo-libres (`PublicSlot[]`).
+  availabilityDay: (
+    salonSlug: string,
+    serviceId: string,
+    professionalId: string,
+    date: string,
+  ) => ["appt-availability-day", salonSlug, serviceId, professionalId, date] as const,
 };
