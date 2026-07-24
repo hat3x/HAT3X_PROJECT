@@ -118,15 +118,29 @@ describe("saveSalonColors", () => {
 // saveSalonLogo — guard de archivo + permiso + éxito.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("saveSalonLogo", () => {
+  /**
+   * Envuelve el fichero igual que el hook: `FormData` con la clave `logo`.
+   * La acción recibe FormData —y NO un `File` suelto— porque los argumentos de
+   * una Server Action deben ser serializables (un `File` es una clase y Next lo
+   * rechaza en runtime). Estos tests fijan ese contrato.
+   */
+  function logoForm(file?: File): FormData {
+    const formData = new FormData();
+    if (file !== undefined) {
+      formData.append("logo", file);
+    }
+    return formData;
+  }
+
   it("sin un File válido (o vacío) NO toca el servidor y pide un archivo", async () => {
-    const noFile = await saveSalonLogo(null as unknown as File);
+    const noFile = await saveSalonLogo(logoForm());
     expect(noFile).toEqual({
       ok: false,
       error: "Selecciona un archivo de imagen para el logo.",
     });
 
     const empty = await saveSalonLogo(
-      new File([], "logo.png", { type: "image/png" }),
+      logoForm(new File([], "logo.png", { type: "image/png" })),
     );
     expect(empty).toEqual({
       ok: false,
@@ -140,7 +154,7 @@ describe("saveSalonLogo", () => {
     uploadLogo.mockRejectedValue(forbidden());
     const file = new File([new Uint8Array(16)], "logo.png", { type: "image/png" });
 
-    const result = await saveSalonLogo(file);
+    const result = await saveSalonLogo(logoForm(file));
 
     expect(result).toEqual({ ok: false, error: FORBIDDEN_MESSAGE });
   });
@@ -153,7 +167,7 @@ describe("saveSalonLogo", () => {
     });
     const file = new File([new Uint8Array(16)], "logo.png", { type: "image/png" });
 
-    const result = await saveSalonLogo(file);
+    const result = await saveSalonLogo(logoForm(file));
 
     expect(result).toEqual({ ok: true, data: ROW });
   });

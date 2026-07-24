@@ -34,11 +34,19 @@ export function useSaveSalonColors() {
   });
 }
 
-/** Sube o reemplaza el logo del salón; devuelve la marca actualizada. */
+/**
+ * Sube o reemplaza el logo del salón; devuelve la marca actualizada.
+ *
+ * Recibe un `File` (cómodo para el formulario) pero lo envía envuelto en
+ * `FormData`: un `File` suelto NO es un argumento válido de Server Action
+ * (es una clase, y Next solo acepta valores serializables o `FormData`).
+ */
 export function useUploadSalonLogo() {
   return useMutation({
     mutationFn: async (file: File): Promise<SalonBranding> => {
-      const result = await saveSalonLogo(file);
+      const formData = new FormData();
+      formData.append("logo", file);
+      const result = await saveSalonLogo(formData);
       if (!result.ok) {
         throw new Error(result.error);
       }

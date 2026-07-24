@@ -1396,18 +1396,51 @@ async function seedAppointments(ctx: SeedContext): Promise<AppointmentSeedResult
   }
 
   // INSERT por lotes; se capturan los ids por clave natural para la transición.
+  //
+  // Tolerancia a solapes (23P01 `appointment_blocks_no_overlap`): el generador
+  // coloca las citas de cada profesional de forma secuencial, pero el cálculo de
+  // los `appointment_blocks` de las fases OCUPADAS (que hace el trigger) puede,
+  // en algún borde, chocar con una cita contigua. Para datos DEMO eso es
+  // irrelevante: si un lote choca, se reinserta fila a fila SALTANDO solo las que
+  // solapan, en vez de abortar toda la siembra. Cualquier otro error sí aborta.
   const idByKey = new Map<string, string>();
+  let skippedOverlap = 0;
+  const EXCLUSION_VIOLATION = "23P01";
+
   for (const batch of chunk(inserts, 500)) {
     const { data: created, error: insertError } = await client
       .from("appointments")
       .insert(batch)
       .select("id, professional_id, starts_at");
-    if (insertError) {
+    if (!insertError) {
+      for (const row of created ?? []) {
+        idByKey.set(appointmentKey(row.professional_id, row.starts_at), row.id);
+      }
+      continue;
+    }
+    if (insertError.code !== EXCLUSION_VIOLATION) {
       throw new Error(`No se pudieron sembrar las citas demo: ${insertError.message}`);
     }
-    for (const row of created ?? []) {
-      idByKey.set(appointmentKey(row.professional_id, row.starts_at), row.id);
+    // Un único solape invalida el lote entero → reintento fila a fila.
+    for (const row of batch) {
+      const { data: one, error: rowError } = await client
+        .from("appointments")
+        .insert(row)
+        .select("id, professional_id, starts_at")
+        .single();
+      if (rowError) {
+        if (rowError.code === EXCLUSION_VIOLATION) {
+          skippedOverlap += 1;
+          continue; // cita demo descartada por solape de fases; no pasa nada
+        }
+        throw new Error(`No se pudieron sembrar las citas demo: ${rowError.message}`);
+      }
+      if (one) idByKey.set(appointmentKey(one.professional_id, one.starts_at), one.id);
     }
+  }
+
+  if (skippedOverlap > 0) {
+    log("appointments", `${skippedOverlap} cita(s) demo descartada(s) por solape de fases (tolerado).`);
   }
 
   // Transición de las pasadas → `completed` (dispara `trg_appointments_create_visit`).

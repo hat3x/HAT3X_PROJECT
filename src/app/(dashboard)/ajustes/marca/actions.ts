@@ -52,14 +52,21 @@ export async function saveSalonColors(
 }
 
 /**
- * Sube o REEMPLAZA el logo del salón activo. Recibe el `File` del formulario,
- * lee sus bytes y delega en {@link uploadActiveSalonLogo}, que valida MIME y
- * tamaño en servidor (≤ 2 MiB) y persiste la URL pública. Revalida las rutas de
- * marca.
+ * Sube o REEMPLAZA el logo del salón activo. Recibe un `FormData` con el fichero
+ * bajo la clave `logo`, lee sus bytes y delega en {@link uploadActiveSalonLogo},
+ * que valida MIME y tamaño en servidor (≤ 2 MiB) y persiste la URL pública.
+ * Revalida las rutas de marca.
+ *
+ * ⚠️ La entrada es `FormData` a propósito, NO un `File` suelto: los argumentos de
+ * una Server Action deben ser serializables y `File` es una clase, así que Next
+ * lo rechaza en runtime («Only plain objects, and a few built-ins, can be passed
+ * to Server Actions»). `FormData` sí está soportado y es la vía correcta para
+ * subir ficheros. El build y los tests NO detectan esto: solo se ve al usarlo.
  */
 export async function saveSalonLogo(
-  file: File,
+  formData: FormData,
 ): Promise<ActionResult<SalonBranding>> {
+  const file = formData.get("logo");
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "Selecciona un archivo de imagen para el logo." };
   }
