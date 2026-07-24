@@ -6,9 +6,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   generateSlots,
+  generateDaySlots,
   mergeSlotsByProfessional,
   type AvailableSlot,
   type BusyInterval,
+  type DaySlot,
+  type GenerateSlotsInput,
 } from "@/lib/booking/availability";
 import { normalizeEmail, type CreateBookingInput } from "@/lib/booking/schema";
 import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
@@ -16,6 +19,7 @@ import { normalizePhone } from "@/lib/customers/normalize-phone";
 import type {
   BookingBootstrap,
   BookingConfirmation,
+  PublicDaySlot,
   PublicSlot,
 } from "@/lib/booking/types";
 
@@ -226,12 +230,19 @@ function parseTstzRange(range: string): BusyInterval {
 }
 
 /**
- * Huecos de un profesional para un día. Si se pasa `excludeAppointmentId`, los bloques
- * de ESA cita NO cuentan como ocupados: es lo que permite MOVER una cita a un hueco que
- * solapa su posición actual sin que se auto-bloquee (ver {@link rescheduleBookingForSalon}).
- * Omitido ⇒ comportamiento normal (toda ocupación bloquea).
+ * Carga los INPUTS de disponibilidad de un profesional para un día (horario, excepción y
+ * bloques ocupados) ya en la forma que consume el motor puro ({@link GenerateSlotsInput}).
+ *
+ * FUENTE ÚNICA de datos para las dos vistas del endpoint: la de huecos libres
+ * (`generateSlots`) y la de rejilla completa (`generateDaySlots`) parten EXACTAMENTE de
+ * los mismos inputs, así que sus resultados no pueden divergir tampoco en la capa de datos
+ * (además del invariante del motor puro, sub-1).
+ *
+ * Si se pasa `excludeAppointmentId`, los bloques de ESA cita NO cuentan como ocupados: es
+ * lo que permite MOVER una cita a un hueco que solapa su posición actual sin que se
+ * auto-bloquee (ver {@link rescheduleBookingForSalon}). Omitido ⇒ toda ocupación bloquea.
  */
-async function slotsForProfessional(
+async function loadProfessionalDayInputs(
   admin: AdminClient,
   salon: SalonConfig,
   professionalId: string,
@@ -240,7 +251,7 @@ async function slotsForProfessional(
   postExposureMin: number,
   date: string,
   excludeAppointmentId?: string,
-): Promise<AvailableSlot[]> {
+): Promise<GenerateSlotsInput> {
   const { startIso, endIso } = dayBoundsUtc(date, salon.timezone);
 
   // Solo bloques físicos de ocupación del profesional (application + post_exposure).
@@ -285,7 +296,7 @@ async function slotsForProfessional(
   // Duración total: encaje en horario laboral y endsAt del hueco devuelto al cliente.
   const totalMin = applicationMin + exposureMin + postExposureMin;
 
-  return generateSlots({
+  return {
     date,
     timeZone: salon.timezone,
     serviceDurationMinutes: blockingMin,
@@ -295,7 +306,64 @@ async function slotsForProfessional(
     busy,
     slotIntervalMinutes: salon.slotIntervalMinutes,
     minLeadMinutes: salon.minLeadMinutes,
-  });
+  };
+}
+
+/**
+ * Huecos LIBRES de un profesional para un día (vista por defecto del endpoint). Delega en
+ * {@link loadProfessionalDayInputs} + `generateSlots`. `excludeAppointmentId` se propaga
+ * para la reprogramación (ver {@link rescheduleBookingForSalon}).
+ */
+async function slotsForProfessional(
+  admin: AdminClient,
+  salon: SalonConfig,
+  professionalId: string,
+  applicationMin: number,
+  exposureMin: number,
+  postExposureMin: number,
+  date: string,
+  excludeAppointmentId?: string,
+): Promise<AvailableSlot[]> {
+  const input = await loadProfessionalDayInputs(
+    admin,
+    salon,
+    professionalId,
+    applicationMin,
+    exposureMin,
+    postExposureMin,
+    date,
+    excludeAppointmentId,
+  );
+  return generateSlots(input);
+}
+
+/**
+ * Rejilla COMPLETA de la jornada de un profesional para un día (vista `view=day`): TODOS
+ * los pasos del horario etiquetados con `available` + `reason`. Delega en
+ * {@link loadProfessionalDayInputs} + `generateDaySlots`, los MISMOS inputs que la vista
+ * de libres, de modo que sus `available: true` coinciden con `generateSlots` (invariante
+ * sub-1). No admite `excludeAppointmentId`: la rejilla es para pintar la agenda, no para
+ * reprogramar.
+ */
+async function daySlotsForProfessional(
+  admin: AdminClient,
+  salon: SalonConfig,
+  professionalId: string,
+  applicationMin: number,
+  exposureMin: number,
+  postExposureMin: number,
+  date: string,
+): Promise<DaySlot[]> {
+  const input = await loadProfessionalDayInputs(
+    admin,
+    salon,
+    professionalId,
+    applicationMin,
+    exposureMin,
+    postExposureMin,
+    date,
+  );
+  return generateDaySlots(input);
 }
 
 /**
@@ -367,6 +435,72 @@ export async function getAvailability(
   const admin = createAdminClient();
   const salon = await loadSalon(admin, slug);
   return availabilityForSalonConfig(admin, salon, serviceId, date, professionalId);
+}
+
+/**
+ * NÚCLEO de la vista de REJILLA (`view=day`), ya RESUELTO el salón. Hermano de
+ * {@link availabilityForSalonConfig} pero, en lugar de los huecos libres de todos los
+ * profesionales, devuelve la jornada COMPLETA de UN profesional concreto (con `available`
+ * + `reason` por slot), que es lo que pinta su columna de agenda.
+ *
+ * Reutiliza la MISMA resolución de servicio y el MISMO filtro «¿este profesional presta el
+ * servicio y está activo?» que la vista de libres ({@link resolveProfessionals}), y el
+ * mismo motor de datos ({@link daySlotsForProfessional}). Si el profesional no presta el
+ * servicio, la rejilla es vacía (no hay columna que pintar). Todo ACOTADO por `salon.id`.
+ */
+async function dayAvailabilityForSalonConfig(
+  admin: AdminClient,
+  salon: SalonConfig,
+  serviceId: string,
+  date: string,
+  professionalId: string,
+): Promise<PublicDaySlot[]> {
+  const { data: service, error: serviceError } = await admin
+    .from("services")
+    .select("application_min, exposure_min, post_exposure_min, active")
+    .eq("salon_id", salon.id)
+    .eq("id", serviceId)
+    .maybeSingle();
+
+  if (serviceError) throw new BookingError(500, "Error al cargar el servicio.");
+  if (!service || !service.active) throw new BookingError(404, "Servicio no disponible.");
+
+  // [] ⇒ el profesional no presta el servicio (o no está activo) ⇒ rejilla vacía.
+  const professionalIds = await resolveProfessionals(
+    admin,
+    salon.id,
+    serviceId,
+    professionalId,
+  );
+  if (professionalIds.length === 0) return [];
+
+  const grid = await daySlotsForProfessional(
+    admin,
+    salon,
+    professionalId,
+    service.application_min,
+    service.exposure_min,
+    service.post_exposure_min,
+    date,
+  );
+  return grid.map((slot) => ({ ...slot, professionalId }));
+}
+
+/**
+ * Rejilla diaria (vista `view=day`) de la reserva pública, entrando por `slug`. Espejo de
+ * {@link getAvailability} pero para la jornada COMPLETA de un profesional concreto. El
+ * `professionalId` es OBLIGATORIO —la rejilla es per-profesional; el schema del endpoint
+ * lo exige con un 400 si falta—, por eso su tipo NO admite `undefined`.
+ */
+export async function getDayAvailability(
+  slug: string,
+  serviceId: string,
+  date: string,
+  professionalId: string,
+): Promise<PublicDaySlot[]> {
+  const admin = createAdminClient();
+  const salon = await loadSalon(admin, slug);
+  return dayAvailabilityForSalonConfig(admin, salon, serviceId, date, professionalId);
 }
 
 /**

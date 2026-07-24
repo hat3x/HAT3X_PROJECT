@@ -2,6 +2,7 @@
  * Tipos del contrato de la API pública de reserva. Sin dependencias de
  * servidor: los comparten el Route Handler y el asistente de reserva (cliente).
  */
+import type { DaySlotReason } from "@/lib/booking/availability";
 
 export interface PublicSalon {
   id: string;
@@ -46,6 +47,38 @@ export interface PublicSlot {
 
 export interface AvailabilityResponse {
   slots: PublicSlot[];
+}
+
+/**
+ * Slot de la REJILLA diaria (vista `view=day` del endpoint de disponibilidad): es un
+ * paso del horario de un profesional CONCRETO, etiquetado como reservable o no, con su
+ * `professionalId` adjunto para pintar su columna de agenda. A diferencia de
+ * {@link PublicSlot} (solo libres), aquí vienen TODOS los pasos de la jornada.
+ *
+ * INVARIANTE (sub-1): los `available: true` coinciden EXACTAMENTE con los
+ * {@link PublicSlot} de la vista por defecto (mismo motor). Un consumidor que solo
+ * quiera libres puede usar la vista por defecto o filtrar `daySlots` por
+ * `available === true`.
+ */
+export interface PublicDaySlot {
+  startsAt: string;
+  endsAt: string;
+  /** `true` si el hueco es reservable. */
+  available: boolean;
+  /** Motivo de indisponibilidad; ausente cuando `available` es `true`. */
+  reason?: DaySlotReason;
+  /** Profesional al que pertenece esta columna de agenda. */
+  professionalId: string;
+}
+
+/**
+ * Respuesta de la vista de REJILLA (`view=day`): la jornada COMPLETA de un profesional
+ * (libres y no-libres). Forma versionada y ADITIVA: la vista por defecto sigue
+ * devolviendo {@link AvailabilityResponse} (`{ slots }`), de modo que los consumidores
+ * actuales (app de cliente y panel) no se ven afectados.
+ */
+export interface DayAvailabilityResponse {
+  daySlots: PublicDaySlot[];
 }
 
 /**

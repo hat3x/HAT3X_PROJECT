@@ -20,6 +20,38 @@ export const availabilityQuerySchema = z.object({
 
 export type AvailabilityQuery = z.infer<typeof availabilityQuerySchema>;
 
+/**
+ * Query del endpoint PÚBLICO de disponibilidad, que extiende {@link availabilityQuerySchema}
+ * de forma ADITIVA con `view` (opt-in) para elegir la forma de la respuesta:
+ *
+ *   · `view` ausente o `"free"` → vista por defecto `{ slots }` (solo huecos libres).
+ *     Contrato intacto para la app de cliente y el panel.
+ *   · `view="day"` → rejilla completa `{ daySlots }` (jornada entera, available + reason).
+ *
+ * La rejilla es PER-PROFESIONAL (pinta la columna de agenda de UN profesional), así que
+ * `view="day"` EXIGE un `professionalId` concreto: se valida de forma cruzada aquí para
+ * devolver un 400 claro y que el handler no tenga que defenderse de un `professionalId`
+ * ausente en la rama de rejilla. La recepción sigue usando el schema base sin `view`, de
+ * modo que su contrato de entrada no cambia.
+ */
+export const publicAvailabilityQuerySchema = availabilityQuerySchema
+  .extend({
+    view: z.enum(["free", "day"]).optional().default("free"),
+  })
+  .superRefine((val, ctx) => {
+    // Tras el transform, `professionalId === undefined` significa "cualquiera": no vale
+    // para una rejilla, que es de un profesional concreto.
+    if (val.view === "day" && val.professionalId === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["professionalId"],
+        message: "La rejilla diaria (view=day) requiere un profesional concreto.",
+      });
+    }
+  });
+
+export type PublicAvailabilityQuery = z.infer<typeof publicAvailabilityQuerySchema>;
+
 /** Datos de contacto del cliente en la reserva pública. */
 export const bookingCustomerSchema = z.object({
   fullName: z.string().trim().min(2, "Indica tu nombre").max(200),
