@@ -68,6 +68,31 @@ export interface AvailableSlot {
   endsAt: string;
 }
 
+/**
+ * Motivo por el que un slot de la jornada NO es reservable (ver {@link DaySlot}).
+ * · `past`     — su inicio ya quedó atrás (antes de "ahora" + antelación mínima).
+ * · `occupied` — solapa un bloque físico del profesional (application/post de otra
+ *                cita); la EXPOSICIÓN ajena NO cuenta, porque no genera bloque.
+ * · `closed`   — la cita completa no cabe antes de que cierre el tramo laboral.
+ */
+export type DaySlotReason = "past" | "occupied" | "closed";
+
+/**
+ * Slot de la jornada laboral: TODOS los pasos de la agenda del profesional, no
+ * solo los libres. Los `available: true` coinciden EXACTAMENTE con lo que
+ * devuelve {@link generateSlots}; el resto llevan `reason` con el porqué.
+ */
+export interface DaySlot {
+  /** Inicio del slot, instante UTC en ISO. */
+  startsAt: string;
+  /** Fin del slot (inicio + duración total de la cita), instante UTC en ISO. */
+  endsAt: string;
+  /** `true` si es reservable (equivale a que {@link generateSlots} lo incluiría). */
+  available: boolean;
+  /** Motivo de indisponibilidad; ausente cuando `available` es `true`. */
+  reason?: DaySlotReason;
+}
+
 const MINUTE_MS = 60_000;
 
 /** Convierte "HH:MM[:SS]" a minutos desde medianoche. */
@@ -81,6 +106,62 @@ function minutesToTime(total: number): string {
   const h = Math.floor(total / 60);
   const m = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * Tramos laborables del día en minutos desde medianoche (hora local del salón),
+ * ordenados por inicio. La excepción del día, si existe, tiene PRIORIDAD sobre el
+ * horario recurrente. Devuelve `[]` si el día no es laborable.
+ *
+ * FUENTE ÚNICA de los tramos: la comparten `generateSlots` y `generateDaySlots`,
+ * de modo que ambos parten exactamente de la misma jornada.
+ */
+function resolveWorkingRanges(
+  date: string,
+  schedules: ScheduleSlot[],
+  exception: ExceptionSlot | null,
+): Array<{ start: number; end: number }> {
+  if (exception) {
+    if (!exception.is_available || !exception.start_time || !exception.end_time) {
+      return []; // Día no laborable.
+    }
+    return [
+      {
+        start: timeToMinutes(exception.start_time),
+        end: timeToMinutes(exception.end_time),
+      },
+    ];
+  }
+
+  const weekday = weekdayOfLocalDate(date);
+  return schedules
+    .filter((s) => s.weekday === weekday)
+    .map((s) => ({
+      start: timeToMinutes(s.start_time),
+      end: timeToMinutes(s.end_time),
+    }))
+    .sort((a, b) => a.start - b.start);
+}
+
+/**
+ * ¿La ventana de bloqueo `[startMs, checkEndMs)` de una cita candidata solapa
+ * algún bloque ocupado del profesional? `busy` proviene de `appointment_blocks`,
+ * que SOLO contiene las fases application y post_exposure (la exposición ajena no
+ * genera bloque, por eso no aparece aquí y no bloquea).
+ *
+ * FUENTE ÚNICA de verdad del solape: la usan por igual `generateSlots` (solo-libres)
+ * y `generateDaySlots` (jornada completa), así que el criterio no puede divergir.
+ */
+function overlapsBusy(
+  startMs: number,
+  checkEndMs: number,
+  busy: BusyInterval[],
+): boolean {
+  return busy.some((b) => {
+    const bStart = new Date(b.starts_at).getTime();
+    const bEnd = new Date(b.ends_at).getTime();
+    return startMs < bEnd && checkEndMs > bStart;
+  });
 }
 
 /**
@@ -108,29 +189,7 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
   if (serviceDurationMinutes <= 0) return [];
 
   // 1. Determinar los tramos laborables del día (excepción tiene prioridad).
-  let workingRanges: Array<{ start: number; end: number }>;
-
-  if (exception) {
-    if (!exception.is_available || !exception.start_time || !exception.end_time) {
-      return []; // Día no laborable.
-    }
-    workingRanges = [
-      {
-        start: timeToMinutes(exception.start_time),
-        end: timeToMinutes(exception.end_time),
-      },
-    ];
-  } else {
-    const weekday = weekdayOfLocalDate(date);
-    workingRanges = schedules
-      .filter((s) => s.weekday === weekday)
-      .map((s) => ({
-        start: timeToMinutes(s.start_time),
-        end: timeToMinutes(s.end_time),
-      }))
-      .sort((a, b) => a.start - b.start);
-  }
-
+  const workingRanges = resolveWorkingRanges(date, schedules, exception);
   if (workingRanges.length === 0) return [];
 
   // 2. Umbral de antelación mínima (instante UTC).
@@ -158,14 +217,93 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
       if (startsAt < earliest) continue;
 
       // Descartar solapamiento con bloques ocupados de appointment_blocks.
-      const overlaps = busy.some((b) => {
-        const bStart = new Date(b.starts_at).getTime();
-        const bEnd = new Date(b.ends_at).getTime();
-        return startsAt.getTime() < bEnd && checkEnd.getTime() > bStart;
-      });
-      if (overlaps) continue;
+      if (overlapsBusy(startsAt.getTime(), checkEnd.getTime(), busy)) continue;
 
       slots.push({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+    }
+  }
+
+  return slots;
+}
+
+/**
+ * Genera TODOS los slots de la jornada laboral del profesional en el paso de tiempo
+ * actual (no solo los libres), etiquetando cada uno como reservable o no.
+ *
+ * Pensado para pintar la agenda del día: por cada posición del horario laboral
+ * indica si es reservable (`available`) y, si no lo es, POR QUÉ (`reason`).
+ *
+ * INVARIANTE con {@link generateSlots}: un slot sale `available: true` EXACTAMENTE
+ * cuando `generateSlots` lo incluiría — mismo motor de tramos ({@link resolveWorkingRanges}),
+ * mismo umbral de antelación y misma comprobación de solape ({@link overlapsBusy})
+ * contra los mismos `appointment_blocks`. No hay un segundo cálculo que pueda divergir.
+ *
+ * Modelo de 3 fases: como `busy` solo trae application/post, un slot que cae en la
+ * EXPOSICIÓN de otra cita del profesional no solapa nada y sale `available: true`;
+ * solo application/post cuentan como `occupied`.
+ *
+ * `reason` (solo si `available: false`), por precedencia: `past` → `occupied` → `closed`.
+ * El tiempo manda primero (un inicio pasado nunca es reservable); entre los futuros,
+ * se prioriza la ocupación real frente al residual de fin de jornada (`closed`).
+ */
+export function generateDaySlots(input: GenerateSlotsInput): DaySlot[] {
+  const {
+    date,
+    timeZone,
+    serviceDurationMinutes,
+    appointmentDurationMinutes,
+    schedules,
+    exception = null,
+    busy,
+    slotIntervalMinutes = 15,
+    minLeadMinutes = 0,
+    now = new Date(),
+  } = input;
+
+  const totalDuration = appointmentDurationMinutes ?? serviceDurationMinutes;
+
+  if (serviceDurationMinutes <= 0) return [];
+
+  const workingRanges = resolveWorkingRanges(date, schedules, exception);
+  if (workingRanges.length === 0) return [];
+
+  const earliest = new Date(now.getTime() + minLeadMinutes * MINUTE_MS);
+
+  const slots: DaySlot[] = [];
+
+  for (const range of workingRanges) {
+    // Último inicio que deja sitio a la cita completa (idéntico a generateSlots).
+    const lastStart = range.end - totalDuration;
+
+    // Recorremos TODAS las posiciones cuyo inicio cae dentro del tramo laboral,
+    // no solo hasta `lastStart`: las que empiezan a tiempo pero no caben antes del
+    // cierre se etiquetan `closed` en vez de desaparecer.
+    for (
+      let startMin = range.start;
+      startMin < range.end;
+      startMin += slotIntervalMinutes
+    ) {
+      const startsAt = zonedWallTimeToUtc(date, minutesToTime(startMin), timeZone);
+      const endsAt = new Date(startsAt.getTime() + totalDuration * MINUTE_MS);
+      const checkEnd = new Date(startsAt.getTime() + serviceDurationMinutes * MINUTE_MS);
+
+      const fits = startMin <= lastStart;
+      const isPast = startsAt < earliest;
+      const occupied = overlapsBusy(startsAt.getTime(), checkEnd.getTime(), busy);
+
+      const startsAtIso = startsAt.toISOString();
+      const endsAtIso = endsAt.toISOString();
+
+      // available: true SOLO si cabe, no es pasado y no está ocupado → mismo criterio
+      // que generateSlots (que solo empuja huecos que cumplen las tres condiciones).
+      if (fits && !isPast && !occupied) {
+        slots.push({ startsAt: startsAtIso, endsAt: endsAtIso, available: true });
+        continue;
+      }
+
+      // Precedencia del motivo: tiempo → ocupación real → residual de cierre.
+      const reason: DaySlotReason = isPast ? "past" : occupied ? "occupied" : "closed";
+      slots.push({ startsAt: startsAtIso, endsAt: endsAtIso, available: false, reason });
     }
   }
 

@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   generateSlots,
+  generateDaySlots,
   mergeSlotsByProfessional,
   type ScheduleSlot,
   type BusyInterval,
+  type GenerateSlotsInput,
+  type DaySlot,
 } from "@/lib/booking/availability";
 
 // Fixed reference time: Monday 2025-06-09 08:00 UTC (10:00 Europe/Madrid CEST)
@@ -291,6 +294,282 @@ describe("generateSlots — modelo de fases (appointment_blocks)", () => {
       (s) => new Date(s.startsAt).getUTCHours() === 7 && new Date(s.startsAt).getUTCMinutes() === 0,
     );
     expect(has0900).toBe(true);
+  });
+});
+
+describe("generateDaySlots", () => {
+  const MIDNIGHT = new Date("2025-06-09T00:00:00.000Z");
+
+  /** Solo los slots disponibles, proyectados a la forma de generateSlots. */
+  function availableAsSlots(day: DaySlot[]): { startsAt: string; endsAt: string }[] {
+    return day
+      .filter((s) => s.available)
+      .map((s) => ({ startsAt: s.startsAt, endsAt: s.endsAt }));
+  }
+
+  // ── INVARIANTE CENTRAL ────────────────────────────────────────────────────
+  // Los available:true de generateDaySlots deben coincidir EXACTAMENTE (mismo
+  // orden y mismos instantes) con lo que devuelve generateSlots para el mismo input.
+  describe("invariante: available:true === generateSlots", () => {
+    const scenarios: Array<{ name: string; input: GenerateSlotsInput }> = [
+      {
+        name: "día simple sin ocupación",
+        input: {
+          date: DATE,
+          timeZone: TZ,
+          serviceDurationMinutes: 30,
+          schedules: MONDAY_SCHEDULE,
+          busy: [],
+          slotIntervalMinutes: 15,
+          now: MIDNIGHT,
+        },
+      },
+      {
+        name: "con bloques ocupados (application/post ajenos)",
+        input: {
+          date: DATE,
+          timeZone: TZ,
+          serviceDurationMinutes: 30,
+          appointmentDurationMinutes: 30,
+          schedules: MONDAY_SCHEDULE,
+          busy: [
+            { starts_at: "2025-06-09T08:00:00.000Z", ends_at: "2025-06-09T08:30:00.000Z" },
+            { starts_at: "2025-06-09T09:30:00.000Z", ends_at: "2025-06-09T09:45:00.000Z" },
+          ],
+          slotIntervalMinutes: 30,
+          now: MIDNIGHT,
+        },
+      },
+      {
+        name: "con antelación mínima (parte del día en pasado)",
+        input: {
+          date: DATE,
+          timeZone: TZ,
+          serviceDurationMinutes: 30,
+          schedules: MONDAY_SCHEDULE,
+          busy: [],
+          slotIntervalMinutes: 30,
+          minLeadMinutes: 30,
+          now: NOW, // 10:00 Madrid → 09:00/09:30/10:00 quedan atrás
+        },
+      },
+      {
+        name: "servicio de 3 fases (bloqueo 45 / total 105)",
+        input: {
+          date: DATE,
+          timeZone: TZ,
+          serviceDurationMinutes: 45,
+          appointmentDurationMinutes: 105,
+          schedules: MONDAY_SCHEDULE,
+          busy: [
+            { starts_at: "2025-06-09T07:50:00.000Z", ends_at: "2025-06-09T08:00:00.000Z" },
+          ],
+          slotIntervalMinutes: 15,
+          now: MIDNIGHT,
+        },
+      },
+      {
+        name: "horario partido (mañana + tarde)",
+        input: {
+          date: DATE,
+          timeZone: TZ,
+          serviceDurationMinutes: 60,
+          schedules: [
+            { weekday: 1, start_time: "09:00:00", end_time: "13:00:00" },
+            { weekday: 1, start_time: "15:00:00", end_time: "17:00:00" },
+          ],
+          busy: [],
+          slotIntervalMinutes: 60,
+          now: MIDNIGHT,
+        },
+      },
+      {
+        name: "excepción con horario propio",
+        input: {
+          date: DATE,
+          timeZone: TZ,
+          serviceDurationMinutes: 30,
+          schedules: MONDAY_SCHEDULE,
+          exception: { is_available: true, start_time: "10:00:00", end_time: "12:00:00" },
+          busy: [],
+          slotIntervalMinutes: 30,
+          now: MIDNIGHT,
+        },
+      },
+    ];
+
+    for (const { name, input } of scenarios) {
+      it(`coincide en: ${name}`, () => {
+        const day = generateDaySlots(input);
+        const free = generateSlots(input);
+        expect(availableAsSlots(day)).toEqual(free);
+      });
+    }
+  });
+
+  it("devuelve TODOS los pasos de la jornada, no solo los libres", () => {
+    // 09:00–17:00 con paso 15 → 32 posiciones cuyo inicio cae dentro del tramo
+    // (09:00 … 16:45). generateSlots solo devolvería las que además caben (≤16:30).
+    const input: GenerateSlotsInput = {
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE,
+      busy: [],
+      slotIntervalMinutes: 15,
+      now: MIDNIGHT,
+    };
+    const day = generateDaySlots(input);
+    expect(day.length).toBe(32); // (17:00−09:00)=480 min / 15 = 32 posiciones
+    expect(day.length).toBeGreaterThan(generateSlots(input).length);
+    // Todos los slots llevan endsAt = inicio + duración total (30 min).
+    day.forEach((s) => {
+      const diff = new Date(s.endsAt).getTime() - new Date(s.startsAt).getTime();
+      expect(diff).toBe(30 * 60 * 1000);
+    });
+  });
+
+  it("etiqueta 'closed' los pasos que no caben antes del cierre", () => {
+    // 30min servicio, paso 15, cierre 17:00: 16:45 empieza dentro pero termina
+    // 17:15 > 17:00 → no cabe → available:false, reason:'closed'.
+    const day = generateDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE,
+      busy: [],
+      slotIntervalMinutes: 15,
+      now: MIDNIGHT,
+    });
+    const last = day[day.length - 1]!;
+    expect(new Date(last.startsAt).getUTCHours()).toBe(14); // 16:45 Madrid = 14:45 UTC
+    expect(new Date(last.startsAt).getUTCMinutes()).toBe(45);
+    expect(last.available).toBe(false);
+    expect(last.reason).toBe("closed");
+    // El último reservable (16:30) sigue siendo available.
+    const fitting = day.find(
+      (s) => new Date(s.startsAt).getUTCHours() === 14 && new Date(s.startsAt).getUTCMinutes() === 30,
+    )!;
+    expect(fitting.available).toBe(true);
+    expect(fitting.reason).toBeUndefined();
+  });
+
+  it("etiqueta 'past' los pasos anteriores a la antelación mínima", () => {
+    // now = 10:00 Madrid, minLead 30 → earliest 10:30. 09:00/09:30/10:00 → past.
+    const day = generateDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE,
+      busy: [],
+      slotIntervalMinutes: 30,
+      minLeadMinutes: 30,
+      now: NOW, // 08:00 UTC = 10:00 CEST
+    });
+    const past = day.filter((s) => s.reason === "past");
+    // 09:00, 09:30, 10:00 Madrid = 07:00, 07:30, 08:00 UTC
+    expect(past.map((s) => new Date(s.startsAt).getUTCHours())).toEqual([7, 7, 8]);
+    past.forEach((s) => expect(s.available).toBe(false));
+    // 10:30 (08:30 UTC) es el primero disponible.
+    const first = day.find((s) => s.available)!;
+    expect(new Date(first.startsAt).getUTCHours()).toBe(8);
+    expect(new Date(first.startsAt).getUTCMinutes()).toBe(30);
+  });
+
+  it("etiqueta 'occupied' los pasos que solapan un bloque físico del profesional", () => {
+    // Bloque ocupado 10:00–11:00 Madrid (08:00–09:00 UTC), servicio 60/paso 60.
+    const day = generateDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: MONDAY_SCHEDULE,
+      busy: [{ starts_at: "2025-06-09T08:00:00.000Z", ends_at: "2025-06-09T09:00:00.000Z" }],
+      slotIntervalMinutes: 60,
+      now: MIDNIGHT,
+    });
+    const at1000 = day.find((s) => new Date(s.startsAt).getUTCHours() === 8)!;
+    expect(at1000.available).toBe(false);
+    expect(at1000.reason).toBe("occupied");
+  });
+
+  describe("modelo de 3 fases", () => {
+    // Otra cita del profesional: application 10:00–10:30 y post 11:30–11:45 Madrid.
+    // Su exposición 10:30–11:30 NO genera bloque (no está en appointment_blocks).
+    const busy: BusyInterval[] = [
+      { starts_at: "2025-06-09T08:00:00.000Z", ends_at: "2025-06-09T08:30:00.000Z" },
+      { starts_at: "2025-06-09T09:30:00.000Z", ends_at: "2025-06-09T09:45:00.000Z" },
+    ];
+
+    const dayFor = () =>
+      generateDaySlots({
+        date: DATE,
+        timeZone: TZ,
+        serviceDurationMinutes: 30, // nueva cita corta (solo aplicación)
+        appointmentDurationMinutes: 30,
+        schedules: MONDAY_SCHEDULE,
+        busy,
+        slotIntervalMinutes: 30,
+        now: MIDNIGHT,
+      });
+
+    it("el hueco de EXPOSICIÓN ajena sale available:true", () => {
+      // 10:30 Madrid = 08:30 UTC cae en la exposición ajena.
+      const at1030 = dayFor().find(
+        (s) => new Date(s.startsAt).getUTCHours() === 8 && new Date(s.startsAt).getUTCMinutes() === 30,
+      )!;
+      expect(at1030.available).toBe(true);
+      expect(at1030.reason).toBeUndefined();
+    });
+
+    it("los tramos de APLICACIÓN y POST-EXPOSICIÓN salen occupied", () => {
+      const day = dayFor();
+      const at1000 = day.find(
+        (s) => new Date(s.startsAt).getUTCHours() === 8 && new Date(s.startsAt).getUTCMinutes() === 0,
+      )!;
+      const at1130 = day.find(
+        (s) => new Date(s.startsAt).getUTCHours() === 9 && new Date(s.startsAt).getUTCMinutes() === 30,
+      )!;
+      expect(at1000.reason).toBe("occupied"); // application ajena
+      expect(at1130.reason).toBe("occupied"); // post-exposición ajena
+    });
+  });
+
+  it("devuelve [] cuando serviceDurationMinutes <= 0", () => {
+    expect(
+      generateDaySlots({
+        date: DATE,
+        timeZone: TZ,
+        serviceDurationMinutes: 0,
+        schedules: MONDAY_SCHEDULE,
+        busy: [],
+        now: MIDNIGHT,
+      }),
+    ).toEqual([]);
+  });
+
+  it("devuelve [] en día no laborable (sin horario o excepción cerrada)", () => {
+    expect(
+      generateDaySlots({
+        date: DATE, // lunes
+        timeZone: TZ,
+        serviceDurationMinutes: 30,
+        schedules: [{ weekday: 2, start_time: "09:00:00", end_time: "17:00:00" }],
+        busy: [],
+        now: MIDNIGHT,
+      }),
+    ).toEqual([]);
+
+    expect(
+      generateDaySlots({
+        date: DATE,
+        timeZone: TZ,
+        serviceDurationMinutes: 30,
+        schedules: MONDAY_SCHEDULE,
+        exception: { is_available: false, start_time: null, end_time: null },
+        busy: [],
+        now: MIDNIGHT,
+      }),
+    ).toEqual([]);
   });
 });
 
