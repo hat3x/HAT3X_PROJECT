@@ -534,6 +534,99 @@ describe("generateDaySlots", () => {
     });
   });
 
+  // ── ESCENARIO DE ENTREGA (sub-5) ──────────────────────────────────────────
+  // Una jornada 09:00–17:00 con UNA cita de servicio de 3 fases ya reservada:
+  //   · aplicación   10:00–10:30 Madrid (08:00–08:30 UTC) → genera appointment_block
+  //   · exposición   10:30–11:30 Madrid                   → NO genera bloque (hueco)
+  //   · post         11:30–11:45 Madrid (09:30–09:45 UTC) → genera appointment_block
+  // Un cliente nuevo pide un servicio corto (bloqueo 30 min, paso 30). Verificamos
+  // las TRES fases a la vez y que los reservables son EXACTAMENTE los de generateSlots.
+  describe("una cita de servicio de 3 fases ocupando la jornada", () => {
+    const busy: BusyInterval[] = [
+      { starts_at: "2025-06-09T08:00:00.000Z", ends_at: "2025-06-09T08:30:00.000Z" }, // aplicación
+      { starts_at: "2025-06-09T09:30:00.000Z", ends_at: "2025-06-09T09:45:00.000Z" }, // post-exposición
+    ];
+    const input: GenerateSlotsInput = {
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      appointmentDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE,
+      busy,
+      slotIntervalMinutes: 30,
+      now: MIDNIGHT,
+    };
+
+    /** Slot cuyo inicio es exactamente esa hora:minuto UTC (debe existir). */
+    const at = (day: DaySlot[], hUtc: number, mUtc: number): DaySlot =>
+      day.find(
+        (s) =>
+          new Date(s.startsAt).getUTCHours() === hUtc &&
+          new Date(s.startsAt).getUTCMinutes() === mUtc,
+      )!;
+
+    it("los slots que solapan la APLICACIÓN ajena salen occupied", () => {
+      const application = at(generateDaySlots(input), 8, 0); // 10:00 Madrid
+      expect(application.available).toBe(false);
+      expect(application.reason).toBe("occupied");
+    });
+
+    it("los slots que solapan el POST-EXPOSICIÓN ajeno salen occupied", () => {
+      const post = at(generateDaySlots(input), 9, 30); // 11:30 Madrid
+      expect(post.available).toBe(false);
+      expect(post.reason).toBe("occupied");
+    });
+
+    it("los slots de EXPOSICIÓN ajena salen available:true (la exposición no bloquea)", () => {
+      const day = generateDaySlots(input);
+      const exposureStart = at(day, 8, 30); // 10:30 Madrid — arranque de la exposición
+      const exposureMid = at(day, 9, 0); // 11:00 Madrid — dentro de la exposición
+      for (const s of [exposureStart, exposureMid]) {
+        expect(s.available).toBe(true);
+        expect(s.reason).toBeUndefined();
+      }
+    });
+
+    it("los reservables coinciden EXACTAMENTE con generateSlots y excluyen las fases ocupadas", () => {
+      const day = generateDaySlots(input);
+      // Misma verdad que el flujo de reserva pública: available:true === generateSlots.
+      expect(availableAsSlots(day)).toEqual(generateSlots(input));
+      // Ni la aplicación (10:00) ni el post (11:30) ajenos aparecen como reservables.
+      const reservableStartsUtc = day
+        .filter((s) => s.available)
+        .map((s) => `${new Date(s.startsAt).getUTCHours()}:${new Date(s.startsAt).getUTCMinutes()}`);
+      expect(reservableStartsUtc).not.toContain("8:0"); // 10:00 aplicación
+      expect(reservableStartsUtc).not.toContain("9:30"); // 11:30 post-exposición
+    });
+  });
+
+  it("etiqueta 'closed' el residual de fin de jornada bajo una excepción con horario propio", () => {
+    // Excepción 10:00–12:00 Madrid, servicio 30 / paso 15. Último encaje: 11:30 (fin 12:00).
+    // 11:45 empieza dentro de la excepción pero termina 12:15 > 12:00 → no cabe → 'closed'.
+    const day = generateDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: MONDAY_SCHEDULE,
+      exception: { is_available: true, start_time: "10:00:00", end_time: "12:00:00" },
+      busy: [],
+      slotIntervalMinutes: 15,
+      now: MIDNIGHT,
+    });
+    const last = day[day.length - 1]!;
+    // 11:45 Madrid = 09:45 UTC
+    expect(new Date(last.startsAt).getUTCHours()).toBe(9);
+    expect(new Date(last.startsAt).getUTCMinutes()).toBe(45);
+    expect(last.available).toBe(false);
+    expect(last.reason).toBe("closed");
+    // El último reservable dentro de la excepción es 11:30 (09:30 UTC).
+    const fitting = day.find(
+      (s) => new Date(s.startsAt).getUTCHours() === 9 && new Date(s.startsAt).getUTCMinutes() === 30,
+    )!;
+    expect(fitting.available).toBe(true);
+    expect(fitting.reason).toBeUndefined();
+  });
+
   it("devuelve [] cuando serviceDurationMinutes <= 0", () => {
     expect(
       generateDaySlots({
