@@ -13,6 +13,7 @@ import {
   Pencil,
   Phone,
   Sparkles,
+  Stethoscope,
   Trash2,
   TrendingUp,
 } from "lucide-react";
@@ -123,6 +124,14 @@ export function CustomerDetailView({
           </div>
         </div>
         <div className="flex gap-2">
+          {salonSector === "odontologia" ? (
+            <Button variant="outline" asChild>
+              <Link href={`/odontograma?paciente=${customerId}`}>
+                <Stethoscope className="mr-2 h-4 w-4" aria-hidden="true" />
+                Ver odontograma
+              </Link>
+            </Button>
+          ) : null}
           {loyaltyEnabled ? (
             <Button variant="outline" asChild>
               <Link href={`/customers/${customerId}/loyalty`}>
