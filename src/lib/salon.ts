@@ -4,13 +4,14 @@ import {
 } from "@/lib/salon-feature-flags";
 import { salonFeatureFlags, salonHasFeature } from "@/lib/salon-features";
 import { createClient } from "@/lib/supabase/server";
-import type { MemberRole, SalonFeature } from "@/types/database";
+import type { MemberRole, SalonFeature, SalonSector } from "@/types/database";
 
 export interface ActiveSalon {
   id: string;
   name: string;
   slug: string;
   timezone: string;
+  sector: SalonSector;
 }
 
 export interface ActiveMembership {
@@ -103,7 +104,7 @@ export async function getActiveSalonId(): Promise<string | null> {
   return data?.salon_id ?? null;
 }
 
-/** Resuelve id, nombre, slug y timezone del salón activo del usuario. */
+/** Resuelve id, nombre, slug, timezone y sector del salón activo del usuario. */
 export async function getActiveSalon(): Promise<ActiveSalon | null> {
   const salonId = await getActiveSalonId();
   if (salonId === null) return null;
@@ -111,12 +112,18 @@ export async function getActiveSalon(): Promise<ActiveSalon | null> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("salons")
-    .select("id, name, slug, timezone")
+    .select("id, name, slug, timezone, sector")
     .eq("id", salonId)
     .maybeSingle();
 
   if (error !== null) throw new Error(`No se pudo cargar el salón: ${error.message}`);
   return data ?? null;
+}
+
+/** Sector del salón activo (o null si no hay salón). */
+export async function getActiveSalonSector(): Promise<SalonSector | null> {
+  const salon = await getActiveSalon();
+  return salon?.sector ?? null;
 }
 
 /**
