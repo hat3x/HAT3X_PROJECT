@@ -21,6 +21,7 @@ import {
   Package,
   Settings,
   ShoppingBag,
+  Stethoscope,
   Users,
   Wallet,
   type LucideIcon,
@@ -82,6 +83,16 @@ export const SETTINGS_ITEM: NavItem = {
   icon: Settings,
 };
 
+/**
+ * Odontograma (ficha dental). Solo visible para el sector odontología.
+ * Permite acceder al mapa interactivo de dientes del paciente.
+ */
+export const ODONTOGRAMA_ITEM: NavItem = {
+  href: "/odontograma",
+  label: "Odontograma",
+  icon: Stethoscope,
+};
+
 /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
   /** El usuario puede ver materia de gestión (owner/manager). */
@@ -139,9 +150,20 @@ export function buildDashboardNavItems({
 
   if (sector === "peluqueria") return items;
 
-  return items.map((item) =>
+  const withSectorLabels = items.map((item) =>
     item.href === "/customers"
       ? { ...item, label: config.terms.customerPlural }
       : item,
   );
+
+  if (sector !== "odontologia") return withSectorLabels;
+
+  // Odontología: añadir Odontograma justo después de Pacientes
+  const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
+  const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
+  return [
+    ...withSectorLabels.slice(0, insertAt),
+    ODONTOGRAMA_ITEM,
+    ...withSectorLabels.slice(insertAt),
+  ];
 }
