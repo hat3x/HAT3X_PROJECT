@@ -23,18 +23,35 @@ import { useCustomers } from "@/hooks/use-customers";
 
 interface PatientSelectorProps {
   salonId: string;
+  /**
+   * Ruta base a la que navegar al seleccionar un paciente: se construye como
+   * `${hrefBase}?paciente=<customer_id>`. Por defecto "/odontograma" para no
+   * romper el uso existente; otras vistas (p. ej. /periodontograma) pasan su
+   * propia ruta.
+   */
+  hrefBase?: string;
+  /**
+   * Frase que completa "Elige el/la {paciente} para {purposeLabel}". Por
+   * defecto describe el odontograma (comportamiento histórico); otras vistas
+   * pueden pasar su propia frase (p. ej. "ver su periodontograma").
+   */
+  purposeLabel?: string;
 }
 
 /**
- * Picker de paciente para la vista del Odontograma.
- * Muestra la lista de clientes del salón con búsqueda en tiempo real.
- * Al seleccionar un paciente navega a /odontograma?paciente=<customer_id>.
+ * Picker de paciente reutilizable entre vistas dentales (Odontograma,
+ * Periodontograma, …). Muestra la lista de clientes del salón con búsqueda en
+ * tiempo real. Al seleccionar un paciente navega a `${hrefBase}?paciente=<customer_id>`
+ * (por defecto /odontograma, comportamiento histórico byte-idéntico si no se
+ * pasa `hrefBase`).
  *
  * Los labels ("Paciente"/"Pacientes") se toman de useTerms() para que
  * este componente sea sector-aware sin hardcodear terminología.
  */
 export function PatientSelector({
   salonId,
+  hrefBase = "/odontograma",
+  purposeLabel = "ver su odontograma",
 }: PatientSelectorProps): React.ReactElement {
   const [search, setSearch] = useState("");
   const router = useRouter();
@@ -46,7 +63,7 @@ export function PatientSelector({
   );
 
   function handleSelect(customerId: string) {
-    router.push(`/odontograma?paciente=${customerId}`);
+    router.push(`${hrefBase}?paciente=${customerId}`);
   }
 
   const customerLabel = terms.customer;
@@ -67,7 +84,7 @@ export function PatientSelector({
               Seleccionar {customerLabel}
             </CardTitle>
             <CardDescription className="text-xs">
-              Elige el/la {customerLabel.toLowerCase()} para ver su odontograma
+              Elige el/la {customerLabel.toLowerCase()} para {purposeLabel}
             </CardDescription>
           </div>
         </div>
