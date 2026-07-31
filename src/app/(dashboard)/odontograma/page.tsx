@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { ClipboardList, Info } from "lucide-react";
+import Link from "next/link";
+import { ClipboardList, Info, ChevronLeft } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { OdontogramChart } from "@/components/dental/odontogram-chart";
@@ -13,12 +14,12 @@ export const metadata: Metadata = {
 /**
  * Odontograma — ficha dental FDI/ISO 3950.
  *
- * Renders the OdontogramChart (Client Component) with the active salon_id.
- * Demo mode when no patient is passed: chart shows empty teeth, save button
- * is disabled.
+ * Route: /odontograma
+ *   No query param  → PatientSelector: search list, click navigates to ?paciente=<id>
+ *   ?paciente=<id>  → OdontogramChart loaded with that patient's findings
  *
- * Pass ?paciente=<customer_id> to link to a specific patient's odontogram
- * (wired from the customer detail page in a later phase).
+ * Data is fetched client-side via useOdontogramFindings (React Query).
+ * This Server Component only resolves the active salon_id and reads searchParams.
  */
 export default async function OdontogramaPage({
   searchParams,
@@ -31,6 +32,7 @@ export default async function OdontogramaPage({
   ]);
 
   const clinicalRecordId = params.paciente ?? "";
+  const hasPatient = clinicalRecordId.length > 0;
 
   return (
     <main className="container py-8 space-y-6">
@@ -42,15 +44,26 @@ export default async function OdontogramaPage({
         >
           <ClipboardList className="h-5 w-5" />
         </span>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Odontograma</h1>
           <p className="text-sm text-muted-foreground">
             Ficha dental · FDI/ISO 3950
-            {clinicalRecordId
+            {hasPatient
               ? ` · Paciente ${clinicalRecordId.slice(0, 8)}…`
-              : " · Vista previa"}
+              : " · Selecciona un paciente"}
           </p>
         </div>
+
+        {/* Back-to-selector link — only visible when a patient is loaded */}
+        {hasPatient && (
+          <Link
+            href="/odontograma"
+            className="ml-auto flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Cambiar paciente
+          </Link>
+        )}
       </div>
 
       {/* No-salon edge case */}
@@ -61,7 +74,7 @@ export default async function OdontogramaPage({
             No se pudo identificar el salón activo. Cierra sesión y vuelve a entrar.
           </CardContent>
         </Card>
-      ) : clinicalRecordId === "" ? (
+      ) : !hasPatient ? (
         <PatientSelector salonId={salonId} />
       ) : (
         <OdontogramChart
