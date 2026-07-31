@@ -1958,6 +1958,155 @@ export interface Database {
           },
         ];
       };
+      // Periodontograma — cabecera de la exploración periodontal (1:N desde
+      // clinical_records vía customer_id+salon_id). Inamovible cuando signed = TRUE
+      // (trigger trg_perio_exam_immutable). Ver migración 20260731140000_perio_exam.
+      perio_exam: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          examiner_id: string | null;
+          notes: string | null;
+          signed: boolean;
+          signed_at: string | null;
+          signed_by: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          examiner_id?: string | null;
+          notes?: string | null;
+          signed?: boolean;
+          signed_at?: string | null;
+          signed_by?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          examiner_id?: string | null;
+          notes?: string | null;
+          signed?: boolean;
+          signed_at?: string | null;
+          signed_by?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "perio_exam_customer_salon_fkey";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_records";
+            referencedColumns: ["customer_id", "salon_id"];
+          },
+        ];
+      };
+      // Periodontograma — datos por diente (1:N desde perio_exam vía exam_id+salon_id):
+      // movilidad (Miller 1985), furcación (Hamp 1975), placa. Un diente por examen
+      // (UNIQUE exam_id+fdi_tooth). Ver migración 20260731140000_perio_exam.
+      perio_tooth: {
+        Row: {
+          id: string;
+          exam_id: string;
+          salon_id: string;
+          fdi_tooth: number;
+          mobility: number;
+          furcation: number;
+          plaque: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          exam_id: string;
+          salon_id: string;
+          fdi_tooth: number;
+          mobility?: number;
+          furcation?: number;
+          plaque?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          exam_id?: string;
+          salon_id?: string;
+          fdi_tooth?: number;
+          mobility?: number;
+          furcation?: number;
+          plaque?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "perio_tooth_exam_salon_fkey";
+            columns: ["exam_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "perio_exam";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      // Periodontograma — mediciones por sitio de sondaje (1:N desde perio_tooth vía
+      // tooth_id+salon_id, 6 sitios/diente). cal_mm es GENERATED ALWAYS AS
+      // (pd_mm - gingival_margin_mm) STORED — nunca se inserta/actualiza directamente.
+      // Ver migración 20260731140000_perio_exam.
+      perio_site: {
+        Row: {
+          id: string;
+          tooth_id: string;
+          salon_id: string;
+          site: number;
+          pd_mm: number;
+          gingival_margin_mm: number;
+          cal_mm: number;
+          bop: boolean;
+          suppuration: boolean;
+          plaque: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tooth_id: string;
+          salon_id: string;
+          site: number;
+          pd_mm: number;
+          gingival_margin_mm?: number;
+          bop?: boolean;
+          suppuration?: boolean;
+          plaque?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tooth_id?: string;
+          salon_id?: string;
+          site?: number;
+          pd_mm?: number;
+          gingival_margin_mm?: number;
+          bop?: boolean;
+          suppuration?: boolean;
+          plaque?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "perio_site_tooth_salon_fkey";
+            columns: ["tooth_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "perio_tooth";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -2210,6 +2359,15 @@ export type ClinicalRecordUpdate = TablesUpdate<"clinical_records">;
 // Odontograma — hallazgos clínicos append-only
 export type OdontogramFinding = Tables<"odontogram_findings">;
 export type OdontogramFindingInsert = TablesInsert<"odontogram_findings">;
+
+// Periodontograma — cabecera (perio_exam), datos por diente (perio_tooth) y
+// mediciones por sitio (perio_site). Inamovibles cuando perio_exam.signed = TRUE.
+export type PerioExam = Tables<"perio_exam">;
+export type PerioExamInsert = TablesInsert<"perio_exam">;
+export type PerioTooth = Tables<"perio_tooth">;
+export type PerioToothInsert = TablesInsert<"perio_tooth">;
+export type PerioSite = Tables<"perio_site">;
+export type PerioSiteInsert = TablesInsert<"perio_site">;
 
 // Notas de visita — nota clínica 1:1 con visits; inamovible cuando signed = TRUE
 export type VisitNote = Tables<"visit_notes">;
