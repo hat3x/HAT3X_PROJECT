@@ -1,5 +1,5 @@
 import { SalonBrandStyle } from "@/components/branding/salon-brand-theme";
-import { DashboardNav } from "@/components/dashboard-nav";
+import { AppSidebar } from "@/components/app-sidebar";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SalonFeaturesProvider } from "@/components/providers/salon-features-provider";
 import { SectorProvider } from "@/components/providers/sector-provider";
@@ -47,14 +47,14 @@ export default async function DashboardLayout({
       <SalonBrandStyle branding={branding} sector={sector} />
       <SalonFeaturesProvider flags={featureFlags}>
         <SectorProvider sector={sector}>
-          <div {...{ [BRAND_SCOPE_ATTR]: "" }} className="flex min-h-screen flex-col">
-            <DashboardNav
+          <div {...{ [BRAND_SCOPE_ATTR]: "" }} className="min-h-screen lg:flex">
+            <AppSidebar
               brandName={salon?.name ?? null}
               logoUrl={buildLogoSrc(branding)}
               role={membership?.role ?? null}
               showSettings={showSettings}
             />
-            <div className="flex-1">{children}</div>
+            <main className="min-w-0 flex-1">{children}</main>
           </div>
         </SectorProvider>
       </SalonFeaturesProvider>
