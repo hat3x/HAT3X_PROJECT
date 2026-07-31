@@ -47,7 +47,7 @@ export default async function DashboardLayout({
       <SalonBrandStyle branding={branding} sector={sector} />
       <SalonFeaturesProvider flags={featureFlags}>
         <SectorProvider sector={sector}>
-          <div {...{ [BRAND_SCOPE_ATTR]: "" }} className="min-h-screen lg:flex">
+          <div {...{ [BRAND_SCOPE_ATTR]: "" }} className="flex min-h-screen flex-col lg:flex-row">
             <AppSidebar
               brandName={salon?.name ?? null}
               logoUrl={buildLogoSrc(branding)}

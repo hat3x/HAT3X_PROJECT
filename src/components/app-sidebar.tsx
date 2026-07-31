@@ -220,44 +220,62 @@ export function AppSidebar({
         </button>
       </header>
 
-      {/* ════════════ Drawer móvil ════════════ */}
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          {/* Backdrop — cierra al tocar fuera */}
-          <button
-            type="button"
-            aria-hidden="true"
-            tabIndex={-1}
-            onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-foreground/10 backdrop-blur-[2px]"
-          />
+      {/* ════════════ Drawer móvil ════════════
+           Siempre montado en DOM — transiciones CSS manejan apertura Y cierre
+           suave (backdrop fade + panel slide-x). `pointer-events-none` bloquea
+           interacciones cuando cerrado sin romper el stacking context.        */}
+      <div
+        aria-hidden={!open}
+        className={cn(
+          "fixed inset-0 z-50 lg:hidden",
+          !open && "pointer-events-none",
+        )}
+      >
+        {/* Backdrop — fade in/out, cierra al tocar fuera */}
+        <button
+          type="button"
+          aria-hidden="true"
+          tabIndex={-1}
+          onClick={() => setOpen(false)}
+          className={cn(
+            "absolute inset-0 bg-foreground/10 backdrop-blur-[2px]",
+            "transition-opacity duration-300",
+            open ? "opacity-100" : "opacity-0",
+          )}
+        />
 
-          {/* Panel lateral del drawer */}
-          <aside
-            id="mobile-sidebar"
-            className="animate-in slide-in-from-left absolute inset-y-0 left-0 flex w-72 flex-col border-r border-border/70 bg-background/95 backdrop-blur-xl duration-300"
-          >
-            {/* Cabecera del drawer: marca + botón cerrar */}
-            <div className="flex h-16 shrink-0 items-center justify-between border-b border-border/70 px-4">
-              {brandLink}
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Cerrar menú"
-                className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
+        {/* Panel lateral — slide-in desde la izquierda, slide-out al cerrar */}
+        <aside
+          id="mobile-sidebar"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menú de navegación"
+          className={cn(
+            "absolute inset-y-0 left-0 flex w-72 flex-col border-r border-border/70 bg-background/95 backdrop-blur-xl",
+            "transition-transform duration-300 ease-apple-out",
+            open ? "translate-x-0" : "-translate-x-full",
+          )}
+        >
+          {/* Cabecera del drawer: marca + botón cerrar */}
+          <div className="flex h-16 shrink-0 items-center justify-between border-b border-border/70 px-4">
+            {brandLink}
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Cerrar menú"
+              className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
 
-            {/* Ítems de navegación */}
-            {navItems}
+          {/* Ítems de navegación */}
+          {navItems}
 
-            {/* Cuenta */}
-            {accountSection}
-          </aside>
-        </div>
-      )}
+          {/* Cuenta */}
+          {accountSection}
+        </aside>
+      </div>
     </>
   );
 }
