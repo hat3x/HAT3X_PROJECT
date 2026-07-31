@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Eye, EyeOff, Scissors } from "lucide-react";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -17,8 +17,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { idToEmail } from "@/lib/auth/id-email";
+import { sectorMismatchMessage } from "@/lib/auth/sector-login";
+import { SECTOR_REGISTRY } from "@/lib/sector/registry";
+import type { SalonSector } from "@/types/database";
 
-export function LoginForm(): React.ReactElement {
+import { resolveTenantSector } from "./actions";
+import { SECTOR_ICON } from "./sector-picker";
+
+interface LoginFormProps {
+  /** Sector elegido en el picker (`/login?sector=<x>`); tema la marca y, tras
+   * el sign-in, se compara contra el sector real del tenant. */
+  sector: SalonSector;
+}
+
+export function LoginForm({ sector }: LoginFormProps): React.ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loginId, setLoginId] = useState("");
@@ -26,6 +38,8 @@ export function LoginForm(): React.ReactElement {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const brandName = SECTOR_REGISTRY[sector].brandName;
+  const BrandIcon = SECTOR_ICON[sector];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -44,6 +58,20 @@ export function LoginForm(): React.ReactElement {
       return;
     }
 
+    // La credencial pertenece a UN tenant y por tanto a UN sector. Si no
+    // coincide con el sector elegido en el picker, se rechaza aquí (UX) —
+    // el aislamiento real de datos lo da la RLS, no esta comprobación.
+    const tenantSector = await resolveTenantSector();
+    const mismatch = tenantSector
+      ? sectorMismatchMessage(sector, tenantSector)
+      : null;
+    if (mismatch !== null) {
+      await supabase.auth.signOut();
+      setError(mismatch);
+      setIsLoading(false);
+      return;
+    }
+
     const next = searchParams.get("next") ?? "/dashboard";
     router.push(next);
     router.refresh();
@@ -55,10 +83,12 @@ export function LoginForm(): React.ReactElement {
       {/* Marca: glifo de acento + wordmark. Minimal, con respiración vertical. */}
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-brand">
-          <Scissors className="h-7 w-7" strokeWidth={1.75} aria-hidden />
+          <BrandIcon className="h-7 w-7" strokeWidth={1.75} aria-hidden />
         </span>
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Salon OS</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {brandName}
+          </h1>
           <p className="text-sm text-muted-foreground">
             Tu salón, bajo control.
           </p>

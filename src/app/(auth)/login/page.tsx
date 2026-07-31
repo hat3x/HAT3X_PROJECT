@@ -1,13 +1,27 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
+import { parseSectorParam } from "@/lib/auth/sector-login";
+
 import { LoginForm } from "./login-form";
+import { SectorPicker } from "./sector-picker";
 
 export const metadata: Metadata = {
   title: "Iniciar sesión",
 };
 
-export default function LoginPage(): React.ReactElement {
+interface LoginPageProps {
+  searchParams?: Record<string, string | string[] | undefined>;
+}
+
+export default function LoginPage({
+  searchParams,
+}: LoginPageProps): React.ReactElement {
+  const rawSector = searchParams?.sector;
+  const sector = parseSectorParam(
+    Array.isArray(rawSector) ? rawSector[0] : rawSector,
+  );
+
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 sm:p-6">
       {/*
@@ -19,10 +33,14 @@ export default function LoginPage(): React.ReactElement {
         <div className="absolute bottom-0 right-0 h-64 w-64 translate-x-1/3 translate-y-1/3 rounded-full bg-accent/40 blur-3xl" />
       </div>
 
-      {/* Suspense requerido por useSearchParams() en el prerender */}
-      <Suspense>
-        <LoginForm />
-      </Suspense>
+      {sector === null ? (
+        <SectorPicker />
+      ) : (
+        // Suspense requerido por useSearchParams() en el prerender
+        <Suspense>
+          <LoginForm sector={sector} />
+        </Suspense>
+      )}
     </main>
   );
 }
