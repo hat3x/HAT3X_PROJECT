@@ -43,6 +43,14 @@ vi.mock("@/hooks/use-customers", () => ({
   useDeleteCustomer: () => ({ mutate: vi.fn(), isPending: false, error: null }),
 }));
 
+// VisitNotesCard usa react-query internamente; stub para evitar QueryClientProvider.
+vi.mock("@/hooks/use-visit-notes", () => ({
+  useVisitsWithNotes: () => ({ data: [], isPending: false, isError: false }),
+  useAddVisitNote: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useSignVisitNote: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useUpdateVisitNote: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+}));
+
 import { CustomerDetailView } from "@/app/(dashboard)/customers/[id]/customer-detail-view";
 
 const CUSTOMER_ID = "11111111-1111-1111-1111-111111111111";
@@ -75,6 +83,7 @@ function renderDetail(loyaltyEnabled: boolean): void {
     customerId: CUSTOMER_ID,
     initialCustomer: CUSTOMER,
     loyaltyEnabled,
+    salonSector: null,
   };
   render(createElement(CustomerDetailView, props));
 }

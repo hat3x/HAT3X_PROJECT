@@ -11,6 +11,7 @@
  */
 
 import type { Arch, ToothClass } from "./tooth";
+export type { ToothClass } from "./tooth";
 
 // ---------------------------------------------------------------------------
 // Surface types
