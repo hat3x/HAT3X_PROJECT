@@ -12,6 +12,16 @@ describe("buildDashboardNavItems — por sector", () => {
     expect(items.some((i) => i.label === "Pacientes")).toBe(true);
     expect(items.some((i) => i.label === "Clientes")).toBe(false);
   });
+  it("odontologia: '/periodontograma' aparece justo después de '/odontograma'; en peluquería NO aparece", () => {
+    const dental = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "odontologia" });
+    expect(dental.some((i) => i.href === "/periodontograma")).toBe(true);
+    const odontoIdx = dental.findIndex((i) => i.href === "/odontograma");
+    const perioIdx = dental.findIndex((i) => i.href === "/periodontograma");
+    expect(perioIdx).toBe(odontoIdx + 1);
+
+    const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
+    expect(peluqueria.some((i) => i.href === "/periodontograma")).toBe(false);
+  });
   it("restauracion (cascaron): item 'Próximamente'", () => {
     const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
     expect(items.some((i) => i.label === "Próximamente")).toBe(true);

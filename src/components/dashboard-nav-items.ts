@@ -12,6 +12,7 @@
  * PRESENTACIÓN: el gate de datos vive en el servidor de cada dominio.
  */
 import {
+  Activity,
   BarChart3,
   CalendarClock,
   CalendarDays,
@@ -93,6 +94,17 @@ export const ODONTOGRAMA_ITEM: NavItem = {
   icon: Stethoscope,
 };
 
+/**
+ * Periodontograma (carta de sondaje periodontal). Solo visible para el sector
+ * odontología, justo después de Odontograma: primero el mapa de dientes,
+ * luego la exploración periodontal (6 sitios/diente) de ese mismo paciente.
+ */
+export const PERIODONTOGRAMA_ITEM: NavItem = {
+  href: "/periodontograma",
+  label: "Periodontograma",
+  icon: Activity,
+};
+
 /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
   /** El usuario puede ver materia de gestión (owner/manager). */
@@ -118,7 +130,8 @@ export interface NavGating {
  * cascarón: solo Panel + "Próximamente" (+ Ajustes si `showSettings`), ignorando
  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
- * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes".
+ * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
+ * además inserta Odontograma y, justo detrás, Periodontograma tras "Pacientes".
  */
 export function buildDashboardNavItems({
   showSettings,
@@ -158,12 +171,14 @@ export function buildDashboardNavItems({
 
   if (sector !== "odontologia") return withSectorLabels;
 
-  // Odontología: añadir Odontograma justo después de Pacientes
+  // Odontología: añadir Odontograma justo después de Pacientes, y
+  // Periodontograma justo después de Odontograma.
   const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
   const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
   return [
     ...withSectorLabels.slice(0, insertAt),
     ODONTOGRAMA_ITEM,
+    PERIODONTOGRAMA_ITEM,
     ...withSectorLabels.slice(insertAt),
   ];
 }
