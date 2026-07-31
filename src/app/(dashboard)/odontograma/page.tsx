@@ -3,6 +3,7 @@ import { ClipboardList, Info } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { OdontogramChart } from "@/components/dental/odontogram-chart";
+import { PatientSelector } from "@/components/dental/patient-selector";
 import { getActiveSalonId } from "@/lib/salon";
 
 export const metadata: Metadata = {
@@ -60,6 +61,8 @@ export default async function OdontogramaPage({
             No se pudo identificar el salón activo. Cierra sesión y vuelve a entrar.
           </CardContent>
         </Card>
+      ) : clinicalRecordId === "" ? (
+        <PatientSelector salonId={salonId} />
       ) : (
         <OdontogramChart
           salonId={salonId}
