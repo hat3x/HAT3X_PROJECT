@@ -10,10 +10,26 @@ import {
   TEETH,
 } from "@/lib/dental/tooth";
 import { TOOTH_COLORS } from "@/lib/dental/color";
+import { foldFindingsAsOf } from "@/lib/dental/fold";
+import { formatDate } from "@/lib/format";
 import { useOdontogramFindings, useAddFinding } from "@/hooks/use-odontogram";
 import type { OdontogramFindingInsert } from "@/types/database";
 import { ToothSvg } from "./tooth-svg";
 import { FindingPanel } from "./finding-panel";
+import { EvolutionDatePicker } from "./evolution-date-picker";
+
+// ---------------------------------------------------------------------------
+// Evolutivo "boca en fecha X" — helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Convierte una fecha de calendario (`YYYY-MM-DD`, tal como la produce
+ * `<input type="date">`) al instante final de ese día en UTC, para incluir
+ * todo lo registrado ese día al filtrar por `recorded_at` (timestamptz ISO).
+ */
+function endOfDay(date: string): string {
+  return `${date}T23:59:59.999Z`;
+}
 
 // ---------------------------------------------------------------------------
 // FDI row slices in standard visual charting order
@@ -136,6 +152,7 @@ export function OdontogramChart({
 }: OdontogramChartProps): React.ReactElement {
   const [dentitionMode, setDentitionMode] = useState<DentitionMode>("permanent");
   const [selectedFdi, setSelectedFdi]     = useState<number | null>(null);
+  const [asOfDate, setAsOfDate]           = useState<string | null>(null);
 
   const { data, isLoading, isError } = useOdontogramFindings(
     salonId,
@@ -143,10 +160,24 @@ export function OdontogramChart({
   );
   const addFinding = useAddFinding(salonId, clinicalRecordId);
 
+  // Estado ACTUAL (asOfDate null) usa `currentStates` tal cual venía; en modo
+  // histórico se reconstruye con `foldFindingsAsOf` a partir del historial
+  // completo de findings. El comportamiento por defecto (asOfDate === null)
+  // es idéntico al de antes de este evolutivo.
   const currentStates = data?.currentStates ?? new Map();
+  const displayedStates =
+    asOfDate === null
+      ? currentStates
+      : foldFindingsAsOf(data?.findings ?? [], endOfDay(asOfDate));
 
   function handleToothSelect(fdi: number) {
     setSelectedFdi((prev) => (prev === fdi ? null : fdi));
+  }
+
+  function handleAsOfDateChange(date: string | null) {
+    setAsOfDate(date);
+    // Modo histórico es solo lectura: no editamos hallazgos "en el pasado".
+    if (date !== null) setSelectedFdi(null);
   }
 
   async function handleSave(input: OdontogramFindingInsert) {
@@ -181,6 +212,8 @@ export function OdontogramChart({
           ))}
         </div>
 
+        <EvolutionDatePicker value={asOfDate} onChange={handleAsOfDateChange} />
+
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           {isLoading && clinicalRecordId.length > 0 && (
             <span>Cargando hallazgos…</span>
@@ -194,6 +227,13 @@ export function OdontogramChart({
         </div>
       </div>
 
+      {/* Aviso de modo histórico (solo lectura) */}
+      {asOfDate !== null && (
+        <p className="text-xs italic text-muted-foreground">
+          Viendo el estado a fecha {formatDate(asOfDate)} (solo lectura)
+        </p>
+      )}
+
       {/* Chart grid */}
       <Card>
         <CardContent className="py-5 px-3 space-y-3">
@@ -205,7 +245,7 @@ export function OdontogramChart({
               </p>
               <ToothRow
                 fdis={UPPER_TEMP}
-                currentStates={currentStates}
+                currentStates={displayedStates}
                 selectedFdi={selectedFdi}
                 onSelect={handleToothSelect}
               />
@@ -222,7 +262,7 @@ export function OdontogramChart({
               )}
               <ToothRow
                 fdis={UPPER_PERM}
-                currentStates={currentStates}
+                currentStates={displayedStates}
                 selectedFdi={selectedFdi}
                 onSelect={handleToothSelect}
               />
@@ -243,7 +283,7 @@ export function OdontogramChart({
             <div className="space-y-1">
               <ToothRow
                 fdis={LOWER_PERM}
-                currentStates={currentStates}
+                currentStates={displayedStates}
                 selectedFdi={selectedFdi}
                 onSelect={handleToothSelect}
               />
@@ -260,7 +300,7 @@ export function OdontogramChart({
             <div className="space-y-1">
               <ToothRow
                 fdis={LOWER_TEMP}
-                currentStates={currentStates}
+                currentStates={displayedStates}
                 selectedFdi={selectedFdi}
                 onSelect={handleToothSelect}
               />
@@ -272,14 +312,16 @@ export function OdontogramChart({
         </CardContent>
       </Card>
 
-      {/* Finding panel — appears when a tooth is selected */}
-      {selectedFdi !== null && (
+      {/* Finding panel — appears when a tooth is selected. Modo histórico
+          (asOfDate !== null) es solo lectura: no se editan hallazgos "en el
+          pasado", así que el panel no se abre en ese caso. */}
+      {selectedFdi !== null && asOfDate === null && (
         <FindingPanel
           key={selectedFdi}
           fdi={selectedFdi}
           salonId={salonId}
           clinicalRecordId={clinicalRecordId}
-          currentState={currentStates.get(selectedFdi)}
+          currentState={displayedStates.get(selectedFdi)}
           onClose={() => setSelectedFdi(null)}
           onSave={handleSave}
           isSaving={addFinding.isPending}
