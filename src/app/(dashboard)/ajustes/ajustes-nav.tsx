@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { useTerms } from "@/components/providers/sector-provider";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -41,13 +42,27 @@ const NAV_ITEMS: readonly NavItem[] = [
  */
 export function AjustesNav(): React.ReactElement {
   const pathname = usePathname();
+  const terms = useTerms();
+
+  // Relabel de los ítems cuyo texto depende del sector activo (p. ej. "Servicios"
+  // para peluquería vs. "Carta" para restauración); el resto de NAV_ITEMS
+  // permanece intacto.
+  const items = NAV_ITEMS.map((item) => {
+    if (item.href === "/ajustes/servicios") {
+      return { ...item, label: terms.servicePlural };
+    }
+    if (item.href === "/ajustes/personal") {
+      return { ...item, label: terms.professionalPlural };
+    }
+    return item;
+  });
 
   return (
     <nav
       aria-label="Secciones de ajustes"
       className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2 md:mx-0 md:flex-col md:gap-1 md:overflow-x-visible md:px-0 md:pb-0"
     >
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon }) => {
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
 
         return (
