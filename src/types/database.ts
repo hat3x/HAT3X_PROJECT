@@ -1722,6 +1722,76 @@ export interface Database {
           },
         ];
       };
+      // Ficha clínica del cliente: 1:1 con customers (customer_id es PK y parte de la
+      // FK compuesta). Datos de categoría especial RGPD Art. 9 (alergias,
+      // contraindicaciones, medicaciones). consent_signed_at es requisito legal antes
+      // de mostrar datos sensibles. Sector-agnóstica: campos comunes + jsonb 'data'
+      // para extensión específica de sector. Ver migración 20260731110000_clinical_records.
+      clinical_records: {
+        Row: {
+          customer_id: string;
+          salon_id: string;
+          allergies: string[];
+          contraindications: string[];
+          skin_hair_type: string | null;
+          medications: string[];
+          medical_notes: string | null;
+          /** Extensión sector-específica. Tipado en la capa de app por sector. */
+          data: Json;
+          /** RGPD Art. 9: timestamp de consentimiento. NULL = no obtenido. */
+          consent_signed_at: string | null;
+          consent_version: string | null;
+          last_updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          customer_id: string;
+          salon_id: string;
+          allergies?: string[];
+          contraindications?: string[];
+          skin_hair_type?: string | null;
+          medications?: string[];
+          medical_notes?: string | null;
+          data?: Json;
+          consent_signed_at?: string | null;
+          consent_version?: string | null;
+          last_updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          customer_id?: string;
+          salon_id?: string;
+          allergies?: string[];
+          contraindications?: string[];
+          skin_hair_type?: string | null;
+          medications?: string[];
+          medical_notes?: string | null;
+          data?: Json;
+          consent_signed_at?: string | null;
+          consent_version?: string | null;
+          last_updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinical_records_customer_salon_fkey";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: true;
+            referencedRelation: "customers";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "clinical_records_last_updated_by_fkey";
+            columns: ["last_updated_by"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       // Claves de API por salón para integraciones NO-humanas (auth de servicio).
       // Se persiste SOLO el hash SHA-256 (key_hash, hex minúsculas 64) y un prefijo
       // corto NO secreto (key_prefix); NUNCA la clave en claro. Tabla de SECRETOS:
@@ -2017,6 +2087,10 @@ export type SalonBranding = Tables<"salon_branding">;
 // Seguridad — claves de API por salón (auth de servicio, emisión solo HAT3X)
 export type ServiceApiKey = Tables<"service_api_keys">;
 export type ServiceApiKeyInsert = TablesInsert<"service_api_keys">;
+// Ficha clínica — datos categoría especial RGPD Art. 9 (1:1 con customers)
+export type ClinicalRecord = Tables<"clinical_records">;
+export type ClinicalRecordInsert = TablesInsert<"clinical_records">;
+export type ClinicalRecordUpdate = TablesUpdate<"clinical_records">;
 
 // Phase helpers -----------------------------------------------------------------
 

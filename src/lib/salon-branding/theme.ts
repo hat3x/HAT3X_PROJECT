@@ -1,5 +1,5 @@
 /**
- * Marca (white-label) — TEMATIZADO DINÁMICO del panel (sub-3). HELPERS PUROS.
+ * Marca (white-label) — TEMATIZADO DINÁMICO del panel (sub-3 + sub-5). HELPERS PUROS.
  *
  * Traduce la fila `salon_branding` (colores en hex `#rrggbb`) al lenguaje del sistema
  * de diseño: los tokens de `globals.css` son TRIPLETES HSL en formato shadcn
@@ -14,11 +14,19 @@
  *      (`[data-salon-brand]`), de modo que la marca NO toca `:root` global: las
  *      páginas sin salón (login) conservan intacto el tema premium por defecto.
  *
+ * Sub-5 — Sector fallback: cuando el tenant no tiene `salon_branding`, el sector del
+ * salón determina el color primario por defecto (`SECTOR_REGISTRY[sector].defaultPrimary`).
+ * Para `peluqueria` el color es `#7c3aed` (idéntico al default de `globals.css`), de modo
+ * que los salones de peluquería no notan ningún cambio visual — regresión byte-idéntica.
+ *
  * SIN dependencias de red ni de React: funciones puras testeables (mismo espíritu que
  * `@/lib/salon-branding/branding`). La capa de servidor decide CUÁNDO pintar; aquí solo
  * se decide CÓMO. Si no hay marca válida ⇒ `null` ⇒ el layout no inyecta nada y el
  * tema por defecto (violeta #7c3aed) manda: [[salon-branding-server]].
  */
+import type { SalonSector } from "@/types/database";
+
+import { SECTOR_REGISTRY } from "@/lib/sector/registry";
 import { HEX_COLOR_PATTERN, type SalonBranding } from "./branding";
 
 /**
@@ -210,23 +218,19 @@ function tripleOf(hsl: Hsl): HslTriple {
 }
 
 /**
- * Traduce la fila de marca a overrides de tema, o `null` cuando NO hay que pintar nada
- * (sin fila, o color primario inválido ⇒ fallback limpio al tema por defecto). El color
- * primario alimenta botones/anillo/info; el ACENTO sutil (hover/estado activo) toma el
- * matiz del color SECUNDARIO si existe, o del primario en su defecto — conservando la
- * ESTRUCTURA de lavado claro / tinte profundo del default (nunca un bloque saturado que
- * arruine la legibilidad de los estados). No reescribe la UI premium: solo re-tinta.
+ * Núcleo PURO de derivación de tema a partir de colores hex. Comparte la lógica entre
+ * `resolveBrandTheme` (fila de BD) y `resolveSectorFallbackTheme` (default de sector).
+ * Devuelve `null` si el hex primario es inválido.
  */
-export function resolveBrandTheme(branding: SalonBranding | null): BrandTheme | null {
-  if (branding === null) return null;
-
-  const primary = hexToHsl(branding.primary_color);
+function resolveHexBrandTheme(
+  primaryHex: string,
+  secondaryHex: string | null,
+): BrandTheme | null {
+  const primary = hexToHsl(primaryHex);
   if (primary === null) return null;
 
   // Matiz del acento: secundario válido si lo hay; si no, el propio primario.
-  const secondary = branding.secondary_color
-    ? hexToHsl(branding.secondary_color)
-    : null;
+  const secondary = secondaryHex ? hexToHsl(secondaryHex) : null;
   const accent = secondary ?? primary;
 
   // Primario: en claro tal cual (fidelidad de marca); en oscuro se aclara para seguir
@@ -262,6 +266,35 @@ export function resolveBrandTheme(branding: SalonBranding | null): BrandTheme | 
   };
 
   return { light, dark };
+}
+
+/**
+ * Traduce la fila de marca a overrides de tema, o `null` cuando NO hay que pintar nada
+ * (sin fila, o color primario inválido ⇒ fallback limpio al tema por defecto). El color
+ * primario alimenta botones/anillo/info; el ACENTO sutil (hover/estado activo) toma el
+ * matiz del color SECUNDARIO si existe, o del primario en su defecto — conservando la
+ * ESTRUCTURA de lavado claro / tinte profundo del default (nunca un bloque saturado que
+ * arruine la legibilidad de los estados). No reescribe la UI premium: solo re-tinta.
+ */
+export function resolveBrandTheme(branding: SalonBranding | null): BrandTheme | null {
+  if (branding === null) return null;
+  return resolveHexBrandTheme(
+    branding.primary_color,
+    branding.secondary_color ?? null,
+  );
+}
+
+/**
+ * Tema por defecto del SECTOR cuando el tenant no ha configurado `salon_branding`.
+ * Usa `SECTOR_REGISTRY[sector].defaultPrimary` como color primario (sin secundario).
+ *
+ * Para `peluqueria` el color es `#7c3aed` — byte-idéntico al default de `globals.css`
+ * (`262 83% 58%`), por lo que los salones de ese sector no notan ningún cambio visual.
+ * Para `odontologia` el color es `#0f766e` (teal), que re-tinta el panel con la paleta
+ * corporativa de clínica dental.
+ */
+export function resolveSectorFallbackTheme(sector: SalonSector): BrandTheme | null {
+  return resolveHexBrandTheme(SECTOR_REGISTRY[sector].defaultPrimary, null);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

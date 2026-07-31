@@ -24,6 +24,7 @@ import {
   hexToHsl,
   readableForegroundHex,
   resolveBrandTheme,
+  resolveSectorFallbackTheme,
 } from "@/lib/salon-branding/theme";
 import type { SalonBranding } from "@/types/database";
 
@@ -247,5 +248,56 @@ describe("coherencia — tematizar con el violeta del sistema no reescribe la UI
     const theme = resolveBrandTheme(branding({ primary_color: DEFAULT_PRIMARY_COLOR }));
     expect(theme).not.toBeNull();
     expect(theme?.light["--primary"]).toBe("221 39% 11%");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C) SECTOR FALLBACK (sub-5) — CSS custom property fallback sin salon_branding
+// ─────────────────────────────────────────────────────────────────────────────
+describe("resolveSectorFallbackTheme — color por defecto del sector sin branding propio", () => {
+  it("peluqueria: CSS byte-idéntico al de resolveBrandTheme con #7c3aed (violeta base)", () => {
+    const fallback = resolveSectorFallbackTheme("peluqueria");
+    const explicit = resolveBrandTheme(branding({ primary_color: "#7c3aed" }));
+    expect(fallback).not.toBeNull();
+    expect(explicit).not.toBeNull();
+    // El CSS serializado debe ser idéntico: mismos tokens, mismo orden, mismos bytes.
+    expect(buildBrandThemeCss(fallback!)).toBe(buildBrandThemeCss(explicit!));
+  });
+
+  it("peluqueria: primario claro = 262 83% 58% (idéntico al default de globals.css)", () => {
+    const theme = resolveSectorFallbackTheme("peluqueria");
+    expect(theme?.light["--primary"]).toBe("262 83% 58%");
+  });
+
+  it("odontologia: primario claro es teal (#0f766e → h≈175)", () => {
+    const theme = resolveSectorFallbackTheme("odontologia");
+    expect(theme).not.toBeNull();
+    // El matiz del teal es ~175°; verificamos que el triplete empieza con ese matiz.
+    expect(theme?.light["--primary"]).toMatch(/^175 /);
+    // En modo oscuro el primario se aclara (+10 L, mínimo 56%).
+    expect(theme?.dark["--primary"]).toMatch(/^175 /);
+    expect(theme?.dark["--primary"]).toMatch(/ 56%$/);
+  });
+
+  it("odontologia: primario claro exacto = 175 77% 26%", () => {
+    const theme = resolveSectorFallbackTheme("odontologia");
+    expect(theme?.light["--primary"]).toBe("175 77% 26%");
+    expect(theme?.dark["--primary"]).toBe("175 77% 56%");
+  });
+
+  it("expone los mismos tokens que resolveBrandTheme (estructura completa)", () => {
+    const theme = resolveSectorFallbackTheme("odontologia");
+    const keys = ["--primary", "--primary-foreground", "--ring", "--info", "--accent", "--accent-foreground"];
+    for (const key of keys) {
+      expect(theme?.light).toHaveProperty(key);
+      expect(theme?.dark).toHaveProperty(key);
+    }
+  });
+
+  it("el CSS del sector está acotado a [data-salon-brand] (sin tocar :root global)", () => {
+    const css = buildBrandThemeCss(resolveSectorFallbackTheme("odontologia")!);
+    expect(css).toContain(":root [data-salon-brand]{");
+    expect(css).toContain(":root.dark [data-salon-brand]{");
+    expect(css).not.toMatch(/[<>]/);
   });
 });
