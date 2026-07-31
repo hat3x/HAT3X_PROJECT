@@ -1,22 +1,13 @@
 /**
- * Punto de entrada público del motor de facturación Veri*factu (`@/lib/invoicing`).
+ * Punto de entrada público del motor de facturación (`@/lib/invoicing`).
  *
- * Reúne el cálculo de la huella encadenada, el motor puro de construcción del
- * registro y el orquestador de emisión. Los consumidores (Server Actions del
- * TPV, verificación del libro de facturas) importan SIEMPRE desde aquí.
+ * Reúne el motor puro de construcción del registro, el orquestador de emisión,
+ * la exportación del libro de facturas y el documento imprimible. Los consumidores
+ * (Server Actions del TPV, libro de facturas) importan SIEMPRE desde aquí.
  *
  * Nota: `emit.ts` es server-only (persiste con un cliente Supabase de servidor).
  * No lo importes desde componentes de cliente.
  */
-
-// ── Huella y encadenamiento SHA-256 (puro, reutilizable en verificación) ──────
-export {
-  buildCanonicalString,
-  computeInvoiceHash,
-  verifyHashChain,
-  type HashableInvoiceRecord,
-  type VerifactuInvoiceCode,
-} from "./hash";
 
 // ── Motor puro: construcción del registro + desglose de IVA ───────────────────
 export {
@@ -37,13 +28,13 @@ export {
   type EmittedInvoice,
 } from "./emit";
 
-// ── Exportación del libro registro (AEAT / gestoría) — puro, sin I/O ──────────
+// ── Exportación del libro de facturas (gestoría) — puro, sin I/O ──────────────
 export {
   EXPORT_FORMATS,
   buildInvoicesCsv,
   buildInvoicesJson,
   toExportRecord,
-  mapInvoiceTypeToAeat,
+  invoiceTypeLabel,
   centsToAmount,
   parseTaxBreakdown,
   exportFilename,
@@ -54,18 +45,6 @@ export {
   type InvoiceExportRecord,
   type InvoiceExportDocument,
 } from "./export";
-
-// ── URL de cotejo AEAT + modo NO VERI*FACTU ───────────────────────────────────
-export {
-  buildVerifactuUrl,
-  VERIFACTU_LEGEND,
-  VERIFACTU_MODE,
-  type VerifactuEnvironment,
-  type VerifactuQrParams,
-} from "./verifactu-url";
-
-// ── Generador de códigos QR (puro, sin dependencias) ──────────────────────────
-export { encodeQrSvg, QrCode, type QrEcc } from "./qr";
 
 // ── Documento imprimible (ticket y factura completa) ──────────────────────────
 export {

@@ -1,10 +1,10 @@
 /**
- * Tests unitarios de la exportación del libro registro de facturas
+ * Tests unitarios de la exportación del libro de facturas
  * (`@/lib/invoicing/export`).
  *
  * Cubre la serialización pura (sin BD ni Route Handler):
  *   · CSV: cabecera, BOM UTF-8, separador `;`, una fila por tipo de IVA,
- *     mapeo ticket→F2 / completa→F1, importes con coma decimal y escapado;
+ *     etiqueta de tipo (Simplificada/Completa), importes con coma y escapado;
  *   · JSON: documento estructurado con desglose anidado y metadatos de filtro;
  *   · helpers: `centsToAmount`, `parseTaxBreakdown`, `exportFilename`.
  */
@@ -16,7 +16,7 @@ import {
   centsToAmount,
   exportContentType,
   exportFilename,
-  mapInvoiceTypeToAeat,
+  invoiceTypeLabel,
   parseTaxBreakdown,
   type ExportableInvoice,
   type ExportFilters,
@@ -35,9 +35,6 @@ const TICKET: ExportableInvoice = {
   total_cents: 1210,
   issuer_data: { tax_id: "B12345678", legal_name: "Salón Demo SL", fiscal_address: "Calle Mayor 1" },
   recipient_data: null,
-  hash_algorithm: "SHA-256",
-  current_hash: "A".repeat(64),
-  previous_hash: null,
 };
 
 const COMPLETA_MULTI: ExportableInvoice = {
@@ -56,9 +53,6 @@ const COMPLETA_MULTI: ExportableInvoice = {
   total_cents: 1760,
   issuer_data: { tax_id: "B12345678", legal_name: "Salón Demo SL", fiscal_address: "Calle Mayor 1" },
   recipient_data: { tax_id: "12345678Z", name: "Cliente; Demo", address: "Av. Siempre Viva 742" },
-  hash_algorithm: "SHA-256",
-  current_hash: "B".repeat(64),
-  previous_hash: "A".repeat(64),
 };
 
 const ALL_FORMATS: ExportFilters = { series: null, from: null, to: null, format: "csv" };
@@ -88,10 +82,10 @@ describe("centsToAmount", () => {
   });
 });
 
-describe("mapInvoiceTypeToAeat", () => {
-  it("ticket → F2 (simplificada), completa → F1 (ordinaria)", () => {
-    expect(mapInvoiceTypeToAeat("ticket")).toBe("F2");
-    expect(mapInvoiceTypeToAeat("completa")).toBe("F1");
+describe("invoiceTypeLabel", () => {
+  it("ticket → Simplificada, completa → Completa", () => {
+    expect(invoiceTypeLabel("ticket")).toBe("Simplificada");
+    expect(invoiceTypeLabel("completa")).toBe("Completa");
   });
 });
 
@@ -118,8 +112,8 @@ describe("buildInvoicesCsv", () => {
     expect(csv.startsWith("﻿")).toBe(true);
     const header = lineAt(csv, 0);
     expect(header.split(";")[0]).toBe("Numero");
-    expect(header).toContain("Tipo AEAT");
-    expect(header).toContain("Huella");
+    expect(header).toContain("Tipo");
+    expect(header).toContain("Total factura");
   });
 
   it("emite una fila por línea de desglose de IVA", () => {
@@ -135,14 +129,14 @@ describe("buildInvoicesCsv", () => {
     const csv = buildInvoicesCsv([TICKET]);
     const row = lineAt(csv, 1).split(";");
     expect(row[0]).toBe("A-1");
-    expect(row[3]).toBe("F2");
+    expect(row[3]).toBe("Simplificada");
     expect(row[4]).toBe("2026-01-15");
     expect(row[10]).toBe("10,00"); // base
     expect(row[11]).toBe("2,10"); // cuota
     expect(row[15]).toBe("12,10"); // total factura
   });
 
-  it("deja vacíos los datos del receptor en un ticket (F2)", () => {
+  it("deja vacíos los datos del receptor en un ticket", () => {
     const row = lineAt(buildInvoicesCsv([TICKET]), 1).split(";");
     expect(row[7]).toBe(""); // NIF receptor
     expect(row[8]).toBe(""); // Nombre receptor
@@ -170,8 +164,8 @@ describe("buildInvoicesJson", () => {
     expect(doc.count).toBe(2);
     expect(doc.filters).toEqual(filters);
     expect(doc.generatedAt).toBe("2026-07-14T00:00:00.000Z");
-    expect(doc.invoices[0].aeatType).toBe("F2");
-    expect(doc.invoices[1].aeatType).toBe("F1");
+    expect(doc.invoices[0].invoiceType).toBe("ticket");
+    expect(doc.invoices[1].invoiceType).toBe("completa");
     expect(doc.invoices[1].taxBreakdown).toHaveLength(2);
     expect(doc.invoices[1].recipient.taxId).toBe("12345678Z");
     expect(doc.invoices[0].recipient).toBeNull();

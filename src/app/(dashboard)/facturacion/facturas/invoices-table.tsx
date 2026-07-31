@@ -1,5 +1,6 @@
 import { FileText } from "lucide-react";
 
+import { DeleteInvoiceButton } from "@/app/(dashboard)/facturacion/facturas/delete-invoice-button";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -70,7 +71,7 @@ export function InvoicesTable({
               Total
             </TableHead>
             <TableHead scope="col" className="w-[1%] text-right">
-              Documento
+              Acciones
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -105,17 +106,23 @@ export function InvoicesTable({
                 {formatMoney(invoice.totalCents, invoice.currency)}
               </TableCell>
               <TableCell className="text-right">
-                <a
-                  href={`/api/facturacion/documento/${invoice.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Abrir el documento de la factura ${invoice.fullNumber} para imprimir o descargar`}
-                  title="Abrir para imprimir o guardar como PDF"
-                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-primary transition-colors duration-150 ease-apple-out hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <FileText className="h-4 w-4" aria-hidden="true" />
-                  <span className="sr-only sm:not-sr-only">Ver</span>
-                </a>
+                <div className="flex items-center justify-end gap-1">
+                  <a
+                    href={`/api/facturacion/documento/${invoice.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Abrir el documento de la factura ${invoice.fullNumber} para imprimir o descargar`}
+                    title="Abrir para imprimir o guardar como PDF"
+                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-primary transition-colors duration-150 ease-apple-out hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <FileText className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only sm:not-sr-only">Ver</span>
+                  </a>
+                  <DeleteInvoiceButton
+                    invoiceId={invoice.id}
+                    invoiceNumber={invoice.fullNumber}
+                  />
+                </div>
               </TableCell>
             </TableRow>
           ))}

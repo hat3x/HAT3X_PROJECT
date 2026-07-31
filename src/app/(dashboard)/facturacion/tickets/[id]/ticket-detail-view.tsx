@@ -1,4 +1,3 @@
-import { ImmutabilityNote } from "@/app/(dashboard)/facturacion/immutability-note";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -228,8 +227,6 @@ export function TicketDetailView({ detail }: TicketDetailViewProps): React.React
           </p>
         </section>
       ) : null}
-
-      <ImmutabilityNote variant="sale" />
     </div>
   );
 }

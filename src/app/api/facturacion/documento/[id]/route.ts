@@ -5,18 +5,17 @@ import {
   type DocumentLineItem,
   type DocumentTaxRow,
   type InvoiceDocumentData,
-  type VerifactuEnvironment,
 } from "@/lib/invoicing";
 import { getActiveSalon } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Documento imprimible (HTML/PDF) de una factura Veri*factu.
+ * Documento imprimible (HTML/PDF) de una factura.
  *
  * `GET /api/facturacion/documento/[id]` devuelve la página HTML autónoma del
  * registro `pos_invoices` indicado, aislada por `salon_id` del usuario. Sirve
- * tanto para el ticket (F2) como para la factura completa (F1); el navegador la
- * imprime o la guarda como PDF (Ctrl+P). Marca visible de modo NO VERI*FACTU.
+ * tanto para el ticket (factura simplificada) como para la factura completa; el
+ * navegador la imprime o la guarda como PDF (Ctrl+P).
  *
  * No cachear: el documento depende del salón/sesión y del registro.
  */
@@ -24,11 +23,6 @@ export const dynamic = "force-dynamic";
 
 interface RouteContext {
   params: { id: string };
-}
-
-/** Entorno del servicio de cotejo de la AEAT para la URL del QR. */
-function resolveEnvironment(): VerifactuEnvironment {
-  return process.env.VERIFACTU_ENVIRONMENT === "test" ? "test" : "production";
 }
 
 /** Respuesta HTML mínima para errores (mismo Content-Type que el documento). */
@@ -89,7 +83,7 @@ export async function GET(
   const { data: invoice, error } = await supabase
     .from("pos_invoices")
     .select(
-      "id, sale_id, invoice_type, series, sequential_number, full_number, issued_at, created_at, currency, tax_breakdown, taxable_base_cents, tax_cents, total_cents, issuer_data, recipient_data, current_hash, previous_hash",
+      "id, sale_id, invoice_type, series, sequential_number, full_number, issued_at, currency, tax_breakdown, taxable_base_cents, tax_cents, total_cents, issuer_data, recipient_data",
     )
     .eq("id", params.id)
     .eq("salon_id", salon.id)
@@ -128,7 +122,6 @@ export async function GET(
     sequentialNumber: invoice.sequential_number,
     fullNumber: invoice.full_number,
     issuedAt: new Date(invoice.issued_at),
-    generatedAt: new Date(invoice.created_at),
     currency: invoice.currency,
     issuer: parseIssuer(invoice.issuer_data),
     recipient: parseRecipient(invoice.recipient_data),
@@ -136,13 +129,10 @@ export async function GET(
     taxableBaseCents: invoice.taxable_base_cents,
     taxCents: invoice.tax_cents,
     totalCents: invoice.total_cents,
-    currentHash: invoice.current_hash,
-    previousHash: invoice.previous_hash,
     lines,
   };
 
   const html = buildInvoiceDocumentHtml(data, {
-    environment: resolveEnvironment(),
     timezone: salon.timezone,
   });
 

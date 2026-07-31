@@ -8,6 +8,7 @@ import {
   getActiveSalon,
   getActiveSalonFeatureFlags,
 } from "@/lib/salon";
+import { buildLogoSrc } from "@/lib/salon-branding/branding";
 import { getActiveSalonBranding } from "@/lib/salon-branding/server";
 import { BRAND_SCOPE_ATTR } from "@/lib/salon-branding/theme";
 
@@ -46,7 +47,7 @@ export default async function DashboardLayout({
         <div {...{ [BRAND_SCOPE_ATTR]: "" }} className="flex min-h-screen flex-col">
           <DashboardNav
             brandName={salon?.name ?? null}
-            logoUrl={branding?.logo_url ?? null}
+            logoUrl={buildLogoSrc(branding)}
             role={membership?.role ?? null}
             showSettings={showSettings}
           />

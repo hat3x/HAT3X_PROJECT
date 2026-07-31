@@ -1,27 +1,20 @@
 /**
- * Tests de integración del ORQUESTADOR de emisión Veri*factu (`@/lib/invoicing`
- * → `emitInvoice`), ejercitado contra un doble EN MEMORIA de `pos_invoices` que
+ * Tests de integración del ORQUESTADOR de emisión (`@/lib/invoicing` →
+ * `emitInvoice`), ejercitado contra un doble EN MEMORIA de `pos_invoices` que
  * reproduce las restricciones reales de la tabla:
  *
- *   · unicidad `(salon_id, series, sequential_number)` y de `current_hash`;
+ *   · unicidad `(salon_id, series, sequential_number)`;
  *   · lectura del último registro de la serie DENTRO del salón (aislamiento);
- *   · inserción atómica que, ante colisión, devuelve el código PostgreSQL 23505.
+ *   · inserción que, ante colisión, devuelve el código PostgreSQL 23505.
  *
- * Con eso se cubre, sobre la capa de pagos + el motor Verifactu enchufados de
- * verdad (no en aislamiento), lo que exige la subtarea sub-14:
- *
+ * Con eso se cubre, sobre la capa de pagos + el motor enchufados de verdad:
  *   1. NUMERACIÓN SECUENCIAL SIN HUECOS por serie (1, 2, 3… y series
  *      independientes) y reanudación sin hueco tras una colisión concurrente.
  *   2. AISLAMIENTO MULTI-TENANT: la serie de un salón no ve ni afecta a la de
  *      otro, aunque compartan nombre de serie (numeración por `salon_id`).
- *   3. ENCADENAMIENTO SHA-256 de punta a punta: cada `previous_hash` apunta a la
- *      huella del registro anterior y ALTERAR un registro invalida la cadena
- *      posterior (la huella recalculada deja de cuadrar con el eslabón que la
- *      referencia).
  *
- * La aritmética de IVA/totales por línea y la huella pura tienen sus propios
- * tests unitarios (`payments-totals`, `invoicing-hash`, `invoicing-engine`); aquí
- * el foco es el comportamiento del orquestador con estado persistente y concurrencia.
+ * La aritmética de IVA/totales por línea y el motor puro tienen sus propios tests
+ * unitarios; aquí el foco es el orquestador con estado persistente y concurrencia.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, it, expect, beforeEach } from "vitest";
@@ -29,11 +22,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { computeSaleTotals, type SaleTotals } from "@/lib/payments";
 import {
   emitInvoice,
-  computeInvoiceHash,
   InvoiceEmissionError,
-  verifyHashChain,
   type EmitInvoiceParams,
-  type HashableInvoiceRecord,
   type IssuerData,
 } from "@/lib/invoicing";
 import type { Database } from "@/types/database";
@@ -50,14 +40,14 @@ const ISSUER: IssuerData = {
   fiscalAddress: "Calle Mayor 1, Madrid",
 };
 
-/** Emisor del salón B: cada salón factura con SU PROPIO NIF (chains distintas). */
+/** Emisor del salón B: cada salón factura con SU PROPIO NIF. */
 const ISSUER_B: IssuerData = {
   taxId: "B87654321",
   legalName: "Peluquería Nova S.L.",
   fiscalAddress: "Avenida del Sol 9, Sevilla",
 };
 
-/** Fecha de expedición fija: la numeración/encadenado no debe depender del reloj. */
+/** Fecha de expedición fija: la numeración no debe depender del reloj. */
 const ISSUED_AT = new Date("2026-07-14T09:00:00.000Z");
 
 /** Totales de una venta simple de 12,10 € (base 10,00 € + 21% IVA). */
@@ -68,29 +58,25 @@ function saleTotals(grossCents = 1210, vatRate = 21): SaleTotals {
 // ─────────────────────────────────────────────────────────────────────────────
 // Doble EN MEMORIA de `pos_invoices`.
 //
-// Guarda el payload íntegro de cada insert (incluye `current_hash`,
-// `previous_hash`, `created_at`…), aplica las restricciones de unicidad de la
-// tabla y resuelve las lecturas de la serie como lo haría PostgREST:
-// filtrando por los `.eq(...)` acumulados, ordenando y limitando.
+// Aplica la restricción de unicidad `(salon_id, series, sequential_number)` y
+// resuelve las lecturas de la serie como lo haría PostgREST: filtrando por los
+// `.eq(...)` acumulados, ordenando y limitando.
 //
 // `raceHook` permite inyectar UNA competidora justo antes de que un insert se
-// resuelva, simulando que otra emisión ganó la carrera entre nuestra lectura
-// del último número y nuestra inserción (TOCTOU) → fuerza el 23505.
+// resuelva, simulando que otra emisión ganó la carrera entre nuestra lectura del
+// último número y nuestra inserción (TOCTOU) → fuerza el 23505.
 // ─────────────────────────────────────────────────────────────────────────────
 interface StoredRow {
   id: string;
   salon_id: string;
   series: string;
   sequential_number: number;
-  current_hash: string;
-  previous_hash: string | null;
   issued_at: string;
-  created_at: string;
   invoice_type: "completa" | "ticket";
-  tax_cents: number;
-  total_cents: number;
-  issuer_data: { tax_id: string };
 }
+
+/** Fila competidora mínima (lo que basta para chocar en la unicidad). */
+type Competitor = Omit<StoredRow, "id">;
 
 class InvoiceStore {
   readonly rows: StoredRow[] = [];
@@ -104,7 +90,7 @@ class InvoiceStore {
   }
 
   /** Inserta directamente una fila competidora (simula otra emisión ganadora). */
-  injectCompetitor(row: Omit<StoredRow, "id">): void {
+  injectCompetitor(row: Competitor): void {
     this.rows.push({ id: this.nextId(), ...row });
   }
 
@@ -130,8 +116,7 @@ class InvoiceStore {
         r.series === payload.series &&
         r.sequential_number === payload.sequential_number,
     );
-    const dupHash = this.rows.some((r) => r.current_hash === payload.current_hash);
-    if (dupNumber || dupHash) {
+    if (dupNumber) {
       return {
         data: null,
         error: { code: "23505", message: "duplicate key value violates unique constraint" },
@@ -211,7 +196,7 @@ function asClient(store: InvoiceStore): SupabaseClient<Database> {
   return store as unknown as SupabaseClient<Database>;
 }
 
-/** Params de emisión de un ticket (F2), rellenando lo mínimo por defecto. */
+/** Params de emisión de un ticket, rellenando lo mínimo por defecto. */
 function ticketParams(overrides: Partial<EmitInvoiceParams> = {}): EmitInvoiceParams {
   return {
     salonId: SALON_A,
@@ -226,21 +211,6 @@ function ticketParams(overrides: Partial<EmitInvoiceParams> = {}): EmitInvoicePa
   };
 }
 
-/** Reconstruye el registro firmable a partir de la fila persistida. */
-function toHashable(row: StoredRow): HashableInvoiceRecord & { currentHash: string } {
-  return {
-    issuerTaxId: row.issuer_data.tax_id,
-    invoiceNumber: `${row.series}-${row.sequential_number}`,
-    issuedAt: new Date(row.issued_at),
-    invoiceCode: row.invoice_type === "completa" ? "F1" : "F2",
-    taxCents: row.tax_cents,
-    totalCents: row.total_cents,
-    previousHash: row.previous_hash,
-    generatedAt: new Date(row.created_at),
-    currentHash: row.current_hash,
-  };
-}
-
 let store: InvoiceStore;
 beforeEach(() => {
   store = new InvoiceStore();
@@ -252,7 +222,6 @@ describe("numeración secuencial sin huecos por serie", () => {
     const emitted = await emitInvoice(asClient(store), ticketParams());
     expect(emitted.sequentialNumber).toBe(1);
     expect(emitted.fullNumber).toBe("T-1");
-    expect(emitted.previousHash).toBeNull();
   });
 
   it("numera 1, 2, 3… correlativo dentro de la misma serie", async () => {
@@ -292,31 +261,12 @@ describe("numeración secuencial sin huecos por serie", () => {
     // insert, otra emisión mete el nº 2. Nuestro insert choca (23505), reintenta,
     // relee (tail=2) y toma el 3: la serie queda {1,2,3}, sin huecos ni duplicados.
     store.raceHook = () => {
-      const competitorTotals = saleTotals();
-      const firstRow = store.rows[0];
-      if (firstRow === undefined) throw new Error("precondición: falta la 1ª factura");
-      const competitor: HashableInvoiceRecord = {
-        issuerTaxId: ISSUER.taxId,
-        invoiceNumber: "T-2",
-        issuedAt: ISSUED_AT,
-        invoiceCode: "F2",
-        taxCents: competitorTotals.taxCents,
-        totalCents: competitorTotals.totalCents,
-        previousHash: firstRow.current_hash,
-        generatedAt: new Date("2026-07-14T09:05:00.000Z"),
-      };
       store.injectCompetitor({
         salon_id: SALON_A,
         series: "T",
         sequential_number: 2,
-        current_hash: computeInvoiceHash(competitor),
-        previous_hash: competitor.previousHash,
         issued_at: ISSUED_AT.toISOString(),
-        created_at: competitor.generatedAt.toISOString(),
         invoice_type: "ticket",
-        tax_cents: competitor.taxCents,
-        total_cents: competitor.totalCents,
-        issuer_data: { tax_id: ISSUER.taxId },
       });
     };
 
@@ -339,11 +289,7 @@ describe("numeración secuencial sin huecos por serie", () => {
     const original = store.insert.bind(store);
     store.insert = ((payload: StoredRow) => {
       attempts += 1;
-      store.rows.push({
-        ...payload,
-        id: `ghost-${attempts}`,
-        current_hash: `GHOST${attempts.toString().padStart(59, "0")}`,
-      });
+      store.rows.push({ ...payload, id: `ghost-${attempts}` });
       return original(payload);
     }) as typeof store.insert;
 
@@ -366,7 +312,6 @@ describe("aislamiento multi-tenant — la serie de un salón no ve la de otro", 
       ticketParams({ salonId: SALON_B, series: "T", issuer: ISSUER_B }),
     );
     expect(firstB.sequentialNumber).toBe(1);
-    expect(firstB.previousHash).toBeNull(); // arranca su propia cadena
   });
 
   it("una venta emitida por un salón no aparece en la lectura de serie de otro", async () => {
@@ -384,72 +329,5 @@ describe("aislamiento multi-tenant — la serie de un salón no ve la de otro", 
     expect(
       store.rows.some((r) => r.id === emittedA.invoiceId && r.salon_id === SALON_A),
     ).toBe(true);
-  });
-
-  it("las cadenas de huellas de dos salones son independientes", async () => {
-    const a1 = await emitInvoice(asClient(store), ticketParams({ salonId: SALON_A, series: "T" }));
-    const a2 = await emitInvoice(asClient(store), ticketParams({ salonId: SALON_A, series: "T" }));
-    const b1 = await emitInvoice(
-      asClient(store),
-      ticketParams({ salonId: SALON_B, series: "T", issuer: ISSUER_B }),
-    );
-
-    // El 2º de A encadena con el 1º de A; el 1º de B no encadena con nada de A.
-    expect(a2.previousHash).toBe(a1.currentHash);
-    expect(b1.previousHash).toBeNull();
-    expect(b1.previousHash).not.toBe(a1.currentHash);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-describe("encadenamiento SHA-256 de punta a punta", () => {
-  it("cada previous_hash apunta a la huella del registro anterior de la serie", async () => {
-    const e1 = await emitInvoice(asClient(store), ticketParams());
-    const e2 = await emitInvoice(asClient(store), ticketParams());
-    const e3 = await emitInvoice(asClient(store), ticketParams());
-
-    expect(e1.previousHash).toBeNull();
-    expect(e2.previousHash).toBe(e1.currentHash);
-    expect(e3.previousHash).toBe(e2.currentHash);
-
-    // La cadena persistida (ordenada por número) verifica íntegra.
-    const chain = store.rows
-      .filter((r) => r.salon_id === SALON_A && r.series === "T")
-      .sort((a, b) => a.sequential_number - b.sequential_number)
-      .map(toHashable);
-    expect(verifyHashChain(chain)).toBe(-1);
-  });
-
-  it("ALTERAR un registro invalida la cadena POSTERIOR", async () => {
-    await emitInvoice(asClient(store), ticketParams());
-    await emitInvoice(asClient(store), ticketParams());
-    await emitInvoice(asClient(store), ticketParams());
-
-    const chain = store.rows
-      .filter((r) => r.series === "T")
-      .sort((a, b) => a.sequential_number - b.sequential_number)
-      .map(toHashable);
-    expect(chain).toHaveLength(3);
-    expect(verifyHashChain(chain)).toBe(-1); // intacta de partida
-
-    const [, second, third] = chain as [
-      (typeof chain)[number],
-      (typeof chain)[number],
-      (typeof chain)[number],
-    ];
-
-    // Se manipula el importe del 2º registro (índice 1) DESPUÉS de firmado.
-    const tamperedSecond = { ...second, totalCents: second.totalCents + 100 };
-    const tampered = [chain[0]!, tamperedSecond, third];
-
-    // verifyHashChain señala el primer eslabón roto: el registro alterado.
-    expect(verifyHashChain(tampered)).toBe(1);
-
-    // Y, crucialmente, la alteración rompe el enlace del registro SIGUIENTE: la
-    // huella recalculada del 2º ya no coincide con el previous_hash del 3º.
-    const recomputedTamperedHash = computeInvoiceHash(tamperedSecond);
-    expect(recomputedTamperedHash).not.toBe(second.currentHash);
-    expect(third.previousHash).toBe(second.currentHash);
-    expect(third.previousHash).not.toBe(recomputedTamperedHash);
   });
 });

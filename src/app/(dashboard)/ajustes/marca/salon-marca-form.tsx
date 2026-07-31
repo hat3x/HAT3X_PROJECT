@@ -26,6 +26,7 @@ import {
   DEFAULT_PRIMARY_COLOR,
   LOGO_MIME_EXTENSIONS,
   MAX_LOGO_BYTES,
+  buildLogoSrc,
   isAllowedLogoMime,
   isValidHexColor,
   type SalonBranding,
@@ -320,13 +321,10 @@ export function SalonMarcaForm({
   const uploadMutation = useUploadSalonLogo();
   const removeMutation = useRemoveSalonLogo();
 
-  const logoUrl = branding?.logo_url ?? null;
-  // Cache-busting por `updated_at`: al reemplazar el logo con la MISMA extensión la
-  // URL pública no cambia; el sufijo fuerza al navegador a recargar la imagen.
-  const logoSrc =
-    logoUrl !== null
-      ? `${logoUrl}?v=${encodeURIComponent(branding?.updated_at ?? "")}`
-      : null;
+  // Cache-busting por `updated_at` (helper compartido con el header del panel): al
+  // reemplazar el logo con la MISMA extensión la URL pública no cambia; el sufijo
+  // `?v=` fuerza al navegador a recargar la imagen. Una sola fuente de verdad.
+  const logoSrc = buildLogoSrc(branding);
   const hasLogo = logoSrc !== null;
   const logoBusy = uploadMutation.isPending || removeMutation.isPending;
 

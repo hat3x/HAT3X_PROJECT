@@ -132,6 +132,28 @@ export function buildLogoObjectPath(salonId: string, extension: string): string 
 }
 
 /**
+ * URL del logo LISTA PARA `<img src>`, con CACHE-BUSTING por `updated_at`.
+ *
+ * El objeto vive SIEMPRE en la ruta canónica `{salon_id}/logo.<ext>` y se sube con
+ * `upsert` + `cacheControl: 3600`. Al REEMPLAZAR el logo con la misma extensión, la
+ * URL pública NO cambia → el navegador (y el CDN de Storage) sirven la imagen vieja
+ * cacheada hasta 1 h y el usuario ve "el mismo logo de siempre". Sufijar `?v=updated_at`
+ * cambia la URL en cada escritura (la fila bumpea `updated_at`) y fuerza la recarga.
+ *
+ * Es la ÚNICA vía por la que la UI debe pintar el logo (header del panel y vista previa
+ * de Ajustes → Marca), para que ambos no vuelvan a divergir. Devuelve `null` si aún no
+ * hay logo (la UI cae al fallback de marca genérica).
+ */
+export function buildLogoSrc(
+  branding: Pick<SalonBranding, "logo_url" | "updated_at"> | null,
+): string | null {
+  const url = branding?.logo_url ?? null;
+  if (url === null || url.trim() === "") return null;
+  const version = branding?.updated_at ?? "";
+  return `${url}?v=${encodeURIComponent(version)}`;
+}
+
+/**
  * Fusiona un color secundario entrante con su forma persistible. `undefined` = "no
  * tocar"; `null`/cadena vacía = "limpiar el acento" (→ `null`); un hex se valida.
  * Devuelve `undefined` cuando no hay cambio, o el valor (`string`/`null`) a escribir.

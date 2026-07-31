@@ -127,13 +127,13 @@ export function InvoicesExport({
             icon={FileSpreadsheet}
             title="CSV para la gestoría"
             recommended
-            description="Libro registro AEAT: una fila por tipo de IVA, separador «;» y UTF-8. Se abre en Excel con acentos y columnas correctas."
+            description="Libro de facturas: una fila por tipo de IVA, separador «;» y UTF-8. Se abre en Excel con acentos y columnas correctas."
           />
           <ExportFormatLink
             href={invoiceExportHref(from, to, "json")}
             icon={FileJson}
             title="JSON estructurado"
-            description="Datos completos con el desglose de IVA y la cadena de huellas Veri*factu. Para integrar con software de la gestoría."
+            description="Datos completos con el desglose de IVA. Para integrar con software de la gestoría."
           />
         </div>
       </DialogContent>

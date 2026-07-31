@@ -59,9 +59,7 @@ import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
 import { normalizePhone } from "@/lib/customers/normalize-phone";
 import {
   emitInvoice,
-  verifyHashChain,
   InvoiceEmissionError,
-  type HashableInvoiceRecord,
   type IssuerData,
   type RecipientData,
 } from "@/lib/invoicing";
@@ -2111,21 +2109,16 @@ function resolveInvoiceSeries(): string {
 }
 
 /**
- * Registro de la cadena de huella reconstruido desde la BD: el `HashableInvoiceRecord`
- * firmado + el `current_hash` persistido (para reverificar la huella) + el `issued_at`
- * ISO original (para el rango de fechas del resumen de verificación de sub-9).
+ * Registro de factura releído desde la BD para el resumen de verificación (sub-9):
+ * basta el `issued_at` ISO original (rango de fechas del libro de facturas).
  */
-type LoadedInvoiceRecord = HashableInvoiceRecord & {
-  currentHash: string;
+interface LoadedInvoiceRecord {
   issuedAtIso: string;
-};
+}
 
 /**
- * Relee TODOS los registros de la serie de la BD (ordenados por número ascendente) y
- * reconstruye el `HashableInvoiceRecord` EXACTAMENTE con los campos que se firmaron
- * (emisor, número visible, fechas, tipo, cuota/total, eslabón) — sin reimplementar la
- * huella. Base COMPARTIDA por la aserción de integridad (sub-8) y el resumen de
- * verificación final (sub-9), para releer la serie una sola vez por consumidor.
+ * Relee las FECHAS de las facturas de la serie (ordenadas por número ascendente) para
+ * el recuento y el rango de fechas del resumen de verificación final (sub-9).
  */
 async function loadInvoiceChainRecords(
   client: SupabaseClient<Database>,
@@ -2134,56 +2127,16 @@ async function loadInvoiceChainRecords(
 ): Promise<LoadedInvoiceRecord[]> {
   const { data, error } = await client
     .from("pos_invoices")
-    .select(
-      "full_number, issued_at, invoice_type, tax_cents, total_cents, previous_hash, current_hash, created_at, issuer_data",
-    )
+    .select("issued_at")
     .eq("salon_id", salonId)
     .eq("series", series)
     .order("sequential_number", { ascending: true });
   if (error !== null) {
     throw new Error(
-      `No se pudo releer la serie "${series}" para verificar la cadena: ${error.message}`,
+      `No se pudo releer la serie "${series}" para el resumen: ${error.message}`,
     );
   }
-  return (data ?? []).map(
-    (row) =>
-      ({
-        issuerTaxId: issuerTaxIdFromSnapshot(row.issuer_data),
-        invoiceNumber: row.full_number,
-        issuedAt: new Date(row.issued_at),
-        invoiceCode: row.invoice_type === "completa" ? "F1" : "F2",
-        taxCents: row.tax_cents,
-        totalCents: row.total_cents,
-        previousHash: row.previous_hash,
-        generatedAt: new Date(row.created_at),
-        currentHash: row.current_hash,
-        issuedAtIso: row.issued_at,
-      }) satisfies LoadedInvoiceRecord,
-  );
-}
-
-/**
- * Reverifica que la cadena de huella de la serie es ÍNTEGRA releyendo TODOS sus
- * registros de la BD y pasándolos por `verifyHashChain` (`@/lib/invoicing`), que
- * recalcula la huella de cada registro y comprueba el eslabón `previous_hash`.
- * Aserción post-seed exigida por el contrato (docs/seed-demo-contracts.md §3.4):
- * debe devolver -1.
- */
-async function assertInvoiceChainIntact(
-  client: SupabaseClient<Database>,
-  salonId: string,
-  series: string,
-): Promise<void> {
-  const records = await loadInvoiceChainRecords(client, salonId, series);
-  if (records.length === 0) return;
-
-  const corruptIndex = verifyHashChain(records);
-  if (corruptIndex !== -1) {
-    throw new Error(
-      `La cadena de huella de la serie "${series}" está CORRUPTA en el índice ${corruptIndex} ` +
-        "(verifyHashChain !== -1). Aborta para no dejar una cadena de facturación inválida.",
-    );
-  }
+  return (data ?? []).map((row) => ({ issuedAtIso: row.issued_at }));
 }
 
 /**
@@ -2388,14 +2341,10 @@ async function seedInvoices(ctx: SeedContext): Promise<InvoicesSeedResult> {
     else ticket += 1;
   }
 
-  // 9) Aserción post-seed: la cadena de huella de la serie es ÍNTEGRA (verifyHashChain === -1).
-  await assertInvoiceChainIntact(client, salonId, series);
-
   log(
     "invoices",
-    `Facturas: +${emitted} en la serie "${series}" (${completa} F1/completa con destinatario, ` +
-      `${ticket} F2/ticket) · ${skipped} ventas ya facturadas · cadena de huella verificada ` +
-      "(verifyHashChain === -1). El resto de ventas queda sin factura.",
+    `Facturas: +${emitted} en la serie "${series}" (${completa} completas con destinatario, ` +
+      `${ticket} simplificadas) · ${skipped} ventas ya facturadas · el resto queda sin factura.`,
   );
 
   return { series, planned: plan.length, emitted, completa, ticket, skipped };
@@ -2625,7 +2574,7 @@ interface SeedSummary {
   customers: number;
   appointments: DateRange & { count: number };
   sales: DateRange & { count: number };
-  invoices: DateRange & { count: number; series: string; chainResult: number };
+  invoices: DateRange & { count: number; series: string };
   /** Nº de salones ajenos verificados INTACTOS (sin cambios) tras el seed. */
   otherSalonsUntouched: number;
 }
@@ -2663,7 +2612,6 @@ async function buildSeedSummary(
     assertOtherSalonsUntouched(client, salonId, otherSalonsBaseline),
   ]);
 
-  const chainResult = invoiceRecords.length > 0 ? verifyHashChain(invoiceRecords) : -1;
   const invoicesRange = invoiceDateRange(invoiceRecords);
 
   return {
@@ -2676,7 +2624,6 @@ async function buildSeedSummary(
       series,
       from: invoicesRange.from,
       to: invoicesRange.to,
-      chainResult,
     },
     otherSalonsUntouched,
   };
@@ -2703,7 +2650,6 @@ function logSeedSummary(
   timezone: string,
 ): void {
   const rule = "─".repeat(66);
-  const chainOk = summary.invoices.chainResult === -1;
 
   log("summary", rule);
   log("summary", "RESUMEN DE VERIFICACIÓN DEL SALÓN DEMO (sub-9)");
@@ -2740,11 +2686,6 @@ function logSeedSummary(
     "summary",
     `Facturas       · ${summary.invoices.count} en serie "${summary.invoices.series}" · ` +
       formatDateRange(summary.invoices, timezone),
-  );
-  log(
-    "summary",
-    `Cadena huella  · verifyHashChain === ${summary.invoices.chainResult} ` +
-      `${chainOk ? "(-1 ⇒ cadena ÍNTEGRA ✓)" : "(¡CORRUPTA! ✗)"}`,
   );
   log(
     "summary",

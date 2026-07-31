@@ -4,7 +4,6 @@ import { FileText, SearchX } from "lucide-react";
 
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import { FacturacionEmpty } from "@/app/(dashboard)/facturacion/facturacion-empty";
-import { ImmutabilityNote } from "@/app/(dashboard)/facturacion/immutability-note";
 import { InvoicesExport } from "@/app/(dashboard)/facturacion/facturas/invoices-export";
 import {
   InvoicesFilters,
@@ -101,7 +100,7 @@ export default async function FacturasPage({
       <SectionHeader
         icon={FileText}
         title="Facturas"
-        description="Libro registro de las facturas emitidas por tu salón. Cada factura es un registro inmutable y encadenado (Veri*factu)."
+        description="Libro de las facturas emitidas por tu salón, con su número, fecha, importe y acceso al documento."
         action={
           <InvoicesExport
             from={filters.from}
@@ -110,8 +109,6 @@ export default async function FacturasPage({
           />
         }
       />
-
-      <ImmutabilityNote variant="invoice" className="mb-6" />
 
       {isPristineEmpty ? (
         <FacturacionEmpty

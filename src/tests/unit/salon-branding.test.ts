@@ -27,11 +27,13 @@ import {
   SALON_LOGOS_BUCKET,
   assertValidHexColor,
   buildLogoObjectPath,
+  buildLogoSrc,
   isAllowedLogoMime,
   isValidHexColor,
   logoExtensionForMime,
   normalizeSecondaryColor,
   type AllowedLogoMime,
+  type SalonBranding,
 } from "@/lib/salon-branding/branding";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,5 +159,41 @@ describe("coherencia TS↔SQL — constantes de branding vs migraciones de FASE 
 
   it("la convención de ruta {salon_id}/logo.<ext> está documentada en la migración", () => {
     expect(storageSql).toContain("{salon_id}/logo.");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildLogoSrc — cache-busting del logo por `updated_at`
+// ─────────────────────────────────────────────────────────────────────────────
+describe("buildLogoSrc — la URL del logo lleva SIEMPRE versión (?v=updated_at)", () => {
+  const LOGO_URL =
+    "https://x.supabase.co/storage/v1/object/public/salon-logos/s1/logo.png";
+
+  function branding(logo_url: string | null, updated_at: string): SalonBranding {
+    return {
+      salon_id: "s1",
+      logo_url,
+      primary_color: "#111827",
+      secondary_color: null,
+      created_at: "2026-01-01T00:00:00.000000+00:00",
+      updated_at,
+    } as SalonBranding;
+  }
+
+  it("devuelve null si no hay marca o no hay logo", () => {
+    expect(buildLogoSrc(null)).toBeNull();
+    expect(buildLogoSrc(branding(null, "2026-07-24T16:17:38.522987+00:00"))).toBeNull();
+    expect(buildLogoSrc(branding("   ", "2026-07-24T16:17:38.522987+00:00"))).toBeNull();
+  });
+
+  it("añade ?v=updated_at (codificado) a la URL pública", () => {
+    const src = buildLogoSrc(branding(LOGO_URL, "2026-07-24T16:17:38.522987+00:00"));
+    expect(src).toBe(`${LOGO_URL}?v=${encodeURIComponent("2026-07-24T16:17:38.522987+00:00")}`);
+  });
+
+  it("misma URL + distinto updated_at ⇒ src DISTINTO (fuerza recarga tras reemplazar)", () => {
+    const before = buildLogoSrc(branding(LOGO_URL, "2026-07-24T11:55:26.000000+00:00"));
+    const after = buildLogoSrc(branding(LOGO_URL, "2026-07-24T16:17:38.522987+00:00"));
+    expect(before).not.toBe(after);
   });
 });

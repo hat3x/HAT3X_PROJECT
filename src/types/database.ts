@@ -1343,10 +1343,7 @@ export interface Database {
           total_cents: number; // = taxable_base_cents + tax_cents
           issuer_data: Json | null; // snapshot emisor {tax_id, legal_name, fiscal_address}
           recipient_data: Json | null; // datos_receptor {tax_id, name, address}; null en 'ticket'
-          hash_algorithm: string; // 'SHA-256'
-          current_hash: string; // hash_actual (SHA-256 hex, 64)
-          previous_hash: string | null; // hash_anterior_64 (null = primer registro)
-          created_at: string; // marca temporal de generación del registro
+          created_at: string; // marca temporal de creación del registro
         };
         Insert: {
           id?: string;
@@ -1364,13 +1361,26 @@ export interface Database {
           total_cents: number;
           issuer_data?: Json | null;
           recipient_data?: Json | null;
-          hash_algorithm?: string;
-          current_hash: string;
-          previous_hash?: string | null;
           created_at?: string;
         };
-        // Registro inmutable: sin UPDATE (el trigger de BD aborta cualquier modificación).
-        Update: never;
+        // Verifactu retirado: la factura ya es editable/borrable (RLS UPDATE/DELETE).
+        Update: {
+          id?: string;
+          salon_id?: string;
+          sale_id?: string | null;
+          invoice_type?: PosInvoiceType;
+          series?: string;
+          sequential_number?: number;
+          issued_at?: string;
+          currency?: string;
+          tax_breakdown?: Json;
+          taxable_base_cents?: number;
+          tax_cents?: number;
+          total_cents?: number;
+          issuer_data?: Json | null;
+          recipient_data?: Json | null;
+          created_at?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "pos_invoices_salon_id_fkey";
@@ -1385,13 +1395,6 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "pos_sales";
             referencedColumns: ["id", "salon_id"];
-          },
-          {
-            foreignKeyName: "pos_invoices_chain_fkey";
-            columns: ["salon_id", "previous_hash"];
-            isOneToOne: false;
-            referencedRelation: "pos_invoices";
-            referencedColumns: ["salon_id", "current_hash"];
           },
         ];
       };

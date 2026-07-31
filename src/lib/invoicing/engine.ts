@@ -1,29 +1,23 @@
 /**
- * Motor puro de construcción del registro de facturación Veri*factu.
+ * Motor puro de construcción del registro de facturación.
  *
  * A partir de los totales de una venta (calculados por `@/lib/payments`, la
  * fuente única de aritmética de IVA) y los datos de emisor/receptor, produce
- * la fila lista para insertar en `pos_invoices`: desglose de IVA, agregados,
- * snapshots fiscales y la HUELLA SHA-256 encadenada.
+ * la fila lista para insertar en `pos_invoices`: desglose de IVA, agregados y
+ * snapshots fiscales.
  *
  * Es una función PURA y sin dependencias de I/O: no lee la base de datos ni
- * genera fechas por su cuenta (el número secuencial, `previous_hash`, la fecha
- * de expedición y el sello de generación se le pasan desde fuera). Así se puede
- * testear el encadenamiento y el desglose de forma determinista, y el orquestador
- * (`emit.ts`, server-only) se limita a resolver la numeración y persistir.
+ * genera fechas por su cuenta (el número secuencial y la fecha de expedición se
+ * le pasan desde fuera). Así se puede testear el desglose de forma determinista,
+ * y el orquestador (`emit.ts`, server-only) se limita a resolver la numeración
+ * y persistir.
  */
 import type { SaleTotals } from "@/lib/payments";
 import type { Json, PosInvoiceType, TablesInsert } from "@/types/database";
 
-import {
-  computeInvoiceHash,
-  type HashableInvoiceRecord,
-  type VerifactuInvoiceCode,
-} from "./hash";
-
-/** Snapshot inmutable del emisor (salón) al expedir. Persistido en `issuer_data`. */
+/** Snapshot del emisor (salón) al expedir. Persistido en `issuer_data`. */
 export interface IssuerData {
-  /** NIF/CIF del emisor. Obligatorio: identifica la cadena y firma la huella. */
+  /** NIF/CIF del emisor. */
   taxId: string;
   /** Razón social del emisor. */
   legalName: string;
@@ -31,7 +25,7 @@ export interface IssuerData {
   fiscalAddress: string | null;
 }
 
-/** Datos fiscales del receptor. Obligatorio en 'completa' (F1); ausente en 'ticket'. */
+/** Datos fiscales del receptor. Obligatorio en 'completa'; ausente en 'ticket'. */
 export interface RecipientData {
   /** NIF/CIF del cliente. */
   taxId: string;
@@ -64,26 +58,20 @@ export interface BuildInvoiceRecordInput {
   sequentialNumber: number;
   /** Fecha de expedición de la factura. */
   issuedAt: Date;
-  /** Sello de tiempo de generación del registro (momento de alta en la cadena). */
-  generatedAt: Date;
   /** Totales e IVA de la venta (de `computeSaleTotals`). */
   totals: SaleTotals;
   /** Snapshot del emisor. */
   issuer: IssuerData;
   /** Datos del receptor; `null` en 'ticket'. Obligatorio en 'completa'. */
   recipient: RecipientData | null;
-  /** Huella del registro anterior de la serie; `null` si es el primero. */
-  previousHash: string | null;
   /** Moneda ISO-4217. Por defecto EUR. */
   currency?: string;
 }
 
-/** Registro construido: fila lista para `insert` + metadatos de la huella. */
+/** Registro construido: fila lista para `insert` + número visible. */
 export interface BuiltInvoiceRecord {
   /** Fila lista para `supabase.from('pos_invoices').insert(...)`. */
   insert: TablesInsert<"pos_invoices">;
-  /** Huella calculada de este registro (redundante con insert.current_hash). */
-  currentHash: string;
   /** Número visible (serie-número), útil para la respuesta al TPV. */
   fullNumber: string;
 }
@@ -94,11 +82,6 @@ export class InvoiceEmissionError extends Error {
     super(message);
     this.name = "InvoiceEmissionError";
   }
-}
-
-/** 'completa' → F1 (con receptor); 'ticket' → F2 (simplificada). */
-function toVerifactuCode(type: PosInvoiceType): VerifactuInvoiceCode {
-  return type === "completa" ? "F1" : "F2";
 }
 
 /**
@@ -115,10 +98,10 @@ export function toTaxBreakdownRows(totals: SaleTotals): TaxBreakdownRow[] {
 }
 
 /**
- * Construye el registro de facturación inmutable y su huella encadenada.
+ * Construye el registro de facturación.
  *
  * Reglas de dominio verificadas:
- *  · el emisor debe estar identificado (NIF/razón social) — firma la cadena;
+ *  · el emisor debe estar identificado (NIF/razón social);
  *  · 'completa' exige receptor con NIF y nombre (constraint de BD equivalente);
  *  · el total debe ser positivo y cuadrar (`base + cuota = total`, lo garantiza
  *    la capa de pagos por construcción).
@@ -149,23 +132,11 @@ export function buildInvoiceRecord(input: BuildInvoiceRecordInput): BuiltInvoice
 
   const fullNumber = `${input.series}-${input.sequentialNumber}`;
 
-  // El receptor solo se persiste en 'completa': el ticket (F2) es anónimo.
+  // El receptor solo se persiste en 'completa': el ticket es anónimo.
   const recipientData =
     invoiceType === "completa" && recipient !== null
       ? { tax_id: recipient.taxId, name: recipient.name, address: recipient.address }
       : null;
-
-  const hashable: HashableInvoiceRecord = {
-    issuerTaxId: issuer.taxId,
-    invoiceNumber: fullNumber,
-    issuedAt: input.issuedAt,
-    invoiceCode: toVerifactuCode(invoiceType),
-    taxCents: totals.taxCents,
-    totalCents: totals.totalCents,
-    previousHash: input.previousHash,
-    generatedAt: input.generatedAt,
-  };
-  const currentHash = computeInvoiceHash(hashable);
 
   const insert: TablesInsert<"pos_invoices"> = {
     salon_id: input.salonId,
@@ -187,11 +158,7 @@ export function buildInvoiceRecord(input: BuildInvoiceRecordInput): BuiltInvoice
       fiscal_address: issuer.fiscalAddress,
     },
     recipient_data: recipientData,
-    hash_algorithm: "SHA-256",
-    current_hash: currentHash,
-    previous_hash: input.previousHash,
-    created_at: input.generatedAt.toISOString(),
   };
 
-  return { insert, currentHash, fullNumber };
+  return { insert, fullNumber };
 }

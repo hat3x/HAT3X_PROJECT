@@ -39,7 +39,7 @@ export const dynamic = "force-dynamic";
 
 /** Columnas de `pos_invoices` que necesita el serializador de exportación. */
 const EXPORT_COLUMNS =
-  "full_number, series, sequential_number, invoice_type, issued_at, currency, tax_breakdown, taxable_base_cents, tax_cents, total_cents, issuer_data, recipient_data, hash_algorithm, current_hash, previous_hash";
+  "full_number, series, sequential_number, invoice_type, issued_at, currency, tax_breakdown, taxable_base_cents, tax_cents, total_cents, issuer_data, recipient_data";
 
 export async function GET(request: Request): Promise<Response> {
   // 1. Autenticación + pertenencia a un salón.

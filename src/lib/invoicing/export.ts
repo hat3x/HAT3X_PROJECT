@@ -1,9 +1,9 @@
 /**
- * Exportación del libro registro de facturas expedidas (`@/lib/invoicing`).
+ * Exportación del libro de facturas expedidas (`@/lib/invoicing`).
  *
- * Toma los registros inmutables de `pos_invoices` y los serializa en un formato
- * estructurado y descargable para la **AEAT / gestoría** (libro registro de
- * facturas expedidas), filtrable por **serie** y **periodo**.
+ * Toma los registros de `pos_invoices` y los serializa en un formato estructurado
+ * y descargable para la **gestoría** (libro de facturas expedidas), filtrable por
+ * **serie** y **periodo**.
  *
  * Módulo PURO (sin I/O ni Supabase): recibe las filas ya leídas y devuelve el
  * texto. Así es testeable sin BD y reutilizable. El Route Handler
@@ -18,8 +18,8 @@
  * — convención de Excel en español — y BOM UTF-8 para que Excel respete acentos.
  *
  * ── Formato JSON ─────────────────────────────────────────────────────────────
- * Registros completos con el desglose anidado y la cadena de huellas: lossless
- * y legible por máquina (integraciones con software de la gestoría).
+ * Registros completos con el desglose anidado: lossless y legible por máquina
+ * (integraciones con software de la gestoría).
  */
 import type { PosInvoiceType } from "@/types/database";
 
@@ -46,9 +46,6 @@ export interface ExportableInvoice {
   total_cents: number;
   issuer_data: unknown;
   recipient_data: unknown;
-  hash_algorithm: string;
-  current_hash: string;
-  previous_hash: string | null;
 }
 
 /** Filtros de la exportación (ya validados/normalizados). */
@@ -69,20 +66,16 @@ interface IssuerSnapshot {
   fiscalAddress: string | null;
 }
 
-/** Snapshot fiscal del receptor (solo facturas completas / F1). */
+/** Snapshot fiscal del receptor (solo facturas completas). */
 interface RecipientSnapshot {
   taxId: string;
   name: string;
   address: string | null;
 }
 
-/**
- * Traduce el tipo interno al código de factura AEAT.
- *   · `ticket`   → **F2** (factura simplificada, sin receptor).
- *   · `completa` → **F1** (factura ordinaria, con receptor).
- */
-export function mapInvoiceTypeToAeat(type: PosInvoiceType): "F1" | "F2" {
-  return type === "completa" ? "F1" : "F2";
+/** Etiqueta legible del tipo de factura para el libro. */
+export function invoiceTypeLabel(type: PosInvoiceType): string {
+  return type === "completa" ? "Completa" : "Simplificada";
 }
 
 /** Formatea céntimos como importe con coma decimal, sin separador de miles. */
@@ -162,7 +155,7 @@ const CSV_HEADERS: readonly string[] = [
   "Numero",
   "Serie",
   "Numero correlativo",
-  "Tipo AEAT",
+  "Tipo",
   "Fecha expedicion",
   "NIF emisor",
   "Razon social emisor",
@@ -176,9 +169,6 @@ const CSV_HEADERS: readonly string[] = [
   "Cuota total factura",
   "Total factura",
   "Moneda",
-  "Algoritmo huella",
-  "Huella",
-  "Huella anterior",
 ];
 
 /** Escapa un campo CSV: entrecomilla si contiene separador, comillas o saltos. */
@@ -202,11 +192,11 @@ const FALLBACK_BREAKDOWN: TaxBreakdownRow = {
 };
 
 /**
- * Serializa las facturas a CSV (libro registro de facturas expedidas).
+ * Serializa las facturas a CSV (libro de facturas expedidas).
  *
  * Emite **una fila por línea de desglose de IVA**. Una factura sin desglose
  * (caso degenerado) se emite igualmente con una fila de importes a cero, para
- * no perder el registro de la cadena.
+ * no perder el registro.
  */
 export function buildInvoicesCsv(invoices: readonly ExportableInvoice[]): string {
   const lines: string[] = [csvRow([...CSV_HEADERS])];
@@ -223,7 +213,7 @@ export function buildInvoicesCsv(invoices: readonly ExportableInvoice[]): string
           invoice.full_number,
           invoice.series,
           invoice.sequential_number,
-          mapInvoiceTypeToAeat(invoice.invoice_type),
+          invoiceTypeLabel(invoice.invoice_type),
           issuedDate(invoice.issued_at),
           issuer.taxId,
           issuer.legalName,
@@ -237,9 +227,6 @@ export function buildInvoicesCsv(invoices: readonly ExportableInvoice[]): string
           centsToAmount(invoice.tax_cents),
           centsToAmount(invoice.total_cents),
           invoice.currency,
-          invoice.hash_algorithm,
-          invoice.current_hash,
-          invoice.previous_hash,
         ]),
       );
     }
@@ -257,7 +244,6 @@ export interface InvoiceExportRecord {
   series: string;
   sequentialNumber: number;
   invoiceType: PosInvoiceType;
-  aeatType: "F1" | "F2";
   issuedAt: string;
   currency: string;
   issuer: IssuerSnapshot;
@@ -266,9 +252,6 @@ export interface InvoiceExportRecord {
   taxableBaseCents: number;
   taxCents: number;
   totalCents: number;
-  hashAlgorithm: string;
-  currentHash: string;
-  previousHash: string | null;
 }
 
 /** Documento JSON completo de la exportación (con metadatos de filtro). */
@@ -286,7 +269,6 @@ export function toExportRecord(invoice: ExportableInvoice): InvoiceExportRecord 
     series: invoice.series,
     sequentialNumber: invoice.sequential_number,
     invoiceType: invoice.invoice_type,
-    aeatType: mapInvoiceTypeToAeat(invoice.invoice_type),
     issuedAt: invoice.issued_at,
     currency: invoice.currency,
     issuer: parseIssuer(invoice.issuer_data),
@@ -295,9 +277,6 @@ export function toExportRecord(invoice: ExportableInvoice): InvoiceExportRecord 
     taxableBaseCents: invoice.taxable_base_cents,
     taxCents: invoice.tax_cents,
     totalCents: invoice.total_cents,
-    hashAlgorithm: invoice.hash_algorithm,
-    currentHash: invoice.current_hash,
-    previousHash: invoice.previous_hash,
   };
 }
 

@@ -1,5 +1,5 @@
 /**
- * Documento imprimible (HTML autónomo) de una factura Veri*factu.
+ * Documento imprimible (HTML autónomo) de una factura.
  *
  * ── Qué produce ──────────────────────────────────────────────────────────────
  * A partir de un registro de `pos_invoices` (normalizado a {@link InvoiceDocumentData})
@@ -8,24 +8,14 @@
  * PDF desde el navegador (Ctrl+P → "Guardar como PDF").
  *
  * Sirve para los dos tipos:
- *   · `ticket`   → FACTURA SIMPLIFICADA (F2): sin datos del receptor.
- *   · `completa` → FACTURA (F1): con NIF/nombre/dirección del receptor.
+ *   · `ticket`   → FACTURA SIMPLIFICADA: sin datos del receptor.
+ *   · `completa` → FACTURA: con NIF/nombre/dirección del receptor.
  *
- * Incluye, según exige la normativa y la subtarea:
- *   · desglose de IVA por tipo (base, cuota, total);
- *   · sello de tiempo de generación del registro;
- *   · código QR con la URL de cotejo de la AEAT (datos del registro dentro);
- *   · aviso visible de modo **NO VERI*FACTU** (banner superior + leyenda del QR);
- *   · huella SHA-256 del registro y de su encadenamiento.
+ * Incluye: emisor, receptor (si aplica), líneas de detalle (si están), desglose
+ * de IVA por tipo y totales.
  *
  * Es una función PURA: no lee la BD ni el reloj (las fechas llegan como `Date`).
  */
-import { encodeQrSvg } from "./qr";
-import {
-  buildVerifactuUrl,
-  VERIFACTU_LEGEND,
-  type VerifactuEnvironment,
-} from "./verifactu-url";
 
 /** Snapshot del emisor tal como se imprime. */
 export interface DocumentIssuer {
@@ -66,8 +56,6 @@ export interface InvoiceDocumentData {
   fullNumber: string;
   /** Fecha de expedición. */
   issuedAt: Date;
-  /** Sello de tiempo de generación del registro (alta en la cadena). */
-  generatedAt: Date;
   currency: string;
   issuer: DocumentIssuer;
   /** Receptor; `null` en ticket simplificado. */
@@ -76,26 +64,17 @@ export interface InvoiceDocumentData {
   taxableBaseCents: number;
   taxCents: number;
   totalCents: number;
-  currentHash: string;
-  previousHash: string | null;
   /** Líneas de detalle, si están disponibles (venta de origen). Opcional. */
   lines?: DocumentLineItem[];
 }
 
 /** Opciones de render. */
 export interface InvoiceDocumentOptions {
-  /** Entorno del servicio de cotejo de la AEAT en la URL del QR. */
-  environment?: VerifactuEnvironment;
   /** Zona horaria para mostrar fechas. Por defecto, Europe/Madrid. */
   timezone?: string;
   /** Incluir el botón "Imprimir" (oculto al imprimir). Por defecto, `true`. */
   showPrintButton?: boolean;
 }
-
-const F_CODE: Record<InvoiceDocumentData["invoiceType"], string> = {
-  ticket: "F2",
-  completa: "F1",
-};
 
 const TYPE_LABEL: Record<InvoiceDocumentData["invoiceType"], string> = {
   ticket: "Factura simplificada",
@@ -124,20 +103,6 @@ function formatDay(date: Date, timezone: string): string {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(date);
-}
-
-/** Fecha-hora completa (con zona) en la zona indicada. */
-function formatDateTime(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("es-ES", {
-    timeZone: timezone,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    timeZoneName: "short",
   }).format(date);
 }
 
@@ -214,17 +179,7 @@ export function buildInvoiceDocumentHtml(
   const timezone = options.timezone ?? "Europe/Madrid";
   const showPrintButton = options.showPrintButton ?? true;
 
-  const verifactuUrl = buildVerifactuUrl({
-    issuerTaxId: data.issuer.taxId,
-    invoiceNumber: data.fullNumber,
-    issuedAt: data.issuedAt,
-    totalCents: data.totalCents,
-    environment: options.environment,
-  });
-  const qrSvg = encodeQrSvg(verifactuUrl, { ecc: "MEDIUM", border: 2 });
-
   const typeLabel = TYPE_LABEL[data.invoiceType];
-  const fCode = F_CODE[data.invoiceType];
   const title = `${typeLabel} ${escapeHtml(data.fullNumber)}`;
 
   const recipientBlock =
@@ -263,9 +218,6 @@ export function buildInvoiceDocumentHtml(
     --muted: #64748b;
     --line: #e2e8f0;
     --accent: #0f766e;
-    --warn-bg: #fef3c7;
-    --warn-border: #f59e0b;
-    --warn-ink: #92400e;
     --paper: #ffffff;
   }
   * { box-sizing: border-box; }
@@ -286,30 +238,6 @@ export function buildInvoiceDocumentHtml(
     border-radius: 8px;
   }
   .tabular { font-variant-numeric: tabular-nums; }
-
-  /* Aviso NO VERI*FACTU */
-  .verifactu-warning {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--warn-bg);
-    border: 1px solid var(--warn-border);
-    color: var(--warn-ink);
-    border-radius: 6px;
-    padding: 10px 14px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    margin-bottom: 24px;
-  }
-  .verifactu-warning .badge {
-    background: var(--warn-border);
-    color: #fff;
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 12px;
-    white-space: nowrap;
-  }
-  .verifactu-warning .note { font-weight: 500; font-size: 12px; }
 
   /* Cabecera */
   header.doc-head {
@@ -364,24 +292,6 @@ export function buildInvoiceDocumentHtml(
     font-size: 18px; font-weight: 700; color: var(--ink);
   }
 
-  /* Pie fiscal + QR */
-  .fiscal-foot {
-    display: flex; gap: 24px; margin-top: 32px; padding-top: 20px;
-    border-top: 1px solid var(--line); align-items: flex-start;
-  }
-  .qr-block { text-align: center; flex-shrink: 0; }
-  .qr-block svg { width: 132px; height: 132px; display: block; }
-  .qr-caption {
-    margin-top: 6px; font-weight: 700; font-size: 12px; letter-spacing: 0.03em;
-    color: var(--warn-ink);
-  }
-  .qr-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
-  .fiscal-data { flex: 1; font-size: 11px; color: var(--muted); }
-  .fiscal-data dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
-  .fiscal-data dt { font-weight: 600; color: var(--ink); }
-  .fiscal-data dd { margin: 0; word-break: break-all; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
-  .fiscal-data .url { word-break: break-all; }
-
   /* Botón imprimir */
   .print-btn {
     display: inline-flex; align-items: center; gap: 8px;
@@ -395,7 +305,6 @@ export function buildInvoiceDocumentHtml(
     body { background: #fff; font-size: 11pt; }
     .sheet { box-shadow: none; margin: 0; max-width: none; border-radius: 0; padding: 0; }
     .no-print { display: none !important; }
-    .verifactu-warning { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
   @page { size: A4; margin: 14mm; }
 </style>
@@ -404,11 +313,6 @@ export function buildInvoiceDocumentHtml(
   <div class="print-bar no-print">${printButton}</div>
   <main class="sheet">
 
-    <div class="verifactu-warning" role="note" aria-label="Aviso de modo de facturación">
-      <span class="badge">${escapeHtml(VERIFACTU_LEGEND)}</span>
-      <span class="note">Sistema que conserva los registros de forma inalterable pero NO los remite a la AEAT en tiempo real.</span>
-    </div>
-
     <header class="doc-head">
       <div class="issuer">
         <p class="legal-name">${escapeHtml(data.issuer.legalName)}</p>
@@ -416,7 +320,7 @@ export function buildInvoiceDocumentHtml(
         ${data.issuer.fiscalAddress !== null ? `<p>${escapeHtml(data.issuer.fiscalAddress)}</p>` : ""}
       </div>
       <div class="doc-meta">
-        <span class="doc-type">${escapeHtml(typeLabel)} · ${fCode}</span>
+        <span class="doc-type">${escapeHtml(typeLabel)}</span>
         <p class="doc-number">${escapeHtml(data.fullNumber)}</p>
         <dl>
           <dt>Serie</dt><dd>${escapeHtml(data.series)}</dd>
@@ -444,22 +348,6 @@ export function buildInvoiceDocumentHtml(
       <div class="row"><span>Base imponible</span><span>${money(data.taxableBaseCents, data.currency)}</span></div>
       <div class="row"><span>Total IVA</span><span>${money(data.taxCents, data.currency)}</span></div>
       <div class="row grand"><span>Total</span><span>${money(data.totalCents, data.currency)}</span></div>
-    </div>
-
-    <div class="fiscal-foot">
-      <div class="qr-block">
-        ${qrSvg}
-        <div class="qr-caption">${escapeHtml(VERIFACTU_LEGEND)}</div>
-        <div class="qr-sub">Cotejo en la Sede electrónica de la AEAT</div>
-      </div>
-      <div class="fiscal-data">
-        <dl>
-          <dt>Sello de tiempo</dt><dd>${formatDateTime(data.generatedAt, timezone)}</dd>
-          <dt>Huella (SHA-256)</dt><dd>${escapeHtml(data.currentHash)}</dd>
-          <dt>Huella anterior</dt><dd>${data.previousHash !== null ? escapeHtml(data.previousHash) : "— (primer registro de la serie)"}</dd>
-          <dt>URL de cotejo</dt><dd class="url">${escapeHtml(verifactuUrl)}</dd>
-        </dl>
-      </div>
     </div>
 
   </main>
