@@ -2160,6 +2160,10 @@ export type ClinicalRecord = Tables<"clinical_records">;
 export type ClinicalRecordInsert = TablesInsert<"clinical_records">;
 export type ClinicalRecordUpdate = TablesUpdate<"clinical_records">;
 
+// Odontograma — hallazgos clínicos append-only
+export type OdontogramFinding = Tables<"odontogram_findings">;
+export type OdontogramFindingInsert = TablesInsert<"odontogram_findings">;
+
 // Phase helpers -----------------------------------------------------------------
 
 /** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
