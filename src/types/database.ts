@@ -81,6 +81,13 @@ export type SalonFeature =
   | "ai_receptionist"
   | "pos";
 
+/**
+ * Sector del tenant. Espejo TS del enum `public.salon_sector` (migración
+ * 20260731100000_salon_sector). Lo fija HAT3X al alta; determina
+ * nav/terminologia/modulos. Default `peluqueria` (back-compat).
+ */
+export type SalonSector = "peluqueria" | "odontologia" | "restauracion";
+
 export interface Database {
   public: {
     Tables: {
@@ -98,6 +105,7 @@ export interface Database {
           legal_name: string | null; // razón social
           fiscal_address: string | null; // domicilio fiscal
           settings: Json;
+          sector: SalonSector;
           active: boolean;
           created_at: string;
           updated_at: string;
@@ -114,6 +122,7 @@ export interface Database {
           legal_name?: string | null;
           fiscal_address?: string | null;
           settings?: Json;
+          sector?: SalonSector;
           active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -130,6 +139,7 @@ export interface Database {
           legal_name?: string | null;
           fiscal_address?: string | null;
           settings?: Json;
+          sector?: SalonSector;
           active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -1951,6 +1961,7 @@ export interface Database {
       coupon_status: CouponStatus;
       reward_status: RewardStatus;
       salon_feature: SalonFeature;
+      salon_sector: SalonSector;
     };
     CompositeTypes: Record<never, never>;
   };
