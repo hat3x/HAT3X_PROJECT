@@ -20,6 +20,7 @@ import {
 import { CustomerAvatar } from "@/app/(dashboard)/customers/customer-avatar";
 import { CustomerForm } from "@/app/(dashboard)/customers/customer-form";
 import { ClinicalRecordCard } from "@/app/(dashboard)/customers/[id]/clinical-record-card";
+import { VisitNotesCard } from "@/app/(dashboard)/customers/[id]/visit-notes-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -306,9 +307,14 @@ export function CustomerDetailView({
         </Card>
       </div>
 
+      {/* Notas clínicas de visita — visible en todos los sectores */}
+      <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:240ms]">
+        <VisitNotesCard salonId={salonId} customerId={customerId} />
+      </div>
+
       {/* Ficha clínica — solo visible en salones con sector odontología */}
       {salonSector === "odontologia" ? (
-        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:240ms]">
+        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:320ms]">
           <ClinicalRecordCard salonId={salonId} customerId={customerId} />
         </div>
       ) : null}

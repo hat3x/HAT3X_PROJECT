@@ -698,6 +698,53 @@ export interface Database {
           },
         ];
       };
+      visit_notes: {
+        Row: {
+          visit_id: string;
+          salon_id: string;
+          content: string;
+          data: Json;
+          signed: boolean;
+          signed_at: string | null;
+          signed_by: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          visit_id: string;
+          salon_id: string;
+          content?: string;
+          data?: Json;
+          signed?: boolean;
+          signed_at?: string | null;
+          signed_by?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          visit_id?: string;
+          salon_id?: string;
+          content?: string;
+          data?: Json;
+          signed?: boolean;
+          signed_at?: string | null;
+          signed_by?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "visit_notes_visit_salon_fkey";
+            columns: ["visit_id", "salon_id"];
+            isOneToOne: true;
+            referencedRelation: "visits";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
       professional_schedules: {
         Row: {
           id: string;
@@ -2163,6 +2210,11 @@ export type ClinicalRecordUpdate = TablesUpdate<"clinical_records">;
 // Odontograma — hallazgos clínicos append-only
 export type OdontogramFinding = Tables<"odontogram_findings">;
 export type OdontogramFindingInsert = TablesInsert<"odontogram_findings">;
+
+// Notas de visita — nota clínica 1:1 con visits; inamovible cuando signed = TRUE
+export type VisitNote = Tables<"visit_notes">;
+export type VisitNoteInsert = TablesInsert<"visit_notes">;
+export type VisitNoteUpdate = TablesUpdate<"visit_notes">;
 
 // Phase helpers -----------------------------------------------------------------
 
