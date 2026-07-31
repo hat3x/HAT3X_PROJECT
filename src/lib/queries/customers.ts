@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import type { Customer, Visit } from "@/types/database";
+import type { ClinicalRecord, Customer, Visit } from "@/types/database";
 
 /**
  * Visita enriquecida con el nombre del/la profesional que la atendió.
@@ -23,6 +23,8 @@ export const customerKeys = {
     [...customerKeys.details(salonId), customerId] as const,
   visits: (salonId: string, customerId: string) =>
     [...customerKeys.detail(salonId, customerId), "visits"] as const,
+  clinicalRecord: (salonId: string, customerId: string) =>
+    [...customerKeys.detail(salonId, customerId), "clinical-record"] as const,
 };
 
 /**
@@ -66,6 +68,25 @@ export async function fetchCustomer(
     .select("*")
     .eq("salon_id", salonId)
     .eq("id", customerId)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw new Error(error.message);
+  }
+  return data;
+}
+
+/** Ficha clínica (1:1 con customers). `null` si aún no existe. */
+export async function fetchClinicalRecord(
+  salonId: string,
+  customerId: string,
+): Promise<ClinicalRecord | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("clinical_records")
+    .select("*")
+    .eq("salon_id", salonId)
+    .eq("customer_id", customerId)
     .maybeSingle();
 
   if (error !== null) {

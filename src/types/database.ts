@@ -15,6 +15,32 @@ export type Json =
 
 export type MemberRole = "owner" | "manager" | "staff";
 
+/** Tipo de hallazgo/procedimiento dental (espejo del enum public.dental_finding_type). */
+export type DentalFindingType =
+  | "sano"
+  | "caries"
+  | "obturacion"
+  | "endodoncia"
+  | "corona"
+  | "implante"
+  | "extraccion"
+  | "puente"
+  | "fractura"
+  | "erosion"
+  | "sellador"
+  | "blanqueamiento"
+  | "nota";
+
+/** Estado visual del diente (espejo del enum public.dental_tooth_state y ToothState de color.ts). */
+export type DentalToothState =
+  | "sano"
+  | "pendiente"
+  | "hecho"
+  | "en_curso"
+  | "ausente"
+  | "corona"
+  | "implante";
+
 export type AppointmentStatus =
   | "pending"
   | "confirmed"
@@ -1840,6 +1866,48 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "salons";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Historial event-sourced de hallazgos del odontograma. Tabla append-only:
+      // cada fila = evento clínico inmutable. Estado actual por diente = evento
+      // más reciente. FK compuesta (clinical_record_id, salon_id) → clinical_records.
+      // Ver migración 20260731120000_odontogram_findings.
+      odontogram_findings: {
+        Row: {
+          id: string;
+          clinical_record_id: string;
+          salon_id: string;
+          fdi_tooth: number;
+          surfaces: string[];
+          finding_type: DentalFindingType;
+          tooth_state: DentalToothState;
+          notes: string | null;
+          recorded_by: string | null;
+          recorded_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          clinical_record_id: string;
+          salon_id: string;
+          fdi_tooth: number;
+          surfaces?: string[];
+          finding_type: DentalFindingType;
+          tooth_state: DentalToothState;
+          notes?: string | null;
+          recorded_by?: string | null;
+          recorded_at?: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "odontogram_findings_record_salon_fkey";
+            columns: ["clinical_record_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_records";
+            referencedColumns: ["customer_id", "salon_id"];
           },
         ];
       };

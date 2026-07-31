@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { CustomerDetailView } from "@/app/(dashboard)/customers/[id]/customer-detail-view";
-import { activeSalonHasFeature, getActiveSalonId } from "@/lib/salon";
+import {
+  activeSalonHasFeature,
+  getActiveSalonId,
+  getActiveSalonSector,
+} from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 
 interface CustomerDetailPageProps {
@@ -61,7 +65,10 @@ export default async function CustomerDetailPage({
   // Gating BARATO de UI: solo mostramos el acceso a fidelización si el salón tiene
   // contratado el add-on. El gate real de datos ya vive en el servidor (la ruta y
   // `lookupByQr` devuelven 403 si no), esto solo evita ofrecer un enlace inútil.
-  const loyaltyEnabled = await activeSalonHasFeature("loyalty");
+  const [loyaltyEnabled, salonSector] = await Promise.all([
+    activeSalonHasFeature("loyalty"),
+    getActiveSalonSector(),
+  ]);
 
   return (
     <CustomerDetailView
@@ -69,6 +76,7 @@ export default async function CustomerDetailPage({
       customerId={params.id}
       initialCustomer={customer}
       loyaltyEnabled={loyaltyEnabled}
+      salonSector={salonSector}
     />
   );
 }

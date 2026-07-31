@@ -19,6 +19,7 @@ import {
 
 import { CustomerAvatar } from "@/app/(dashboard)/customers/customer-avatar";
 import { CustomerForm } from "@/app/(dashboard)/customers/customer-form";
+import { ClinicalRecordCard } from "@/app/(dashboard)/customers/[id]/clinical-record-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +45,7 @@ import {
   useUpdateCustomer,
 } from "@/hooks/use-customers";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
-import type { Customer } from "@/types/database";
+import type { Customer, SalonSector } from "@/types/database";
 
 interface CustomerDetailViewProps {
   salonId: string;
@@ -56,6 +57,8 @@ interface CustomerDetailViewProps {
    * la ficha de fidelización: sin add-on, esa ruta redirige y `lookupByQr` da 403.
    */
   loyaltyEnabled: boolean;
+  /** Sector del salón activo (null si no pudo resolverse). Gate de UI para ficha clínica. */
+  salonSector: SalonSector | null;
 }
 
 export function CustomerDetailView({
@@ -63,6 +66,7 @@ export function CustomerDetailView({
   customerId,
   initialCustomer,
   loyaltyEnabled,
+  salonSector,
 }: CustomerDetailViewProps): React.ReactElement {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -301,6 +305,13 @@ export function CustomerDetailView({
           </CardContent>
         </Card>
       </div>
+
+      {/* Ficha clínica — solo visible en salones con sector odontología */}
+      {salonSector === "odontologia" ? (
+        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:240ms]">
+          <ClinicalRecordCard salonId={salonId} customerId={customerId} />
+        </div>
+      ) : null}
 
       {/* Diálogo de edición */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
