@@ -2,6 +2,7 @@ import { SalonBrandStyle } from "@/components/branding/salon-brand-theme";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SalonFeaturesProvider } from "@/components/providers/salon-features-provider";
+import { SectorProvider } from "@/components/providers/sector-provider";
 import {
   canManageSettings,
   getActiveMembership,
@@ -39,20 +40,23 @@ export default async function DashboardLayout({
     getActiveSalonFeatureFlags(),
   ]);
   const showSettings = canManageSettings(membership?.role);
+  const sector = salon?.sector ?? "peluqueria";
 
   return (
     <QueryProvider>
       <SalonBrandStyle branding={branding} />
       <SalonFeaturesProvider flags={featureFlags}>
-        <div {...{ [BRAND_SCOPE_ATTR]: "" }} className="flex min-h-screen flex-col">
-          <DashboardNav
-            brandName={salon?.name ?? null}
-            logoUrl={buildLogoSrc(branding)}
-            role={membership?.role ?? null}
-            showSettings={showSettings}
-          />
-          <div className="flex-1">{children}</div>
-        </div>
+        <SectorProvider sector={sector}>
+          <div {...{ [BRAND_SCOPE_ATTR]: "" }} className="flex min-h-screen flex-col">
+            <DashboardNav
+              brandName={salon?.name ?? null}
+              logoUrl={buildLogoSrc(branding)}
+              role={membership?.role ?? null}
+              showSettings={showSettings}
+            />
+            <div className="flex-1">{children}</div>
+          </div>
+        </SectorProvider>
       </SalonFeaturesProvider>
     </QueryProvider>
   );

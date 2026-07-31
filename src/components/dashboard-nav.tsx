@@ -9,6 +9,7 @@ import type { MemberRole } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { buildDashboardNavItems } from "@/components/dashboard-nav-items";
 import { useHasPos } from "@/components/providers/salon-features-provider";
+import { useSector } from "@/components/providers/sector-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 /** Etiqueta legible del rol para el bloque de cuenta. */
@@ -65,8 +66,9 @@ export function DashboardNav({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const hasPos = useHasPos();
+  const sector = useSector();
 
-  const items = buildDashboardNavItems({ showSettings, hasPos });
+  const items = buildDashboardNavItems({ showSettings, hasPos, sector });
   const brand = brandName?.trim() ? brandName : "Salon OS";
   const logo = logoUrl?.trim() ? logoUrl : null;
 
