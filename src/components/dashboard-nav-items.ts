@@ -15,6 +15,7 @@ import {
   BarChart3,
   CalendarClock,
   CalendarDays,
+  Clock,
   FileText,
   LayoutDashboard,
   Package,
@@ -24,6 +25,9 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
+
+import { SECTOR_REGISTRY } from "@/lib/sector/registry";
+import type { SalonSector } from "@/types/database";
 
 /** Una sección navegable del panel: destino, etiqueta e icono. */
 export interface NavItem {
@@ -78,12 +82,14 @@ export const SETTINGS_ITEM: NavItem = {
   icon: Settings,
 };
 
-/** Entradas del gate: rol de gestión y add-on `pos` contratado y activo. */
+/** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
   /** El usuario puede ver materia de gestión (owner/manager). */
   showSettings: boolean;
   /** El salón tiene el add-on `pos` (TPV) contratado y activo. */
   hasPos: boolean;
+  /** Sector del salón activo; determina labels y disponibilidad. Por defecto "peluqueria". */
+  sector?: SalonSector;
 }
 
 /**
@@ -95,10 +101,18 @@ export interface NavGating {
  *
  * Facturación se coloca entre Analítica y Ajustes (del «cómo va» al «papeleo»).
  * Puro y determinista → testeable sin render (`dashboard-nav-items.test.ts`).
+ *
+ * ── Por sector ────────────────────────────────────────────────────────────────
+ * Sector no implementado (`SECTOR_REGISTRY[sector].implemented === false`) →
+ * cascarón: solo Panel + "Próximamente" (+ Ajustes si `showSettings`), ignorando
+ * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
+ * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
+ * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes".
  */
 export function buildDashboardNavItems({
   showSettings,
   hasPos,
+  sector = "peluqueria",
 }: NavGating): NavItem[] {
   const items: NavItem[] = [...PRIMARY_NAV_ITEMS];
 
@@ -110,5 +124,24 @@ export function buildDashboardNavItems({
     items.push(SETTINGS_ITEM);
   }
 
-  return items;
+  const config = SECTOR_REGISTRY[sector];
+  if (!config.implemented) {
+    const panel = items.find((item) => item.href === "/dashboard");
+    if (panel === undefined) {
+      throw new Error("buildDashboardNavItems: falta el item Panel (/dashboard)");
+    }
+    return [
+      panel,
+      { href: "/proximamente", label: "Próximamente", icon: Clock },
+      ...(showSettings ? [SETTINGS_ITEM] : []),
+    ];
+  }
+
+  if (sector === "peluqueria") return items;
+
+  return items.map((item) =>
+    item.href === "/customers"
+      ? { ...item, label: config.terms.customerPlural }
+      : item,
+  );
 }
