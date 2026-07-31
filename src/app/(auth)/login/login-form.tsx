@@ -61,7 +61,14 @@ export function LoginForm({ sector }: LoginFormProps): React.ReactElement {
     // La credencial pertenece a UN tenant y por tanto a UN sector. Si no
     // coincide con el sector elegido en el picker, se rechaza aquí (UX) —
     // el aislamiento real de datos lo da la RLS, no esta comprobación.
-    const tenantSector = await resolveTenantSector();
+    // Un fallo transitorio al resolver el sector NO debe colgar el login: se
+    // deja pasar (el layout del panel aplica el sector real como red de seguridad).
+    let tenantSector: SalonSector | null = null;
+    try {
+      tenantSector = await resolveTenantSector();
+    } catch {
+      tenantSector = null;
+    }
     const mismatch = tenantSector
       ? sectorMismatchMessage(sector, tenantSector)
       : null;
