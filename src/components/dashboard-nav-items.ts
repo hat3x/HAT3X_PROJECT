@@ -16,6 +16,7 @@ import {
   BarChart3,
   CalendarClock,
   CalendarDays,
+  ClipboardList,
   Clock,
   FileText,
   LayoutDashboard,
@@ -105,6 +106,18 @@ export const PERIODONTOGRAMA_ITEM: NavItem = {
   icon: Activity,
 };
 
+/**
+ * Planes de tratamiento / presupuestos. Solo visible para el sector
+ * odontología, justo después de Periodontograma: primero el mapa de dientes,
+ * luego la exploración periodontal y, por último, el presupuesto/plan de
+ * tratamiento derivado de ambos.
+ */
+export const PLANES_ITEM: NavItem = {
+  href: "/planes",
+  label: "Planes",
+  icon: ClipboardList,
+};
+
 /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
   /** El usuario puede ver materia de gestión (owner/manager). */
@@ -131,7 +144,8 @@ export interface NavGating {
  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
- * además inserta Odontograma y, justo detrás, Periodontograma tras "Pacientes".
+ * además inserta Odontograma y, justo detrás, Periodontograma y Planes (en ese
+ * orden) tras "Pacientes".
  */
 export function buildDashboardNavItems({
   showSettings,
@@ -171,14 +185,15 @@ export function buildDashboardNavItems({
 
   if (sector !== "odontologia") return withSectorLabels;
 
-  // Odontología: añadir Odontograma justo después de Pacientes, y
-  // Periodontograma justo después de Odontograma.
+  // Odontología: añadir Odontograma justo después de Pacientes, Periodontograma
+  // justo después de Odontograma, y Planes justo después de Periodontograma.
   const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
   const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
   return [
     ...withSectorLabels.slice(0, insertAt),
     ODONTOGRAMA_ITEM,
     PERIODONTOGRAMA_ITEM,
+    PLANES_ITEM,
     ...withSectorLabels.slice(insertAt),
   ];
 }
