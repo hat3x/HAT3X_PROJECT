@@ -1,8 +1,10 @@
 "use server";
 
+import { formatLongDate, formatSlotTime } from "@/lib/booking/format";
 import { getActiveMembership, getActiveSalon } from "@/lib/salon";
+import { sendSms, summarizeSmsResult } from "@/lib/sms/client";
+import { buildAppointmentReminderSms } from "@/lib/sms/templates";
 import { createClient } from "@/lib/supabase/server";
-import { sendReminder24h, summarizeSendResult } from "@/lib/whatsapp/reminders";
 import type { MemberRole } from "@/types/database";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -25,9 +27,13 @@ interface AppointmentReminderRow {
 }
 
 /**
- * Envía al instante un recordatorio WhatsApp de la cita indicada, reutilizando
- * la MISMA plantilla y barreras de dry-run que el recordatorio automático de
- * 24h (`sendReminder24h`). Botón "Enviar recordatorio" de la cita.
+ * Envía al instante un recordatorio SMS de la cita indicada (Twilio Messages
+ * API, texto plano), con las MISMAS barreras de dry-run que el resto de
+ * recordatorios (`@/lib/sms/client`). Botón "Enviar recordatorio" de la cita.
+ *
+ * SMS en vez de WhatsApp: clientes como Biodental no tienen WhatsApp
+ * configurado; su recepcionista de voz ya usa SMS con Twilio para
+ * confirmaciones, así que los recordatorios replican ese mismo mecanismo.
  *
  * Gate de rol (owner/manager/staff), SIN gate de sector: vale para todos los
  * verticales. La cita se acota siempre al salón activo del usuario.
@@ -61,18 +67,16 @@ export async function sendAppointmentReminder(
     return { ok: false, error: ERROR_NO_PHONE };
   }
 
-  const result = await sendReminder24h({
-    customerPhone: phone,
-    customerName: appointment.customer?.full_name ?? "—",
-    startsAt: appointment.starts_at,
-    serviceName: appointment.service?.name ?? "—",
-    professionalName: appointment.professional?.full_name ?? "—",
+  const dateStr = appointment.starts_at.slice(0, 10);
+  const body = buildAppointmentReminderSms({
+    clientName: appointment.customer?.full_name ?? "—",
     salonName: salon.name,
-    salonTimezone: salon.timezone,
-    priceCents: appointment.price_cents,
-    currency: appointment.currency,
-    salonPhone: appointment.salon?.phone ?? undefined,
+    date: formatLongDate(dateStr, salon.timezone),
+    time: formatSlotTime(appointment.starts_at, salon.timezone),
+    serviceName: appointment.service?.name ?? "—",
   });
 
-  return { ok: true, data: { message: summarizeSendResult(result) } };
+  const result = await sendSms(phone, body);
+
+  return { ok: true, data: { message: summarizeSmsResult(result) } };
 }

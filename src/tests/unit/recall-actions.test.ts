@@ -3,7 +3,9 @@
  *
  * Mismo patrón que `planes-actions.test.ts` / `appointment-reminder-actions.test.ts`:
  * se mockea `@/lib/salon` y `@/lib/supabase/server` (chain "then-able"). Se mockea
- * `sendRevisionReminder`; `summarizeSendResult` se mantiene REAL.
+ * `sendSms`; `summarizeSmsResult` se mantiene REAL.
+ *
+ * SMS (Twilio) en vez de WhatsApp: ver `appointment-reminder-actions.test.ts`.
  *
  * Sin gate de sector: solo gate de rol.
  */
@@ -11,12 +13,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 import type { MemberRole } from "@/types/database";
 
-const { getActiveSalonMock, getActiveMembershipMock, fromMock, sendRevisionReminderMock } =
+const { getActiveSalonMock, getActiveMembershipMock, fromMock, sendSmsMock } =
   vi.hoisted(() => ({
     getActiveSalonMock: vi.fn(),
     getActiveMembershipMock: vi.fn(),
     fromMock: vi.fn(),
-    sendRevisionReminderMock: vi.fn(),
+    sendSmsMock: vi.fn(),
   }));
 
 vi.mock("@/lib/salon", () => ({
@@ -30,11 +32,11 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-vi.mock("@/lib/whatsapp/reminders", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/whatsapp/reminders")>();
+vi.mock("@/lib/sms/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/sms/client")>();
   return {
     ...actual,
-    sendRevisionReminder: sendRevisionReminderMock,
+    sendSms: sendSmsMock,
   };
 });
 
@@ -68,7 +70,7 @@ function membership(role: MemberRole): void {
 beforeEach(() => {
   vi.clearAllMocks();
   getActiveSalonMock.mockResolvedValue(SALON);
-  sendRevisionReminderMock.mockResolvedValue({
+  sendSmsMock.mockResolvedValue({
     sent: false,
     dryRun: true,
     reason: "disabled",
@@ -78,14 +80,14 @@ beforeEach(() => {
 });
 
 describe("sendRecallReminder — gate", () => {
-  it("sin salón asignado ⇒ { ok:false } sin tocar la BD ni WhatsApp", async () => {
+  it("sin salón asignado ⇒ { ok:false } sin tocar la BD ni SMS", async () => {
     getActiveSalonMock.mockResolvedValue(null);
 
     const result = await sendRecallReminder(CUSTOMER_ID);
 
     expect(result).toEqual({ ok: false, error: "No tienes un salón asignado." });
     expect(fromMock).not.toHaveBeenCalled();
-    expect(sendRevisionReminderMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
   });
 
   it("sin membresía activa ⇒ { ok:false }", async () => {
@@ -99,7 +101,7 @@ describe("sendRecallReminder — gate", () => {
 });
 
 describe("sendRecallReminder — (a) cliente sin teléfono", () => {
-  it("devuelve error legible y NO llama a sendRevisionReminder", async () => {
+  it("devuelve error legible y NO llama a sendSms", async () => {
     membership("staff");
     fromMock.mockImplementation(() =>
       chain({ data: { full_name: "Ana García", phone: null }, error: null }),
@@ -111,12 +113,12 @@ describe("sendRecallReminder — (a) cliente sin teléfono", () => {
       ok: false,
       error: "El paciente no tiene teléfono para enviarle el recordatorio.",
     });
-    expect(sendRevisionReminderMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
   });
 });
 
 describe("sendRecallReminder — (b) cliente con teléfono", () => {
-  it("llama a sendRevisionReminder con el input correcto", async () => {
+  it("llama a sendSms con el teléfono del cliente y un cuerpo de texto no vacío", async () => {
     membership("owner");
     fromMock.mockImplementation((table: string) => {
       if (table === "customers") {
@@ -128,11 +130,12 @@ describe("sendRecallReminder — (b) cliente con teléfono", () => {
     const result = await sendRecallReminder(CUSTOMER_ID);
 
     expect(fromMock).toHaveBeenCalledWith("customers");
-    expect(sendRevisionReminderMock).toHaveBeenCalledWith({
-      customerPhone: "+34611111111",
-      customerName: "Ana García",
-      salonName: "Salón de prueba",
-    });
+    expect(sendSmsMock).toHaveBeenCalledTimes(1);
+    const [to, body] = sendSmsMock.mock.calls[0] as [string, string];
+    expect(to).toBe("+34611111111");
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).toContain("Ana García");
+    expect(body).toContain("Salón de prueba");
     expect(result.ok).toBe(true);
   });
 
@@ -141,7 +144,7 @@ describe("sendRecallReminder — (b) cliente con teléfono", () => {
     fromMock.mockImplementation(() =>
       chain({ data: { full_name: "Ana García", phone: "+34611111111" }, error: null }),
     );
-    sendRevisionReminderMock.mockResolvedValue({
+    sendSmsMock.mockResolvedValue({
       sent: true,
       dryRun: false,
       messageSid: "SM999",
@@ -152,7 +155,7 @@ describe("sendRecallReminder — (b) cliente con teléfono", () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { message: "✅ Enviado a +34611111111 (SID: SM999)" },
+      data: { message: "✅ SMS enviado a +34611111111 (SID: SM999)" },
     });
   });
 
@@ -163,7 +166,7 @@ describe("sendRecallReminder — (b) cliente con teléfono", () => {
     const result = await sendRecallReminder(CUSTOMER_ID);
 
     expect(result).toEqual({ ok: false, error: "boom" });
-    expect(sendRevisionReminderMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
   });
 });
 

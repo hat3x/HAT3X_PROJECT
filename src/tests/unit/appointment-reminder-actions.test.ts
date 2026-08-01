@@ -3,8 +3,12 @@
  *
  * Mismo patrón que `planes-actions.test.ts`: se mockea `@/lib/salon`
  * (getActiveSalon + getActiveMembership) y `@/lib/supabase/server`
- * (chain encadenable "then-able"). `sendReminder24h` se mockea; `summarizeSendResult`
+ * (chain encadenable "then-able"). `sendSms` se mockea; `summarizeSmsResult`
  * se mantiene REAL (función pura) para verificar el mensaje legible de verdad.
+ *
+ * SMS (Twilio Messages API) en vez de WhatsApp: Biodental no tiene WhatsApp
+ * configurado, así que los recordatorios replican el mecanismo SMS que ya usa
+ * su recepcionista de voz "Sara".
  *
  * Sin gate de sector (a diferencia de planes): solo gate de rol.
  */
@@ -12,12 +16,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 import type { MemberRole } from "@/types/database";
 
-const { getActiveSalonMock, getActiveMembershipMock, fromMock, sendReminder24hMock } =
+const { getActiveSalonMock, getActiveMembershipMock, fromMock, sendSmsMock } =
   vi.hoisted(() => ({
     getActiveSalonMock: vi.fn(),
     getActiveMembershipMock: vi.fn(),
     fromMock: vi.fn(),
-    sendReminder24hMock: vi.fn(),
+    sendSmsMock: vi.fn(),
   }));
 
 vi.mock("@/lib/salon", () => ({
@@ -31,11 +35,11 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-vi.mock("@/lib/whatsapp/reminders", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/whatsapp/reminders")>();
+vi.mock("@/lib/sms/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/sms/client")>();
   return {
     ...actual,
-    sendReminder24h: sendReminder24hMock,
+    sendSms: sendSmsMock,
   };
 });
 
@@ -82,7 +86,7 @@ function membership(role: MemberRole): void {
 beforeEach(() => {
   vi.clearAllMocks();
   getActiveSalonMock.mockResolvedValue(SALON);
-  sendReminder24hMock.mockResolvedValue({
+  sendSmsMock.mockResolvedValue({
     sent: false,
     dryRun: true,
     reason: "disabled",
@@ -92,14 +96,14 @@ beforeEach(() => {
 });
 
 describe("sendAppointmentReminder — gate", () => {
-  it("sin salón asignado ⇒ { ok:false } sin tocar la BD ni WhatsApp", async () => {
+  it("sin salón asignado ⇒ { ok:false } sin tocar la BD ni SMS", async () => {
     getActiveSalonMock.mockResolvedValue(null);
 
     const result = await sendAppointmentReminder(APPOINTMENT_ID);
 
     expect(result).toEqual({ ok: false, error: "No tienes un salón asignado." });
     expect(fromMock).not.toHaveBeenCalled();
-    expect(sendReminder24hMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
   });
 
   it("sin membresía activa ⇒ { ok:false }", async () => {
@@ -113,7 +117,7 @@ describe("sendAppointmentReminder — gate", () => {
 });
 
 describe("sendAppointmentReminder — (a) cliente sin teléfono", () => {
-  it("devuelve error legible y NO llama a sendReminder24h", async () => {
+  it("devuelve error legible y NO llama a sendSms", async () => {
     membership("staff");
     fromMock.mockImplementation(() =>
       chain({ data: appointmentRow({ customer: { full_name: "Ana García", phone: null } }), error: null }),
@@ -125,12 +129,12 @@ describe("sendAppointmentReminder — (a) cliente sin teléfono", () => {
       ok: false,
       error: "El paciente no tiene teléfono para enviarle el recordatorio.",
     });
-    expect(sendReminder24hMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
   });
 });
 
 describe("sendAppointmentReminder — (b) cliente con teléfono", () => {
-  it("llama a sendReminder24h con el AppointmentReminderInput correcto", async () => {
+  it("llama a sendSms con el teléfono del cliente y un cuerpo de texto no vacío", async () => {
     membership("owner");
     fromMock.mockImplementation((table: string) => {
       if (table === "appointments") return chain({ data: appointmentRow(), error: null });
@@ -140,25 +144,20 @@ describe("sendAppointmentReminder — (b) cliente con teléfono", () => {
     const result = await sendAppointmentReminder(APPOINTMENT_ID);
 
     expect(fromMock).toHaveBeenCalledWith("appointments");
-    expect(sendReminder24hMock).toHaveBeenCalledWith({
-      customerPhone: "+34611111111",
-      customerName: "Ana García",
-      startsAt: "2026-08-15T09:00:00.000Z",
-      serviceName: "Corte y peinado",
-      professionalName: "Marta López",
-      salonName: "Salón de prueba",
-      salonTimezone: "Europe/Madrid",
-      priceCents: 3000,
-      currency: "EUR",
-      salonPhone: "+34900000000",
-    });
+    expect(sendSmsMock).toHaveBeenCalledTimes(1);
+    const [to, body] = sendSmsMock.mock.calls[0] as [string, string];
+    expect(to).toBe("+34611111111");
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).toContain("Ana García");
+    expect(body).toContain("Salón de prueba");
+    expect(body).toContain("Corte y peinado");
     expect(result.ok).toBe(true);
   });
 
   it("propaga el mensaje resumido de un envío real (sent:true)", async () => {
     membership("manager");
     fromMock.mockImplementation(() => chain({ data: appointmentRow(), error: null }));
-    sendReminder24hMock.mockResolvedValue({
+    sendSmsMock.mockResolvedValue({
       sent: true,
       dryRun: false,
       messageSid: "SM123",
@@ -169,14 +168,14 @@ describe("sendAppointmentReminder — (b) cliente con teléfono", () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { message: "✅ Enviado a +34611111111 (SID: SM123)" },
+      data: { message: "✅ SMS enviado a +34611111111 (SID: SM123)" },
     });
   });
 
   it("propaga el mensaje resumido de un dry-run", async () => {
     membership("manager");
     fromMock.mockImplementation(() => chain({ data: appointmentRow(), error: null }));
-    sendReminder24hMock.mockResolvedValue({
+    sendSmsMock.mockResolvedValue({
       sent: false,
       dryRun: true,
       reason: "disabled",
@@ -188,7 +187,7 @@ describe("sendAppointmentReminder — (b) cliente con teléfono", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.message).toContain("Dry-run");
+      expect(result.data.message).toContain("Modo prueba");
     }
   });
 
@@ -199,7 +198,7 @@ describe("sendAppointmentReminder — (b) cliente con teléfono", () => {
     const result = await sendAppointmentReminder(APPOINTMENT_ID);
 
     expect(result).toEqual({ ok: false, error: "boom" });
-    expect(sendReminder24hMock).not.toHaveBeenCalled();
+    expect(sendSmsMock).not.toHaveBeenCalled();
   });
 });
 

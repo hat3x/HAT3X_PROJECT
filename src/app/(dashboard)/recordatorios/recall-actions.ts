@@ -1,8 +1,9 @@
 "use server";
 
 import { getActiveMembership, getActiveSalon } from "@/lib/salon";
+import { sendSms, summarizeSmsResult } from "@/lib/sms/client";
+import { buildRevisionReminderSms } from "@/lib/sms/templates";
 import { createClient } from "@/lib/supabase/server";
-import { sendRevisionReminder, summarizeSendResult } from "@/lib/whatsapp/reminders";
 import type { MemberRole } from "@/types/database";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -15,9 +16,9 @@ const ERROR_ROLE = "No tienes permiso para enviar recordatorios.";
 const ERROR_NO_PHONE = "El paciente no tiene teléfono para enviarle el recordatorio.";
 
 /**
- * Envía un recordatorio de revisión (recall) a un cliente que hace tiempo que
- * no viene, reutilizando `sendRevisionReminder` (misma plantilla y barreras
- * de dry-run que el resto de recordatorios WhatsApp).
+ * Envía un recordatorio de revisión (recall) por SMS a un cliente que hace
+ * tiempo que no viene, reutilizando `sendSms` (mismas barreras de dry-run que
+ * el resto de recordatorios). SMS en vez de WhatsApp: ver `reminder-actions.ts`.
  *
  * Gate de rol (owner/manager/staff), SIN gate de sector.
  */
@@ -46,11 +47,12 @@ export async function sendRecallReminder(
     return { ok: false, error: ERROR_NO_PHONE };
   }
 
-  const result = await sendRevisionReminder({
-    customerPhone: customer.phone,
-    customerName: customer.full_name,
+  const body = buildRevisionReminderSms({
+    clientName: customer.full_name,
     salonName: salon.name,
   });
 
-  return { ok: true, data: { message: summarizeSendResult(result) } };
+  const result = await sendSms(customer.phone, body);
+
+  return { ok: true, data: { message: summarizeSmsResult(result) } };
 }
