@@ -19,6 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useUpdateSalon } from "@/hooks/use-salon-settings";
 import { COMMON_TIMEZONES } from "@/lib/booking/timezone";
+import { sectorTerms } from "@/lib/sector/registry";
 import { salonSettingsSchema } from "@/lib/validations/salon";
 import type { Salon } from "@/types/database";
 
@@ -56,6 +57,11 @@ export function SalonDatosForm({ salon }: SalonDatosFormProps): React.ReactEleme
   const [saved, setSaved] = useState(false);
   const mutation = useUpdateSalon(salon.id);
 
+  // Peluquería conserva el título literal "Datos del salón" (identidad byte a
+  // byte); el resto de sectores usa `terms.business` ("Datos de la clínica").
+  const terms = sectorTerms(salon.sector);
+  const title = salon.sector === "peluqueria" ? "Datos del salón" : `Datos de la ${terms.business}`;
+
   // Aseguramos que la zona actual del salón aparezca en el selector aunque no
   // esté en la lista curada; así nunca se pierde el valor persistido.
   const timezoneOptions = COMMON_TIMEZONES.includes(values.timezone)
@@ -92,8 +98,8 @@ export function SalonDatosForm({ salon }: SalonDatosFormProps): React.ReactEleme
     <div>
       <SectionHeader
         icon={Store}
-        title="Datos del salón"
-        description="Nombre, zona horaria y datos de contacto de tu salón."
+        title={title}
+        description={`Nombre, zona horaria y datos de contacto de tu ${terms.business}.`}
       />
       <Card className="animate-fade-up [animation-delay:60ms]">
       <form onSubmit={handleSubmit}>

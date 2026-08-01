@@ -13,7 +13,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { useTerms } from "@/components/providers/sector-provider";
+import { useSector, useTerms } from "@/components/providers/sector-provider";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -42,17 +42,22 @@ const NAV_ITEMS: readonly NavItem[] = [
  */
 export function AjustesNav(): React.ReactElement {
   const pathname = usePathname();
+  const sector = useSector();
   const terms = useTerms();
 
   // Relabel de los ítems cuyo texto depende del sector activo (p. ej. "Servicios"
   // para peluquería vs. "Carta" para restauración); el resto de NAV_ITEMS
-  // permanece intacto.
+  // permanece intacto. Peluquería conserva el label literal "Datos del salón"
+  // (identidad byte a byte); el resto de sectores usa `terms.business`.
   const items = NAV_ITEMS.map((item) => {
     if (item.href === "/ajustes/servicios") {
       return { ...item, label: terms.servicePlural };
     }
     if (item.href === "/ajustes/personal") {
       return { ...item, label: terms.professionalPlural };
+    }
+    if (item.href === "/ajustes/datos" && sector !== "peluqueria") {
+      return { ...item, label: `Datos de la ${terms.business}` };
     }
     return item;
   });

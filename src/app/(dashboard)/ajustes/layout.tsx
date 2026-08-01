@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AjustesNav } from "@/app/(dashboard)/ajustes/ajustes-nav";
-import { canManageSettings, getActiveMembership } from "@/lib/salon";
+import { canManageSettings, getActiveMembership, getActiveSalonSector } from "@/lib/salon";
+import { sectorTerms } from "@/lib/sector/registry";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -38,12 +39,18 @@ export default async function AjustesLayout({
     redirect("/dashboard");
   }
 
+  // "de tu {business}" es gramaticalmente válido en cualquier sector (posesivo
+  // invariante); en peluquería `terms.business` es "salón", así que la frase
+  // queda IDÉNTICA a la anterior.
+  const sector = await getActiveSalonSector();
+  const terms = sectorTerms(sector ?? "peluqueria");
+
   return (
     <main className="container py-8 md:py-10">
       <div className="mb-8 animate-fade-up">
         <h1 className="text-3xl font-bold tracking-tight">Ajustes</h1>
         <p className="mt-1.5 max-w-prose text-muted-foreground">
-          Configura las sedes, servicios, personal, horarios, los datos y la marca de tu salón.
+          Configura las sedes, {terms.servicePlural.toLowerCase()}, personal, horarios, los datos y la marca de tu {terms.business}.
         </p>
       </div>
 
