@@ -12,6 +12,7 @@ import {
 
 import { SaveStatus } from "@/app/(dashboard)/ajustes/save-status";
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
+import { useSector } from "@/components/providers/sector-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import {
   useSaveSalonColors,
   useUploadSalonLogo,
 } from "@/hooks/use-salon-branding";
+import { formatMoney } from "@/lib/format";
 import {
   ALLOWED_LOGO_MIME_TYPES,
   DEFAULT_PRIMARY_COLOR,
@@ -36,6 +38,7 @@ import {
   assessFillLegibility,
   readableForegroundHex,
 } from "@/lib/salon-branding/theme";
+import { SECTOR_REGISTRY } from "@/lib/sector/registry";
 import { cn } from "@/lib/utils";
 
 // Constantes de presentación derivadas del contrato de la marca (espejo del SQL),
@@ -200,11 +203,26 @@ function ColorField({
   );
 }
 
+/**
+ * Precio del servicio de ejemplo del preview, vía el helper de moneda existente
+ * (`formatMoney`), sin decimales cuando el importe es un número entero de euros —
+ * mismo criterio visual que el texto estático anterior ("25 €"), así peluquería
+ * (25,00 €) sigue mostrando "25 €" byte a byte. `Intl.NumberFormat` intercala un
+ * espacio DURO (U+00A0) entre el importe y "€"; lo normalizamos a un espacio
+ * normal para no introducir un carácter invisible distinto del texto original.
+ */
+function formatSamplePrice(cents: number): string {
+  const formatted = formatMoney(cents).replace(/ /g, " ");
+  return cents % 100 === 0 ? formatted.replace(",00", "") : formatted;
+}
+
 interface BrandPreviewProps {
   salonName: string;
   logoSrc: string | null;
   primary: string;
   secondary: string;
+  serviceName: string;
+  servicePrice: string;
 }
 
 /**
@@ -218,6 +236,8 @@ function BrandPreview({
   logoSrc,
   primary,
   secondary,
+  serviceName,
+  servicePrice,
 }: BrandPreviewProps): React.ReactElement {
   const safePrimary = safeColor(primary, DEFAULT_PRIMARY_COLOR);
   const safeSecondary = isValidHexColor(secondary.trim())
@@ -264,9 +284,9 @@ function BrandPreview({
       </div>
       <div className="space-y-3 p-4">
         <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background px-3 py-2">
-          <span className="text-sm text-foreground/80">Corte y peinado</span>
+          <span className="text-sm text-foreground/80">{serviceName}</span>
           <span className="text-sm font-semibold" style={{ color: accent }}>
-            25 €
+            {servicePrice}
           </span>
         </div>
         <button
@@ -300,6 +320,9 @@ export function SalonMarcaForm({
   salonName,
   branding: initialBranding,
 }: SalonMarcaFormProps): React.ReactElement {
+  const sector = useSector();
+  const sampleService = SECTOR_REGISTRY[sector].sampleService;
+
   const [branding, setBranding] = useState<SalonBranding | null>(
     initialBranding,
   );
@@ -554,6 +577,8 @@ export function SalonMarcaForm({
                 logoSrc={logoSrc}
                 primary={primary}
                 secondary={secondary}
+                serviceName={sampleService.name}
+                servicePrice={formatSamplePrice(sampleService.priceCents)}
               />
             </div>
           </CardContent>
