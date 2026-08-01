@@ -41,6 +41,24 @@ export type DentalToothState =
   | "corona"
   | "implante";
 
+/** Estado del plan de tratamiento (espejo del enum public.treatment_plan_status). */
+export type TreatmentPlanStatus =
+  | "draft"
+  | "proposed"
+  | "accepted"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
+
+/** Estado de una línea del plan de tratamiento (espejo del enum public.plan_item_state). */
+export type PlanItemState =
+  | "propuesto"
+  | "aceptado"
+  | "en_curso"
+  | "realizado"
+  | "rechazado"
+  | "anulado";
+
 export type AppointmentStatus =
   | "pending"
   | "confirmed"
@@ -2107,6 +2125,188 @@ export interface Database {
           },
         ];
       };
+      // Planes de tratamiento / presupuestos (odontología) — cabecera del plan
+      // (1:N desde clinical_records vía customer_id+salon_id). El estado es un
+      // roll-up gestionado por la app (updatePlanStatus), no derivado en BD.
+      // Ver migración 20260801100000_treatment_plans.sql.
+      treatment_plan: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          status: TreatmentPlanStatus;
+          currency: string;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          status?: TreatmentPlanStatus;
+          currency?: string;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          status?: TreatmentPlanStatus;
+          currency?: string;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "treatment_plan_customer_fk";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_records";
+            referencedColumns: ["customer_id", "salon_id"];
+          },
+        ];
+      };
+      // Planes de tratamiento — fases (1:N desde treatment_plan vía
+      // plan_id+salon_id). Sin updated_at (solo created_at). Ver migración
+      // 20260801100000_treatment_plans.sql.
+      plan_phase: {
+        Row: {
+          id: string;
+          salon_id: string;
+          plan_id: string;
+          position: number;
+          name: string;
+          priority: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          plan_id: string;
+          position?: number;
+          name: string;
+          priority?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          plan_id?: string;
+          position?: number;
+          name?: string;
+          priority?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "plan_phase_plan_fk";
+            columns: ["plan_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_plan";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      // Planes de tratamiento — líneas presupuestadas (1:N desde treatment_plan
+      // vía plan_id+salon_id; opcionalmente agrupadas por plan_phase vía
+      // phase_id+salon_id). line_total_cents es GENERATED ALWAYS AS (quantity *
+      // unit_price_cents - discount_cents) STORED — nunca se inserta/actualiza
+      // directamente (omitido de Insert/Update, igual que perio_site.cal_mm).
+      // Ver migración 20260801100000_treatment_plans.sql.
+      plan_item: {
+        Row: {
+          id: string;
+          salon_id: string;
+          plan_id: string;
+          phase_id: string | null;
+          position: number;
+          service_id: string | null;
+          description: string | null;
+          fdi_code: number | null;
+          surfaces: string[];
+          quantity: number;
+          unit_price_cents: number;
+          discount_cents: number;
+          tax_rate: number;
+          line_total_cents: number;
+          state: PlanItemState;
+          scheduled_appointment_id: string | null;
+          executed_at: string | null;
+          executed_by: string | null;
+          finding_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          plan_id: string;
+          phase_id?: string | null;
+          position?: number;
+          service_id?: string | null;
+          description?: string | null;
+          fdi_code?: number | null;
+          surfaces?: string[];
+          quantity?: number;
+          unit_price_cents?: number;
+          discount_cents?: number;
+          tax_rate?: number;
+          // line_total_cents es generada: omitir en Insert
+          state?: PlanItemState;
+          scheduled_appointment_id?: string | null;
+          executed_at?: string | null;
+          executed_by?: string | null;
+          finding_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          plan_id?: string;
+          phase_id?: string | null;
+          position?: number;
+          service_id?: string | null;
+          description?: string | null;
+          fdi_code?: number | null;
+          surfaces?: string[];
+          quantity?: number;
+          unit_price_cents?: number;
+          discount_cents?: number;
+          tax_rate?: number;
+          // line_total_cents es generada: omitir en Update
+          state?: PlanItemState;
+          scheduled_appointment_id?: string | null;
+          executed_at?: string | null;
+          executed_by?: string | null;
+          finding_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "plan_item_plan_fk";
+            columns: ["plan_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_plan";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "plan_item_phase_fk";
+            columns: ["phase_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "plan_phase";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -2364,6 +2564,15 @@ export type OdontogramFindingInsert = TablesInsert<"odontogram_findings">;
 // mediciones por sitio (perio_site). Inamovibles cuando perio_exam.signed = TRUE.
 export type PerioExam = Tables<"perio_exam">;
 export type PerioExamInsert = TablesInsert<"perio_exam">;
+
+// Planes de tratamiento / presupuestos — cabecera (treatment_plan), fases
+// (plan_phase) y líneas presupuestadas (plan_item).
+export type TreatmentPlan = Tables<"treatment_plan">;
+export type TreatmentPlanInsert = TablesInsert<"treatment_plan">;
+export type PlanPhase = Tables<"plan_phase">;
+export type PlanPhaseInsert = TablesInsert<"plan_phase">;
+export type PlanItem = Tables<"plan_item">;
+export type PlanItemInsert = TablesInsert<"plan_item">;
 export type PerioTooth = Tables<"perio_tooth">;
 export type PerioToothInsert = TablesInsert<"perio_tooth">;
 export type PerioSite = Tables<"perio_site">;
