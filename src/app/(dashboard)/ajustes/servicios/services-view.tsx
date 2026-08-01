@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Scissors, Search, Trash2 } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Scissors, Search, Trash2 } from "lucide-react";
 
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/app/(dashboard)/ajustes/servicios/service-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useSector, useTerms } from "@/components/providers/sector-provider";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,12 @@ export function ServicesView({ salonId }: ServicesViewProps): React.ReactElement
   const [editing, setEditing] = useState<Service | null>(null);
   const [deleting, setDeleting] = useState<Service | null>(null);
 
+  const sector = useSector();
+  const terms = useTerms();
+  // Peluquería conserva el icono de tijeras (identidad byte a byte); el resto
+  // de sectores usa un icono neutro (no tiene sentido en odontología/restauración).
+  const headerIcon = sector === "peluqueria" ? Scissors : ClipboardList;
+
   const { data: services, isPending, isError, error } = useServices(
     salonId,
     search,
@@ -75,9 +82,9 @@ export function ServicesView({ salonId }: ServicesViewProps): React.ReactElement
   return (
     <div>
       <SectionHeader
-        icon={Scissors}
-        title="Servicios"
-        description="Catálogo, duración por fases y precios de tu salón."
+        icon={headerIcon}
+        title={terms.servicePlural}
+        description={`Catálogo, duración por fases y precios de tu ${terms.business}.`}
         action={
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <Button onClick={() => setCreateOpen(true)}>
@@ -88,7 +95,9 @@ export function ServicesView({ salonId }: ServicesViewProps): React.ReactElement
               <DialogHeader>
                 <DialogTitle>Nuevo servicio</DialogTitle>
                 <DialogDescription>
-                  Añade un servicio al catálogo del salón.
+                  {sector === "peluqueria"
+                    ? "Añade un servicio al catálogo del salón."
+                    : `Añade un servicio al catálogo de la ${terms.business}.`}
                 </DialogDescription>
               </DialogHeader>
               <ServiceForm
