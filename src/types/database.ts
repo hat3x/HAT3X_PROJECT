@@ -164,6 +164,13 @@ export type ImageModality =
   | "foto_intraoral"
   | "scan_stl";
 
+/**
+ * Estado de una receta/prescripción (espejo del enum public.prescription_status).
+ * Borrador → emitida → revocada; INMUTABLE tras emitir (trigger
+ * `prescription_guard`, migración 20260801140000_prescriptions.sql).
+ */
+export type PrescriptionStatus = "draft" | "issued" | "revoked";
+
 export interface Database {
   public: {
     Tables: {
@@ -2642,6 +2649,115 @@ export interface Database {
           },
         ];
       };
+      // Recetas / prescripciones (odontología) — cabecera. Borrador → emitida →
+      // revocada; INMUTABLE tras emitir (trigger prescription_guard en BD).
+      // 1:N desde clinical_records vía customer_id+salon_id. Ver migración
+      // 20260801140000_prescriptions.sql.
+      prescription: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          prescriber_id: string | null;
+          prescriber_name: string | null;
+          diagnosis: string | null;
+          notes: string | null;
+          status: PrescriptionStatus;
+          issued_at: string | null;
+          signed_by: string | null;
+          revoked_at: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          prescriber_id?: string | null;
+          prescriber_name?: string | null;
+          diagnosis?: string | null;
+          notes?: string | null;
+          status?: PrescriptionStatus; // default 'draft'
+          issued_at?: string | null;
+          signed_by?: string | null;
+          revoked_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          prescriber_id?: string | null;
+          prescriber_name?: string | null;
+          diagnosis?: string | null;
+          notes?: string | null;
+          status?: PrescriptionStatus;
+          issued_at?: string | null;
+          signed_by?: string | null;
+          revoked_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "prescription_customer_fk";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_records";
+            referencedColumns: ["customer_id", "salon_id"];
+          },
+        ];
+      };
+      // Renglones de medicación de una receta. INMUTABLES cuando la cabecera ya
+      // no es 'draft' (trigger prescription_item_guard en BD).
+      prescription_item: {
+        Row: {
+          id: string;
+          salon_id: string;
+          prescription_id: string;
+          position: number;
+          medication: string;
+          dose: string | null;
+          frequency: string | null;
+          duration: string | null;
+          quantity: string | null;
+          instructions: string | null;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          prescription_id: string;
+          position?: number; // default 0
+          medication: string;
+          dose?: string | null;
+          frequency?: string | null;
+          duration?: string | null;
+          quantity?: string | null;
+          instructions?: string | null;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          prescription_id?: string;
+          position?: number;
+          medication?: string;
+          dose?: string | null;
+          frequency?: string | null;
+          duration?: string | null;
+          quantity?: string | null;
+          instructions?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "prescription_item_fk";
+            columns: ["prescription_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "prescription";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -2923,6 +3039,13 @@ export type Consent = Tables<"consents">;
 export type ConsentInsert = TablesInsert<"consents">;
 export type PatientImage = Tables<"patient_images">;
 export type PatientImageInsert = TablesInsert<"patient_images">;
+
+// Recetas / prescripciones (odontología) — cabecera (prescription) + renglones
+// de medicación (prescription_item). INMUTABLE tras emitir (trigger BD).
+export type Prescription = Tables<"prescription">;
+export type PrescriptionInsert = TablesInsert<"prescription">;
+export type PrescriptionItem = Tables<"prescription_item">;
+export type PrescriptionItemInsert = TablesInsert<"prescription_item">;
 
 // Notas de visita — nota clínica 1:1 con visits; inamovible cuando signed = TRUE
 export type VisitNote = Tables<"visit_notes">;
