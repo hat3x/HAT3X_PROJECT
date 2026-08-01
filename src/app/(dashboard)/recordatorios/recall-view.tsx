@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { BellRing, Phone, Users } from "lucide-react";
+import { BellRing, Phone, Search, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -32,6 +33,7 @@ const MONTHS_OPTIONS = [6, 12] as const;
 export function RecallView({ salonId }: RecallViewProps): React.ReactElement {
   const [monthsSince, setMonthsSince] = useState<number>(MONTHS_OPTIONS[0]);
   const [lastResult, setLastResult] = useState<ReminderResult | null>(null);
+  const [search, setSearch] = useState("");
 
   const {
     data: patients,
@@ -62,6 +64,14 @@ export function RecallView({ salonId }: RecallViewProps): React.ReactElement {
   }
 
   const hasResults = !isPending && !isError && !!patients && patients.length > 0;
+
+  const query = search.trim().toLowerCase();
+  const filtered = (patients ?? []).filter(
+    (p) =>
+      query === "" ||
+      p.fullName.toLowerCase().includes(query) ||
+      (p.phone ?? "").toLowerCase().includes(query),
+  );
 
   return (
     <main className="container py-10">
@@ -100,6 +110,22 @@ export function RecallView({ salonId }: RecallViewProps): React.ReactElement {
               +{months} meses
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="mb-4 max-w-sm animate-fade-up [animation-delay:80ms]">
+        <div className="relative">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            className="pl-9"
+            placeholder="Buscar por nombre o teléfono…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Buscar cliente"
+          />
         </div>
       </div>
 
@@ -153,8 +179,16 @@ export function RecallView({ salonId }: RecallViewProps): React.ReactElement {
                   </div>
                 </TableCell>
               </TableRow>
+            ) : filtered.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={4} className="py-14 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Sin coincidencias para «{search.trim()}».
+                  </p>
+                </TableCell>
+              </TableRow>
             ) : (
-              patients.map((patient) => {
+              filtered.map((patient) => {
                 const isSending =
                   sendMutation.isPending && sendMutation.variables === patient.customerId;
                 const rowResult =
