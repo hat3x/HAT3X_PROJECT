@@ -55,6 +55,8 @@ const PHASE_ID = "33333333-3333-3333-3333-333333333333";
 const ITEM_ID = "44444444-4444-4444-4444-444444444444";
 const SERVICE_ID = "55555555-5555-5555-5555-555555555555";
 const FINDING_ID = "66666666-6666-6666-6666-666666666666";
+const PRODUCT_A_ID = "77777777-7777-7777-7777-777777777777";
+const PRODUCT_B_ID = "88888888-8888-8888-8888-888888888888";
 
 const PLAN_ROW = {
   id: PLAN_ID,
@@ -435,6 +437,262 @@ describe("transitionPlanItem", () => {
 
     expect(result).toEqual({ ok: true, data: updated });
     expect(fromMock).toHaveBeenCalledWith("odontogram_findings");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// transitionPlanItem → auto-descuento de stock (escandallo, service_material)
+// ---------------------------------------------------------------------------
+
+describe("transitionPlanItem · auto-descuento de stock (escandallo)", () => {
+  /**
+   * Mock de `products` que resuelve el SELECT (id, stock) según el `id` del
+   * `.eq("id", ...)` encadenado, y captura cada payload de `.update(...)` en
+   * `productUpdates` (en orden de llamada — los materiales se procesan en el
+   * orden devuelto por `service_material`, así que el orden del array basta
+   * para casar cada update con su material sin rastrear el id).
+   */
+  function productsMock(
+    stocks: Record<string, number | null>,
+    productUpdates: Array<Record<string, unknown>>,
+  ): (table: string) => Record<string, unknown> {
+    return () => {
+      let productId: string | null = null;
+      const c: Record<string, unknown> = {};
+      c.select = vi.fn(() => c);
+      c.update = vi.fn((payload: Record<string, unknown>) => {
+        productUpdates.push(payload);
+        return c;
+      });
+      c.eq = vi.fn((column: string, value: string) => {
+        if (column === "id") productId = value;
+        return c;
+      });
+      c.single = vi.fn(async () => ({
+        data: { id: productId, stock: productId !== null ? (stocks[productId] ?? null) : null },
+        error: null,
+      }));
+      c.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: null });
+      return c;
+    };
+  }
+
+  /** Mock de `stock_movement` que captura cada `.insert(...)` en `insertedMovements`. */
+  function stockMovementMock(
+    insertedMovements: Array<Record<string, unknown>>,
+  ): (table: string) => Record<string, unknown> {
+    return () => {
+      const c: Record<string, unknown> = {};
+      c.insert = vi.fn((payload: Record<string, unknown>) => {
+        insertedMovements.push(payload);
+        return c;
+      });
+      c.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: null });
+      return c;
+    };
+  }
+
+  it("(a) realizado con service_id y 2 materiales en el escandallo: registra 2 salidas y baja products.stock", async () => {
+    salon("odontologia");
+    membership("owner");
+
+    const existing = itemRow({ state: "en_curso", service_id: SERVICE_ID, quantity: 1 });
+    const updated = itemRow({
+      state: "realizado",
+      service_id: SERVICE_ID,
+      quantity: 1,
+      executed_at: "2026-08-01T12:00:00.000Z",
+      executed_by: "user-1",
+    });
+
+    const insertedMovements: Array<Record<string, unknown>> = [];
+    const productUpdates: Array<Record<string, unknown>> = [];
+    const planItemChain = fromSequence({
+      plan_item: [
+        { data: existing, error: null },
+        { data: updated, error: null },
+      ],
+    });
+    const productsChain = productsMock({ [PRODUCT_A_ID]: 10, [PRODUCT_B_ID]: 5 }, productUpdates);
+    const stockMovementChain = stockMovementMock(insertedMovements);
+
+    fromMock.mockImplementation((table: string) => {
+      if (table === "plan_item") return planItemChain(table);
+      if (table === "service_material") {
+        return chain({
+          data: [
+            { product_id: PRODUCT_A_ID, quantity: 2 },
+            { product_id: PRODUCT_B_ID, quantity: 1 },
+          ],
+          error: null,
+        });
+      }
+      if (table === "products") return productsChain(table);
+      if (table === "stock_movement") return stockMovementChain(table);
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    const result = await transitionPlanItem(ITEM_ID, "realizado");
+
+    expect(result).toEqual({ ok: true, data: updated });
+    expect(insertedMovements).toHaveLength(2);
+    expect(insertedMovements[0]).toMatchObject({
+      product_id: PRODUCT_A_ID,
+      kind: "salida",
+      quantity: -2,
+      resulting_stock: 8,
+      note: "Consumo automático — tratamiento realizado",
+    });
+    expect(insertedMovements[1]).toMatchObject({
+      product_id: PRODUCT_B_ID,
+      kind: "salida",
+      quantity: -1,
+      resulting_stock: 4,
+    });
+    expect(productUpdates).toEqual([{ stock: 8 }, { stock: 4 }]);
+  });
+
+  it("(b) sin service_id: no consulta service_material ni registra movimientos", async () => {
+    salon("odontologia");
+    membership("owner");
+
+    const existing = itemRow({ state: "en_curso", service_id: null, quantity: 1 });
+    const updated = itemRow({
+      state: "realizado",
+      service_id: null,
+      executed_at: "2026-08-01T12:00:00.000Z",
+      executed_by: "user-1",
+    });
+
+    fromMock.mockImplementation(
+      fromSequence({
+        plan_item: [
+          { data: existing, error: null },
+          { data: updated, error: null },
+        ],
+      }),
+    );
+
+    const result = await transitionPlanItem(ITEM_ID, "realizado");
+
+    expect(result).toEqual({ ok: true, data: updated });
+    expect(fromMock).not.toHaveBeenCalledWith("service_material");
+    expect(fromMock).not.toHaveBeenCalledWith("stock_movement");
+  });
+
+  it("(b) con service_id pero sin materiales en el escandallo: no registra movimientos", async () => {
+    salon("odontologia");
+    membership("owner");
+
+    const existing = itemRow({ state: "en_curso", service_id: SERVICE_ID, quantity: 1 });
+    const updated = itemRow({
+      state: "realizado",
+      service_id: SERVICE_ID,
+      executed_at: "2026-08-01T12:00:00.000Z",
+      executed_by: "user-1",
+    });
+
+    const planItemChain = fromSequence({
+      plan_item: [
+        { data: existing, error: null },
+        { data: updated, error: null },
+      ],
+    });
+    fromMock.mockImplementation((table: string) => {
+      if (table === "plan_item") return planItemChain(table);
+      if (table === "service_material") return chain({ data: [], error: null });
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    const result = await transitionPlanItem(ITEM_ID, "realizado");
+
+    expect(result).toEqual({ ok: true, data: updated });
+    expect(fromMock).not.toHaveBeenCalledWith("products");
+    expect(fromMock).not.toHaveBeenCalledWith("stock_movement");
+  });
+
+  it("(c) stock insuficiente: NO falla la transición, descuenta hasta 0 (clamp)", async () => {
+    salon("odontologia");
+    membership("owner");
+
+    const existing = itemRow({ state: "en_curso", service_id: SERVICE_ID, quantity: 1 });
+    const updated = itemRow({
+      state: "realizado",
+      service_id: SERVICE_ID,
+      quantity: 1,
+      executed_at: "2026-08-01T12:00:00.000Z",
+      executed_by: "user-1",
+    });
+
+    const insertedMovements: Array<Record<string, unknown>> = [];
+    const productUpdates: Array<Record<string, unknown>> = [];
+    const planItemChain = fromSequence({
+      plan_item: [
+        { data: existing, error: null },
+        { data: updated, error: null },
+      ],
+    });
+    // Stock disponible (3) menor que el consumo pedido por el escandallo (5).
+    const productsChain = productsMock({ [PRODUCT_A_ID]: 3 }, productUpdates);
+    const stockMovementChain = stockMovementMock(insertedMovements);
+
+    fromMock.mockImplementation((table: string) => {
+      if (table === "plan_item") return planItemChain(table);
+      if (table === "service_material") {
+        return chain({ data: [{ product_id: PRODUCT_A_ID, quantity: 5 }], error: null });
+      }
+      if (table === "products") return productsChain(table);
+      if (table === "stock_movement") return stockMovementChain(table);
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    const result = await transitionPlanItem(ITEM_ID, "realizado");
+
+    expect(result).toEqual({ ok: true, data: updated });
+    expect(insertedMovements).toHaveLength(1);
+    expect(insertedMovements[0]).toMatchObject({
+      product_id: PRODUCT_A_ID,
+      kind: "salida",
+      quantity: -3,
+      resulting_stock: 0,
+    });
+    expect(productUpdates).toEqual([{ stock: 0 }]);
+  });
+
+  it("best-effort: si el fetch de service_material falla, la transición sigue { ok:true } (se registra con console.error)", async () => {
+    salon("odontologia");
+    membership("owner");
+
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const existing = itemRow({ state: "en_curso", service_id: SERVICE_ID, quantity: 1 });
+    const updated = itemRow({
+      state: "realizado",
+      service_id: SERVICE_ID,
+      executed_at: "2026-08-01T12:00:00.000Z",
+      executed_by: "user-1",
+    });
+
+    const planItemChain = fromSequence({
+      plan_item: [
+        { data: existing, error: null },
+        { data: updated, error: null },
+      ],
+    });
+    fromMock.mockImplementation((table: string) => {
+      if (table === "plan_item") return planItemChain(table);
+      if (table === "service_material") {
+        return chain({ data: null, error: { message: "boom service_material" } });
+      }
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    const result = await transitionPlanItem(ITEM_ID, "realizado");
+
+    expect(result).toEqual({ ok: true, data: updated });
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 });
 

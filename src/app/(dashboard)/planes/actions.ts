@@ -3,6 +3,7 @@
 import { addOdontogramFinding } from "@/app/(dashboard)/odontograma/actions";
 import { canTransitionItem, mapServiceToFindingType } from "@/lib/dental/treatment";
 import { getActiveMembership, getActiveSalon } from "@/lib/salon";
+import { applyMovement, movementDelta } from "@/lib/stock";
 import { createClient } from "@/lib/supabase/server";
 import type {
   MemberRole,
@@ -257,6 +258,90 @@ export async function addPlanItem(input: AddPlanItemInput): Promise<ActionResult
 }
 
 // ---------------------------------------------------------------------------
+// consumeServiceMaterials — auto-descuento de stock (escandallo)
+// ---------------------------------------------------------------------------
+
+/**
+ * Descuenta el stock de los materiales del escandallo (`service_material`)
+ * de un servicio, tras marcar una línea de plan (`plan_item`) como
+ * `'realizado'`. Por cada material registra un `stock_movement` de tipo
+ * `'salida'` con `quantity = material.quantity * itemQuantity`, reutilizando
+ * `applyMovement`/`movementDelta` de `@/lib/stock` (mismo cálculo puro que
+ * `products/stock-actions.ts`).
+ *
+ * Si el stock disponible no alcanza para el consumo completo, se descuenta
+ * SOLO hasta 0 (clamp) — nunca se rechaza ni se deja el stock en negativo,
+ * a diferencia de `recordStockMovement` (que si rechaza la `salida`). Un
+ * producto sin control de stock (`stock === null`) se trata como 0: al no
+ * haber nada que descontar, no se registra movimiento para esa línea.
+ *
+ * BEST-EFFORT por diseño: el caller (`transitionPlanItem`) la envuelve en un
+ * `try/catch` y nunca deja que un fallo aquí tumbe la transición ya
+ * confirmada — marcar un tratamiento como realizado NUNCA debe fallar por el
+ * stock. Cualquier error de BD (fetch de materiales, insert del movimiento,
+ * update de `products.stock`) se propaga como excepción para que el caller
+ * lo capture y lo registre con `console.error`.
+ */
+async function consumeServiceMaterials(
+  supabase: SupabaseServerClient,
+  salonId: string,
+  serviceId: string,
+  itemQuantity: number,
+  userId: string | null,
+): Promise<void> {
+  const { data: materials, error: materialsError } = await supabase
+    .from("service_material")
+    .select("product_id, quantity")
+    .eq("salon_id", salonId)
+    .eq("service_id", serviceId);
+
+  if (materialsError !== null) throw new Error(materialsError.message);
+  if (materials === null || materials.length === 0) return;
+
+  for (const material of materials) {
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select("id, stock")
+      .eq("id", material.product_id)
+      .eq("salon_id", salonId)
+      .single();
+
+    if (productError !== null || product === null) {
+      throw new Error(productError?.message ?? "Producto del escandallo no encontrado.");
+    }
+
+    const currentStock = product.stock ?? 0;
+    const requestedQty = material.quantity * itemQuantity;
+    // Clamp: nunca se consume más de lo disponible (nunca queda negativo).
+    const consumedQty = Math.min(requestedQty, Math.max(currentStock, 0));
+    if (consumedQty <= 0) continue;
+
+    const delta = movementDelta(currentStock, "salida", consumedQty);
+    const newStock = applyMovement(currentStock, "salida", consumedQty);
+
+    const { error: insertError } = await supabase.from("stock_movement").insert({
+      salon_id: salonId,
+      product_id: material.product_id,
+      kind: "salida",
+      quantity: delta,
+      resulting_stock: newStock,
+      note: "Consumo automático — tratamiento realizado",
+      created_by: userId,
+    });
+
+    if (insertError !== null) throw new Error(insertError.message);
+
+    const { error: updateStockError } = await supabase
+      .from("products")
+      .update({ stock: newStock })
+      .eq("id", material.product_id)
+      .eq("salon_id", salonId);
+
+    if (updateStockError !== null) throw new Error(updateStockError.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // transitionPlanItem
 // ---------------------------------------------------------------------------
 
@@ -322,6 +407,25 @@ export async function transitionPlanItem(
     .single();
 
   if (updateError !== null) return { ok: false, error: updateError.message };
+
+  // Auto-descuento de stock (escandallo) — best-effort: un fallo aquí NUNCA
+  // debe tumbar una transición ya confirmada en BD. Ver `consumeServiceMaterials`.
+  if (toState === "realizado" && updated.service_id !== null) {
+    try {
+      await consumeServiceMaterials(
+        supabase,
+        access.salonId,
+        updated.service_id,
+        updated.quantity,
+        user?.id ?? null,
+      );
+    } catch (err) {
+      console.error(
+        "Consumo automático de materiales (service_material) falló tras marcar el item como realizado:",
+        err,
+      );
+    }
+  }
 
   if (toState === "realizado" && updated.fdi_code !== null) {
     const { data: plan, error: planError } = await supabase
