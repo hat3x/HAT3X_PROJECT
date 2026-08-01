@@ -9,6 +9,7 @@ import {
   Palette,
   Receipt,
   Scissors,
+  ShieldPlus,
   Store,
   Users,
 } from "lucide-react";
@@ -61,6 +62,19 @@ export function AjustesNav(): React.ReactElement {
     }
     return item;
   });
+
+  // "Mutuas y seguros" solo tiene sentido en odontología (baremos con
+  // aseguradoras) — se inserta justo después de "Servicios" en vez de
+  // añadirse a NAV_ITEMS a secas, para no mostrarla en peluquería/restauración.
+  if (sector === "odontologia") {
+    const servicesIndex = items.findIndex((item) => item.href === "/ajustes/servicios");
+    const insertAt = servicesIndex === -1 ? items.length : servicesIndex + 1;
+    items.splice(insertAt, 0, {
+      href: "/ajustes/mutuas",
+      label: "Mutuas y seguros",
+      icon: ShieldPlus,
+    });
+  }
 
   return (
     <nav
