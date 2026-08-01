@@ -132,6 +132,31 @@ export type SalonFeature =
  */
 export type SalonSector = "peluqueria" | "odontologia" | "restauracion";
 
+/** Tipo de consentimiento informado (espejo del enum public.consent_type). */
+export type ConsentType =
+  | "general"
+  | "endodoncia"
+  | "exodoncia"
+  | "implante"
+  | "ortodoncia"
+  | "anestesia"
+  | "periodoncia"
+  | "blanqueamiento"
+  | "rgpd";
+
+/** Estado de un consentimiento informado (espejo del enum public.consent_status). */
+export type ConsentStatus = "pending" | "signed" | "revoked";
+
+/** Modalidad de una imagen/radiografía clínica (espejo del enum public.image_modality). */
+export type ImageModality =
+  | "periapical"
+  | "bitewing"
+  | "panoramic"
+  | "cbct"
+  | "cefalometrica"
+  | "foto_intraoral"
+  | "scan_stl";
+
 export interface Database {
   public: {
     Tables: {
@@ -2307,6 +2332,177 @@ export interface Database {
           },
         ];
       };
+      // Consentimientos informados (odontología) — 1:N desde clinical_records vía
+      // customer_id+salon_id. INMUTABLE tras firmar (trigger consents_guard en BD):
+      // signed solo puede pasar a revoked; revoked es inmutable; pending se puede
+      // editar/borrar. Ver migración 20260801110000_consents_images.sql.
+      consents: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          type: ConsentType;
+          treatment_plan_id: string | null;
+          plan_item_id: string | null;
+          fdi_code: number | null;
+          title: string;
+          body: string | null;
+          template_version: string;
+          document_uri: string | null;
+          status: ConsentStatus;
+          signed_at: string | null;
+          signed_by_patient: string | null;
+          witnessed_by: string | null;
+          revoked_at: string | null;
+          revoked_by: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          type: ConsentType;
+          treatment_plan_id?: string | null;
+          plan_item_id?: string | null;
+          fdi_code?: number | null;
+          title: string;
+          body?: string | null;
+          template_version?: string; // default 'v1'
+          document_uri?: string | null;
+          status?: ConsentStatus; // default 'pending'
+          signed_at?: string | null;
+          signed_by_patient?: string | null;
+          witnessed_by?: string | null;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          type?: ConsentType;
+          treatment_plan_id?: string | null;
+          plan_item_id?: string | null;
+          fdi_code?: number | null;
+          title?: string;
+          body?: string | null;
+          template_version?: string;
+          document_uri?: string | null;
+          status?: ConsentStatus;
+          signed_at?: string | null;
+          signed_by_patient?: string | null;
+          witnessed_by?: string | null;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "consents_customer_fk";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_records";
+            referencedColumns: ["customer_id", "salon_id"];
+          },
+          {
+            foreignKeyName: "consents_treatment_plan_id_fkey";
+            columns: ["treatment_plan_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_plan";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "consents_plan_item_id_fkey";
+            columns: ["plan_item_id"];
+            isOneToOne: false;
+            referencedRelation: "plan_item";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Imágenes/radiografías clínicas (odontología) — metadatos; el BINARIO vive
+      // en el bucket PRIVADO `patient-media` (storage_path), acceso vía signed URLs.
+      // 1:N desde clinical_records vía customer_id+salon_id. Ver migración
+      // 20260801110000_consents_images.sql.
+      patient_images: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          treatment_plan_id: string | null;
+          fdi_code: number | null;
+          modality: ImageModality;
+          taken_at: string | null;
+          taken_by: string | null;
+          device: string | null;
+          storage_path: string;
+          thumbnail_path: string | null;
+          mime: string | null;
+          dicom_metadata: Json | null;
+          tags: string[];
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          treatment_plan_id?: string | null;
+          fdi_code?: number | null;
+          modality: ImageModality;
+          taken_at?: string | null;
+          taken_by?: string | null;
+          device?: string | null;
+          storage_path: string;
+          thumbnail_path?: string | null;
+          mime?: string | null;
+          dicom_metadata?: Json | null;
+          tags?: string[]; // default '{}'
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          treatment_plan_id?: string | null;
+          fdi_code?: number | null;
+          modality?: ImageModality;
+          taken_at?: string | null;
+          taken_by?: string | null;
+          device?: string | null;
+          storage_path?: string;
+          thumbnail_path?: string | null;
+          mime?: string | null;
+          dicom_metadata?: Json | null;
+          tags?: string[];
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "patient_images_customer_fk";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_records";
+            referencedColumns: ["customer_id", "salon_id"];
+          },
+          {
+            foreignKeyName: "patient_images_treatment_plan_id_fkey";
+            columns: ["treatment_plan_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_plan";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<never, never>;
     Functions: {
@@ -2499,6 +2695,9 @@ export interface Database {
       reward_status: RewardStatus;
       salon_feature: SalonFeature;
       salon_sector: SalonSector;
+      consent_type: ConsentType;
+      consent_status: ConsentStatus;
+      image_modality: ImageModality;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -2577,6 +2776,13 @@ export type PerioTooth = Tables<"perio_tooth">;
 export type PerioToothInsert = TablesInsert<"perio_tooth">;
 export type PerioSite = Tables<"perio_site">;
 export type PerioSiteInsert = TablesInsert<"perio_site">;
+
+// Consentimientos informados + imágenes/radiografías (odontología) — bucket
+// privado `patient-media`. Ambas 1:N desde clinical_records (customer_id+salon_id).
+export type Consent = Tables<"consents">;
+export type ConsentInsert = TablesInsert<"consents">;
+export type PatientImage = Tables<"patient_images">;
+export type PatientImageInsert = TablesInsert<"patient_images">;
 
 // Notas de visita — nota clínica 1:1 con visits; inamovible cuando signed = TRUE
 export type VisitNote = Tables<"visit_notes">;
