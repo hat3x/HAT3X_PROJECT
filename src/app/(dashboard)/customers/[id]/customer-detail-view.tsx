@@ -21,6 +21,7 @@ import {
 import { CustomerAvatar } from "@/app/(dashboard)/customers/customer-avatar";
 import { CustomerForm } from "@/app/(dashboard)/customers/customer-form";
 import { ClinicalRecordCard } from "@/app/(dashboard)/customers/[id]/clinical-record-card";
+import { InsuranceCard } from "@/app/(dashboard)/customers/[id]/insurance-card";
 import { VisitNotesCard } from "@/app/(dashboard)/customers/[id]/visit-notes-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -325,6 +326,13 @@ export function CustomerDetailView({
       {salonSector === "odontologia" ? (
         <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:320ms]">
           <ClinicalRecordCard salonId={salonId} customerId={customerId} />
+        </div>
+      ) : null}
+
+      {/* Seguro / Mutua — solo visible en salones con sector odontología */}
+      {salonSector === "odontologia" ? (
+        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:360ms]">
+          <InsuranceCard salonId={salonId} customerId={customerId} />
         </div>
       ) : null}
 
