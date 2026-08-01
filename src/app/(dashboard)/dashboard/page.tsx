@@ -5,6 +5,7 @@ import {
   ArrowRight,
   CalendarClock,
   CalendarDays,
+  ClipboardList,
   Euro,
   Gauge,
   Receipt,
@@ -34,8 +35,10 @@ import {
 } from "@/lib/metrics";
 import { getActiveSalon, type ActiveSalon } from "@/lib/salon";
 import { salonHasFeature } from "@/lib/salon-features";
+import { sectorTerms, type SectorTerms } from "@/lib/sector/registry";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
+import type { SalonSector } from "@/types/database";
 
 export const metadata: Metadata = {
   title: "Panel",
@@ -56,43 +59,59 @@ const PLACEHOLDER_METRICS: readonly DashboardMetric[] = [
   { key: "occupancy", label: "Ocupación", value: "—", hint: "Agenda reservada hoy", icon: Gauge },
 ];
 
-/** Accesos rápidos a las áreas principales del panel. */
-const SHORTCUTS: ReadonlyArray<{
+interface ShortcutItem {
   href: string;
   title: string;
   description: string;
   cta: string;
   icon: React.ComponentType<{ className?: string }>;
-}> = [
-  {
-    href: "/day-panel",
-    title: "Panel del día",
-    description: "Vista en tiempo real por profesional.",
-    cta: "Abrir panel del día",
-    icon: CalendarClock,
-  },
-  {
-    href: "/appointments",
-    title: "Citas",
-    description: "Agenda del día y gestión de reservas.",
-    cta: "Ver agenda",
-    icon: CalendarDays,
-  },
-  {
-    href: "/customers",
-    title: "Clientes",
-    description: "Fichas, historial y base de clientes.",
-    cta: "Ver clientes",
-    icon: Users,
-  },
-  {
-    href: "/ajustes/servicios",
-    title: "Servicios",
-    description: "Catálogo, precios y duración.",
-    cta: "Gestionar catálogo",
-    icon: Scissors,
-  },
-];
+}
+
+/**
+ * Accesos rápidos a las áreas principales del panel, relabelados por sector.
+ *
+ * "Clientes"/"Servicios" y su icono dependen del sector activo (p. ej.
+ * odontología: "Pacientes"/"Tratamientos"); el resto de accesos son iguales en
+ * todos los sectores. Para peluquería el resultado es IDÉNTICO al array
+ * estático anterior (mismo icono `Scissors`, mismos textos).
+ */
+function buildShortcuts(
+  terms: SectorTerms,
+  sector: SalonSector,
+): readonly ShortcutItem[] {
+  const servicesIcon = sector === "peluqueria" ? Scissors : ClipboardList;
+
+  return [
+    {
+      href: "/day-panel",
+      title: "Panel del día",
+      description: "Vista en tiempo real por profesional.",
+      cta: "Abrir panel del día",
+      icon: CalendarClock,
+    },
+    {
+      href: "/appointments",
+      title: "Citas",
+      description: "Agenda del día y gestión de reservas.",
+      cta: "Ver agenda",
+      icon: CalendarDays,
+    },
+    {
+      href: "/customers",
+      title: terms.customerPlural,
+      description: `Fichas, historial y base de ${terms.customerPlural.toLowerCase()}.`,
+      cta: `Ver ${terms.customerPlural.toLowerCase()}`,
+      icon: Users,
+    },
+    {
+      href: "/ajustes/servicios",
+      title: terms.servicePlural,
+      description: "Catálogo, precios y duración.",
+      cta: "Gestionar catálogo",
+      icon: servicesIcon,
+    },
+  ];
+}
 
 /**
  * Resuelve los KPIs del resumen para el salón activo, agregados EN SERVIDOR
@@ -153,6 +172,12 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
   const isEmpty = metrics === null;
   const metricsGridCols = cards.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3";
 
+  // Terminología por sector (odontología: Pacientes/Tratamientos…). Sin salón,
+  // cae a peluquería — mismo comportamiento que el resto del panel.
+  const sector: SalonSector = salon?.sector ?? "peluqueria";
+  const terms = sectorTerms(sector);
+  const shortcuts = buildShortcuts(terms, sector);
+
   return (
     <main className="container py-10">
       {/* Encabezado */}
@@ -160,7 +185,7 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
         <div className="animate-fade-up">
           <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-accent/60 px-3 py-1 text-xs font-medium text-accent-foreground">
             <Sparkles className="h-3.5 w-3.5" />
-            Tu salón, de un vistazo
+            Tu {terms.business}, de un vistazo
           </div>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Panel</h1>
           <p className="mt-1 text-muted-foreground">
@@ -217,7 +242,7 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
           Accesos rápidos
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {SHORTCUTS.map((item, index) => (
+          {shortcuts.map((item, index) => (
             <ShortcutTile key={item.href} {...item} delayMs={220 + index * 50} />
           ))}
         </div>
