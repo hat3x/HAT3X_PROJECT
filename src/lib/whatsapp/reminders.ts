@@ -16,6 +16,7 @@ import {
   buildConfirmacionCitaPayload,
   buildCitaCanceladaPayload,
   buildSeguimientoPostVisitaPayload,
+  buildRecordatorioRevisionPayload,
 } from '@/lib/whatsapp/templates';
 
 // ---------------------------------------------------------------------------
@@ -143,6 +144,35 @@ export async function sendPostVisitFollowUp(
     clientName: input.customerName,
     salonName: input.salonName,
     reviewUrl: input.reviewUrl ?? input.salonName,
+  });
+
+  return sendWhatsAppTemplate(input.customerPhone, payload);
+}
+
+// ---------------------------------------------------------------------------
+// Recall de revisión — cliente sin cita asociada (no deriva de una cita)
+// ---------------------------------------------------------------------------
+
+export interface RevisionReminderInput {
+  /** Teléfono del cliente en cualquier formato; se normaliza a E.164 internamente. */
+  customerPhone: string;
+  customerName: string;
+  salonName: string;
+  /** Meses transcurridos desde la última visita (opcional; frase genérica si se omite). */
+  months?: number;
+  /** URL pública de reserva del salón. */
+  bookingUrl?: string;
+}
+
+/** Recordatorio de revisión para clientes sin visita reciente (recall). */
+export async function sendRevisionReminder(
+  input: RevisionReminderInput,
+): Promise<SendResult> {
+  const payload = buildRecordatorioRevisionPayload({
+    clientName: input.customerName,
+    salonName: input.salonName,
+    months: input.months,
+    bookingUrl: input.bookingUrl ?? input.salonName,
   });
 
   return sendWhatsAppTemplate(input.customerPhone, payload);

@@ -35,6 +35,7 @@ export interface TwilioWhatsAppConfig {
     confirmacionCita: string;
     citaCancelada: string;
     seguimientoPostVisita: string;
+    recordatorioRevision: string;
   };
   /** URL para callbacks de estado de entrega (opcional). */
   statusCallbackUrl: string | null;
@@ -62,6 +63,9 @@ export function getTwilioConfig(): TwilioWhatsAppConfig {
         TWILIO_PLACEHOLDERS.contentSid,
       seguimientoPostVisita:
         process.env.TWILIO_CONTENT_SID_SEGUIMIENTO ??
+        TWILIO_PLACEHOLDERS.contentSid,
+      recordatorioRevision:
+        process.env.TWILIO_CONTENT_SID_RECORDATORIO_REVISION ??
         TWILIO_PLACEHOLDERS.contentSid,
     },
     statusCallbackUrl: process.env.TWILIO_STATUS_CALLBACK_URL ?? null,

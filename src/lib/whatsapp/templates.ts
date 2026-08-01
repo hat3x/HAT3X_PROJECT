@@ -16,7 +16,8 @@ export type TemplateKey =
   | 'recordatorio2h'
   | 'confirmacionCita'
   | 'citaCancelada'
-  | 'seguimientoPostVisita';
+  | 'seguimientoPostVisita'
+  | 'recordatorioRevision';
 
 // ---------------------------------------------------------------------------
 // Interfaces de variables por plantilla
@@ -62,6 +63,14 @@ export interface SeguimientoPostVisitaVars {
   clientName: string;
   salonName: string;
   reviewUrl: string;      // URL de Google Maps / plataforma de reseña
+}
+
+export interface RecordatorioRevisionVars {
+  clientName: string;
+  salonName: string;
+  /** Meses transcurridos desde la última visita; si se omite, frase genérica. */
+  months?: number;
+  bookingUrl: string;     // URL pública de reserva del salón
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +120,12 @@ export const TEMPLATE_BODIES: Record<TemplateKey, string> = {
     '⭐ Tu opinión nos ayuda a mejorar:\n' +
     '👉 {{3}}\n\n' +
     '¡Hasta la próxima! 💫',
+
+  recordatorioRevision:
+    'Hola {{1}}, {{2}} de tu última visita a {{3}} 👋\n\n' +
+    '¿Reservamos tu próxima revisión?\n' +
+    '👉 {{4}}\n\n' +
+    '¡Te esperamos pronto! 😊',
 };
 
 // ---------------------------------------------------------------------------
@@ -171,6 +186,21 @@ function buildSeguimientoPostVisitaVars(
   };
 }
 
+/** Frase genérica ("ha pasado un tiempo") o específica ("han pasado 6 meses"). */
+function recencyPhrase(months: number | undefined): string {
+  if (months === undefined) return 'ha pasado un tiempo';
+  return `han pasado ${months} ${months === 1 ? 'mes' : 'meses'}`;
+}
+
+function buildRecordatorioRevisionVars(v: RecordatorioRevisionVars): Record<string, string> {
+  return {
+    '1': v.clientName,
+    '2': recencyPhrase(v.months),
+    '3': v.salonName,
+    '4': v.bookingUrl,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Builders de texto interpolado (para dry-run y logging)
 // ---------------------------------------------------------------------------
@@ -202,6 +232,13 @@ export function buildSeguimientoPostVisitaText(v: SeguimientoPostVisitaVars): st
   return interpolate(
     TEMPLATE_BODIES.seguimientoPostVisita,
     buildSeguimientoPostVisitaVars(v),
+  );
+}
+
+export function buildRecordatorioRevisionText(v: RecordatorioRevisionVars): string {
+  return interpolate(
+    TEMPLATE_BODIES.recordatorioRevision,
+    buildRecordatorioRevisionVars(v),
   );
 }
 
@@ -256,5 +293,15 @@ export function buildSeguimientoPostVisitaPayload(
     key: 'seguimientoPostVisita',
     variables: buildSeguimientoPostVisitaVars(v),
     fallbackText: buildSeguimientoPostVisitaText(v),
+  };
+}
+
+export function buildRecordatorioRevisionPayload(
+  v: RecordatorioRevisionVars,
+): TemplatePayload {
+  return {
+    key: 'recordatorioRevision',
+    variables: buildRecordatorioRevisionVars(v),
+    fallbackText: buildRecordatorioRevisionText(v),
   };
 }
