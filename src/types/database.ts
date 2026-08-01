@@ -59,6 +59,13 @@ export type PlanItemState =
   | "rechazado"
   | "anulado";
 
+/**
+ * Tipo de movimiento de stock (espejo del enum public.stock_movement_kind).
+ * Migración 20260801120000_stock_inventory. `entrada`/`salida` = flujo normal;
+ * `ajuste` = corrección manual (fija el total); `merma` = pérdida/rotura.
+ */
+export type StockMovementKind = "entrada" | "salida" | "ajuste" | "merma";
+
 export type AppointmentStatus =
   | "pending"
   | "confirmed"
@@ -537,6 +544,13 @@ export interface Database {
           currency: string;
           vat_rate: number; // tipo de IVA en porcentaje (p. ej. 21.00)
           stock: number | null; // null = producto no inventariado
+          // min_stock/unit — migración 20260801120000_stock_inventory: control
+          // de stock/inventario de material (peluquería + odontología, sin gate
+          // de sector). min_stock = umbral de reposición (stock <= min_stock ⇒
+          // "Bajo mínimo"); unit = unidad de medida a mostrar (p. ej. "unidad",
+          // "ml", "ampolla").
+          min_stock: number;
+          unit: string;
           active: boolean;
           created_at: string;
           updated_at: string;
@@ -550,6 +564,8 @@ export interface Database {
           currency?: string;
           vat_rate?: number;
           stock?: number | null;
+          min_stock?: number; // default 0
+          unit?: string; // default 'unidad'
           active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -563,6 +579,8 @@ export interface Database {
           currency?: string;
           vat_rate?: number;
           stock?: number | null;
+          min_stock?: number;
+          unit?: string;
           active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -573,6 +591,70 @@ export interface Database {
             columns: ["salon_id"];
             isOneToOne: false;
             referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Movimientos de stock (libro de inventario) — migración
+      // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
+      // aplicado al stock resultante (no la magnitud introducida por el
+      // usuario); ver `@/lib/stock` para la lógica pura de cálculo
+      // (`applyMovement`/`movementDelta`) y `products/stock-actions.ts` para la
+      // Server Action que persiste el movimiento Y actualiza `products.stock`.
+      // Lote/caducidad viajan en las ENTRADAS (trazabilidad de lotes).
+      stock_movement: {
+        Row: {
+          id: string;
+          salon_id: string;
+          product_id: string;
+          kind: StockMovementKind;
+          quantity: number; // delta con signo, ≠0 (check de BD)
+          resulting_stock: number | null; // foto del stock tras el movimiento
+          lot: string | null;
+          expiry: string | null; // fecha YYYY-MM-DD
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          product_id: string;
+          kind: StockMovementKind;
+          quantity: number;
+          resulting_stock?: number | null;
+          lot?: string | null;
+          expiry?: string | null;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          product_id?: string;
+          kind?: StockMovementKind;
+          quantity?: number;
+          resulting_stock?: number | null;
+          lot?: string | null;
+          expiry?: string | null;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stock_movement_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_movement_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
             referencedColumns: ["id"];
           },
         ];
@@ -2698,6 +2780,7 @@ export interface Database {
       consent_type: ConsentType;
       consent_status: ConsentStatus;
       image_modality: ImageModality;
+      stock_movement_kind: StockMovementKind;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -2788,6 +2871,12 @@ export type PatientImageInsert = TablesInsert<"patient_images">;
 export type VisitNote = Tables<"visit_notes">;
 export type VisitNoteInsert = TablesInsert<"visit_notes">;
 export type VisitNoteUpdate = TablesUpdate<"visit_notes">;
+
+// Stock/inventario de material — libro de movimientos (todos los sectores, sin
+// gate de sector). Ver `@/lib/stock` (lógica pura) y
+// `products/stock-actions.ts` (Server Action que persiste + actualiza products.stock).
+export type StockMovement = Tables<"stock_movement">;
+export type StockMovementInsert = TablesInsert<"stock_movement">;
 
 // Phase helpers -----------------------------------------------------------------
 
