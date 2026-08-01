@@ -275,6 +275,8 @@ function EditServiceDialog({
           onSubmit={(input) => {
             updateMutation.mutate(input, { onSuccess: onClose });
           }}
+          salonId={salonId}
+          serviceId={service.id}
         />
       </DialogContent>
     </Dialog>

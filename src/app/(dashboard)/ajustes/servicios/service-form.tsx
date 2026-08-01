@@ -1,13 +1,28 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Clock } from "lucide-react";
+import { Clock, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useProductsWithStock } from "@/hooks/use-stock";
+import {
+  useAddServiceMaterial,
+  useRemoveServiceMaterial,
+  useServiceMaterials,
+  useUpdateServiceMaterialQty,
+} from "@/hooks/use-service-material";
+import type { ServiceMaterialWithProduct } from "@/lib/queries/service-material";
 import type { ServiceInput } from "@/lib/validations/service";
 
 export interface ServiceFormDefaults {
@@ -41,6 +56,14 @@ interface ServiceFormProps {
   error: string | null;
   onSubmit: (input: ServiceInput) => void;
   onCancel: () => void;
+  /**
+   * Salón activo — junto con `serviceId`, habilita la sección de escandallo
+   * de materiales. Solo tiene sentido en EDICIÓN: en alta todavía no existe
+   * un `service_id` real al que enlazar `service_material`.
+   */
+  salonId?: string;
+  /** id del servicio en edición. `undefined` en alta (oculta la sección de materiales). */
+  serviceId?: string;
 }
 
 /** Convierte una cadena de minutos a entero; 0 si no es un número válido. */
@@ -64,6 +87,8 @@ export function ServiceForm({
   error,
   onSubmit,
   onCancel,
+  salonId,
+  serviceId,
 }: ServiceFormProps): React.ReactElement {
   const [values, setValues] = useState<ServiceFormDefaults>(defaultValues);
 
@@ -206,6 +231,10 @@ export function ServiceForm({
         Servicio activo (visible para reservas)
       </label>
 
+      {salonId !== undefined && serviceId !== undefined ? (
+        <ServiceMaterialSection salonId={salonId} serviceId={serviceId} />
+      ) : null}
+
       {error !== null ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -226,5 +255,215 @@ export function ServiceForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ServiceMaterialSection — escandallo (BOM) de materiales del tratamiento
+// (Fase 2 del inventario). Solo se monta en EDICIÓN (necesita un service_id
+// real). Vive DENTRO del <form> de ServiceForm pero NO anida un <form> propio
+// (inválido en HTML): "Añadir" es un botón type="button" con su propio
+// manejador, independiente del submit del formulario padre.
+// ---------------------------------------------------------------------------
+
+interface ServiceMaterialSectionProps {
+  salonId: string;
+  serviceId: string;
+}
+
+function ServiceMaterialSection({
+  salonId,
+  serviceId,
+}: ServiceMaterialSectionProps): React.ReactElement {
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const materialsQuery = useServiceMaterials(salonId, serviceId);
+  const productsQuery = useProductsWithStock(salonId);
+  const addMutation = useAddServiceMaterial(salonId, serviceId);
+  const removeMutation = useRemoveServiceMaterial(salonId, serviceId);
+  const updateQtyMutation = useUpdateServiceMaterialQty(salonId, serviceId);
+
+  function handleAdd(): void {
+    setFormError(null);
+
+    if (productId === "") {
+      setFormError("Selecciona un producto.");
+      return;
+    }
+    const qty = Number.parseInt(quantity, 10);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      setFormError("Introduce una cantidad válida (entero > 0).");
+      return;
+    }
+
+    addMutation.mutate(
+      { serviceId, productId, quantity: qty },
+      {
+        onSuccess: () => {
+          setProductId("");
+          setQuantity("1");
+        },
+        onError: (err: unknown) => {
+          setFormError(
+            err instanceof Error ? err.message : "Error al añadir el material.",
+          );
+        },
+      },
+    );
+  }
+
+  const products = productsQuery.data ?? [];
+  const materials = materialsQuery.data ?? [];
+
+  return (
+    <fieldset className="grid gap-3 rounded-lg border border-border/70 bg-muted/30 p-4">
+      <legend className="px-1.5 text-sm font-medium">
+        Materiales que consume este tratamiento
+      </legend>
+
+      {materialsQuery.isPending ? (
+        <p className="text-sm text-muted-foreground">Cargando…</p>
+      ) : materialsQuery.isError ? (
+        <p className="text-sm text-destructive">
+          {materialsQuery.error instanceof Error
+            ? materialsQuery.error.message
+            : "Error al cargar el escandallo."}
+        </p>
+      ) : materials.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Este tratamiento no consume materiales todavía.
+        </p>
+      ) : (
+        <ul className="divide-y rounded-md border border-border/70 bg-background text-sm">
+          {materials.map((m) => (
+            <MaterialRow
+              key={m.id}
+              material={m}
+              onRemove={() => removeMutation.mutate(m.id)}
+              removing={removeMutation.isPending}
+              onUpdateQuantity={(qty) =>
+                updateQtyMutation.mutate({ id: m.id, quantity: qty })
+              }
+              updating={updateQtyMutation.isPending}
+            />
+          ))}
+        </ul>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-[1fr_6rem_auto] sm:items-end">
+        <div className="grid gap-1.5">
+          <Label htmlFor="material-product">Producto</Label>
+          <Select value={productId} onValueChange={setProductId}>
+            <SelectTrigger id="material-product">
+              <SelectValue placeholder="Selecciona un producto" />
+            </SelectTrigger>
+            <SelectContent>
+              {products.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} ({p.unit})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="material-quantity">Cantidad</Label>
+          <Input
+            id="material-quantity"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={1}
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleAdd}
+          disabled={addMutation.isPending}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Añadir
+        </Button>
+      </div>
+
+      {formError !== null ? (
+        <p role="alert" className="text-sm text-destructive">
+          {formError}
+        </p>
+      ) : null}
+    </fieldset>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MaterialRow — una línea del escandallo, con edición de cantidad inline
+// (input numérico local; confirma con `onBlur` solo si el valor cambió y es
+// válido, sin necesidad de un botón "guardar" aparte).
+// ---------------------------------------------------------------------------
+
+interface MaterialRowProps {
+  material: ServiceMaterialWithProduct;
+  onRemove: () => void;
+  removing: boolean;
+  onUpdateQuantity: (quantity: number) => void;
+  updating: boolean;
+}
+
+function MaterialRow({
+  material,
+  onRemove,
+  removing,
+  onUpdateQuantity,
+  updating,
+}: MaterialRowProps): React.ReactElement {
+  const [qty, setQty] = useState(material.quantity.toString());
+
+  function commitQuantity(): void {
+    const parsed = Number.parseInt(qty, 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      if (parsed !== material.quantity) {
+        onUpdateQuantity(parsed);
+      }
+    } else {
+      // Valor inválido: revierte al último valor persistido en vez de dejar
+      // el input en un estado que no se corresponde con la BD.
+      setQty(material.quantity.toString());
+    }
+  }
+
+  return (
+    <li className="flex items-center justify-between gap-2 px-3 py-2">
+      <span className="flex-1 truncate">{material.product.name}</span>
+      <Input
+        type="number"
+        inputMode="numeric"
+        min={1}
+        step={1}
+        className="w-16"
+        aria-label={`Cantidad de ${material.product.name}`}
+        value={qty}
+        disabled={updating}
+        onChange={(e) => setQty(e.target.value)}
+        onBlur={commitQuantity}
+      />
+      <span className="w-10 shrink-0 text-xs text-muted-foreground">
+        {material.product.unit}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={`Quitar ${material.product.name} del escandallo`}
+        disabled={removing}
+        onClick={onRemove}
+      >
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
+    </li>
   );
 }
