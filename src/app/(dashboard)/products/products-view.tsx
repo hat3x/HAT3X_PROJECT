@@ -1,14 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Package, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  CalendarClock,
+  Package,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 
 import {
   ProductForm,
   type ProductFormDefaults,
 } from "@/app/(dashboard)/products/product-form";
+import { StockMovementDialog } from "@/app/(dashboard)/products/stock-movement-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +44,9 @@ import {
   useProducts,
   useUpdateProduct,
 } from "@/hooks/use-products";
+import { useExpiringSoon, useLowStock } from "@/hooks/use-stock";
 import { formatMoney } from "@/lib/format";
+import { isLowStock } from "@/lib/stock";
 import type { Product } from "@/types/database";
 
 interface ProductsViewProps {
@@ -60,6 +73,7 @@ export function ProductsView({ salonId }: ProductsViewProps): React.ReactElement
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState<Product | null>(null);
+  const [movementProduct, setMovementProduct] = useState<Product | null>(null);
 
   const { data: products, isPending, isError, error } = useProducts(
     salonId,
@@ -69,6 +83,12 @@ export function ProductsView({ salonId }: ProductsViewProps): React.ReactElement
   const createMutation = useCreateProduct(salonId);
   const updateMutation = useUpdateProduct(salonId, editing?.id ?? "");
   const deleteMutation = useDeleteProduct(salonId);
+
+  // Resumen de inventario: nº de productos bajo mínimo y nº de lotes por
+  // caducar (ventana por defecto de useExpiringSoon: 60 días). Independiente
+  // del filtro de búsqueda/incluir inactivos de la tabla de gestión de abajo.
+  const lowStockQuery = useLowStock(salonId);
+  const expiringSoonQuery = useExpiringSoon(salonId);
 
   return (
     <main className="container py-10">
@@ -110,6 +130,32 @@ export function ProductsView({ salonId }: ProductsViewProps): React.ReactElement
         </Dialog>
       </div>
 
+      {/* Resumen de inventario — productos bajo mínimo y lotes por caducar */}
+      <div className="mb-6 grid gap-4 sm:grid-cols-2">
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <AlertTriangle className="h-8 w-8 shrink-0 text-destructive" aria-hidden="true" />
+            <div>
+              <p className="text-2xl font-semibold tabular-nums">
+                {lowStockQuery.data?.length ?? 0}
+              </p>
+              <p className="text-sm text-muted-foreground">Productos bajo mínimo</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <CalendarClock className="h-8 w-8 shrink-0 text-amber-500" aria-hidden="true" />
+            <div>
+              <p className="text-2xl font-semibold tabular-nums">
+                {expiringSoonQuery.data?.length ?? 0}
+              </p>
+              <p className="text-sm text-muted-foreground">Lotes por caducar</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-4">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -139,7 +185,9 @@ export function ProductsView({ salonId }: ProductsViewProps): React.ReactElement
               <TableHead>Nombre</TableHead>
               <TableHead className="text-right">Precio</TableHead>
               <TableHead className="text-right">IVA</TableHead>
-              <TableHead className="text-right">Stock</TableHead>
+              <TableHead className="text-right">Existencias</TableHead>
+              <TableHead className="text-right">Mínimo</TableHead>
+              <TableHead>Unidad</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="w-[1%] text-right">Acciones</TableHead>
             </TableRow>
@@ -148,20 +196,20 @@ export function ProductsView({ salonId }: ProductsViewProps): React.ReactElement
             {isPending ? (
               Array.from({ length: 5 }).map((_, index) => (
                 <TableRow key={index}>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={8}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : isError ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-destructive">
+                <TableCell colSpan={8} className="text-center text-destructive">
                   {error instanceof Error ? error.message : "Error al cargar"}
                 </TableCell>
               </TableRow>
             ) : !products || products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center">
+                <TableCell colSpan={8} className="py-10 text-center">
                   <Package className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
                     {search.trim() === ""
@@ -188,8 +236,17 @@ export function ProductsView({ salonId }: ProductsViewProps): React.ReactElement
                     {product.vat_rate}%
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {product.stock === null ? "—" : product.stock}
+                    <div className="flex items-center justify-end gap-2">
+                      {product.stock === null ? "—" : product.stock}
+                      {isLowStock(product.stock, product.min_stock) ? (
+                        <Badge variant="destructive">Bajo mínimo</Badge>
+                      ) : null}
+                    </div>
                   </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {product.min_stock}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{product.unit}</TableCell>
                   <TableCell>
                     {product.active ? (
                       <Badge variant="secondary">Activo</Badge>
@@ -199,6 +256,14 @@ export function ProductsView({ salonId }: ProductsViewProps): React.ReactElement
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Movimiento de ${product.name}`}
+                        onClick={() => setMovementProduct(product)}
+                      >
+                        <ArrowLeftRight className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -311,6 +376,17 @@ export function ProductsView({ salonId }: ProductsViewProps): React.ReactElement
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de movimiento de stock (Entrada/Salida/Ajuste/Merma) + historial */}
+      <StockMovementDialog
+        salonId={salonId}
+        product={movementProduct}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMovementProduct(null);
+          }
+        }}
+      />
     </main>
   );
 }
