@@ -32,6 +32,16 @@ describe("buildDashboardNavItems — por sector", () => {
     const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
     expect(peluqueria.some((i) => i.href === "/planes")).toBe(false);
   });
+  it("odontologia: '/expediente' aparece justo después de '/planes'; en peluquería NO aparece", () => {
+    const dental = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "odontologia" });
+    expect(dental.some((i) => i.href === "/expediente")).toBe(true);
+    const planesIdx = dental.findIndex((i) => i.href === "/planes");
+    const expedienteIdx = dental.findIndex((i) => i.href === "/expediente");
+    expect(expedienteIdx).toBe(planesIdx + 1);
+
+    const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
+    expect(peluqueria.some((i) => i.href === "/expediente")).toBe(false);
+  });
   it("restauracion (cascaron): item 'Próximamente'", () => {
     const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
     expect(items.some((i) => i.label === "Próximamente")).toBe(true);

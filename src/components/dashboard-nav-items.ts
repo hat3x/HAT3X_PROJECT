@@ -19,6 +19,7 @@ import {
   ClipboardList,
   Clock,
   FileText,
+  FolderOpen,
   LayoutDashboard,
   Package,
   Settings,
@@ -118,6 +119,19 @@ export const PLANES_ITEM: NavItem = {
   icon: ClipboardList,
 };
 
+/**
+ * Expediente clínico (consentimientos informados + imágenes/radiografías).
+ * Solo visible para el sector odontología, justo después de Planes: primero
+ * el mapa de dientes, la exploración periodontal y el presupuesto/plan, y por
+ * último el expediente (consentimientos firmados + imágenes) que documenta
+ * todo lo anterior.
+ */
+export const EXPEDIENTE_ITEM: NavItem = {
+  href: "/expediente",
+  label: "Expediente",
+  icon: FolderOpen,
+};
+
 /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
   /** El usuario puede ver materia de gestión (owner/manager). */
@@ -144,8 +158,8 @@ export interface NavGating {
  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
- * además inserta Odontograma y, justo detrás, Periodontograma y Planes (en ese
- * orden) tras "Pacientes".
+ * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
+ * (en ese orden) tras "Pacientes".
  */
 export function buildDashboardNavItems({
   showSettings,
@@ -186,7 +200,8 @@ export function buildDashboardNavItems({
   if (sector !== "odontologia") return withSectorLabels;
 
   // Odontología: añadir Odontograma justo después de Pacientes, Periodontograma
-  // justo después de Odontograma, y Planes justo después de Periodontograma.
+  // justo después de Odontograma, Planes justo después de Periodontograma, y
+  // Expediente justo después de Planes.
   const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
   const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
   return [
@@ -194,6 +209,7 @@ export function buildDashboardNavItems({
     ODONTOGRAMA_ITEM,
     PERIODONTOGRAMA_ITEM,
     PLANES_ITEM,
+    EXPEDIENTE_ITEM,
     ...withSectorLabels.slice(insertAt),
   ];
 }
