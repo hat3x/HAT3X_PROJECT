@@ -34,6 +34,7 @@ import {
 import { treatmentKeys } from "@/lib/queries/treatment";
 import type { PlanPhase } from "@/types/database";
 import { PlanDetail } from "./plan-detail";
+import { PlanInsurerCard } from "./plan-insurer-card";
 import { PlanList } from "./plan-list";
 
 // ---------------------------------------------------------------------------
@@ -177,6 +178,12 @@ export function PlanWorkspace({
             </Card>
           ) : (
             <>
+              <PlanInsurerCard
+                salonId={salonId}
+                customerId={customerId}
+                planId={activePlanId}
+                insurerId={planDetailQuery.data.plan.insurer_id}
+              />
               <PlanDetail
                 salonId={salonId}
                 plan={planDetailQuery.data.plan}
