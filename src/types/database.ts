@@ -659,6 +659,63 @@ export interface Database {
           },
         ];
       };
+      // Escandallo (BOM) de materiales por tratamiento — Fase 2 del inventario
+      // (migración ya aplicada). Vincula un servicio con los productos que
+      // consume y en qué cantidad (por 1x del servicio); UNIQUE(service_id,
+      // product_id) evita duplicar la misma línea. El auto-descuento de stock
+      // al marcar un `plan_item` como 'realizado' vive en
+      // `app/(dashboard)/planes/actions.ts` (`transitionPlanItem`), que lee
+      // esta tabla y reutiliza `@/lib/stock` (applyMovement/movementDelta)
+      // para registrar las salidas correspondientes.
+      service_material: {
+        Row: {
+          id: string;
+          salon_id: string;
+          service_id: string;
+          product_id: string;
+          quantity: number; // > 0 (check de BD); unidades de producto por 1x del servicio
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          service_id: string;
+          product_id: string;
+          quantity?: number; // default 1
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          service_id?: string;
+          product_id?: string;
+          quantity?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "service_material_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_material_service_id_fkey";
+            columns: ["service_id"];
+            isOneToOne: false;
+            referencedRelation: "services";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_material_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       appointments: {
         Row: {
           id: string;
@@ -2877,6 +2934,13 @@ export type VisitNoteUpdate = TablesUpdate<"visit_notes">;
 // `products/stock-actions.ts` (Server Action que persiste + actualiza products.stock).
 export type StockMovement = Tables<"stock_movement">;
 export type StockMovementInsert = TablesInsert<"stock_movement">;
+
+// Escandallo (BOM) de materiales por tratamiento — vincula servicios con los
+// productos que consumen (Fase 2 del inventario). Ver
+// `@/lib/queries/service-material.ts` y
+// `ajustes/servicios/material-actions.ts`.
+export type ServiceMaterial = Tables<"service_material">;
+export type ServiceMaterialInsert = TablesInsert<"service_material">;
 
 // Phase helpers -----------------------------------------------------------------
 
