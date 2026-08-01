@@ -9,6 +9,7 @@ import {
   type CreateAppointmentInput,
   type RescheduleAppointmentInput,
 } from "@/app/(dashboard)/appointments/actions";
+import { sendAppointmentReminder } from "@/app/(dashboard)/appointments/reminder-actions";
 import {
   appointmentKeys,
   fetchAppointments,
@@ -183,5 +184,16 @@ export function useRescheduleAppointment(salonId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: appointmentKeys.all(salonId) });
     },
+  });
+}
+
+/**
+ * Envía al instante un recordatorio WhatsApp de la cita indicada. No invalida
+ * ninguna caché (no cambia datos de la cita): el resultado (enviado / modo
+ * prueba / error) se consume directamente en `onSuccess` del `mutate`.
+ */
+export function useSendAppointmentReminder() {
+  return useMutation({
+    mutationFn: (appointmentId: string) => sendAppointmentReminder(appointmentId),
   });
 }

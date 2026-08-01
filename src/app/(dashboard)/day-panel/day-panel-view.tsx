@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  MessageCircle,
   WifiOff,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ import { useDayPanelRealtime } from "@/hooks/use-day-panel-realtime";
 import {
   useAppointments,
   useProfessionals,
+  useSendAppointmentReminder,
   useUpdateAppointmentStatus,
 } from "@/hooks/use-appointments";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
@@ -117,6 +119,12 @@ export function DayPanelView({
   const appointmentsQuery = useAppointments(salonId, date, timezone, null);
   const professionalsQuery = useProfessionals(salonId);
   const statusMutation = useUpdateAppointmentStatus(salonId, date, null);
+  const reminderMutation = useSendAppointmentReminder();
+  const [reminderResult, setReminderResult] = useState<{
+    appointmentId: string;
+    message: string;
+    isError: boolean;
+  } | null>(null);
 
   function handleStatusChange(id: string, status: AppointmentStatus): void {
     if (status === "cancelled") {
@@ -124,6 +132,26 @@ export function DayPanelView({
       return;
     }
     statusMutation.mutate({ id, status });
+  }
+
+  function handleSendReminder(appointmentId: string): void {
+    setReminderResult(null);
+    reminderMutation.mutate(appointmentId, {
+      onSuccess: (result) => {
+        setReminderResult(
+          result.ok
+            ? { appointmentId, message: result.data.message, isError: false }
+            : { appointmentId, message: result.error, isError: true },
+        );
+      },
+      onError: (err) => {
+        setReminderResult({
+          appointmentId,
+          message: err instanceof Error ? err.message : "Error al enviar el recordatorio",
+          isError: true,
+        });
+      },
+    });
   }
 
   function confirmCancel(): void {
@@ -328,6 +356,13 @@ export function DayPanelView({
                 timezone={timezone}
                 onStatusChange={handleStatusChange}
                 mutating={statusMutation.isPending}
+                onSendReminder={handleSendReminder}
+                reminderPendingId={
+                  reminderMutation.isPending
+                    ? (reminderMutation.variables ?? null)
+                    : null
+                }
+                reminderResult={reminderResult}
               />
             ))}
         </div>
@@ -421,6 +456,9 @@ interface ProfessionalColumnProps {
   timezone: string;
   onStatusChange: (id: string, status: AppointmentStatus) => void;
   mutating: boolean;
+  onSendReminder: (id: string) => void;
+  reminderPendingId: string | null;
+  reminderResult: { appointmentId: string; message: string; isError: boolean } | null;
 }
 
 function ProfessionalColumn({
@@ -430,6 +468,9 @@ function ProfessionalColumn({
   timezone,
   onStatusChange,
   mutating,
+  onSendReminder,
+  reminderPendingId,
+  reminderResult,
 }: ProfessionalColumnProps): React.ReactElement {
   return (
     <Card className="flex flex-col overflow-hidden">
@@ -462,6 +503,11 @@ function ProfessionalColumn({
             timezone={timezone}
             onStatusChange={onStatusChange}
             mutating={mutating}
+            onSendReminder={onSendReminder}
+            reminderPending={reminderPendingId === appt.id}
+            reminderResult={
+              reminderResult?.appointmentId === appt.id ? reminderResult : null
+            }
           />
         ))}
       </CardContent>
@@ -476,6 +522,9 @@ interface AppointmentSlotProps {
   timezone: string;
   onStatusChange: (id: string, status: AppointmentStatus) => void;
   mutating: boolean;
+  onSendReminder: (id: string) => void;
+  reminderPending: boolean;
+  reminderResult: { message: string; isError: boolean } | null;
 }
 
 // Acento lateral por estado: guía visual del flujo del día de un vistazo.
@@ -492,6 +541,9 @@ function AppointmentSlot({
   timezone,
   onStatusChange,
   mutating,
+  onSendReminder,
+  reminderPending,
+  reminderResult,
 }: AppointmentSlotProps): React.ReactElement {
   const isPending = appt.status === "pending";
   const isConfirmed = appt.status === "confirmed";
@@ -552,9 +604,30 @@ function AppointmentSlot({
         </p>
       )}
 
+      {reminderResult && (
+        <p
+          className={[
+            "mt-1.5 text-xs",
+            reminderResult.isError ? "text-destructive" : "text-muted-foreground",
+          ].join(" ")}
+        >
+          {reminderResult.message}
+        </p>
+      )}
+
       {/* Acciones */}
       {isActive && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            disabled={reminderPending || mutating}
+            onClick={() => onSendReminder(appt.id)}
+          >
+            <MessageCircle className="mr-1 h-3.5 w-3.5" />
+            {reminderPending ? "Enviando…" : "Recordatorio"}
+          </Button>
           {isPending && (
             <Button
               size="sm"

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  MessageCircle,
   Phone,
   Plus,
   Scissors,
@@ -35,6 +36,7 @@ import { localDateInZone } from "@/lib/booking/timezone";
 import {
   useAppointments,
   useProfessionals,
+  useSendAppointmentReminder,
   useUpdateAppointmentStatus,
 } from "@/hooks/use-appointments";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
@@ -74,6 +76,12 @@ export function AppointmentsView({
   const appointmentsQuery = useAppointments(salonId, date, timezone, filterProfessionalId);
   const professionalsQuery = useProfessionals(salonId);
   const statusMutation = useUpdateAppointmentStatus(salonId, date, filterProfessionalId);
+  const reminderMutation = useSendAppointmentReminder();
+  const [reminderResult, setReminderResult] = useState<{
+    appointmentId: string;
+    message: string;
+    isError: boolean;
+  } | null>(null);
 
   function handleStatusChange(id: string, status: AppointmentStatus): void {
     if (status === "cancelled") {
@@ -81,6 +89,26 @@ export function AppointmentsView({
       return;
     }
     statusMutation.mutate({ id, status });
+  }
+
+  function handleSendReminder(appointmentId: string): void {
+    setReminderResult(null);
+    reminderMutation.mutate(appointmentId, {
+      onSuccess: (result) => {
+        setReminderResult(
+          result.ok
+            ? { appointmentId, message: result.data.message, isError: false }
+            : { appointmentId, message: result.error, isError: true },
+        );
+      },
+      onError: (err) => {
+        setReminderResult({
+          appointmentId,
+          message: err instanceof Error ? err.message : "Error al enviar el recordatorio",
+          isError: true,
+        });
+      },
+    });
   }
 
   function confirmCancel(): void {
@@ -244,6 +272,13 @@ export function AppointmentsView({
                   setRescheduleState({ open: true, appointment: a })
                 }
                 mutating={statusMutation.isPending}
+                onSendReminder={handleSendReminder}
+                reminderPending={
+                  reminderMutation.isPending && reminderMutation.variables === appt.id
+                }
+                reminderResult={
+                  reminderResult?.appointmentId === appt.id ? reminderResult : null
+                }
               />
             </div>
           ))}
@@ -323,6 +358,9 @@ interface AppointmentCardProps {
   onStatusChange: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appointment: AppointmentWithDetails) => void;
   mutating: boolean;
+  onSendReminder: (id: string) => void;
+  reminderPending: boolean;
+  reminderResult: { message: string; isError: boolean } | null;
 }
 
 function AppointmentCard({
@@ -331,6 +369,9 @@ function AppointmentCard({
   onStatusChange,
   onReschedule,
   mutating,
+  onSendReminder,
+  reminderPending,
+  reminderResult,
 }: AppointmentCardProps): React.ReactElement {
   const isPending = appt.status === "pending";
   const isConfirmed = appt.status === "confirmed";
@@ -397,10 +438,30 @@ function AppointmentCard({
               Motivo: {appt.cancelled_reason}
             </p>
           )}
+
+          {reminderResult && (
+            <p
+              className={cn(
+                "text-xs",
+                reminderResult.isError ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {reminderResult.message}
+            </p>
+          )}
         </div>
 
         {isActive && (
           <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={reminderPending || mutating}
+              onClick={() => onSendReminder(appt.id)}
+            >
+              <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+              {reminderPending ? "Enviando…" : "Enviar recordatorio"}
+            </Button>
             {isPending && (
               <Button
                 size="sm"
