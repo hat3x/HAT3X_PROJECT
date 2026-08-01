@@ -24,6 +24,7 @@ function plan(overrides: Partial<TreatmentPlan> & { id: string }): TreatmentPlan
     status: "draft",
     currency: "EUR",
     notes: null,
+    insurer_id: null,
     created_by: null,
     created_at: "2026-01-01T10:00:00.000Z",
     updated_at: "2026-01-01T10:00:00.000Z",

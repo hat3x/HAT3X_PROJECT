@@ -497,6 +497,37 @@ export async function deletePlan(planId: string): Promise<ActionResult<{ id: str
 }
 
 // ---------------------------------------------------------------------------
+// setPlanInsurer — marca (o desmarca) el plan como cubierto por una mutua
+// ---------------------------------------------------------------------------
+
+/**
+ * Marca un plan de tratamiento con una aseguradora (`insurer_id`), o lo
+ * desmarca si se pasa `null`. Reutiliza {@link assertPlanAccess} (mismo gate
+ * que el resto de este archivo) en vez de duplicarlo en
+ * `ajustes/mutuas/actions.ts` — este endpoint vive junto al resto de las
+ * escrituras de `treatment_plan`.
+ */
+export async function setPlanInsurer(
+  planId: string,
+  insurerId: string | null,
+): Promise<ActionResult<TreatmentPlan>> {
+  const access = await assertPlanAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("treatment_plan")
+    .update({ insurer_id: insurerId, updated_at: new Date().toISOString() })
+    .eq("id", planId)
+    .eq("salon_id", access.salonId)
+    .select()
+    .single();
+
+  if (error !== null) return { ok: false, error: error.message };
+  return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
 // updatePlanStatus
 // ---------------------------------------------------------------------------
 

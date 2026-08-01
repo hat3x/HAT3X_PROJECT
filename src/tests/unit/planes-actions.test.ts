@@ -44,6 +44,7 @@ import {
   createPlan,
   deletePlan,
   deletePlanItem,
+  setPlanInsurer,
   transitionPlanItem,
   updatePlanStatus,
 } from "@/app/(dashboard)/planes/actions";
@@ -753,6 +754,53 @@ describe("updatePlanStatus", () => {
     });
 
     const result = await updatePlanStatus(PLAN_ID, "proposed");
+
+    expect(result).toEqual({ ok: true, data: updatedPlan });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setPlanInsurer — marca/desmarca el plan con una mutua (mutuas y seguros)
+// ---------------------------------------------------------------------------
+
+describe("setPlanInsurer", () => {
+  const INSURER_ID = "99999999-9999-9999-9999-999999999999";
+
+  it("sector peluquería ⇒ { ok:false } sin tocar la BD (reusa el mismo gate)", async () => {
+    salon("peluqueria");
+    membership("owner");
+
+    const result = await setPlanInsurer(PLAN_ID, INSURER_ID);
+
+    expect(result.ok).toBe(false);
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it("marca el plan con una aseguradora (insurer_id)", async () => {
+    salon("odontologia");
+    membership("staff");
+    const updatedPlan = { ...PLAN_ROW, insurer_id: INSURER_ID };
+    fromMock.mockImplementation((table: string) => {
+      if (table === "treatment_plan") return chain({ data: updatedPlan, error: null });
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    const result = await setPlanInsurer(PLAN_ID, INSURER_ID);
+
+    expect(result).toEqual({ ok: true, data: updatedPlan });
+    expect(fromMock).toHaveBeenCalledWith("treatment_plan");
+  });
+
+  it("desmarca el plan (insurer_id: null)", async () => {
+    salon("odontologia");
+    membership("owner");
+    const updatedPlan = { ...PLAN_ROW, insurer_id: null };
+    fromMock.mockImplementation((table: string) => {
+      if (table === "treatment_plan") return chain({ data: updatedPlan, error: null });
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    const result = await setPlanInsurer(PLAN_ID, null);
 
     expect(result).toEqual({ ok: true, data: updatedPlan });
   });
