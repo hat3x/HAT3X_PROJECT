@@ -2308,6 +2308,7 @@ export interface Database {
           status: TreatmentPlanStatus;
           currency: string;
           notes: string | null;
+          insurer_id: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -2319,6 +2320,7 @@ export interface Database {
           status?: TreatmentPlanStatus;
           currency?: string;
           notes?: string | null;
+          insurer_id?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -2330,6 +2332,7 @@ export interface Database {
           status?: TreatmentPlanStatus;
           currency?: string;
           notes?: string | null;
+          insurer_id?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -2341,6 +2344,13 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "clinical_records";
             referencedColumns: ["customer_id", "salon_id"];
+          },
+          {
+            foreignKeyName: "treatment_plan_insurer_id_fkey";
+            columns: ["insurer_id"];
+            isOneToOne: false;
+            referencedRelation: "insurer";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -2475,6 +2485,135 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "plan_phase";
             referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      // Mutuas y seguros (odontología) — aseguradoras del salón (insurer), póliza
+      // del paciente (customer_insurance, 1:N desde clinical_records vía
+      // customer_id+salon_id) y baremo por servicio (insurer_service_price).
+      // Ver migración 20260801150000_insurers.sql.
+      insurer: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          phone: string | null;
+          email: string | null;
+          notes: string | null;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          phone?: string | null;
+          email?: string | null;
+          notes?: string | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          phone?: string | null;
+          email?: string | null;
+          notes?: string | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      customer_insurance: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          insurer_id: string;
+          policy_number: string | null;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          insurer_id: string;
+          policy_number?: string | null;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          insurer_id?: string;
+          policy_number?: string | null;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "customer_insurance_customer_fk";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_records";
+            referencedColumns: ["customer_id", "salon_id"];
+          },
+          {
+            foreignKeyName: "customer_insurance_insurer_fk";
+            columns: ["insurer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "insurer";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      // price_cents NO es columna generada (a diferencia de
+      // plan_item.line_total_cents): se inserta/actualiza directamente.
+      insurer_service_price: {
+        Row: {
+          id: string;
+          salon_id: string;
+          insurer_id: string;
+          service_id: string;
+          price_cents: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          insurer_id: string;
+          service_id: string;
+          price_cents?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          insurer_id?: string;
+          service_id?: string;
+          price_cents?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "insurer_service_price_insurer_fk";
+            columns: ["insurer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "insurer";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "insurer_service_price_service_id_fkey";
+            columns: ["service_id"];
+            isOneToOne: false;
+            referencedRelation: "services";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -3032,6 +3171,15 @@ export type PerioTooth = Tables<"perio_tooth">;
 export type PerioToothInsert = TablesInsert<"perio_tooth">;
 export type PerioSite = Tables<"perio_site">;
 export type PerioSiteInsert = TablesInsert<"perio_site">;
+
+// Mutuas y seguros (odontología) — aseguradoras (insurer), póliza del paciente
+// (customer_insurance) y baremo por servicio (insurer_service_price).
+export type Insurer = Tables<"insurer">;
+export type InsurerInsert = TablesInsert<"insurer">;
+export type CustomerInsurance = Tables<"customer_insurance">;
+export type CustomerInsuranceInsert = TablesInsert<"customer_insurance">;
+export type InsurerServicePrice = Tables<"insurer_service_price">;
+export type InsurerServicePriceInsert = TablesInsert<"insurer_service_price">;
 
 // Consentimientos informados + imágenes/radiografías (odontología) — bucket
 // privado `patient-media`. Ambas 1:N desde clinical_records (customer_id+salon_id).
