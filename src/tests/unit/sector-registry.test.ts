@@ -26,6 +26,28 @@ describe("sector registry", () => {
     expect(t.service).toBe("Tratamiento");
     expect(t.professionalPlural).toBe("Equipo");
   });
+  it("business/businessCapitalized por sector", () => {
+    expect(sectorTerms("peluqueria").business).toBe("salón");
+    expect(sectorTerms("peluqueria").businessCapitalized).toBe("Salón");
+    expect(sectorTerms("odontologia").business).toBe("clínica");
+    expect(sectorTerms("odontologia").businessCapitalized).toBe("Clínica");
+    expect(sectorTerms("restauracion").business).toBe("restaurante");
+    expect(sectorTerms("restauracion").businessCapitalized).toBe("Restaurante");
+  });
+  it("sampleService por sector, para el preview de marca", () => {
+    expect(SECTOR_REGISTRY.peluqueria.sampleService).toEqual({
+      name: "Corte y peinado",
+      priceCents: 2500,
+    });
+    expect(SECTOR_REGISTRY.odontologia.sampleService).toEqual({
+      name: "Limpieza dental",
+      priceCents: 4500,
+    });
+    expect(SECTOR_REGISTRY.restauracion.sampleService).toEqual({
+      name: "Menú del día",
+      priceCents: 1500,
+    });
+  });
   it("implemented: peluqueria y odontologia true, restauracion false", () => {
     expect(SECTOR_REGISTRY.peluqueria.implemented).toBe(true);
     expect(SECTOR_REGISTRY.odontologia.implemented).toBe(true);

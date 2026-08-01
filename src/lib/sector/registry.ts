@@ -11,6 +11,16 @@ export interface SectorTerms {
   servicePlural: string;
   professional: string;
   professionalPlural: string;
+  /** Negocio en minúscula, para insertar en frases ("de tu salón"). */
+  business: string;
+  /** Negocio con mayúscula inicial, para títulos ("Tu Salón"). */
+  businessCapitalized: string;
+}
+
+/** Servicio de ejemplo para el preview de marca (ajustes → Marca). */
+export interface SectorSampleService {
+  name: string;
+  priceCents: number;
 }
 
 export interface SectorConfig {
@@ -20,6 +30,7 @@ export interface SectorConfig {
   defaultPrimary: string; // #rrggbb; el salon_branding del tenant tiene prioridad
   implemented: boolean;   // false = cascarón "Próximamente"
   terms: SectorTerms;
+  sampleService: SectorSampleService;
 }
 
 export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
@@ -33,7 +44,9 @@ export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
       customer: "Cliente", customerPlural: "Clientes",
       service: "Servicio", servicePlural: "Servicios",
       professional: "Profesional", professionalPlural: "Personal",
+      business: "salón", businessCapitalized: "Salón",
     },
+    sampleService: { name: "Corte y peinado", priceCents: 2500 },
   },
   odontologia: {
     key: "odontologia",
@@ -45,7 +58,9 @@ export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
       customer: "Paciente", customerPlural: "Pacientes",
       service: "Tratamiento", servicePlural: "Tratamientos",
       professional: "Dentista", professionalPlural: "Equipo",
+      business: "clínica", businessCapitalized: "Clínica",
     },
+    sampleService: { name: "Limpieza dental", priceCents: 4500 },
   },
   restauracion: {
     key: "restauracion",
@@ -57,7 +72,9 @@ export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
       customer: "Cliente", customerPlural: "Clientes",
       service: "Producto", servicePlural: "Carta",
       professional: "Empleado", professionalPlural: "Equipo",
+      business: "restaurante", businessCapitalized: "Restaurante",
     },
+    sampleService: { name: "Menú del día", priceCents: 1500 },
   },
 };
 
