@@ -14,6 +14,7 @@
 import {
   Activity,
   BarChart3,
+  BellRing,
   CalendarClock,
   CalendarDays,
   ClipboardList,
@@ -42,15 +43,17 @@ export interface NavItem {
 
 /**
  * Operativa diaria — SIEMPRE visible (no depende del rol ni de add-ons). El orden
- * refleja la jerarquía de uso: vista general y día, luego venta/caja, y por último
- * los maestros (clientes/productos). La Caja (TPV) y el Arqueo son superficies de
- * uso corriente y se mantienen aquí; el add-on `pos` gatea el REPORTING fiscal
- * (Facturación) y de ingresos, no la operativa de caja.
+ * refleja la jerarquía de uso: vista general y día, luego citas y recordatorios,
+ * luego venta/caja, y por último los maestros (clientes/productos). La Caja (TPV)
+ * y el Arqueo son superficies de uso corriente y se mantienen aquí; el add-on
+ * `pos` gatea el REPORTING fiscal (Facturación) y de ingresos, no la operativa de
+ * caja. Recordatorios (recall de revisión) no depende del sector: vale para todos.
  */
 export const PRIMARY_NAV_ITEMS: readonly NavItem[] = [
   { href: "/dashboard", label: "Panel", icon: LayoutDashboard },
   { href: "/day-panel", label: "Panel del día", icon: CalendarDays },
   { href: "/appointments", label: "Citas", icon: CalendarClock },
+  { href: "/recordatorios", label: "Recordatorios", icon: BellRing },
   { href: "/tpv", label: "Caja", icon: ShoppingBag },
   { href: "/arqueo", label: "Arqueo", icon: Wallet },
   { href: "/customers", label: "Clientes", icon: Users },

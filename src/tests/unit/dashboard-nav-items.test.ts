@@ -70,4 +70,11 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
       items.indexOf(SETTINGS_ITEM.href),
     );
   });
+
+  it("Recordatorios (recall de revisión) es operativa diaria: visible para staff, justo tras Citas", () => {
+    const items = hrefs(buildDashboardNavItems({ showSettings: false, hasPos: false }));
+
+    expect(items).toContain("/recordatorios");
+    expect(items.indexOf("/recordatorios")).toBe(items.indexOf("/appointments") + 1);
+  });
 });
