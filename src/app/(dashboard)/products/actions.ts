@@ -22,6 +22,8 @@ function toWritePayload(
     price_cents: values.price,
     vat_rate: values.vat_rate,
     stock: values.stock,
+    min_stock: values.min_stock,
+    unit: values.unit,
     active: values.active,
   };
 }

@@ -48,6 +48,8 @@ function toFormDefaults(product: Product): ProductFormDefaults {
     price: (product.price_cents / 100).toFixed(2).replace(".", ","),
     vat_rate: String(product.vat_rate),
     stock: product.stock === null ? "" : String(product.stock),
+    min_stock: String(product.min_stock),
+    unit: product.unit,
     active: product.active,
   };
 }

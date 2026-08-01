@@ -12,6 +12,11 @@ import { z } from "zod";
  *   (`price_cents`).
  * - `stock` es opcional: la cadena vacía representa "producto no inventariado"
  *   y se traduce a `null`.
+ * - `min_stock` (umbral de reposición) y `unit` (unidad de medida) forman
+ *   parte del control de stock/inventario (migración
+ *   20260801120000_stock_inventory); igual que `stock`, llegan como texto del
+ *   formulario y caen a un valor por defecto si vienen vacíos ("0" y
+ *   "unidad" respectivamente — los mismos DEFAULT de la columna en BD).
  */
 const optionalText = (max: number) =>
   z
@@ -55,6 +60,21 @@ export const productSchema = z.object({
       "El stock debe ser un número entero",
     )
     .transform((value) => (value === "" ? null : Number.parseInt(value, 10))),
+  // Mínimo de reposición: "" → 0 (sin umbral especial), como el DEFAULT de BD.
+  min_stock: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === "" || /^\d+$/.test(value),
+      "El mínimo debe ser un número entero",
+    )
+    .transform((value) => (value === "" ? 0 : Number.parseInt(value, 10))),
+  // Unidad de medida: "" → "unidad", como el DEFAULT de BD.
+  unit: z
+    .string()
+    .trim()
+    .max(20, "La unidad no puede superar 20 caracteres")
+    .transform((value) => (value === "" ? "unidad" : value)),
   active: z.boolean().default(true),
 });
 

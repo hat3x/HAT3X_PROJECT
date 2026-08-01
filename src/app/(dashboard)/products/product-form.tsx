@@ -28,6 +28,10 @@ export interface ProductFormDefaults {
   vat_rate: string;
   /** Stock como texto; vacío = producto no inventariado. */
   stock: string;
+  /** Mínimo de reposición como texto; vacío = 0 (sin umbral especial). */
+  min_stock: string;
+  /** Unidad de medida (p. ej. "unidad", "ml", "ampolla"); vacío = "unidad". */
+  unit: string;
   active: boolean;
 }
 
@@ -37,6 +41,8 @@ const EMPTY_DEFAULTS: ProductFormDefaults = {
   price: "",
   vat_rate: "21",
   stock: "",
+  min_stock: "0",
+  unit: "unidad",
   active: true,
 };
 
@@ -83,6 +89,10 @@ export function ProductForm({
       vat_rate: values.vat_rate,
       // Si no se controla stock, se envía "" → null en el esquema.
       stock: trackStock ? values.stock : "",
+      // Mínimo/unidad solo tienen sentido si se controla stock; si no, van al
+      // valor por defecto del esquema ("" → 0 / "unidad").
+      min_stock: trackStock ? values.min_stock : "",
+      unit: trackStock ? values.unit : "",
       active: values.active,
     });
   }
@@ -159,15 +169,37 @@ export function ProductForm({
           Controlar stock de este producto
         </label>
         {trackStock ? (
-          <div className="grid gap-2">
-            <Label htmlFor="stock">Unidades en stock</Label>
-            <Input
-              id="stock"
-              inputMode="numeric"
-              value={values.stock}
-              onChange={(e) => update("stock", e.target.value)}
-              placeholder="0"
-            />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="stock">Unidades en stock</Label>
+              <Input
+                id="stock"
+                inputMode="numeric"
+                value={values.stock}
+                onChange={(e) => update("stock", e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="min_stock">Mínimo de reposición</Label>
+              <Input
+                id="min_stock"
+                inputMode="numeric"
+                value={values.min_stock}
+                onChange={(e) => update("min_stock", e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="unit">Unidad</Label>
+              <Input
+                id="unit"
+                value={values.unit}
+                onChange={(e) => update("unit", e.target.value)}
+                placeholder="unidad, ml, ampolla…"
+                maxLength={20}
+              />
+            </div>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
