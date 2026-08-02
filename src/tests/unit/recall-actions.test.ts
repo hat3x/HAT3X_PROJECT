@@ -155,7 +155,7 @@ describe("sendRecallReminder — (b) cliente con teléfono", () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { message: "✅ SMS enviado a +34611111111 (SID: SM999)" },
+      data: { message: "Enviado ✓" },
     });
   });
 

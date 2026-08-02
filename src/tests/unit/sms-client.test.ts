@@ -149,14 +149,14 @@ describe("sendSms — envío real (config habilitada, credenciales válidas)", (
 });
 
 describe("summarizeSmsResult", () => {
-  it("enviado ⇒ mensaje con SID", () => {
+  it("enviado ⇒ mensaje limpio 'Enviado'", () => {
     const result: SmsSendResult = {
       sent: true,
       dryRun: false,
       messageSid: "SM123",
       to: "+34611111111",
     };
-    expect(summarizeSmsResult(result)).toBe("✅ SMS enviado a +34611111111 (SID: SM123)");
+    expect(summarizeSmsResult(result)).toBe("Enviado ✓");
   });
 
   it("dry-run ⇒ mensaje legible 'Modo prueba' (NO jerga tipo '[disabled]')", () => {
@@ -180,7 +180,7 @@ describe("summarizeSmsResult", () => {
       to: "+34611111111",
     };
     expect(summarizeSmsResult(result)).toBe(
-      "❌ Error enviando SMS a +34611111111: Twilio 400: boom",
+      "No se pudo enviar: Twilio 400: boom",
     );
   });
 });

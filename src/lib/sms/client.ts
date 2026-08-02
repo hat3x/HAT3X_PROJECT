@@ -153,10 +153,13 @@ function dryRunResult(
 
 export function summarizeSmsResult(result: SmsSendResult): string {
   if (result.sent) {
-    return `✅ SMS enviado a ${result.to} (SID: ${result.messageSid})`;
+    return "Enviado ✓";
   }
   if (result.dryRun) {
-    return `⏭ Modo prueba — no enviado a ${result.to}`;
+    if (result.reason === "invalid_phone") {
+      return "No enviado — el paciente no tiene un teléfono válido";
+    }
+    return "Modo prueba — no enviado (envío de SMS desactivado)";
   }
-  return `❌ Error enviando SMS a ${result.to}: ${result.error}`;
+  return `No se pudo enviar: ${result.error}`;
 }
