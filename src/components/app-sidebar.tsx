@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LogOut, Menu, Scissors, User, X } from "lucide-react";
+import { LogOut, Menu, User, X } from "lucide-react";
 
 import type { MemberRole } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { KairosMark } from "@/components/brand/kairos-mark";
 import { buildDashboardNavItems } from "@/components/dashboard-nav-items";
 import { useHasPos } from "@/components/providers/salon-features-provider";
 import { useSector } from "@/components/providers/sector-provider";
@@ -35,7 +36,7 @@ const GLASS_BG =
   "bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60";
 
 interface AppSidebarProps {
-  /** Nombre del salón activo; cae a "Salon OS" si no hay uno resuelto. */
+  /** Nombre del salón activo; cae a "Kairos" si no hay uno resuelto. */
   brandName: string | null;
   /**
    * URL pública del logo del salón (white-label). Si existe, sustituye a la
@@ -73,7 +74,7 @@ export function AppSidebar({
   const sector = useSector();
 
   const items = buildDashboardNavItems({ showSettings, hasPos, sector });
-  const brand = brandName?.trim() ? brandName : "Salon OS";
+  const brand = brandName?.trim() ? brandName : "Kairos";
   const logo = logoUrl?.trim() ? logoUrl : null;
 
   // Cierra el drawer móvil al cambiar de ruta (navegación completada).
@@ -114,7 +115,7 @@ export function AppSidebar({
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-brand transition-transform duration-200 ease-apple-out group-hover:scale-105"
             aria-hidden="true"
           >
-            <Scissors className="h-4.5 w-4.5" />
+            <KairosMark className="h-4.5 w-4.5" />
           </span>
           <span className="truncate text-base font-semibold tracking-tight">{brand}</span>
         </>

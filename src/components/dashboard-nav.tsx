@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LogOut, Menu, Scissors, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 
 import type { MemberRole } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { KairosMark } from "@/components/brand/kairos-mark";
 import { buildDashboardNavItems } from "@/components/dashboard-nav-items";
 import { useHasPos } from "@/components/providers/salon-features-provider";
 import { useSector } from "@/components/providers/sector-provider";
@@ -20,11 +21,11 @@ const ROLE_LABEL: Record<MemberRole, string> = {
 };
 
 interface DashboardNavProps {
-  /** Nombre del salón activo; cae a "Salon OS" si no hay uno resuelto. */
+  /** Nombre del salón activo; cae a "Kairos" si no hay uno resuelto. */
   brandName: string | null;
   /**
    * URL pública del logo del salón (white-label). Si existe, sustituye a la marca
-   * genérica (cuadro violeta + tijeras); si es `null`, se muestra el fallback premium.
+   * genérica (símbolo Kairos); si es `null`, se muestra el fallback premium.
    */
   logoUrl?: string | null;
   /** Rol del usuario, para mostrar un descriptor discreto en la cuenta. */
@@ -69,7 +70,7 @@ export function DashboardNav({
   const sector = useSector();
 
   const items = buildDashboardNavItems({ showSettings, hasPos, sector });
-  const brand = brandName?.trim() ? brandName : "Salon OS";
+  const brand = brandName?.trim() ? brandName : "Kairos";
   const logo = logoUrl?.trim() ? logoUrl : null;
 
   // Cierra el menú móvil al cambiar de ruta (navegación completada).
@@ -110,7 +111,7 @@ export function DashboardNav({
                 className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-brand transition-transform duration-200 ease-apple-out group-hover:scale-105"
                 aria-hidden="true"
               >
-                <Scissors className="h-4.5 w-4.5" />
+                <KairosMark className="h-4.5 w-4.5" />
               </span>
               <span className="hidden text-base font-semibold tracking-tight sm:inline-block">
                 {brand}

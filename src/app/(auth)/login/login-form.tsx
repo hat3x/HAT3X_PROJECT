@@ -19,10 +19,10 @@ import { createClient } from "@/lib/supabase/client";
 import { idToEmail } from "@/lib/auth/id-email";
 import { sectorMismatchMessage } from "@/lib/auth/sector-login";
 import { SECTOR_REGISTRY } from "@/lib/sector/registry";
+import { KairosMark } from "@/components/brand/kairos-mark";
 import type { SalonSector } from "@/types/database";
 
 import { resolveTenantSector } from "./actions";
-import { SECTOR_ICON } from "./sector-picker";
 
 interface LoginFormProps {
   /** Sector elegido en el picker (`/login?sector=<x>`); tema la marca y, tras
@@ -39,7 +39,6 @@ export function LoginForm({ sector }: LoginFormProps): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const brandName = SECTOR_REGISTRY[sector].brandName;
-  const BrandIcon = SECTOR_ICON[sector];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -90,14 +89,14 @@ export function LoginForm({ sector }: LoginFormProps): React.ReactElement {
       {/* Marca: glifo de acento + wordmark. Minimal, con respiración vertical. */}
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-brand">
-          <BrandIcon className="h-7 w-7" strokeWidth={1.75} aria-hidden />
+          <KairosMark className="h-7 w-7" />
         </span>
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">
             {brandName}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Tu salón, bajo control.
+            Cada cliente, en su momento.
           </p>
         </div>
       </div>

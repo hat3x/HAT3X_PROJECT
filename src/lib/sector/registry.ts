@@ -26,7 +26,7 @@ export interface SectorSampleService {
 export interface SectorConfig {
   key: SalonSector;
   label: string;      // nombre del sector para el picker
-  brandName: string;  // wordmark de la app en ese sector
+  brandName: string;  // wordmark de la app (masterbrand «Kairos», igual en todos los sectores)
   defaultPrimary: string; // #rrggbb; el salon_branding del tenant tiene prioridad
   implemented: boolean;   // false = cascarón "Próximamente"
   terms: SectorTerms;
@@ -37,7 +37,7 @@ export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
   peluqueria: {
     key: "peluqueria",
     label: "Peluquería",
-    brandName: "Salón OS",
+    brandName: "Kairos",
     defaultPrimary: "#7c3aed",
     implemented: true,
     terms: {
@@ -51,7 +51,7 @@ export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
   odontologia: {
     key: "odontologia",
     label: "Odontología",
-    brandName: "Clínica OS",
+    brandName: "Kairos",
     defaultPrimary: "#0f766e",
     implemented: true,
     terms: {
@@ -65,7 +65,7 @@ export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
   restauracion: {
     key: "restauracion",
     label: "Restauración",
-    brandName: "Restau OS",
+    brandName: "Kairos",
     defaultPrimary: "#c2410c",
     implemented: false,
     terms: {

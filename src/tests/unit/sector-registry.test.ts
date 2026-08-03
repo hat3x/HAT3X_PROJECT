@@ -57,6 +57,9 @@ describe("sector registry", () => {
     expect([...SECTOR_ORDER].sort()).toEqual([...ALL].sort());
   });
   it("getSectorConfig devuelve la config", () => {
-    expect(getSectorConfig("odontologia").brandName).toBe("Clínica OS");
+    expect(getSectorConfig("odontologia").label).toBe("Odontología");
+  });
+  it("el masterbrand es «Kairos» en todos los sectores", () => {
+    for (const s of ALL) expect(SECTOR_REGISTRY[s].brandName).toBe("Kairos");
   });
 });

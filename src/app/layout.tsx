@@ -11,10 +11,11 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: {
-    default: "Salon OS",
-    template: "%s | Salon OS",
+    default: "Kairos",
+    template: "%s | Kairos",
   },
-  description: "Sistema de gestión integral para salones de belleza",
+  description:
+    "Kairos — gestión para negocios de cita previa: agenda, fichas, cobros y fidelización. Clínicas, salones y más.",
 };
 
 export default function RootLayout({

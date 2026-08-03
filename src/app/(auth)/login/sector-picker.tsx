@@ -52,7 +52,7 @@ export function SectorPicker(): React.ReactElement {
                   <div className="min-w-0">
                     <p className="truncate font-medium">{config.label}</p>
                     <p className="truncate text-sm text-muted-foreground">
-                      {config.brandName}
+                      Para tu {config.terms.business}
                     </p>
                   </div>
                 </CardContent>
