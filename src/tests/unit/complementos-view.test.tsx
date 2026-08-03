@@ -28,11 +28,19 @@ afterEach(() => {
   cleanup();
 });
 
-/** Renderiza la vista con un mapa `feature → enabled` (ausencia = no contratado). */
-function renderView(entries: ReadonlyArray<[SalonFeature, boolean]>): void {
+/**
+ * Renderiza la vista con un mapa `feature → enabled` (ausencia = no contratado) y,
+ * opcionalmente, el nombre de la recepcionista IA vinculada (para las pruebas de la
+ * línea de verificación en la tarjeta de Recepcionista IA).
+ */
+function renderView(
+  entries: ReadonlyArray<[SalonFeature, boolean]>,
+  receptionistName?: string | null,
+): void {
   render(
     createElement(ComplementosView, {
       features: new Map<SalonFeature, boolean>(entries),
+      receptionistName,
     }),
   );
 }
@@ -101,5 +109,54 @@ describe("ComplementosView · la fidelización ausente NO se ofrece como activa"
     expect(within(card).queryByText("Contratado")).toBeNull();
     // Un add-on pausado sí cuenta como contratado (1 de 5): está en el plan, suspendido.
     expect(screen.getByText(/1 de 5/)).toBeInTheDocument();
+  });
+});
+
+describe("ComplementosView · verificación del nombre de la recepcionista IA", () => {
+  it("con el add-on activo y nombre, la tarjeta de Recepcionista IA muestra el nombre", () => {
+    renderView([["ai_receptionist", true]], "Sara");
+
+    const card = cardFor("Recepcionista IA");
+    expect(within(card).getByText("Sara")).toBeInTheDocument();
+    expect(
+      within(card).getByText(/Recepcionista vinculada/i),
+    ).toBeInTheDocument();
+  });
+
+  it("el nombre aparece SOLO en la tarjeta de Recepcionista IA, no en otras", () => {
+    renderView(
+      [
+        ["ai_receptionist", true],
+        ["pos", true],
+      ],
+      "Sara",
+    );
+
+    expect(
+      within(cardFor("Recepcionista IA")).getByText("Sara"),
+    ).toBeInTheDocument();
+    expect(within(cardFor("TPV")).queryByText("Sara")).toBeNull();
+  });
+
+  it("con el add-on activo pero SIN nombre, no se pinta la línea de verificación", () => {
+    renderView([["ai_receptionist", true]]); // sin receptionistName
+
+    expect(screen.queryByText(/Recepcionista vinculada/i)).toBeNull();
+  });
+
+  it("aunque llegue un nombre, si el add-on está EN PAUSA no se muestra (no vinculada activa)", () => {
+    renderView([["ai_receptionist", false]], "Sara");
+
+    const card = cardFor("Recepcionista IA");
+    expect(within(card).getByText("En pausa")).toBeInTheDocument();
+    expect(within(card).queryByText("Sara")).toBeNull();
+    expect(screen.queryByText(/Recepcionista vinculada/i)).toBeNull();
+  });
+
+  it("si el add-on NO está contratado, un nombre suelto NO aparece", () => {
+    renderView([], "Sara"); // ai_receptionist ausente ⇒ no contratado
+
+    expect(screen.queryByText("Sara")).toBeNull();
+    expect(screen.queryByText(/Recepcionista vinculada/i)).toBeNull();
   });
 });

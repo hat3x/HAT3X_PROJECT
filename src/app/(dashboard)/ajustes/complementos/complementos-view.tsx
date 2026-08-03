@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BadgeCheck,
   Blocks,
   CheckCircle2,
   CreditCard,
@@ -122,6 +123,13 @@ function statusOf(
 interface ComplementosViewProps {
   /** Entitlements del salón activo (`feature → enabled`); ver `listSalonFeatures`. */
   features: ReadonlyMap<SalonFeature, boolean>;
+  /**
+   * Nombre de la recepcionista IA vinculada (p. ej. "Sara"), o `null` si el add-on
+   * `ai_receptionist` no está activo / sin nombre. Ver `getReceptionistName`. Solo se
+   * muestra en la tarjeta de Recepcionista IA cuando está contratada y activa, para
+   * VERIFICAR de un vistazo que la recepcionista vinculada es la correcta.
+   */
+  receptionistName?: string | null;
 }
 
 /**
@@ -132,6 +140,7 @@ interface ComplementosViewProps {
  */
 export function ComplementosView({
   features,
+  receptionistName = null,
 }: ComplementosViewProps): React.ReactElement {
   const contractedCount = ADDONS.filter(
     (addon) => statusOf(features, addon.feature) !== "not_contracted",
@@ -189,6 +198,23 @@ export function ComplementosView({
                   <h3 className="font-semibold tracking-tight">{name}</h3>
                   <p className="text-sm text-muted-foreground">{description}</p>
                 </div>
+
+                {feature === "ai_receptionist" &&
+                status === "active" &&
+                receptionistName ? (
+                  <div className="mt-auto flex items-center gap-2 rounded-lg border border-primary/15 bg-accent/60 px-3 py-2 text-sm">
+                    <BadgeCheck
+                      className="h-4 w-4 shrink-0 text-primary"
+                      aria-hidden="true"
+                    />
+                    <span className="text-muted-foreground">
+                      Recepcionista vinculada:{" "}
+                      <span className="font-semibold text-foreground">
+                        {receptionistName}
+                      </span>
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </li>
           );

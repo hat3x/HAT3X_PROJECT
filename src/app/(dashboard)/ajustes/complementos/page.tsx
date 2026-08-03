@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ComplementosView } from "@/app/(dashboard)/ajustes/complementos/complementos-view";
 import { SectionPlaceholder } from "@/app/(dashboard)/ajustes/section-placeholder";
 import { getActiveSalonId } from "@/lib/salon";
-import { listSalonFeatures } from "@/lib/salon-features";
+import { getReceptionistName, listSalonFeatures } from "@/lib/salon-features";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -33,9 +33,15 @@ export default async function ComplementosPage(): Promise<React.ReactElement> {
   }
 
   // Una sola consulta para los cinco add-ons (vs. N gates); el mapa distingue los tres
-  // estados que la vista necesita (contratado / en pausa / no contratado).
+  // estados que la vista necesita (contratado / en pausa / no contratado). Aparte, el
+  // nombre de la recepcionista IA (si está vinculada y activa) para verificar identidad.
   const supabase = createClient();
-  const features = await listSalonFeatures(supabase, salonId);
+  const [features, receptionistName] = await Promise.all([
+    listSalonFeatures(supabase, salonId),
+    getReceptionistName(supabase, salonId),
+  ]);
 
-  return <ComplementosView features={features} />;
+  return (
+    <ComplementosView features={features} receptionistName={receptionistName} />
+  );
 }

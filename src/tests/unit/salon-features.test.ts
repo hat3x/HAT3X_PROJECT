@@ -33,6 +33,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   LOYALTY_FEATURE_DISABLED_MESSAGE,
+  getReceptionistName,
   listSalonFeatures,
   salonFeatureFlags,
   salonHasFeature,
@@ -152,6 +153,75 @@ describe("salonHasFeature — tabla de verdad OPT-IN", () => {
     // el llamador lo traduce a un error `internal`/500, no a un gate cerrado en silencio.
     const client = asClient([], { message: "boom" });
     await expect(salonHasFeature(client, SALON_A, LOYALTY)).rejects.toMatchObject({
+      message: "boom",
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A''') NOMBRE DE LA RECEPCIONISTA IA — `getReceptionistName` lee `notes` de la fila
+//       `ai_receptionist` SOLO si el add-on está contratado y ACTIVO (enabled=true). Un
+//       `notes` vacío o en blanco ⇒ null (sin nombre), nunca cadena vacía. Se usa para
+//       VERIFICAR, al vincular la recepcionista con su negocio, que es la correcta.
+//       Reutiliza el doble `asClient` (basado en `.maybeSingle`) que discrimina por los
+//       `.eq` acumulados (salon_id + feature + enabled).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("getReceptionistName — nombre de la recepcionista IA vinculada", () => {
+  const AI: SalonFeature = "ai_receptionist";
+
+  it("add-on activo con nombre ⇒ devuelve el nombre (p. ej. 'Sara')", async () => {
+    const client = asClient([
+      { salon_id: SALON_A, feature: AI, enabled: true, notes: "Sara" },
+    ]);
+    await expect(getReceptionistName(client, SALON_A)).resolves.toBe("Sara");
+  });
+
+  it("recorta los espacios del nombre ('  Sara  ' ⇒ 'Sara')", async () => {
+    const client = asClient([
+      { salon_id: SALON_A, feature: AI, enabled: true, notes: "  Sara  " },
+    ]);
+    await expect(getReceptionistName(client, SALON_A)).resolves.toBe("Sara");
+  });
+
+  it("add-on activo pero notes null ⇒ null (sin nombre asignado)", async () => {
+    const client = asClient([
+      { salon_id: SALON_A, feature: AI, enabled: true, notes: null },
+    ]);
+    await expect(getReceptionistName(client, SALON_A)).resolves.toBeNull();
+  });
+
+  it("add-on activo con notes en blanco ⇒ null (no cadena vacía)", async () => {
+    const client = asClient([
+      { salon_id: SALON_A, feature: AI, enabled: true, notes: "   " },
+    ]);
+    await expect(getReceptionistName(client, SALON_A)).resolves.toBeNull();
+  });
+
+  it("add-on en PAUSA (enabled=false) ⇒ null (una recepcionista pausada no se anuncia)", async () => {
+    const client = asClient([
+      { salon_id: SALON_A, feature: AI, enabled: false, notes: "Sara" },
+    ]);
+    await expect(getReceptionistName(client, SALON_A)).resolves.toBeNull();
+  });
+
+  it("sin fila de ai_receptionist ⇒ null (no contratado, la ausencia es el gate)", async () => {
+    const client = asClient([
+      { salon_id: SALON_A, feature: "loyalty", enabled: true, notes: "algo" },
+    ]);
+    await expect(getReceptionistName(client, SALON_A)).resolves.toBeNull();
+  });
+
+  it("se acota por salon_id: la recepcionista de OTRO salón no cuenta", async () => {
+    const client = asClient([
+      { salon_id: SALON_B, feature: AI, enabled: true, notes: "Sara" },
+    ]);
+    await expect(getReceptionistName(client, SALON_A)).resolves.toBeNull();
+    await expect(getReceptionistName(client, SALON_B)).resolves.toBe("Sara");
+  });
+
+  it("un error de la consulta se PROPAGA (no se enmascara como null)", async () => {
+    const client = asClient([], { message: "boom" });
+    await expect(getReceptionistName(client, SALON_A)).rejects.toMatchObject({
       message: "boom",
     });
   });

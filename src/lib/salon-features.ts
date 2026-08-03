@@ -101,6 +101,43 @@ export async function listSalonFeatures(
 }
 
 /**
+ * Nombre de la RECEPCIONISTA IA vinculada al salón (p. ej. "Sara" en Biodental), o
+ * `null` si el add-on `ai_receptionist` no está activo o no tiene nombre asignado.
+ *
+ * El nombre se guarda en `salon_features.notes` de la fila `ai_receptionist`: es un
+ * dato 1:1 con ese entitlement (cada salón con recepcionista IA tiene UNA), así que
+ * reutiliza la columna `notes` en vez de una tabla nueva. Sirve para VERIFICAR, al
+ * vincular la recepcionista con su negocio, que es la correcta y no otra: la vista de
+ * Complementos lo muestra bajo el add-on.
+ *
+ * Solo devuelve nombre cuando el add-on está CONTRATADO Y ACTIVO (`enabled = true`):
+ * una recepcionista en pausa no se anuncia como vinculada. Un `notes` vacío o en
+ * blanco cuenta como "sin nombre" (⇒ `null`), no como cadena vacía. Acota SIEMPRE por
+ * `salon_id`. De SOLO LECTURA. USO EXCLUSIVO DE SERVIDOR.
+ *
+ * @throws el error de Postgrest si la consulta falla (un resultado vacío NO es error:
+ *   es `null`, igual que {@link salonHasFeature} con una feature ausente).
+ */
+export async function getReceptionistName(
+  client: AnySupabaseClient,
+  salonId: string,
+): Promise<string | null> {
+  const { data, error } = await client
+    .from("salon_features")
+    .select("notes")
+    .eq("salon_id", salonId)
+    .eq("feature", "ai_receptionist")
+    .eq("enabled", true)
+    .maybeSingle();
+
+  if (error !== null) {
+    throw error;
+  }
+  const name = data?.notes?.trim();
+  return name ? name : null;
+}
+
+/**
  * Snapshot BOOLEANO del GATE para `salonId`: lee los entitlements en UNA consulta (vía
  * {@link listSalonFeatures}) y los reduce con {@link toSalonFeatureFlags} a un
  * `feature → boolean` con todas las claves presentes (OPT-IN: en pausa / ausente ⇒
