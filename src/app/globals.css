@@ -5,7 +5,10 @@
 /*
  * Kairos — Sistema de diseño premium (estilo Apple)
  * ----------------------------------------------------
- * Base neutra cálida + acento violeta (#7c3aed ≈ hsl(262 83% 58%)).
+ * Base neutra cálida + primary en TINTA (near-black cálido) + acento de marca LATÓN
+ * (token propio --brand, #B4884D ≈ 34 41% 50%), usado con cuentagotas (símbolo, nav
+ * activa, foco, señales). El violeta anterior queda retirado. El white-label del tenant
+ * sigue sobrescribiendo --primary/--accent/--ring vía [data-salon-brand].
  * Todos los tokens son variables CSS consumidas por tailwind.config.ts,
  * de modo que el tema claro/oscuro y los componentes shadcn comparten
  * una única fuente de verdad. NO contiene lógica de negocio.
@@ -26,9 +29,13 @@
     --popover: 40 40% 99.5%;
     --popover-foreground: 30 10% 15%;
 
-    /* ---- Acento de marca (violeta) ---- */
-    --primary: 262 83% 58%;
+    /* ---- Primary = TINTA (botones oscuros, texto porcelana) ---- */
+    --primary: 32 11% 11%;
     --primary-foreground: 40 40% 99%;
+
+    /* ---- Marca: LATÓN (acento propio Kairos, no derivado del tenant) ---- */
+    --brand: 34 41% 50%;
+    --brand-foreground: 32 11% 11%;
 
     /* ---- Neutros de apoyo (cálidos) ---- */
     --secondary: 40 20% 94%;
@@ -38,9 +45,9 @@
     /* L42% (antes 44%) para alcanzar AA 4.5:1 también sobre --muted */
     --muted-foreground: 30 6% 42%;
 
-    /* Acento sutil: lavado violeta para hover/estados suaves */
-    --accent: 262 60% 96%;
-    --accent-foreground: 262 55% 34%;
+    /* Acento sutil: lavado LATÓN para hover/estado activo (nav) */
+    --accent: 40 52% 90%;
+    --accent-foreground: 38 55% 32%;
 
     /* ---- Semánticos ---- */
     --destructive: 0 72% 51%;
@@ -53,13 +60,13 @@
     --warning: 38 92% 48%;
     --warning-foreground: 30 20% 12%;
 
-    --info: 262 83% 58%;
+    --info: 205 70% 40%;
     --info-foreground: 40 40% 99%;
 
     /* ---- Líneas y foco ---- */
     --border: 38 20% 89%;
     --input: 38 20% 89%;
-    --ring: 262 83% 58%;
+    --ring: 32 11% 11%;
 
     /* ---- Radios (base premium generosa) ---- */
     --radius: 0.75rem;
@@ -94,9 +101,13 @@
     --popover: 30 8% 11%;
     --popover-foreground: 40 22% 96%;
 
-    /* ---- Acento de marca (violeta algo más claro para contraste) ---- */
-    --primary: 262 84% 68%;
+    /* ---- Primary = PORCELANA en oscuro (botón claro, texto tinta) ---- */
+    --primary: 40 22% 94%;
     --primary-foreground: 30 12% 10%;
+
+    /* ---- Marca: LATÓN (más claro sobre charcoal) ---- */
+    --brand: 40 56% 66%;
+    --brand-foreground: 30 12% 10%;
 
     /* ---- Neutros de apoyo ---- */
     --secondary: 30 6% 17%;
@@ -105,9 +116,9 @@
     --muted: 30 6% 16%;
     --muted-foreground: 40 8% 64%;
 
-    /* Acento sutil: lavado violeta profundo */
-    --accent: 262 40% 22%;
-    --accent-foreground: 262 80% 88%;
+    /* Acento sutil: lavado LATÓN profundo */
+    --accent: 38 30% 16%;
+    --accent-foreground: 40 58% 74%;
 
     /* ---- Semánticos ---- */
     /* L50% (antes 52%) para superar con holgura AA 4.5:1 con texto claro */
@@ -120,13 +131,13 @@
     --warning: 38 90% 58%;
     --warning-foreground: 30 20% 10%;
 
-    --info: 262 84% 68%;
+    --info: 205 70% 62%;
     --info-foreground: 30 12% 10%;
 
     /* ---- Líneas y foco ---- */
     --border: 30 6% 20%;
     --input: 30 6% 22%;
-    --ring: 262 84% 68%;
+    --ring: 40 22% 94%;
 
     /* ---- Sombras (negras, más presentes sobre fondo oscuro) ---- */
     --shadow-color: 0 0% 0%;
@@ -172,7 +183,7 @@
 
   /* Selección con tinte de marca */
   ::selection {
-    background-color: hsl(var(--primary) / 0.18);
+    background-color: hsl(var(--brand) / 0.22);
     color: hsl(var(--foreground));
   }
 

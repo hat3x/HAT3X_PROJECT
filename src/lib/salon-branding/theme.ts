@@ -14,19 +14,17 @@
  *      (`[data-salon-brand]`), de modo que la marca NO toca `:root` global: las
  *      páginas sin salón (login) conservan intacto el tema premium por defecto.
  *
- * Sub-5 — Sector fallback: cuando el tenant no tiene `salon_branding`, el sector del
- * salón determina el color primario por defecto (`SECTOR_REGISTRY[sector].defaultPrimary`).
- * Para `peluqueria` el color es `#7c3aed` (idéntico al default de `globals.css`), de modo
- * que los salones de peluquería no notan ningún cambio visual — regresión byte-idéntica.
+ * Rebrand Kairos — SIN fallback por sector: cuando el tenant no tiene `salon_branding`,
+ * NO se re-tiñe nada; el panel hereda el default de marca de `globals.css` (primary =
+ * tinta, acento = latón `--brand`). `resolveSectorFallbackTheme` devuelve siempre `null`.
  *
  * SIN dependencias de red ni de React: funciones puras testeables (mismo espíritu que
  * `@/lib/salon-branding/branding`). La capa de servidor decide CUÁNDO pintar; aquí solo
  * se decide CÓMO. Si no hay marca válida ⇒ `null` ⇒ el layout no inyecta nada y el
- * tema por defecto (violeta #7c3aed) manda: [[salon-branding-server]].
+ * tema por defecto de Kairos (tinta + latón) manda: [[salon-branding-server]].
  */
 import type { SalonSector } from "@/types/database";
 
-import { SECTOR_REGISTRY } from "@/lib/sector/registry";
 import { HEX_COLOR_PATTERN, type SalonBranding } from "./branding";
 
 /**
@@ -285,16 +283,17 @@ export function resolveBrandTheme(branding: SalonBranding | null): BrandTheme | 
 }
 
 /**
- * Tema por defecto del SECTOR cuando el tenant no ha configurado `salon_branding`.
- * Usa `SECTOR_REGISTRY[sector].defaultPrimary` como color primario (sin secundario).
+ * Fallback de sector — RETIRADO con el rebrand a Kairos: ya NO se re-tiñe el panel por
+ * sector. El default de marca (primary = TINTA, acento = LATÓN `--brand`) vive en
+ * `globals.css` y el panel lo HEREDA cuando el tenant no tiene `salon_branding` propio.
  *
- * Para `peluqueria` el color es `#7c3aed` — byte-idéntico al default de `globals.css`
- * (`262 83% 58%`), por lo que los salones de ese sector no notan ningún cambio visual.
- * Para `odontologia` el color es `#0f766e` (teal), que re-tinta el panel con la paleta
- * corporativa de clínica dental.
+ * Devuelve siempre `null` ("no inyectar overrides"): así login y panel comparten el
+ * mismo default Kairos, sin per-sector. SOLO el branding explícito del tenant
+ * (`resolveBrandTheme`) sobrescribe `--primary`/`--accent`/`--ring` en el subárbol del
+ * panel (white-label intacto). Se conserva la firma `(sector)` para no tocar llamadores.
  */
-export function resolveSectorFallbackTheme(sector: SalonSector): BrandTheme | null {
-  return resolveHexBrandTheme(SECTOR_REGISTRY[sector].defaultPrimary, null);
+export function resolveSectorFallbackTheme(_sector: SalonSector): BrandTheme | null {
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

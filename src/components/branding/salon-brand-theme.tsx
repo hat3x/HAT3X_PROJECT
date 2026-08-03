@@ -7,10 +7,10 @@
  * `ThemeScript`). Las reglas están acotadas a `[data-salon-brand]`, así que solo
  * re-tintan el subárbol del panel; `:root` global queda intacto.
  *
- * Sub-5 — Sector fallback: si el salón no tiene `salon_branding`, se aplica el color
- * primario por defecto del sector (`SECTOR_REGISTRY[sector].defaultPrimary`) en lugar
- * de no emitir nada. Para `peluqueria` el resultado es byte-idéntico al default de
- * `globals.css`; para `odontologia` se activa la paleta teal de clínica.
+ * Rebrand Kairos — SIN fallback por sector: si el salón no tiene `salon_branding`,
+ * `resolveSectorFallbackTheme` devuelve `null` y este componente NO emite nada; el panel
+ * hereda el default de marca de `globals.css` (primary = tinta, acento = latón). Solo el
+ * branding EXPLÍCITO del tenant re-tiñe el subárbol del panel.
  * El CSS solo contiene tripletes numéricos generados por la lib (nunca texto libre),
  * de modo que `dangerouslySetInnerHTML` es seguro aquí.
  */

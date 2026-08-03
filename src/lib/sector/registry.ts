@@ -27,7 +27,7 @@ export interface SectorConfig {
   key: SalonSector;
   label: string;      // nombre del sector para el picker
   brandName: string;  // wordmark de la app (masterbrand «Kairos», igual en todos los sectores)
-  defaultPrimary: string; // #rrggbb; el salon_branding del tenant tiene prioridad
+  defaultPrimary: string; // #rrggbb — LEGACY: ya NO re-tiñe el panel (default Kairos vive en globals.css); reservado
   implemented: boolean;   // false = cascarón "Próximamente"
   terms: SectorTerms;
   sampleService: SectorSampleService;
