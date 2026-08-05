@@ -37,14 +37,18 @@ infravaloraba, porque gran parte del trabajo (editar imágenes, probar la app) o
 4. **Histórico: estimado desde los logs.** Para lo ya trabajado sin fichar, las ventanas de
    presencia se deducen de los logs con un umbral de inactividad configurable. Se marca como
    `estimado` frente a lo `fichado`.
-5. **Dashboard: fichero HTML local.** Un comando genera un `.html` autocontenido y lo abre
-   en el navegador. Sin servidor, offline, privado. (Servidor en vivo y publicación al móvil
-   quedan fuera del v1.)
+5. **Entregable: app de escritorio `.exe` con el dashboard embebido.** La herramienta se
+   empaqueta como un `.exe` de Windows (PyInstaller) que abre una **ventana con el dashboard
+   dentro** (webview, sin abrir navegador aparte) y los controles de entrada/salida. No
+   requiere Python instalado. El fichero HTML suelto queda solo como artefacto de
+   desarrollo/demo. (Servidor en vivo y publicación al móvil quedan fuera del v1.)
 
 ## 3. Arquitectura
 
-Ubicación: `tools/fichaje/`. **Python, solo stdlib** (cero dependencias, portable Windows).
-El código se commitea; los datos personales (`tools/fichaje/data/`) van a `.gitignore`.
+Ubicación: `tools/fichaje/`. **Python**. El **motor** (parseo, atribución, ventanas, informe)
+es **solo stdlib** — cero dependencias, testeable aislado. La **capa de app** usa **pywebview**
+para la ventana con el dashboard embebido. Empaquetado a `.exe` con **PyInstaller** (dependencia
+solo de build). El código se commitea; los datos personales (`tools/fichaje/data/`) van a `.gitignore`.
 
 ### Módulos (una responsabilidad cada uno, testeable aislado)
 
@@ -56,9 +60,17 @@ El código se commitea; los datos personales (`tools/fichaje/data/`) van a `.git
 | `windows.py` | Construye ventanas de presencia (`fichado`, `estimado`, `manual`); precedencia. | store, logs |
 | `store.py` | Lee/escribe `fichaje.json`: fichajes, ventana abierta, manuales. Máquina de estados entrada/salida. | — |
 | `report.py` | Cruza ventanas × atribución → totales por cliente/día, unión (jornada real), CSV. | windows, attribution, clients |
-| `dashboard.py` | Renderiza HTML autocontenido (JSON embebido + vanilla JS). | report |
-| `cli.py` | Subcomandos (entrada/salida/estado/add/informe/dashboard/clientes). | todos |
+| `dashboard.py` | Renderiza el HTML autocontenido (JSON embebido + vanilla JS) que se carga en la ventana. | report |
+| `app.py` | Ventana de escritorio (pywebview): carga el dashboard embebido + puente JS↔Python para entrada/salida/refresco en vivo. | dashboard, store, report |
+| `cli.py` | Interfaz secundaria: subcomandos sobre el mismo motor (entrada/salida/estado/add/informe/dashboard/clientes). | todos |
 | `cache.py` | Caché de parseo por fichero de sesión (clave `mtime+tamaño`). | — |
+
+### Empaquetado (.exe)
+
+- **PyInstaller** en modo *onefile* → un solo `fichaje.exe` (con un `fichaje.spec` versionado para regenerarlo).
+- `pywebview` en Windows usa el runtime **Edge WebView2**, presente por defecto en Windows 11.
+- El motor stdlib mantiene el `.exe` pequeño; `pywebview` es la única dependencia de runtime.
+- Punto de entrada del `.exe` = `app.py` (abre la ventana). El CLI queda disponible por separado.
 
 ### Tipo `Evento`
 
@@ -120,9 +132,13 @@ Tres orígenes, con etiqueta:
 - `cliente_principal` opcional: pista para tramos sin actividad en Claude. Si hay actividad,
   mandan las rutas.
 
-## 6. CLI
+## 6. Interfaces (app + CLI)
 
-Atajo `fichaje` (`.cmd`/`.ps1` mínimo que llama a `python tools/fichaje/cli.py`).
+La interfaz **principal** es la **app de escritorio** (`.exe`, Sección 7): ventana con el
+dashboard embebido y controles de entrada/salida. La **CLI** es una interfaz **secundaria**
+sobre el mismo motor, para fichar rápido desde terminal o scriptar informes/export.
+
+Atajo CLI `fichaje` (`.cmd`/`.ps1` mínimo que llama a `python tools/fichaje/cli.py`, o el propio `fichaje.exe`).
 
 | Comando | Qué hace |
 |---|---|
@@ -131,7 +147,7 @@ Atajo `fichaje` (`.cmd`/`.ps1` mínimo que llama a `python tools/fichaje/cli.py`
 | `fichaje estado` | Jornada abierta + totales de hoy en vivo. |
 | `fichaje add --cliente 100m --de 16:00 --a 17:30 [--fecha ayer] [--nota "…"]` | Bloque manual. |
 | `fichaje informe [--desde 2026-06-30] [--hasta hoy] [--cliente 100m] [--csv ruta.csv]` | Tabla + export CSV. |
-| `fichaje dashboard [--desde --hasta]` | Genera y abre el HTML. |
+| `fichaje dashboard [--desde --hasta]` | Genera el HTML a fichero (demo/preview en navegador; la vista real va embebida en la app). |
 | `fichaje clientes` | Lista clientes detectados + nombre/tarifa. |
 
 ### Informe (terminal)
@@ -167,19 +183,22 @@ Fichero resumen por cliente aparte. Fechas ISO; `origen ∈ {fichado, estimado, 
 
 `tarifa_eur_h` opcional → activa la columna importe.
 
-## 7. Dashboard (HTML local)
+## 7. App de escritorio + dashboard embebido
 
-`fichaje dashboard` → genera `tools/fichaje/out/fichaje.html` y lo abre.
+Al abrir `fichaje.exe`, `app.py` crea una ventana **pywebview** que carga el HTML del
+dashboard **dentro** (sin navegador aparte). El mismo renderer (`dashboard.py`) puede además
+escribir el HTML a fichero para previsualizar en el navegador durante el desarrollo.
 
-- **Autocontenido:** datos como JSON embebido, **vanilla JS, cero dependencias, sin servidor**.
-- Tema claro/oscuro, estilo HAT3X.
-- Bloques:
+- **Barra de controles** (arriba): selector de cliente + **Entrada / Salida / Estado** +
+  **Añadir manual**. Los botones llaman a Python por el puente `window.pywebview.api.*`
+  (→ `store.py`/`report.py`) y **refrescan el dashboard en vivo**.
+- **Dashboard** (cuerpo), HTML autocontenido, vanilla JS, tema claro/oscuro, estilo HAT3X:
   1. **Cabecera:** rango + cifras grandes (jornada real / facturable con solape / nº días / importe).
   2. **Por cliente:** barras o donut con horas, %, importe, color por cliente; badge `estimado`/`fichado`.
   3. **Timeline por día:** carriles apilados; los solapes se ven en paralelo. Hover → tooltip
      (cliente, hora, origen, nota).
   4. **Filtros** por cliente y origen; botón **export CSV**.
-- Salida local (no se publica). Construido para *poder* publicarse como Artifact más adelante.
+- Todo local y privado. El renderer se construye para *poder* publicarse como Artifact más adelante.
 
 ## 8. Rendimiento
 
@@ -196,6 +215,10 @@ nuevos/cambiados → informes casi instantáneos. Lectura siempre en streaming.
 - `store`: máquina de estados entrada/salida (salida sin entrada, entrada con abierta), round-trip JSON.
 - `report`: forma del CSV.
 - `dashboard`: smoke test — genera HTML válido con JSON embebido parseable.
+- `app`: smoke test del puente — los métodos de la API (entrada/salida/estado/informe) son
+  invocables y devuelven datos correctos; la ventana pywebview en sí no se testea unitariamente.
+
+El motor (todo salvo `app.py`) se testea sin `pywebview` instalado, para que la suite corra en CI.
 
 ## 10. Errores
 
