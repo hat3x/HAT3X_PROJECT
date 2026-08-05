@@ -27,5 +27,16 @@ export function createAdminClient() {
 
   return createSupabaseClient<Database>(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    // Lecturas SIEMPRE en vivo. En Next 14 App Router, `fetch` (que usa supabase-js
+    // por debajo) entra en el Data Cache aunque la ruta sea `dynamic = "force-dynamic"`:
+    // ese flag gobierna el RENDER, pero un fetch sin `cache` explícito y con URL estable
+    // (p. ej. la query de `professional_schedules`, que no lleva la fecha) se cachea y
+    // devuelve datos OBSOLETOS tras un cambio en BD. Este cliente alimenta disponibilidad,
+    // creación y reprogramación de citas: la frescura es una invariante de corrección
+    // (un horario o una cita cacheados provocan huecos falsos). Forzamos `no-store`.
+    global: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, { ...init, cache: "no-store" }),
+    },
   });
 }
