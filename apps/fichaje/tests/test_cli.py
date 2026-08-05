@@ -67,5 +67,32 @@ class TestCli(unittest.TestCase):
         hoy = datetime.now(timezone(timedelta(hours=2))).date()
         self.assertEqual(vs[0].inicio.date(), hoy)
 
+    def test_add_cruza_medianoche_no_se_descarta(self):
+        # IMPORTANT (re-review): --de 22:00 --a 02:00 es trabajo nocturno legitimo;
+        # antes del fix se guardaba con fin <= inicio y pipeline lo descartaba en silencio.
+        code, out = self._run("add", "--cliente", "100-montaditos",
+                               "--de", "22:00", "--a", "02:00", "--fecha", "2026-08-01")
+        self.assertEqual(code, 0)
+        s = Store(self.root / "apps" / "fichaje" / "data" / "fichaje.json")
+        vs = s.ventanas_manual()
+        self.assertEqual(len(vs), 1)
+        self.assertGreater(vs[0].fin, vs[0].inicio)
+        self.assertEqual(vs[0].inicio.date().isoformat(), "2026-08-01")
+        self.assertEqual(vs[0].fin.date().isoformat(), "2026-08-02")
+        self.assertEqual(vs[0].fin.hour, 2)
+
+    def test_resolver_rango_manual_suma_un_dia_si_a_no_es_posterior(self):
+        # Unidad: la funcion que resuelve el rango debe garantizar fin > inicio.
+        from datetime import date as ddate
+        from fichaje import timeutil
+        tz = timeutil.TZ_DEFECTO
+        fecha = ddate(2026, 8, 1)
+        de, a = cli._resolver_rango_manual(fecha, "22:00", "02:00", tz)
+        self.assertGreater(a, de)
+        self.assertEqual(a.date().isoformat(), "2026-08-02")
+        # caso normal (mismo dia) no debe alterarse
+        de2, a2 = cli._resolver_rango_manual(fecha, "16:00", "17:30", tz)
+        self.assertEqual(a2.date().isoformat(), "2026-08-01")
+
 if __name__ == "__main__":
     unittest.main()

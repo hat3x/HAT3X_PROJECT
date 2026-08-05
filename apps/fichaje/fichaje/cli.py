@@ -23,6 +23,15 @@ def _parse_hora(fecha, hhmm, tz):
     h, m = map(int, hhmm.split(":"))
     return datetime.combine(fecha, time(h, m), tz)
 
+def _resolver_rango_manual(fecha, de_str, a_str, tz):
+    """Resuelve --de/--a a datetimes con fin > inicio. Si 'a' no es posterior a 'de'
+    (turno nocturno tipo 22:00 -> 02:00), asume que cruza medianoche y le suma un dia."""
+    de = _parse_hora(fecha, de_str, tz)
+    a = _parse_hora(fecha, a_str, tz)
+    if a <= de:
+        a += timedelta(days=1)
+    return de, a
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     ap = argparse.ArgumentParser(prog="fichaje")
@@ -76,8 +85,7 @@ def main(argv=None):
 
     if args.cmd == "add":
         fecha = _parse_fecha(args.fecha, tz)
-        de = _parse_hora(fecha, args.de, tz)
-        a_hasta = _parse_hora(fecha, args.a, tz)
+        de, a_hasta = _resolver_rango_manual(fecha, args.de, args.a, tz)
         try:
             Store(P["store_path"]).add_manual(args.cliente, de, a_hasta, args.nota)
         except FichajeError as e:

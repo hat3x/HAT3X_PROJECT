@@ -43,7 +43,10 @@ def _bloques(minuto_cliente, tz):
 def facturar(ventanas, actividades, reg, tarifas, tz):
     acts_min = {}
     for a in actividades:
-        for m in range(epoch_min(a.inicio), epoch_min(a.fin)):  # [inicio, fin) — consistente con ventanas
+        # [inicio, fin) exclusivo, consistente con ventanas — pero un run degenerado
+        # (inicio==fin, un solo evento) se acolcha a minimo 1 minuto para no perderse.
+        fin_m = max(epoch_min(a.fin), epoch_min(a.inicio) + 1)
+        for m in range(epoch_min(a.inicio), fin_m):
             acts_min.setdefault(m, []).append(a.cliente)
     orden_acts = sorted(actividades, key=lambda a: a.inicio)
 

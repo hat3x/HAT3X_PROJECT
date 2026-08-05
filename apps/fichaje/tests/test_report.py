@@ -73,5 +73,21 @@ class TestReport(unittest.TestCase):
         self.assertEqual(rep.jornada_min, 60)
         self.assertEqual(rep.facturable_min, 60)  # sin doble conteo en la frontera
 
+    def test_actividad_instantanea_no_desaparece_junto_a_otra(self):
+        # CRITICAL (re-review): un run de un solo evento (inicio==fin, sesion s1, cliente
+        # "a") no debe perderse cuando otra actividad ("b", sesion s2) ya ocupa ese mismo
+        # minuto en acts_min. El rango exclusivo [inicio,fin) de una actividad degenerada
+        # da range(m,m) vacio; si ese hueco no se acolcha a minimo 1 minuto, "a" desaparece
+        # en silencio de totales/facturable_min porque _arrastre no se dispara (el minuto
+        # ya esta "ocupado" por "b").
+        v = [Ventana(t(10), t(11), "fichado")]
+        acts = [ActividadCliente("a", t(10), t(10), "s1"),        # evento unico, instantaneo
+                ActividadCliente("b", t(10), t(10, 5), "s2")]      # 5 min activos
+        rep = report.facturar(v, acts, REG, {}, TZ)
+        por = {tc.cliente: tc.minutos for tc in rep.totales}
+        self.assertIn("a", por)
+        self.assertGreaterEqual(por["a"], 1)
+        self.assertIn("b", por)
+
 if __name__ == "__main__":
     unittest.main()
