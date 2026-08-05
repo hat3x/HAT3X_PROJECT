@@ -32,3 +32,12 @@ def test_select_builds_filters():
     assert call["method"] == "GET"
     assert call["params"]["salon_id"] == "eq.S1"
     assert call["params"]["select"] == "feature,enabled"
+
+def test_auth_get_user_builds_admin_request():
+    sess = FakeSession()
+    c = SupabaseClient("https://p.supabase.co", "svc", session=sess)
+    c.auth_get_user("uid-1")
+    call = sess.calls[-1]
+    assert call["method"] == "GET"
+    assert call["url"].endswith("/auth/v1/admin/users/uid-1")
+    assert call["headers"]["apikey"] == "svc"

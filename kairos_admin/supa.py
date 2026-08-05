@@ -54,3 +54,6 @@ class SupabaseClient:
 
     def auth_update_user(self, uid, patch):
         return self._call("PUT", f"/auth/v1/admin/users/{uid}", body=patch)
+
+    def auth_get_user(self, uid):
+        return self._call("GET", f"/auth/v1/admin/users/{uid}")

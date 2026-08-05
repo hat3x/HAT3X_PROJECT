@@ -52,3 +52,27 @@ def test_bridge_apply_catalog_invalid_returns_error(supa):
     bad = {**CATALOG, "schedules": [{"professional": "Nadia Ros", "weekday": 9, "start": "10:00", "end": "14:00"}]}
     res = api.apply_catalog(out["salon"]["id"], bad)
     assert "error" in res
+
+def test_bridge_get_tenant_includes_owner(supa):
+    api = Api(supa=supa)
+    out = api.create_tenant({
+        "name": "Biodental", "sector": "dental",
+        "owner": {"login_id": "biodental", "password": "Pw-2026"},
+        "features": {}, "catalog": None,
+    })
+    salon_id = out["salon"]["id"]
+
+    detail = api.get_tenant(salon_id)
+    owner = detail["owner"]
+    assert owner["email"] == "biodental@salonos.app"
+    assert owner["login_id"] == "biodental"
+    assert owner["user_id"]
+    # el resto de la forma existente no se rompe
+    assert "salon" in detail and "features" in detail and "api_keys" in detail and "catalog" in detail
+
+def test_bridge_get_tenant_owner_none_without_members(supa):
+    api = Api(supa=supa)
+    salon = supa.insert("salons", [{"name": "Sin dueño", "slug": "sin-dueno", "sector": "dental",
+                                     "timezone": "Europe/Madrid", "active": True, "settings": {}}])[0]
+    detail = api.get_tenant(salon["id"])
+    assert detail["owner"] is None

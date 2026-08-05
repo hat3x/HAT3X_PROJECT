@@ -48,7 +48,18 @@ class Api:
             "features": features.get_features(self._supa, salon_id),
             "api_keys": access.list_api_keys(self._supa, salon_id),
             "catalog": catalog_ops.get_catalog(self._supa, salon_id),
+            "owner": self._get_owner(salon_id),
         }
+
+    def _get_owner(self, salon_id):
+        members = self._supa.select("salon_members", {"salon_id": salon_id, "role": "owner"})
+        if not members:
+            return None
+        user_id = members[0]["user_id"]
+        user = self._supa.auth_get_user(user_id) or {}
+        email = user.get("email") or ""
+        login_id = email.split("@", 1)[0] if email else None
+        return {"user_id": user_id, "email": email or None, "login_id": login_id}
 
     @_safe
     def create_tenant(self, payload):

@@ -518,22 +518,20 @@ function renderKeysTable(container) {
 
 function renderAccessTab(panel) {
   const salonId = STATE.tenant.salon.id;
+  const owner = STATE.tenant.owner || null;
   panel.innerHTML = `
     <div class="card">
-      <h2 class="card-title">Contraseña del dueño</h2>
-      <p class="muted">
-        El panel todavía no expone el ID de usuario del dueño desde esta pantalla (limitación
-        conocida de la API actual — pendiente para una futura versión). Búscalo en Supabase →
-        Authentication → Users por el email <code class="mono">&lt;id de acceso&gt;@salonos.app</code>
-        y pégalo aquí para resetear su contraseña.
-      </p>
-      <form id="reset-form" class="inline-form">
-        <label class="field">
-          <span>ID de usuario (Supabase Auth)</span>
-          <input id="reset-uid" type="text" placeholder="uuid del usuario" required autocomplete="off">
-        </label>
-        <button type="submit" class="btn btn-secondary">Resetear contraseña</button>
-      </form>
+      <h2 class="card-title">Acceso del dueño</h2>
+      ${owner ? `
+        <dl class="detail-grid detail-grid-tight">
+          <div><dt>Login</dt><dd class="mono">${escapeHtml(owner.login_id || "—")}</dd></div>
+          <div><dt>Email</dt><dd class="mono">${escapeHtml(owner.email || "—")}</dd></div>
+        </dl>
+        <p class="muted">Genera una contraseña nueva y resetéala para este usuario. Se mostrará una sola vez.</p>
+        <button type="button" class="btn btn-secondary" id="btn-reset-password">Resetear contraseña</button>
+      ` : `
+        <p class="muted">Este tenant todavía no tiene un dueño (fila <code class="mono">salon_members</code> con <code class="mono">role=owner</code>).</p>
+      `}
       <div id="reset-result"></div>
     </div>
 
@@ -553,24 +551,23 @@ function renderAccessTab(panel) {
 
   renderKeysTable($("#keys-table"));
 
-  $("#reset-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const uid = $("#reset-uid").value.trim();
-    if (!uid) return;
-    const pw = genPassword();
-    const btn = e.target.querySelector("button");
-    btn.disabled = true;
-    try {
-      const res = await api().reset_password(uid, pw);
-      if (res && res.error) { toast(res.error, "error"); return; }
-      $("#reset-result").innerHTML = secretPanel("Nueva contraseña", pw, "Guárdala ahora: no se volverá a mostrar.");
-      bindSecretCopyButtons($("#reset-result"));
-      toast("Contraseña reseteada.", "success");
-      e.target.reset();
-    } finally {
-      btn.disabled = false;
-    }
-  });
+  const resetBtn = $("#btn-reset-password");
+  if (resetBtn && owner) {
+    resetBtn.addEventListener("click", async () => {
+      if (!confirm(`¿Resetear la contraseña de «${owner.login_id || owner.email}»? La contraseña actual dejará de funcionar.`)) return;
+      const pw = genPassword();
+      resetBtn.disabled = true;
+      try {
+        const res = await api().reset_password(owner.user_id, pw);
+        if (res && res.error) { toast(res.error, "error"); return; }
+        $("#reset-result").innerHTML = secretPanel("Nueva contraseña", pw, "Guárdala ahora: no se volverá a mostrar.");
+        bindSecretCopyButtons($("#reset-result"));
+        toast("Contraseña reseteada.", "success");
+      } finally {
+        resetBtn.disabled = false;
+      }
+    });
+  }
 
   $("#issue-form").addEventListener("submit", async (e) => {
     e.preventDefault();

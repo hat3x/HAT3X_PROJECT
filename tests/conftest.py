@@ -54,6 +54,9 @@ class FakeSupabase:
         self.auth_users.setdefault(uid, {}).update(patch)
         return {"id": uid, **self.auth_users[uid]}
 
+    def auth_get_user(self, uid):
+        return {"id": uid, **self.auth_users.get(uid, {})}
+
 @pytest.fixture
 def supa():
     return FakeSupabase()
