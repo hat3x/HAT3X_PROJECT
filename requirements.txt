@@ -1,0 +1,4 @@
+pywebview==5.*
+cryptography==43.*
+requests==2.*
+pytest==8.*
