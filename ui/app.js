@@ -127,7 +127,8 @@ async function boot() {
   try {
     const needs = await api().needs_setup();
     show(needs ? "setup" : "unlock");
-    if (!needs) $("#master")?.focus();
+    if (needs) $("#url")?.focus();
+    else $("#master")?.focus();
   } catch (e) {
     toast("No se pudo iniciar el panel: " + e, "error");
   }
@@ -208,7 +209,12 @@ async function renderTenants() {
   });
 
   try {
-    STATE.tenants = await api().list_tenants();
+    const res = await api().list_tenants();
+    if (res && res.error) {
+      $("#tenants-card").innerHTML = `<p class="error-text">No se pudo cargar la lista de tenants: ${escapeHtml(res.error)}</p>`;
+      return;
+    }
+    STATE.tenants = Array.isArray(res) ? res : [];
   } catch (e) {
     $("#tenants-card").innerHTML = `<p class="error-text">No se pudo cargar la lista de tenants: ${escapeHtml(String(e))}</p>`;
     return;
@@ -581,7 +587,12 @@ function renderAccessTab(panel) {
       bindSecretCopyButtons($("#issue-result"));
       toast("Clave emitida.", "success");
       try {
-        STATE.tenant = await api().get_tenant(salonId);
+        const fresh = await api().get_tenant(salonId);
+        if (fresh && !fresh.error && fresh.salon) {
+          STATE.tenant = fresh;
+        } else if (fresh && fresh.error) {
+          toast(fresh.error, "error");
+        }
       } catch {
         /* la tabla se refresca de todos modos al volver a esta pestaña */
       }
@@ -887,7 +898,12 @@ async function applyCatalogManage(panel) {
     if (res && res.error) { toast(res.error, "error"); return; }
     toast(`Catálogo actualizado: ${res.professionals} prof. · ${res.services} servicios · ${res.schedules} horarios · ${res.links} asignaciones.`, "success");
     try {
-      STATE.tenant = await api().get_tenant(cm.salonId);
+      const fresh = await api().get_tenant(cm.salonId);
+      if (fresh && !fresh.error && fresh.salon) {
+        STATE.tenant = fresh;
+      } else if (fresh && fresh.error) {
+        toast(fresh.error, "error");
+      }
     } catch {
       /* si falla el refresco, el usuario puede volver a entrar en la pestaña */
     }
@@ -981,6 +997,7 @@ function paintWizard() {
     </div>
   `;
   paintWizardStep($("#wizard-body"), idx);
+  $("#wizard-body")?.querySelector("input, select, textarea")?.focus();
   $("#wizard-back").addEventListener("click", () => {
     if (idx > 1) { w.step--; paintWizard(); }
   });
