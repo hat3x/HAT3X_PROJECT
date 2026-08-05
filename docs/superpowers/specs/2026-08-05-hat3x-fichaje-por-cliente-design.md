@@ -45,10 +45,10 @@ infravaloraba, porque gran parte del trabajo (editar imágenes, probar la app) o
 
 ## 3. Arquitectura
 
-Ubicación: `tools/fichaje/`. **Python**. El **motor** (parseo, atribución, ventanas, informe)
+Ubicación: `apps/fichaje/`. **Python**. El **motor** (parseo, atribución, ventanas, informe)
 es **solo stdlib** — cero dependencias, testeable aislado. La **capa de app** usa **pywebview**
 para la ventana con el dashboard embebido. Empaquetado a `.exe` con **PyInstaller** (dependencia
-solo de build). El código se commitea; los datos personales (`tools/fichaje/data/`) van a `.gitignore`.
+solo de build). El código se commitea; los datos personales (`apps/fichaje/data/`) van a `.gitignore`.
 
 ### Módulos (una responsabilidad cada uno, testeable aislado)
 
@@ -138,7 +138,7 @@ La interfaz **principal** es la **app de escritorio** (`.exe`, Sección 7): vent
 dashboard embebido y controles de entrada/salida. La **CLI** es una interfaz **secundaria**
 sobre el mismo motor, para fichar rápido desde terminal o scriptar informes/export.
 
-Atajo CLI `fichaje` (`.cmd`/`.ps1` mínimo que llama a `python tools/fichaje/cli.py`, o el propio `fichaje.exe`).
+Atajo CLI `fichaje` (`.cmd`/`.ps1` mínimo que llama a `python apps/fichaje/cli.py`, o el propio `fichaje.exe`).
 
 | Comando | Qué hace |
 |---|---|
@@ -202,7 +202,7 @@ escribir el HTML a fichero para previsualizar en el navegador durante el desarro
 
 ## 8. Rendimiento
 
-Hay un log de sesión de ~484 MB. **Caché** por fichero (`tools/fichaje/data/cache/`) con clave
+Hay un log de sesión de ~484 MB. **Caché** por fichero (`apps/fichaje/data/cache/`) con clave
 `mtime+tamaño`: la primera pasada parsea todo (~1-2 min), las siguientes solo releen ficheros
 nuevos/cambiados → informes casi instantáneos. Lectura siempre en streaming.
 
