@@ -1,0 +1,8 @@
+{
+  "umbral_inactividad_min": 25,
+  "tz": "+02:00",
+  "clientes": {
+    "100-montaditos": { "nombre": "100 Montaditos", "tarifa_eur_h": 50 },
+    "salon-os": { "nombre": "Salon OS", "tarifa_eur_h": 50 }
+  }
+}
