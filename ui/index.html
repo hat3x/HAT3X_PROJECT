@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self' https:;">
+  <title>Kairos Admin</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Pantalla de carga inicial, mientras arranca el bridge pywebview -->
+  <section id="loading" class="screen screen-center">
+    <div class="brandmark">Kairos<span>Admin</span></div>
+    <p class="muted">Iniciando…</p>
+  </section>
+
+  <!-- Primer arranque: pide URL de Supabase + service role + contraseña maestra -->
+  <section id="setup" class="screen screen-center" hidden>
+    <form id="setup-form" class="auth-card" novalidate>
+      <div class="brandmark">Kairos<span>Admin</span></div>
+      <h1>Primer arranque</h1>
+      <p class="muted">Conecta el panel con tu proyecto de Supabase y fija una contraseña maestra. Todo se guarda cifrado en este equipo, nunca en texto plano.</p>
+
+      <label class="field">
+        <span>URL de Supabase</span>
+        <input id="url" type="url" placeholder="https://xxxx.supabase.co" required autocomplete="off">
+      </label>
+
+      <label class="field">
+        <span>Service role key</span>
+        <input id="svc" type="password" placeholder="eyJhbGciOi…" required autocomplete="off">
+      </label>
+
+      <label class="field">
+        <span>Contraseña maestra</span>
+        <input id="master2" type="password" placeholder="Mínimo 8 caracteres" required autocomplete="new-password" minlength="8">
+      </label>
+
+      <p class="hint">Esta contraseña descifra la configuración cada vez que abras Kairos Admin. Si la olvidas, tendrás que rehacer el primer arranque (los datos en Supabase no se pierden).</p>
+
+      <button type="submit" class="btn btn-primary btn-block">Guardar y entrar</button>
+    </form>
+  </section>
+
+  <!-- Arranques siguientes: solo pide la contraseña maestra -->
+  <section id="unlock" class="screen screen-center" hidden>
+    <form id="unlock-form" class="auth-card" novalidate>
+      <div class="brandmark">Kairos<span>Admin</span></div>
+      <h1>Bienvenido de vuelta</h1>
+      <p class="muted">Introduce la contraseña maestra para desbloquear el panel.</p>
+
+      <label class="field">
+        <span>Contraseña maestra</span>
+        <input id="master" type="password" required autocomplete="current-password" autofocus>
+      </label>
+
+      <button type="submit" class="btn btn-primary btn-block">Desbloquear</button>
+    </form>
+  </section>
+
+  <!-- App principal: tenants, detalle, asistente de alta -->
+  <section id="app" class="screen app-shell" hidden>
+    <header class="topbar">
+      <div class="brandmark">Kairos<span>Admin</span></div>
+      <nav class="topbar-actions" id="topbar-actions"></nav>
+    </header>
+    <main id="main" class="main" aria-live="polite"></main>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
