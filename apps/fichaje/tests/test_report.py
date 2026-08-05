@@ -41,9 +41,37 @@ class TestReport(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "out.csv"
             report.exportar_csv(rep, p)
-            filas = list(csv.DictReader(p.open(encoding="utf-8")))
+            with p.open(encoding="utf-8") as f:
+                filas = list(csv.DictReader(f))
             self.assertEqual(filas[0]["cliente"], "100-montaditos")
             self.assertIn("minutos", filas[0])
+
+    def test_csv_export_bloques(self):
+        v = [Ventana(t(10), t(10, 30), "fichado")]
+        acts = [ActividadCliente("100-montaditos", t(10), t(10, 30), "s1")]
+        rep = report.facturar(v, acts, REG, {}, TZ)
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "bloques.csv"
+            report.exportar_csv_bloques(rep, p)
+            with p.open(encoding="utf-8") as f:
+                filas = list(csv.DictReader(f))
+            self.assertEqual(set(filas[0].keys()),
+                             {"fecha", "cliente", "inicio", "fin", "minutos", "origen"})
+            self.assertEqual(filas[0]["cliente"], "100-montaditos")
+            self.assertEqual(filas[0]["fecha"], "2026-08-03")
+
+    def test_frontera_entre_actividades_consecutivas_sin_doble_conteo(self):
+        # CRITICAL 2: cliente A 10:00-10:30, cliente B 10:30-11:00; ventana 10:00-11:00.
+        # El minuto 10:30 (frontera) debe contar solo para B, no para ambos.
+        v = [Ventana(t(10), t(11), "fichado")]
+        acts = [ActividadCliente("100-montaditos", t(10), t(10, 30), "s1"),
+                ActividadCliente("salon-os", t(10, 30), t(11), "s2")]
+        rep = report.facturar(v, acts, REG, {}, TZ)
+        por = {tc.cliente: tc.minutos for tc in rep.totales}
+        self.assertEqual(por["100-montaditos"], 30)
+        self.assertEqual(por["salon-os"], 30)
+        self.assertEqual(rep.jornada_min, 60)
+        self.assertEqual(rep.facturable_min, 60)  # sin doble conteo en la frontera
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,11 +21,14 @@ def intervalos_actividad(eventos, reg, umbral_min):
         ultimo = None
         run_cliente = run_ini = run_fin = None
         for ev in evs:
+            hueco = run_fin is not None and (ev.ts - run_fin) > umbral
+            if hueco:
+                ultimo = None  # el hueco cierra el run: la herencia no lo cruza
             c = _cliente_evento(ev, reg, ultimo) or INTERNO
             ultimo = c
             if run_cliente is None:
                 run_cliente, run_ini, run_fin = c, ev.ts, ev.ts
-            elif c == run_cliente and (ev.ts - run_fin) <= umbral:
+            elif c == run_cliente and not hueco:
                 run_fin = ev.ts
             else:
                 out.append(ActividadCliente(run_cliente, run_ini, run_fin, sid))

@@ -43,7 +43,7 @@ def _bloques(minuto_cliente, tz):
 def facturar(ventanas, actividades, reg, tarifas, tz):
     acts_min = {}
     for a in actividades:
-        for m in range(epoch_min(a.inicio), epoch_min(a.fin) + 1):
+        for m in range(epoch_min(a.inicio), epoch_min(a.fin)):  # [inicio, fin) — consistente con ventanas
             acts_min.setdefault(m, []).append(a.cliente)
     orden_acts = sorted(actividades, key=lambda a: a.inicio)
 
@@ -77,3 +77,13 @@ def exportar_csv(rep, path):
         for tc in rep.totales:
             w.writerow([tc.cliente, tc.minutos, round(tc.minutos / 60, 2),
                         "" if tc.importe is None else tc.importe])
+
+def exportar_csv_bloques(rep, path):
+    """CSV por bloque (una fila por tramo atribuido), separado del resumen por cliente."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["fecha", "cliente", "inicio", "fin", "minutos", "origen"])
+        for b in rep.bloques:
+            minutos = round((b.fin - b.inicio).total_seconds() / 60)
+            w.writerow([b.inicio.date().isoformat(), b.cliente, b.inicio.isoformat(),
+                        b.fin.isoformat(), minutos, b.origen])

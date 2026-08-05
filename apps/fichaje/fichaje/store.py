@@ -1,4 +1,4 @@
-import json
+import json, os
 from datetime import datetime
 from pathlib import Path
 from .models import Ventana
@@ -11,11 +11,19 @@ class Store:
         self.path = Path(path)
         self._d = {"fichajes": [], "abierto": None, "manuales": []}
         if self.path.exists():
-            self._d = json.loads(self.path.read_text(encoding="utf-8"))
+            try:
+                self._d = json.loads(self.path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                bak = self.path.with_name(self.path.name + ".bak")
+                os.replace(self.path, bak)
+                self._d = {"fichajes": [], "abierto": None, "manuales": []}
 
     def _guardar(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self._d, ensure_ascii=False, indent=2), encoding="utf-8")
+        data = json.dumps(self._d, ensure_ascii=False, indent=2)
+        tmp = self.path.with_name(f"{self.path.name}.tmp{os.getpid()}")
+        tmp.write_text(data, encoding="utf-8")
+        os.replace(tmp, self.path)
 
     @property
     def abierto(self):

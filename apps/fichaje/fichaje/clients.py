@@ -16,7 +16,7 @@ class ClientRegistry:
         return m.group(1) if m else None
 
     def nombre(self, slug: str) -> str:
-        return self.nombres.get(slug, slug)
+        return self.nombres.get(slug) or slug
 
 def descubrir(repo_root, nombres=None):
     repo_root = Path(repo_root)

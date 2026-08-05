@@ -23,5 +23,9 @@ class TestClients(unittest.TestCase):
         self.assertEqual(self.reg.nombre("salon-os"), "salon-os")
         self.assertEqual(self.reg.nombre("100-montaditos"), "100 Montaditos")
 
+    def test_nombre_none_cae_al_slug(self):
+        reg = clients.ClientRegistry(slugs=["denueveanueve"], nombres={"denueveanueve": None})
+        self.assertEqual(reg.nombre("denueveanueve"), "denueveanueve")
+
 if __name__ == "__main__":
     unittest.main()

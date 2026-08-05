@@ -29,5 +29,21 @@ class TestAttribution(unittest.TestCase):
         clientes = sorted({a.cliente for a in acts})
         self.assertEqual(clientes, ["100-montaditos", "salon-os"])
 
+    def test_herencia_no_cruza_hueco_mayor_que_umbral(self):
+        # IMPORTANT 9: tras un hueco > umbral el run se cierra; un evento sin ruta
+        # despues del hueco no debe heredar el cliente de antes del hueco.
+        acts = attribution.intervalos_actividad(
+            [ev("10:00", "100-montaditos"), ev("11:00", None)], REG, 25)
+        self.assertEqual(len(acts), 2)
+        self.assertEqual(acts[0].cliente, "100-montaditos")
+        self.assertEqual(acts[1].cliente, clients.INTERNO)
+
+    def test_herencia_se_mantiene_dentro_del_mismo_run(self):
+        # Control: sin hueco (gap <= umbral) la herencia si debe aplicarse.
+        acts = attribution.intervalos_actividad(
+            [ev("10:00", "100-montaditos"), ev("10:10", None)], REG, 25)
+        self.assertEqual(len(acts), 1)
+        self.assertEqual(acts[0].cliente, "100-montaditos")
+
 if __name__ == "__main__":
     unittest.main()
