@@ -106,3 +106,13 @@ class Api:
     @_safe
     def apply_catalog(self, salon_id, catalog):
         return catalog_ops.apply_catalog(self._supa, salon_id, catalog)
+
+    @_safe
+    def pick_file(self):
+        import webview  # import perezoso: no requerido para importar bridge en tests
+        result = webview.windows[0].create_file_dialog(
+            webview.OPEN_DIALOG, allow_multiple=False,
+            file_types=("Catálogo (*.json;*.csv)", "Todos (*.*)"),
+        )
+        path = result[0] if result else None
+        return {"path": path}

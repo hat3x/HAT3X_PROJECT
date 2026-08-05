@@ -746,12 +746,15 @@ function paintCatalogManageImportBody(el, panel) {
     el.innerHTML = `
       <label class="field">
         <span>Ruta del fichero .json</span>
-        <input id="cm-import-json-path" type="text" placeholder="C:\\ruta\\catalogo.json" value="${escapeHtml(cm.importJsonPath || "")}">
+        <div class="input-with-action">
+          <input id="cm-import-json-path" type="text" placeholder="C:\\ruta\\catalogo.json" value="${escapeHtml(cm.importJsonPath || "")}">
+          <button type="button" class="btn btn-secondary btn-sm" id="cm-pick-json">Elegir fichero…</button>
+        </div>
       </label>
-      <p class="hint">Pega la ruta completa del fichero.</p>
       <button type="button" class="btn btn-secondary" id="cm-load-import">Cargar y validar</button>
     `;
     $("#cm-import-json-path", el).addEventListener("input", (e) => { cm.importJsonPath = e.target.value; });
+    $("#cm-pick-json", el).addEventListener("click", () => pickFileInto($("#cm-import-json-path", el), (v) => { cm.importJsonPath = v; }));
     $("#cm-load-import", el).addEventListener("click", async () => {
       if (!cm.importJsonPath.trim()) return toast("Indica la ruta del fichero.", "error");
       const btn = $("#cm-load-import", el);
@@ -783,14 +786,23 @@ function paintCatalogManageImportBody(el, panel) {
     ${kinds.map((k) => `
       <label class="field">
         <span>${k.label} (.csv)</span>
-        <input class="cm-import-csv-path" data-kind="${k.key}" type="text" placeholder="C:\\ruta\\${k.key}.csv" value="${escapeHtml(cm.importCsvPaths[k.key] || "")}">
+        <div class="input-with-action">
+          <input class="cm-import-csv-path" data-kind="${k.key}" type="text" placeholder="C:\\ruta\\${k.key}.csv" value="${escapeHtml(cm.importCsvPaths[k.key] || "")}">
+          <button type="button" class="btn btn-secondary btn-sm cm-pick-csv" data-kind="${k.key}">Elegir fichero…</button>
+        </div>
       </label>
     `).join("")}
-    <p class="hint">Deja en blanco las tablas que no quieras importar. Pega rutas completas.</p>
+    <p class="hint">Deja en blanco las tablas que no quieras importar.</p>
     <button type="button" class="btn btn-secondary" id="cm-load-import-csv">Cargar y validar</button>
   `;
   $all(".cm-import-csv-path", el).forEach((inp) => {
     inp.addEventListener("input", () => { cm.importCsvPaths[inp.dataset.kind] = inp.value; });
+  });
+  $all(".cm-pick-csv", el).forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = el.querySelector(`.cm-import-csv-path[data-kind="${btn.dataset.kind}"]`);
+      pickFileInto(input, (v) => { cm.importCsvPaths[btn.dataset.kind] = v; });
+    });
   });
   $("#cm-load-import-csv", el).addEventListener("click", async () => {
     const btn = $("#cm-load-import-csv", el);
@@ -886,6 +898,20 @@ async function applyCatalogManage(panel) {
   } finally {
     cm.applying = false;
     if (btn) { btn.disabled = false; btn.textContent = "Aplicar al catálogo"; }
+  }
+}
+
+async function pickFileInto(inputEl, setter) {
+  if (!inputEl) return;
+  try {
+    const res = await api().pick_file();
+    if (res && res.error) { toast(res.error, "error"); return; }
+    if (res && res.path) {
+      inputEl.value = res.path;
+      setter(res.path);
+    }
+  } catch (e) {
+    toast("No se pudo abrir el selector de ficheros: " + e, "error");
   }
 }
 
@@ -1152,12 +1178,16 @@ function paintImportBody(el) {
     el.innerHTML = `
       <label class="field">
         <span>Ruta del fichero .json</span>
-        <input id="import-json-path" type="text" placeholder="C:\\ruta\\catalogo.json" value="${escapeHtml(w.importJsonPath || "")}">
+        <div class="input-with-action">
+          <input id="import-json-path" type="text" placeholder="C:\\ruta\\catalogo.json" value="${escapeHtml(w.importJsonPath || "")}">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-pick-json">Elegir fichero…</button>
+        </div>
       </label>
-      <p class="hint">Pega la ruta completa (Explorador de Windows: Mayús + clic derecho &rarr; «Copiar como ruta de acceso»). El panel todavía no abre un selector de ficheros nativo.</p>
+      <p class="hint">Usa «Elegir fichero…» o pega la ruta completa (Explorador de Windows: Mayús + clic derecho &rarr; «Copiar como ruta de acceso»).</p>
       <button type="button" class="btn btn-secondary" id="btn-load-import">Cargar y validar</button>
     `;
     $("#import-json-path").addEventListener("input", (e) => { w.importJsonPath = e.target.value; });
+    $("#btn-pick-json").addEventListener("click", () => pickFileInto($("#import-json-path"), (v) => { w.importJsonPath = v; }));
     $("#btn-load-import").addEventListener("click", async () => {
       if (!w.importJsonPath.trim()) return toast("Indica la ruta del fichero.", "error");
       const btn = $("#btn-load-import");
@@ -1189,14 +1219,23 @@ function paintImportBody(el) {
     ${kinds.map((k) => `
       <label class="field">
         <span>${k.label} (.csv)</span>
-        <input class="import-csv-path" data-kind="${k.key}" type="text" placeholder="C:\\ruta\\${k.key}.csv" value="${escapeHtml(w.importCsvPaths[k.key] || "")}">
+        <div class="input-with-action">
+          <input class="import-csv-path" data-kind="${k.key}" type="text" placeholder="C:\\ruta\\${k.key}.csv" value="${escapeHtml(w.importCsvPaths[k.key] || "")}">
+          <button type="button" class="btn btn-secondary btn-sm btn-pick-csv" data-kind="${k.key}">Elegir fichero…</button>
+        </div>
       </label>
     `).join("")}
-    <p class="hint">Deja en blanco las tablas que no quieras importar. Pega rutas completas.</p>
+    <p class="hint">Deja en blanco las tablas que no quieras importar. Usa «Elegir fichero…» o pega rutas completas.</p>
     <button type="button" class="btn btn-secondary" id="btn-load-import-csv">Cargar y validar</button>
   `;
   $all(".import-csv-path", el).forEach((inp) => {
     inp.addEventListener("input", () => { w.importCsvPaths[inp.dataset.kind] = inp.value; });
+  });
+  $all(".btn-pick-csv", el).forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = el.querySelector(`.import-csv-path[data-kind="${btn.dataset.kind}"]`);
+      pickFileInto(input, (v) => { w.importCsvPaths[btn.dataset.kind] = v; });
+    });
   });
   $("#btn-load-import-csv").addEventListener("click", async () => {
     const btn = $("#btn-load-import-csv");

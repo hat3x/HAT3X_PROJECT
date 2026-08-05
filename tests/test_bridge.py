@@ -76,3 +76,8 @@ def test_bridge_get_tenant_owner_none_without_members(supa):
                                      "timezone": "Europe/Madrid", "active": True, "settings": {}}])[0]
     detail = api.get_tenant(salon["id"])
     assert detail["owner"] is None
+
+def test_bridge_pick_file_returns_dict_without_pywebview(supa):
+    api = Api(supa=supa)
+    res = api.pick_file()
+    assert isinstance(res, dict)
