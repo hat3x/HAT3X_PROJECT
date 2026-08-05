@@ -1,13 +1,13 @@
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
-from . import pipeline, dashboard, timeutil
+from . import clients, config as cfgmod, pipeline, dashboard
 from .store import Store, FichajeError
 
 class Api:
     def __init__(self, repo_root, projects_dir, store_path, config_path):
         self.repo_root = Path(repo_root); self.projects_dir = Path(projects_dir)
         self.store_path = Path(store_path); self.config_path = config_path
-        self.tz = timeutil.TZ_DEFECTO
+        self.tz = cfgmod.cargar(config_path).tz
 
     def entrada(self, cliente=None):
         try:
@@ -24,7 +24,16 @@ class Api:
     def estado(self):
         return {"abierto": Store(self.store_path).abierto}
 
+    def clientes(self):
+        cfg = cfgmod.cargar(self.config_path)
+        reg = clients.descubrir(self.repo_root, {k: v.get("nombre") for k, v in cfg.clientes.items()})
+        return [{"slug": s, "nombre": reg.nombre(s)} for s in reg.slugs]
+
     def datos(self, desde=None, hasta=None):
+        if isinstance(desde, str):
+            desde = date.fromisoformat(desde)
+        if isinstance(hasta, str):
+            hasta = date.fromisoformat(hasta)
         rep, reg = pipeline.construir_reporte(self.repo_root, self.projects_dir,
                                               self.store_path, self.config_path, desde, hasta)
         return dashboard.datos_json(rep, reg)

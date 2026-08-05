@@ -18,12 +18,26 @@ class TestDashboard(unittest.TestCase):
         self.assertEqual(d["jornada_min"], 60)
         self.assertTrue(any(c["cliente"] == "100-montaditos" for c in d["totales"]))
 
+    def test_datos_json_incluye_clientes(self):
+        # IMPORTANT 8: el JSON embebido debe traer la lista de slugs+nombres
+        # para poblar el <select> de la barra de controles sin llamada aparte.
+        d = dashboard.datos_json(self._rep(), REG)
+        self.assertIn("clientes", d)
+        self.assertTrue(any(c["slug"] == "100-montaditos" and c["nombre"] == "100 Montaditos"
+                             for c in d["clientes"]))
+
     def test_html_embebe_json_parseable(self):
         html = dashboard.render_html(self._rep(), REG)
         self.assertIn("<!doctype html>", html.lower())
         m = re.search(r'id="datos"[^>]*>(.*?)</script>', html, re.S)
         self.assertIsNotNone(m)
-        json.loads(m.group(1))  # no lanza
+        datos = json.loads(m.group(1))  # no lanza
+        self.assertIn("clientes", datos)
+
+    def test_html_incluye_barra_de_controles(self):
+        html = dashboard.render_html(self._rep(), REG)
+        for id_ in ("sel-cliente", "btn-entrada", "btn-salida", "btn-estado", "btn-refrescar"):
+            self.assertIn(id_, html)
 
 if __name__ == "__main__":
     unittest.main()
