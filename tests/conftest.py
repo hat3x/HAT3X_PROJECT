@@ -11,10 +11,16 @@ class FakeSupabase:
 
     def select(self, table, filters=None, columns="*"):
         rows = self._key(table)
+        cols = None
+        if columns and columns != "*":
+            cols = [c.strip() for c in columns.split(",")]
         out = []
         for r in rows:
             if all(str(r.get(k)) == str(v) for k, v in (filters or {}).items()):
-                out.append(dict(r))
+                row = dict(r)
+                if cols is not None:
+                    row = {c: row.get(c) for c in cols}
+                out.append(row)
         return out
 
     def insert(self, table, rows):
