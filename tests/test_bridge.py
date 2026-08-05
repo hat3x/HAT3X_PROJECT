@@ -18,3 +18,37 @@ def test_bridge_errors_are_returned_not_raised(supa):
 def test_bridge_template(supa):
     api = Api(supa=supa)
     assert len(api.template("dental")["services"]) >= 3
+
+CATALOG = {
+    "professionals": [{"full_name": "Nadia Ros"}],
+    "services": [{"name": "Revisión", "application_min": 20, "exposure_min": 0, "post_exposure_min": 0}],
+    "schedules": [{"professional": "Nadia Ros", "weekday": 1, "start": "10:00", "end": "14:00"}],
+    "links": [{"professional": "Nadia Ros", "service": "Revisión"}],
+}
+
+def test_bridge_apply_catalog_to_existing_tenant(supa):
+    api = Api(supa=supa)
+    out = api.create_tenant({
+        "name": "Biodental", "sector": "dental",
+        "owner": {"login_id": "biodental", "password": "Pw-2026"},
+        "features": {}, "catalog": None,
+    })
+    salon_id = out["salon"]["id"]
+
+    res = api.apply_catalog(salon_id, CATALOG)
+    assert res == {"professionals": 1, "services": 1, "schedules": 1, "links": 1}
+    assert supa.select("professionals", {"salon_id": salon_id})[0]["full_name"] == "Nadia Ros"
+    assert supa.select("services", {"salon_id": salon_id})[0]["name"] == "Revisión"
+    assert len(supa.select("professional_schedules", {"salon_id": salon_id})) == 1
+    assert len(supa.select("professional_services", {"salon_id": salon_id})) == 1
+
+def test_bridge_apply_catalog_invalid_returns_error(supa):
+    api = Api(supa=supa)
+    out = api.create_tenant({
+        "name": "Biodental", "sector": "dental",
+        "owner": {"login_id": "biodental", "password": "Pw-2026"},
+        "features": {}, "catalog": None,
+    })
+    bad = {**CATALOG, "schedules": [{"professional": "Nadia Ros", "weekday": 9, "start": "10:00", "end": "14:00"}]}
+    res = api.apply_catalog(out["salon"]["id"], bad)
+    assert "error" in res

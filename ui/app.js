@@ -601,11 +601,39 @@ function renderCatalogTab(panel) {
   const svcs = cat.services || [];
   const scheds = cat.schedules || [];
   const links = cat.links || [];
+  const salonId = STATE.tenant.salon.id;
 
   const proName = Object.fromEntries(pros.map((p) => [String(p.id), p.full_name]));
   const svcName = Object.fromEntries(svcs.map((s) => [String(s.id), s.name]));
 
+  if (!STATE.catalogManage || STATE.catalogManage.salonId !== salonId) {
+    STATE.catalogManage = {
+      salonId,
+      mode: "template",
+      importFormat: "json",
+      importJsonPath: "",
+      importCsvPaths: {},
+      catalog: null,
+      catalogErrors: [],
+      applying: false,
+    };
+  }
+
   panel.innerHTML = `
+    <div class="card" id="catalog-manage-card">
+      <h2 class="card-title">Añadir al catálogo</h2>
+      <p class="muted">Carga la plantilla del sector o importa un fichero (CSV/JSON), revisa la vista previa y aplica. Se añade a lo que ya existe.</p>
+      <div class="segmented" id="cm-mode">
+        ${["template", "import"].map((m) => `
+          <button type="button" class="segmented-btn ${STATE.catalogManage.mode === m ? "active" : ""}" data-mode="${m}">${m === "template" ? "Plantilla del sector" : "Importar fichero"}</button>
+        `).join("")}
+      </div>
+      <div id="cm-mode-body"></div>
+      <div id="cm-preview"></div>
+      <div class="wizard-footer wizard-footer-end">
+        <button type="button" class="btn btn-primary" id="cm-apply" disabled>Aplicar al catálogo</button>
+      </div>
+    </div>
     <div class="card">
       <h2 class="card-title">Profesionales</h2>
       ${pros.length ? `
@@ -656,6 +684,212 @@ function renderCatalogTab(panel) {
         </table></div>` : `<p class="empty-inline">Sin asignaciones todavía.</p>`}
     </div>
   `;
+
+  $all("#cm-mode .segmented-btn", panel).forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.mode === STATE.catalogManage.mode) return;
+      STATE.catalogManage.mode = btn.dataset.mode;
+      STATE.catalogManage.catalog = null;
+      STATE.catalogManage.catalogErrors = [];
+      paintCatalogManageBody(panel);
+    });
+  });
+  paintCatalogManageBody(panel);
+
+  $("#cm-apply", panel).addEventListener("click", () => applyCatalogManage(panel));
+}
+
+function paintCatalogManageBody(panel) {
+  const cm = STATE.catalogManage;
+  const body = $("#cm-mode-body", panel);
+  if (cm.mode === "template") {
+    body.innerHTML = `
+      <p class="hint">Se añadirá la plantilla estándar del sector «${escapeHtml(sectorLabel(STATE.tenant.salon.sector))}».</p>
+      <button type="button" class="btn btn-secondary" id="cm-load-template">Cargar plantilla</button>
+    `;
+    $("#cm-load-template", body).addEventListener("click", async () => {
+      const btn = $("#cm-load-template", body);
+      btn.disabled = true;
+      btn.textContent = "Cargando…";
+      try {
+        const tpl = await api().template(STATE.tenant.salon.sector);
+        if (tpl && tpl.error) { toast(tpl.error, "error"); return; }
+        cm.catalog = tpl;
+        await validateCatalogManage();
+        paintCatalogManagePreview(panel);
+      } catch (e) {
+        toast("No se pudo cargar la plantilla: " + e, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Cargar plantilla";
+      }
+    });
+  } else {
+    body.innerHTML = `
+      <div class="segmented segmented-sm" id="cm-import-format">
+        <button type="button" class="segmented-btn ${cm.importFormat !== "csv" ? "active" : ""}" data-fmt="json">JSON (un fichero)</button>
+        <button type="button" class="segmented-btn ${cm.importFormat === "csv" ? "active" : ""}" data-fmt="csv">CSV (uno por tabla)</button>
+      </div>
+      <div id="cm-import-body"></div>
+    `;
+    $all("#cm-import-format .segmented-btn", body).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        cm.importFormat = btn.dataset.fmt;
+        paintCatalogManageBody(panel);
+      });
+    });
+    paintCatalogManageImportBody($("#cm-import-body", body), panel);
+  }
+  paintCatalogManagePreview(panel);
+}
+
+function paintCatalogManageImportBody(el, panel) {
+  const cm = STATE.catalogManage;
+  if (cm.importFormat === "json") {
+    el.innerHTML = `
+      <label class="field">
+        <span>Ruta del fichero .json</span>
+        <input id="cm-import-json-path" type="text" placeholder="C:\\ruta\\catalogo.json" value="${escapeHtml(cm.importJsonPath || "")}">
+      </label>
+      <p class="hint">Pega la ruta completa del fichero.</p>
+      <button type="button" class="btn btn-secondary" id="cm-load-import">Cargar y validar</button>
+    `;
+    $("#cm-import-json-path", el).addEventListener("input", (e) => { cm.importJsonPath = e.target.value; });
+    $("#cm-load-import", el).addEventListener("click", async () => {
+      if (!cm.importJsonPath.trim()) return toast("Indica la ruta del fichero.", "error");
+      const btn = $("#cm-load-import", el);
+      btn.disabled = true;
+      btn.textContent = "Cargando…";
+      try {
+        const res = await api().import_file(cm.importJsonPath.trim(), "json");
+        if (res && res.error) { toast(res.error, "error"); return; }
+        cm.catalog = res;
+        await validateCatalogManage();
+        paintCatalogManagePreview(panel);
+      } catch (e) {
+        toast("No se pudo importar: " + e, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Cargar y validar";
+      }
+    });
+    return;
+  }
+
+  const kinds = [
+    { key: "professionals", label: "Profesionales" },
+    { key: "services", label: "Servicios" },
+    { key: "schedules", label: "Horarios" },
+    { key: "links", label: "Asignaciones" },
+  ];
+  el.innerHTML = `
+    ${kinds.map((k) => `
+      <label class="field">
+        <span>${k.label} (.csv)</span>
+        <input class="cm-import-csv-path" data-kind="${k.key}" type="text" placeholder="C:\\ruta\\${k.key}.csv" value="${escapeHtml(cm.importCsvPaths[k.key] || "")}">
+      </label>
+    `).join("")}
+    <p class="hint">Deja en blanco las tablas que no quieras importar. Pega rutas completas.</p>
+    <button type="button" class="btn btn-secondary" id="cm-load-import-csv">Cargar y validar</button>
+  `;
+  $all(".cm-import-csv-path", el).forEach((inp) => {
+    inp.addEventListener("input", () => { cm.importCsvPaths[inp.dataset.kind] = inp.value; });
+  });
+  $("#cm-load-import-csv", el).addEventListener("click", async () => {
+    const btn = $("#cm-load-import-csv", el);
+    btn.disabled = true;
+    btn.textContent = "Cargando…";
+    try {
+      const merged = { professionals: [], services: [], schedules: [], links: [] };
+      for (const k of kinds) {
+        const path = (cm.importCsvPaths[k.key] || "").trim();
+        if (!path) continue;
+        const rows = await api().import_file(path, k.key);
+        if (rows && rows.error) { toast(`${k.label}: ${rows.error}`, "error"); continue; }
+        merged[k.key] = rows;
+      }
+      cm.catalog = merged;
+      await validateCatalogManage();
+      paintCatalogManagePreview(panel);
+    } catch (e) {
+      toast("No se pudo importar: " + e, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Cargar y validar";
+    }
+  });
+}
+
+async function validateCatalogManage() {
+  const cm = STATE.catalogManage;
+  if (!cm.catalog) { cm.catalogErrors = []; return; }
+  try {
+    const res = await api().validate_catalog(cm.catalog);
+    if (res && res.error) { cm.catalogErrors = [res.error]; return; }
+    cm.catalogErrors = (res && res.errors) || [];
+  } catch (e) {
+    cm.catalogErrors = ["No se pudo validar el catálogo: " + e];
+  }
+}
+
+function paintCatalogManagePreview(panel) {
+  const cm = STATE.catalogManage;
+  const el = $("#cm-preview", panel);
+  const applyBtn = $("#cm-apply", panel);
+  if (!el) return;
+  if (!cm.catalog) {
+    el.innerHTML = "";
+    if (applyBtn) applyBtn.disabled = true;
+    return;
+  }
+  const c = cm.catalog;
+  const counts = {
+    professionals: (c.professionals || []).length,
+    services: (c.services || []).length,
+    schedules: (c.schedules || []).length,
+    links: (c.links || []).length,
+  };
+  el.innerHTML = `
+    <div class="preview-box ${cm.catalogErrors.length ? "preview-box-error" : "preview-box-ok"}">
+      <p class="field-label">Vista previa</p>
+      <ul class="preview-counts">
+        <li>${counts.professionals} profesional(es)</li>
+        <li>${counts.services} servicio(s)</li>
+        <li>${counts.schedules} horario(s)</li>
+        <li>${counts.links} asignación(es)</li>
+      </ul>
+      ${cm.catalogErrors.length ? `
+        <p class="warning-text">Se encontraron ${cm.catalogErrors.length} error(es):</p>
+        <ul class="error-list">${cm.catalogErrors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul>
+      ` : `<p class="success-text">Catálogo válido.</p>`}
+    </div>
+  `;
+  if (applyBtn) applyBtn.disabled = cm.catalogErrors.length > 0;
+}
+
+async function applyCatalogManage(panel) {
+  const cm = STATE.catalogManage;
+  if (!cm.catalog || cm.applying) return;
+  cm.applying = true;
+  const btn = $("#cm-apply", panel);
+  if (btn) { btn.disabled = true; btn.textContent = "Aplicando…"; }
+  try {
+    const res = await api().apply_catalog(cm.salonId, cm.catalog);
+    if (res && res.error) { toast(res.error, "error"); return; }
+    toast(`Catálogo actualizado: ${res.professionals} prof. · ${res.services} servicios · ${res.schedules} horarios · ${res.links} asignaciones.`, "success");
+    try {
+      STATE.tenant = await api().get_tenant(cm.salonId);
+    } catch {
+      /* si falla el refresco, el usuario puede volver a entrar en la pestaña */
+    }
+    STATE.catalogManage = null;
+    renderTabContent();
+  } catch (e) {
+    toast("No se pudo aplicar el catálogo: " + e, "error");
+  } finally {
+    cm.applying = false;
+    if (btn) { btn.disabled = false; btn.textContent = "Aplicar al catálogo"; }
+  }
 }
 
 /* ---------- Asistente de alta de tenant ---------- */

@@ -91,3 +91,7 @@ class Api:
     @_safe
     def validate_catalog(self, catalog):
         return {"errors": importers.validate(catalog)}
+
+    @_safe
+    def apply_catalog(self, salon_id, catalog):
+        return catalog_ops.apply_catalog(self._supa, salon_id, catalog)
