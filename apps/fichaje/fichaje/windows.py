@@ -12,8 +12,9 @@ def _clusters(eventos, umbral_min):
         if e.ts - fin <= umbral:
             fin = e.ts
         else:
-            out.append((ini, fin)); ini = fin = e.ts
-    out.append((ini, fin))
+            out.append((ini, fin if fin > ini else fin + timedelta(minutes=1)))
+            ini = fin = e.ts
+    out.append((ini, fin if fin > ini else fin + timedelta(minutes=1)))
     return out
 
 def _restar(ini, fin, cubierto):
