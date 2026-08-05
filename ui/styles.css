@@ -880,3 +880,176 @@ a { color: var(--accent-strong); }
   border-radius: var(--radius-sm);
   word-break: break-all;
 }
+
+/* ---------- 11. Asistente de alta (wizard) ---------- */
+
+.wizard {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.wizard-steps {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  gap: var(--space-1);
+}
+
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  text-align: center;
+  position: relative;
+}
+
+.wizard-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 13px;
+  left: 55%;
+  width: 90%;
+  height: 2px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.wizard-step-done:not(:last-child)::after {
+  background: var(--accent);
+}
+
+.wizard-step-dot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.wizard-step-current .wizard-step-dot {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  background: var(--surface);
+}
+
+.wizard-step-done .wizard-step-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.wizard-step-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.wizard-step-current .wizard-step-label {
+  color: var(--text);
+}
+
+.wizard-card h2 {
+  margin-bottom: var(--space-1);
+}
+
+.wizard-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.wizard-footer-end {
+  justify-content: flex-end;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.segmented-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--duration-fast), color var(--duration-fast);
+}
+
+.segmented-btn:hover {
+  color: var(--text);
+}
+
+.segmented-btn.active {
+  background: var(--surface);
+  color: var(--accent-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.segmented-sm .segmented-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.preview-box {
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-top: var(--space-3);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.preview-box-ok {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: var(--success-bg);
+}
+
+.preview-box-error {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: var(--danger-bg);
+}
+
+.preview-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-2);
+  font-size: 13px;
+}
+
+.error-list {
+  margin: var(--space-2) 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.error-list li {
+  margin-bottom: 3px;
+}
