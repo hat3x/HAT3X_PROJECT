@@ -46,4 +46,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    # icon='assets/kairos.ico',  # TODO: generar el .ico desde el símbolo de marca
+    #                            # (anillo + punto de latón, ver ui/index.html .brandmark-icon
+    #                            # y salon-os/src/components/brand/kairos-mark.tsx) y colocarlo
+    #                            # en assets/kairos.ico antes de descomentar esta línea.
 )
