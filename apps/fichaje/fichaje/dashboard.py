@@ -72,27 +72,37 @@ function render(data) {
   if (actual) sel.value = actual;
 }
 
-const tienePywebview = () => typeof window.pywebview !== 'undefined';
+const hayPuente = () => !!(window.pywebview && window.pywebview.api);
 
 async function refrescar() {
-  if (!tienePywebview()) return;
+  if (!hayPuente()) return;
+  const aviso = document.getElementById('barra-aviso');
+  aviso.textContent = 'actualizando…';
   render(await window.pywebview.api.datos());
+  aviso.textContent = '';
 }
 
+let barraLista = false;
 function configurarBarra() {
+  if (barraLista) return;
   const btns = ['btn-entrada','btn-salida','btn-estado','btn-refrescar'].map(id => document.getElementById(id));
-  if (!tienePywebview()) {
+  if (!hayPuente()) {                       // el puente pywebview aun no esta inyectado
     btns.forEach(b => b.disabled = true);
     document.getElementById('barra-aviso').textContent = 'solo en la app';
-    return;
+    return;                                 // reintentable: no marcamos barraLista
   }
+  barraLista = true;
+  btns.forEach(b => b.disabled = false);
+  document.getElementById('barra-aviso').textContent = '';
   document.getElementById('btn-entrada').addEventListener('click', async () => {
     const cliente = document.getElementById('sel-cliente').value || null;
-    await window.pywebview.api.entrada(cliente);
+    const r = await window.pywebview.api.entrada(cliente);
+    if (r && r.ok === false) { document.getElementById('barra-aviso').textContent = r.error; return; }
     await refrescar();
   });
   document.getElementById('btn-salida').addEventListener('click', async () => {
-    await window.pywebview.api.salida();
+    const r = await window.pywebview.api.salida();
+    if (r && r.ok === false) { document.getElementById('barra-aviso').textContent = r.error; return; }
     await refrescar();
   });
   document.getElementById('btn-estado').addEventListener('click', async () => {
@@ -104,6 +114,9 @@ function configurarBarra() {
 }
 
 render(D);
-configurarBarra();
+configurarBarra();                                    // intento inmediato
+window.addEventListener('pywebviewready', configurarBarra);  // señal canonica de pywebview
+let _intentos = 0;                                    // reintento por si el evento ya paso
+const _poll = setInterval(() => { configurarBarra(); if (barraLista || ++_intentos > 50) clearInterval(_poll); }, 100);
 </script>
 </body></html>"""
