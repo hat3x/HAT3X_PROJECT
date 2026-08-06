@@ -38,9 +38,20 @@ class Api:
                                               self.store_path, self.config_path, desde, hasta)
         return dashboard.datos_json(rep, reg)
 
+def _repo_root():
+    import os, sys
+    env = os.environ.get("FICHAJE_ROOT")
+    if env:
+        return Path(env)
+    if getattr(sys, "frozen", False):
+        # .exe empaquetado: __file__ apunta al bundle temporal, no al repo.
+        # Usa la ruta conocida del repo en esta maquina (override con FICHAJE_ROOT).
+        return Path(r"c:\Users\josem\Desktop\HAT3X\CLAUDE\HAT3X")
+    return Path(__file__).resolve().parents[2]  # .../HAT3X en modo dev
+
 def lanzar():
     import webview  # perezoso: solo al abrir la ventana
-    root = Path(__file__).resolve().parents[2]  # .../HAT3X
+    root = _repo_root()
     api = Api(root,
               Path.home()/".claude"/"projects"/"c--Users-josem-Desktop-HAT3X-CLAUDE-HAT3X",
               root/"apps"/"fichaje"/"data"/"fichaje.json",
