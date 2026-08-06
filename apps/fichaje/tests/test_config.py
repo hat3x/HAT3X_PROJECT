@@ -32,5 +32,16 @@ class TestConfig(unittest.TestCase):
             c = config.cargar(p)
             self.assertEqual(c.tarifa_defecto_eur_h, 35)
 
+    def test_modo_estimado_ausente_es_conservador(self):
+        c = config.cargar(None)
+        self.assertEqual(c.modo_estimado, "conservador")
+
+    def test_modo_estimado_presente(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "cfg.json"
+            p.write_text(json.dumps({"modo_estimado": "presencia"}), encoding="utf-8")
+            c = config.cargar(p)
+            self.assertEqual(c.modo_estimado, "presencia")
+
 if __name__ == "__main__":
     unittest.main()

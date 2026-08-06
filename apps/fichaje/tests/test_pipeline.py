@@ -98,6 +98,25 @@ class TestPipeline(unittest.TestCase):
                 desde=date(2026, 8, 3), hasta=date(2026, 8, 3))
             self.assertGreaterEqual(rep.rango[0].date(), date(2026, 8, 3))
 
+    def test_modo_presencia_desde_config_llega_al_pipeline(self):
+        # cfg.modo_estimado="presencia" debe cablearse hasta windows.ventanas_estimado:
+        # dia con eventos a las 10:00 y 22:00 -> ventana de 12h (720 min), ignorando el
+        # hueco intermedio que en modo conservador partiria en varias ventanas.
+        with tempfile.TemporaryDirectory() as d:
+            proj = Path(d) / "projects"; proj.mkdir()
+            (proj / "s1.jsonl").write_text(
+                _linea_evento("2026-08-03T08:00:00.000Z") +
+                _linea_evento("2026-08-03T20:00:00.000Z"), encoding="utf-8")
+            cfg_path = Path(d) / "fichaje.config.json"
+            cfg_path.write_text(json.dumps({
+                "umbral_inactividad_min": 25, "tz": "+02:00",
+                "modo_estimado": "presencia", "clientes": {}}), encoding="utf-8")
+            rep, reg = pipeline.construir_reporte(
+                repo_root=Path(d), projects_dir=proj,
+                store_path=Path(d)/"fichaje.json", config_path=cfg_path,
+                desde=date(2026, 8, 3), hasta=date(2026, 8, 3))
+            self.assertEqual(rep.jornada_min, 720)  # 10:00-22:00 completo
+
     def test_usa_cache_para_no_reparsear_log(self):
         # IMPORTANT 3: la segunda llamada no debe volver a parsear el .jsonl (cache hit).
         with tempfile.TemporaryDirectory() as d:

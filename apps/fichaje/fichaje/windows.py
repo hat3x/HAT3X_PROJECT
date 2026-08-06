@@ -31,9 +31,23 @@ def _restar(ini, fin, cubierto):
         trozos = nuevos
     return trozos
 
-def ventanas_estimado(eventos, cubierto, umbral_min):
+def _presencia(eventos):
+    """Un dia natural (fecha LOCAL, ev.ts.date()) -> UNA franja [primer, ultimo evento del
+    dia], ignorando huecos intermedios (a diferencia del clustering por umbral)."""
+    por_dia = {}
+    for e in eventos:
+        por_dia.setdefault(e.ts.date(), []).append(e.ts)
     out = []
-    for ini, fin in _clusters(eventos, umbral_min):
+    for fecha in sorted(por_dia):
+        tss = por_dia[fecha]
+        ini, fin = min(tss), max(tss)
+        out.append((ini, fin if fin > ini else fin + timedelta(minutes=1)))
+    return out
+
+def ventanas_estimado(eventos, cubierto, umbral_min, modo="conservador"):
+    intervalos = _presencia(eventos) if modo == "presencia" else _clusters(eventos, umbral_min)
+    out = []
+    for ini, fin in intervalos:
         for a, b in _restar(ini, fin, cubierto):
             if b >= a:
                 out.append(Ventana(a, b, "estimado"))
