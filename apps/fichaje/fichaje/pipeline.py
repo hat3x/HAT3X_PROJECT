@@ -33,4 +33,5 @@ def construir_reporte(repo_root, projects_dir, store_path, config_path, desde=No
                                     umbral_min=cfg.umbral_inactividad_min)
     vent = windows.combinar(fich, man, est)
     acts = attribution.intervalos_actividad(eventos, reg, cfg.umbral_inactividad_min)
-    return report.facturar(vent, acts, reg, cfg.clientes, cfg.tz), reg
+    return report.facturar(vent, acts, reg, cfg.clientes, cfg.tz,
+                           tarifa_defecto=cfg.tarifa_defecto_eur_h), reg

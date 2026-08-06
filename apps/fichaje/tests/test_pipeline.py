@@ -51,6 +51,24 @@ class TestPipeline(unittest.TestCase):
                 desde=date(2026, 8, 3), hasta=date(2026, 8, 3))
             self.assertEqual(rep.jornada_min, 60)  # solo cuenta 00:00-01:00 del dia 3
 
+    def test_tarifa_defecto_de_config_llega_al_importe(self):
+        # B: cfg.tarifa_defecto_eur_h debe cablearse hasta report.facturar cuando el
+        # cliente no tiene tarifa especifica en cfg.clientes.
+        with tempfile.TemporaryDirectory() as d:
+            proj = Path(d) / "projects"; proj.mkdir()
+            (proj / "s1.jsonl").write_text(_linea_evento("2026-08-03T08:00:00.000Z"), encoding="utf-8")
+            cfg_path = Path(d) / "fichaje.config.json"
+            cfg_path.write_text(json.dumps({
+                "umbral_inactividad_min": 25, "tz": "+02:00",
+                "tarifa_defecto_eur_h": 35, "clientes": {}}), encoding="utf-8")
+            rep, reg = pipeline.construir_reporte(
+                repo_root=Path(d), projects_dir=proj,
+                store_path=Path(d)/"fichaje.json", config_path=cfg_path,
+                desde=date(2026,8,3), hasta=date(2026,8,3))
+            tc = [x for x in rep.totales if x.cliente == "100-montaditos"][0]
+            self.assertIsNotNone(tc.importe)
+            self.assertAlmostEqual(tc.importe, round(tc.minutos / 60 * 35, 2))
+
     def test_usa_cache_para_no_reparsear_log(self):
         # IMPORTANT 3: la segunda llamada no debe volver a parsear el .jsonl (cache hit).
         with tempfile.TemporaryDirectory() as d:

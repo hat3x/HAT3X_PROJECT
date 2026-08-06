@@ -21,5 +21,16 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(c.umbral_inactividad_min, 30)
             self.assertEqual(c.clientes["100-montaditos"]["tarifa_eur_h"], 50)
 
+    def test_tarifa_defecto_ausente_es_none(self):
+        c = config.cargar(None)
+        self.assertIsNone(c.tarifa_defecto_eur_h)
+
+    def test_tarifa_defecto_presente(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "cfg.json"
+            p.write_text(json.dumps({"tarifa_defecto_eur_h": 35}), encoding="utf-8")
+            c = config.cargar(p)
+            self.assertEqual(c.tarifa_defecto_eur_h, 35)
+
 if __name__ == "__main__":
     unittest.main()

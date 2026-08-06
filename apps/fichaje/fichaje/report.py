@@ -1,5 +1,5 @@
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from .models import TotalCliente, Bloque
 from .clients import INTERNO
 from .timeutil import epoch_min, desde_epoch_min
@@ -11,6 +11,7 @@ class Reporte:
     facturable_min: int
     bloques: list
     rango: tuple
+    por_dia: list = field(default_factory=list)
 
 def _arrastre(m, orden_acts):
     # candidatos "previa": actividades cuyo fin <= m; nos quedamos con las de fin mas reciente (empate incluido)
@@ -24,6 +25,17 @@ def _arrastre(m, orden_acts):
         min_inicio = min(epoch_min(a.inicio) for a in next_acts)
         return sorted({a.cliente for a in next_acts if epoch_min(a.inicio) == min_inicio})
     return [INTERNO]
+
+def _por_dia(minuto_cliente, tz):
+    """Agrupa la asignacion de minutos de jornada (minuto_cliente, sin solape) por
+    fecha LOCAL (tz) — misma fuente que _bloques, coherente con ella."""
+    por_fecha = {}
+    for m, c in minuto_cliente.items():
+        fecha = desde_epoch_min(m, tz).date().isoformat()
+        entrada = por_fecha.setdefault(fecha, {"fecha": fecha, "jornada_min": 0, "clientes": {}})
+        entrada["jornada_min"] += 1
+        entrada["clientes"][c] = entrada["clientes"].get(c, 0) + 1
+    return [por_fecha[f] for f in sorted(por_fecha)]
 
 def _bloques(minuto_cliente, tz):
     if not minuto_cliente:
@@ -40,7 +52,7 @@ def _bloques(minuto_cliente, tz):
     out.append(Bloque(cli, desde_epoch_min(ini, tz), desde_epoch_min(prev + 1, tz), "mix"))
     return out
 
-def facturar(ventanas, actividades, reg, tarifas, tz):
+def facturar(ventanas, actividades, reg, tarifas, tz, tarifa_defecto=None):
     acts_min = {}
     for a in actividades:
         # [inicio, fin) exclusivo, consistente con ventanas — pero un run degenerado
@@ -66,12 +78,15 @@ def facturar(ventanas, actividades, reg, tarifas, tz):
     tot = []
     for c, mins in sorted(bill.items(), key=lambda kv: -kv[1]):
         tarifa = (tarifas.get(c) or {}).get("tarifa_eur_h")
+        if tarifa is None:
+            tarifa = tarifa_defecto
         imp = round(mins / 60 * tarifa, 2) if tarifa is not None else None
         tot.append(TotalCliente(c, mins, {}, imp))
 
     rango = (min((v.inicio for v in ventanas), default=None),
              max((v.fin for v in ventanas), default=None))
-    return Reporte(tot, len(jornada), sum(bill.values()), _bloques(minuto_cliente, tz), rango)
+    return Reporte(tot, len(jornada), sum(bill.values()), _bloques(minuto_cliente, tz), rango,
+                   _por_dia(minuto_cliente, tz))
 
 def exportar_csv(rep, path):
     with open(path, "w", newline="", encoding="utf-8") as f:
