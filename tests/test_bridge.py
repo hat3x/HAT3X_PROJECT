@@ -1,4 +1,42 @@
+import base64
+import json
+
 from kairos_admin.bridge import Api
+from kairos_admin import config as cfg_mod
+
+
+def _fake_jwt(payload: dict) -> str:
+    def b64(obj):
+        return base64.urlsafe_b64encode(json.dumps(obj).encode("utf-8")).rstrip(b"=").decode("ascii")
+    return f"{b64({'alg': 'HS256', 'typ': 'JWT'})}.{b64(payload)}.firma-invent"
+
+
+def test_bridge_first_run_rejects_anon_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAIROS_ADMIN_HOME", str(tmp_path))
+    api = Api()
+    anon_key = _fake_jwt({"role": "anon"})
+    res = api.first_run("https://x.supabase.co", anon_key, "master-pw")
+    assert "error" in res
+    assert cfg_mod.exists() is False
+
+
+def test_bridge_first_run_accepts_service_role_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAIROS_ADMIN_HOME", str(tmp_path))
+    api = Api()
+    svc_key = _fake_jwt({"role": "service_role"})
+    res = api.first_run("https://x.supabase.co", svc_key, "master-pw")
+    assert res == {"ok": True}
+    assert cfg_mod.exists() is True
+
+
+def test_bridge_first_run_accepts_new_style_secret_key(tmp_path, monkeypatch):
+    # claves nuevas tipo sb_secret_... no son JWT: no se bloquean (no se pueden identificar)
+    monkeypatch.setenv("KAIROS_ADMIN_HOME", str(tmp_path))
+    api = Api()
+    res = api.first_run("https://x.supabase.co", "sb_secret_abc123", "master-pw")
+    assert res == {"ok": True}
+    assert cfg_mod.exists() is True
+
 
 def test_bridge_create_and_list(supa):
     api = Api(supa=supa)

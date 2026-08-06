@@ -2,6 +2,7 @@
 devuelve {"error": msg} para que la UI lo muestre."""
 import functools
 from kairos_admin import config as cfg_mod
+from kairos_admin.keycheck import service_role_role
 from kairos_admin.supa import SupabaseClient
 from kairos_admin.ops import tenants, features, access, catalog as catalog_ops, onboarding
 from kairos_admin import templates, importers
@@ -25,6 +26,11 @@ class Api:
 
     @_safe
     def first_run(self, url, service_role, master):
+        if service_role_role(service_role) == "anon":
+            return {
+                "error": "Esa es la clave pública (anon): no puede ver los datos por RLS. "
+                         "Pega la clave secreta 'service_role' de Supabase → Settings → API."
+            }
         cfg_mod.save(cfg_mod.Config(url, service_role, ""), master)
         self._supa = SupabaseClient(url, service_role)
         return {"ok": True}
