@@ -46,6 +46,27 @@ def eventos_de_fichero(path, tz):
                 out.append(ev)
     return out
 
+def eventos_de_history(history_path, tz):
+    """~/.claude/history.jsonl: prompts (sin ruta -> caen a 'interno' en la atribucion),
+    conservados mas alla de la limpieza automatica de transcripts de sesion."""
+    out = []
+    p = Path(history_path)
+    if not p.exists():
+        return out
+    with open(p, "rb") as f:
+        for linea in f:
+            try:
+                o = json.loads(linea)
+                ts = o.get("timestamp")
+                if not isinstance(ts, (int, float)) or isinstance(ts, bool):
+                    continue
+                dt = datetime.fromtimestamp(ts / 1000, tz)
+                sid = str(o.get("sessionId") or "history")
+            except Exception:
+                continue
+            out.append(Evento(ts=dt, session_id=sid, rutas=()))
+    return out
+
 def eventos_de_proyectos(projects_dir, tz, cache=None):
     out = []
     d = Path(projects_dir)

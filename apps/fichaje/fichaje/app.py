@@ -4,9 +4,11 @@ from . import clients, config as cfgmod, pipeline, dashboard
 from .store import Store, FichajeError
 
 class Api:
-    def __init__(self, repo_root, projects_dir, store_path, config_path):
+    def __init__(self, repo_root, projects_dir, store_path, config_path, history_path=None):
         self.repo_root = Path(repo_root); self.projects_dir = Path(projects_dir)
         self.store_path = Path(store_path); self.config_path = config_path
+        self.history_path = Path(history_path) if history_path is not None \
+            else Path.home()/".claude"/"history.jsonl"
         self.tz = cfgmod.cargar(config_path).tz
 
     def entrada(self, cliente=None):
@@ -35,7 +37,8 @@ class Api:
         if isinstance(hasta, str):
             hasta = date.fromisoformat(hasta)
         rep, reg = pipeline.construir_reporte(self.repo_root, self.projects_dir,
-                                              self.store_path, self.config_path, desde, hasta)
+                                              self.store_path, self.config_path, desde, hasta,
+                                              history_path=self.history_path)
         return dashboard.datos_json(rep, reg)
 
 def _repo_root():
@@ -55,9 +58,11 @@ def lanzar():
     api = Api(root,
               Path.home()/".claude"/"projects"/"c--Users-josem-Desktop-HAT3X-CLAUDE-HAT3X",
               root/"apps"/"fichaje"/"data"/"fichaje.json",
-              root/"apps"/"fichaje"/"fichaje.config.json")
+              root/"apps"/"fichaje"/"fichaje.config.json",
+              Path.home()/".claude"/"history.jsonl")
     rep, reg = pipeline.construir_reporte(api.repo_root, api.projects_dir,
-                                          api.store_path, api.config_path, None, None)
+                                          api.store_path, api.config_path, None, None,
+                                          history_path=api.history_path)
     html = dashboard.render_html(rep, reg)
     webview.create_window("HAT3X Fichaje", html=html, js_api=api, width=1100, height=800)
     webview.start()

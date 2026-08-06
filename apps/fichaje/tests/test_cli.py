@@ -94,5 +94,11 @@ class TestCli(unittest.TestCase):
         de2, a2 = cli._resolver_rango_manual(fecha, "16:00", "17:30", tz)
         self.assertEqual(a2.date().isoformat(), "2026-08-01")
 
+    def test_paths_incluye_history_path_por_defecto(self):
+        # C: el pipeline del CLI debe apuntar por defecto a ~/.claude/history.jsonl
+        # para extender el estimado hacia atras con logs.eventos_de_history.
+        paths = cli._paths(self.root)
+        self.assertEqual(paths["history_path"], Path.home() / ".claude" / "history.jsonl")
+
 if __name__ == "__main__":
     unittest.main()

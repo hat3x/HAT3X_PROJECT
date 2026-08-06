@@ -1,5 +1,5 @@
 import unittest, tempfile, json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest import mock
 from fichaje import logs, pipeline, store, timeutil
@@ -68,6 +68,35 @@ class TestPipeline(unittest.TestCase):
             tc = [x for x in rep.totales if x.cliente == "100-montaditos"][0]
             self.assertIsNotNone(tc.importe)
             self.assertAlmostEqual(tc.importe, round(tc.minutos / 60 * 35, 2))
+
+    def test_history_extiende_el_rango_hacia_atras(self):
+        # B: 1 evento en agosto (projects_dir) + 1 prompt en marzo (history.jsonl), sin
+        # filtro de fechas -> rep.rango[0] cae en marzo y por_dia incluye el dia de marzo.
+        with tempfile.TemporaryDirectory() as d:
+            proj = Path(d) / "projects"; proj.mkdir()
+            (proj / "s1.jsonl").write_text(_linea_evento("2026-08-03T08:00:00.000Z"), encoding="utf-8")
+            history_path = Path(d) / "history.jsonl"
+            ts_marzo = int(datetime(2026, 3, 5, 10, 0, tzinfo=timezone.utc).timestamp() * 1000)
+            history_path.write_text(json.dumps({
+                "display": "prompt antiguo", "timestamp": ts_marzo, "sessionId": "hist1"}) + "\n",
+                encoding="utf-8")
+            rep, reg = pipeline.construir_reporte(
+                repo_root=Path(d), projects_dir=proj,
+                store_path=Path(d)/"fichaje.json", config_path=None,
+                desde=None, hasta=None, history_path=history_path)
+            self.assertLess(rep.rango[0].date(), date(2026, 8, 1))
+            self.assertTrue(any(pd["fecha"].startswith("2026-03") for pd in rep.por_dia))
+
+    def test_sin_history_path_no_cambia_el_comportamiento(self):
+        # history_path=None (por defecto) no debe tocar nada fuera de projects_dir.
+        with tempfile.TemporaryDirectory() as d:
+            proj = Path(d) / "projects"; proj.mkdir()
+            (proj / "s1.jsonl").write_text(_linea_evento("2026-08-03T08:00:00.000Z"), encoding="utf-8")
+            rep, reg = pipeline.construir_reporte(
+                repo_root=Path(d), projects_dir=proj,
+                store_path=Path(d)/"fichaje.json", config_path=None,
+                desde=date(2026, 8, 3), hasta=date(2026, 8, 3))
+            self.assertGreaterEqual(rep.rango[0].date(), date(2026, 8, 3))
 
     def test_usa_cache_para_no_reparsear_log(self):
         # IMPORTANT 3: la segunda llamada no debe volver a parsear el .jsonl (cache hit).

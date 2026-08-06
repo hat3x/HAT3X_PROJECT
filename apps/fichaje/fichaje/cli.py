@@ -9,7 +9,8 @@ def _paths(root):
     return dict(repo_root=root,
                 projects_dir=Path.home()/".claude"/"projects"/"c--Users-josem-Desktop-HAT3X-CLAUDE-HAT3X",
                 store_path=root/"apps"/"fichaje"/"data"/"fichaje.json",
-                config_path=root/"apps"/"fichaje"/"fichaje.config.json")
+                config_path=root/"apps"/"fichaje"/"fichaje.config.json",
+                history_path=Path.home()/".claude"/"history.jsonl")
 
 def _parse_fecha(s, tz):
     hoy = datetime.now(tz).date()
@@ -96,7 +97,8 @@ def main(argv=None):
     desde = date.fromisoformat(args.desde) if getattr(args, "desde", None) else None
     hasta = date.fromisoformat(args.hasta) if getattr(args, "hasta", None) else None
     rep, reg = pipeline.construir_reporte(P["repo_root"], P["projects_dir"], P["store_path"],
-                                          P["config_path"], desde, hasta)
+                                          P["config_path"], desde, hasta,
+                                          history_path=P["history_path"])
     if args.cmd == "informe":
         for tc in rep.totales:
             print(f"{reg.nombre(tc.cliente):24} {tc.minutos//60}h{tc.minutos%60:02d}")

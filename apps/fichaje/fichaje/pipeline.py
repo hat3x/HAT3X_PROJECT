@@ -15,11 +15,17 @@ def _recortar_ventanas(ventanas, lo, hi):
             out.append(replace(v, inicio=ini, fin=fin))
     return out
 
-def construir_reporte(repo_root, projects_dir, store_path, config_path, desde=None, hasta=None):
+def construir_reporte(repo_root, projects_dir, store_path, config_path, desde=None, hasta=None,
+                      history_path=None):
     cfg = cfgmod.cargar(config_path)
     reg = clients.descubrir(repo_root, {k: v.get("nombre") for k, v in cfg.clientes.items()})
     cache = Cache(Path(store_path).parent / "cache")
     eventos = logs.eventos_de_proyectos(projects_dir, cfg.tz, cache=cache)
+    if history_path is not None:
+        # extiende el estimado hacia atras (transcripts de sesion se limpian; el
+        # historial de prompts sobrevive mas tiempo) - antes del filtro de fechas.
+        eventos = eventos + logs.eventos_de_history(history_path, cfg.tz)
+        eventos.sort(key=lambda e: e.ts)
     lo = datetime.combine(desde, time.min, cfg.tz) if desde else None
     hi = datetime.combine(hasta, time.max, cfg.tz) if hasta else None
     if lo:
