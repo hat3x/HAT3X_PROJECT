@@ -38,6 +38,16 @@ def test_bridge_first_run_accepts_new_style_secret_key(tmp_path, monkeypatch):
     assert cfg_mod.exists() is True
 
 
+def test_bridge_reconfigure_clears_config_and_needs_setup(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAIROS_ADMIN_HOME", str(tmp_path))
+    cfg_mod.save(cfg_mod.Config("https://x.supabase.co", "svc", "x"), "master-pw")
+    api = Api()
+    assert api.needs_setup() is False
+    res = api.reconfigure()
+    assert res == {"ok": True}
+    assert api.needs_setup() is True
+
+
 def test_bridge_create_and_list(supa):
     api = Api(supa=supa)
     out = api.create_tenant({

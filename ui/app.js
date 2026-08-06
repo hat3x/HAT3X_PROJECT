@@ -176,12 +176,42 @@ function topbarActions(html) {
   if (el) el.innerHTML = html;
 }
 
+const ICON_GEAR = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+
+function reconfigureButtonHtml() {
+  return `<button id="btn-reconfigure" type="button" class="btn btn-ghost btn-sm" title="Reconfigurar Supabase" aria-label="Reconfigurar">${ICON_GEAR} Reconfigurar</button>`;
+}
+
+function bindReconfigureButton() {
+  const btn = $("#btn-reconfigure");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const ok = confirm(
+      "¿Reconfigurar Kairos Admin?\n\nSe borrará la configuración guardada en este equipo (URL de Supabase, clave y contraseña maestra). " +
+      "Los datos en Supabase no se pierden, pero tendrás que volver a hacer el primer arranque.\n\n¿Continuar?"
+    );
+    if (!ok) return;
+    btn.disabled = true;
+    try {
+      const res = await api().reconfigure();
+      if (res && res.error) { toast(res.error, "error"); return; }
+      toast("Configuración borrada. Vuelve a conectar tu proyecto de Supabase.", "success");
+      await boot();
+    } catch (e) {
+      toast("No se pudo reconfigurar: " + e, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 /* ---------- Tenants: lista ---------- */
 
 async function renderTenants() {
   show("app");
   STATE.tab = "general";
-  topbarActions(`<button id="btn-new-tenant" class="btn btn-primary">+ Nuevo tenant</button>`);
+  topbarActions(`<button id="btn-new-tenant" class="btn btn-primary">+ Nuevo tenant</button>${reconfigureButtonHtml()}`);
+  bindReconfigureButton();
 
   $("#main").innerHTML = `
     <div class="page-head">
@@ -308,7 +338,8 @@ async function loadChipsProgressively() {
 async function renderDetail(id) {
   show("app");
   STATE.tab = "general";
-  topbarActions(`<button id="btn-back" class="btn btn-ghost">&larr; Tenants</button>`);
+  topbarActions(`<button id="btn-back" class="btn btn-ghost">&larr; Tenants</button>${reconfigureButtonHtml()}`);
+  bindReconfigureButton();
   $("#main").innerHTML = `<div class="card"><p class="muted">Cargando tenant…</p></div>`;
   $("#btn-back").addEventListener("click", renderTenants);
 

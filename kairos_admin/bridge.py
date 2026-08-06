@@ -41,6 +41,11 @@ class Api:
         self._supa = SupabaseClient(cfg.supabase_url, cfg.service_role_key)
         return {"ok": True}
 
+    @_safe
+    def reconfigure(self):
+        cfg_mod.clear()
+        return {"ok": True}
+
     # ---- tenants ----
     @_safe
     def list_tenants(self):

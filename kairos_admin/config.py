@@ -22,6 +22,12 @@ def config_path() -> Path:
 def exists() -> bool:
     return config_path().exists()
 
+def clear() -> None:
+    """Borra el config.enc si existe (usado por 'Reconfigurar' en la UI)."""
+    path = config_path()
+    if path.exists():
+        path.unlink()
+
 def save(cfg: Config, password: str) -> None:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
