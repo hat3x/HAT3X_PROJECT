@@ -1,6 +1,7 @@
 import json
 
 def datos_json(rep, reg):
+    importes = [tc.importe for tc in rep.totales if tc.importe is not None]
     return {
         "jornada_min": rep.jornada_min,
         "facturable_min": rep.facturable_min,
@@ -11,6 +12,8 @@ def datos_json(rep, reg):
         "bloques": [{"cliente": b.cliente, "nombre": reg.nombre(b.cliente),
                      "inicio": b.inicio.isoformat(), "fin": b.fin.isoformat()} for b in rep.bloques],
         "clientes": [{"slug": s, "nombre": reg.nombre(s)} for s in reg.slugs],
+        "por_dia": rep.por_dia,
+        "importe_total": round(sum(importes), 2) if importes else None,
     }
 
 def render_html(rep, reg):
@@ -36,6 +39,13 @@ body{margin:0;padding:1.5rem;background:#0b0c10;color:#e8e8ea}
 .bar{height:14px;border-radius:7px;background:#5b8def}
 table{width:100%;border-collapse:collapse;margin-top:1rem}
 td,th{padding:.4rem .6rem;text-align:left;border-bottom:1px solid #ffffff14}
+#historico{margin-top:1rem}
+#historico h3{margin:0 0 .75rem}
+.mes{margin-bottom:1.25rem}
+.mes:last-child{margin-bottom:0}
+.mes-titulo{font-weight:600;margin-bottom:.4rem;text-transform:capitalize}
+.dias{display:flex;align-items:flex-end;gap:3px;height:60px}
+.dia-bar{width:8px;min-height:2px;background:#5b8def;border-radius:2px 2px 0 0}
 </style></head><body>
 <h1>HAT3X — Fichaje</h1>
 <div class="barra">
@@ -49,17 +59,53 @@ td,th{padding:.4rem .6rem;text-align:left;border-bottom:1px solid #ffffff14}
 <div class="kpi">
   <div class="card"><div class="big" id="jornada"></div><div>jornada real (union)</div></div>
   <div class="card"><div class="big" id="fact"></div><div>facturable (con solape)</div></div>
+  <div class="card" id="card-importe" style="display:none"><div class="big" id="importe"></div><div>importe total</div></div>
 </div>
 <div id="tabla" class="card"></div>
+<div id="historico" class="card"></div>
 <script id="datos" type="application/json">/*DATOS*/</script>
 <script>
 let D = JSON.parse(document.getElementById('datos').textContent);
 const hm = m => `${Math.floor(m/60)}h ${String(m%60).padStart(2,'0')}m`;
 
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                'agosto','septiembre','octubre','noviembre','diciembre'];
+
+function renderHistorico(porDia) {
+  const cont = document.getElementById('historico');
+  if (!porDia || !porDia.length) {
+    cont.innerHTML = '<h3>Historico</h3><p class="aviso">Sin datos.</p>';
+    return;
+  }
+  const porMes = {};
+  porDia.forEach(d => { (porMes[d.fecha.slice(0, 7)] = porMes[d.fecha.slice(0, 7)] || []).push(d); });
+  const meses = Object.keys(porMes).sort();
+  let html = '<h3>Historico</h3>';
+  meses.forEach(mes => {
+    const dias = porMes[mes].slice().sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const totalMin = dias.reduce((s, d) => s + d.jornada_min, 0);
+    const [anio, m] = mes.split('-');
+    const nombreMes = `${MESES[parseInt(m, 10) - 1]} ${anio}`;
+    const maxMin = Math.max(1, ...dias.map(d => d.jornada_min));
+    html += `<div class="mes"><div class="mes-titulo">${nombreMes} — ${hm(totalMin)}</div>` +
+      '<div class="dias">' +
+      dias.map(d => `<div class="dia-bar" title="${d.fecha} — ${hm(d.jornada_min)}" style="height:${100 * d.jornada_min / maxMin}%"></div>`).join('') +
+      '</div></div>';
+  });
+  cont.innerHTML = html;
+}
+
 function render(data) {
   D = data;
   document.getElementById('jornada').textContent = hm(D.jornada_min);
   document.getElementById('fact').textContent = hm(D.facturable_min);
+  const cardImporte = document.getElementById('card-importe');
+  if (D.importe_total != null) {
+    cardImporte.style.display = '';
+    document.getElementById('importe').textContent = `${D.importe_total} €`;
+  } else {
+    cardImporte.style.display = 'none';
+  }
   const max = Math.max(1, ...D.totales.map(t=>t.minutos));
   document.getElementById('tabla').innerHTML =
    '<table><tr><th>Cliente</th><th>Tiempo</th><th></th><th>Importe</th></tr>' +
@@ -70,6 +116,7 @@ function render(data) {
   const actual = sel.value;
   sel.innerHTML = (D.clientes||[]).map(c=>`<option value="${c.slug}">${c.nombre}</option>`).join('');
   if (actual) sel.value = actual;
+  renderHistorico(D.por_dia);
 }
 
 const hayPuente = () => !!(window.pywebview && window.pywebview.api);

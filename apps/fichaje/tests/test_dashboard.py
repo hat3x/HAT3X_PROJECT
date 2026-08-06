@@ -39,5 +39,28 @@ class TestDashboard(unittest.TestCase):
         for id_ in ("sel-cliente", "btn-entrada", "btn-salida", "btn-estado", "btn-refrescar"):
             self.assertIn(id_, html)
 
+    def test_datos_json_incluye_por_dia_y_importe_total(self):
+        # D: sin tarifa configurada, importe_total debe ser None (nada que sumar);
+        # por_dia debe venir tal cual desde rep.por_dia (lista de dicts JSON-serializable).
+        d = dashboard.datos_json(self._rep(), REG)
+        self.assertIn("por_dia", d)
+        self.assertIsInstance(d["por_dia"], list)
+        self.assertTrue(len(d["por_dia"]) >= 1)
+        self.assertEqual(d["por_dia"][0]["fecha"], "2026-08-03")
+        self.assertIn("importe_total", d)
+        self.assertIsNone(d["importe_total"])
+
+    def test_datos_json_importe_total_suma_importes_no_nulos(self):
+        v = [Ventana(t(10), t(11), "fichado")]
+        acts = [ActividadCliente("100-montaditos", t(10), t(11), "s1")]
+        rep = report.facturar(v, acts, REG, {"100-montaditos": {"tarifa_eur_h": 60}}, TZ)
+        d = dashboard.datos_json(rep, REG)
+        self.assertEqual(d["importe_total"], 60.0)
+
+    def test_html_incluye_seccion_historico_y_card_importe(self):
+        html = dashboard.render_html(self._rep(), REG)
+        self.assertIn("historico", html)
+        self.assertIn("card-importe", html)
+
 if __name__ == "__main__":
     unittest.main()
