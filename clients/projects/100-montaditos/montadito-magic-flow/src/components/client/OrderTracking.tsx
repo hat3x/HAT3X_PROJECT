@@ -6,6 +6,8 @@ import { Clock, ChefHat, CheckCircle2, CreditCard, Beer, UtensilsCrossed, AlertT
 import { supabase } from '@/integrations/supabase/client';
 import { Monty } from './Monty';
 import { playBellSound } from '@/lib/bell-sound';
+import { unlockAudio, startAlarm, stopAlarm, isAudioUnlocked } from '@/lib/alarm';
+import { usePushSubscription } from '@/hooks/use-push-notifications';
 import { AllergenIcon } from './AllergenIcon';
 import { AllergenLegalNotice } from './AllergenLegalNotice';
 
@@ -58,7 +60,7 @@ function TicketCard({ kind, status }: TicketCardProps) {
   const config = STATUS_CONFIG[status];
   const isReady = status === 'listo';
   const Icon = kind === 'cocina' ? UtensilsCrossed : Beer;
-  const title = kind === 'cocina' ? 'Comida · Recoger en barra' : 'Bebida · Recoger en caja';
+  const title = kind === 'cocina' ? 'Comida · Recoger en barra' : 'Bebida/Aperitivo · Recoger en barra';
   const steps = ['pendiente', 'recibido', 'preparando', 'listo'] as const;
 
   return (
@@ -120,7 +122,7 @@ function TicketCard({ kind, status }: TicketCardProps) {
         <p className="mt-3 text-xs text-center text-gold/90 font-medium">
           {kind === 'cocina'
             ? '¡Acércate a la barra!'
-            : '¡Recoge tu bebida en caja!'}
+            : '¡Recoge en barra!'}
         </p>
       )}
     </motion.div>
@@ -138,6 +140,36 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
   const [numeroDisplay, setNumeroDisplay] = useState(numeroPedido);
   const readyFiredCocina = useRef(false);
   const readyFiredBebidas = useRef(false);
+  // Aviso sonoro: en iOS hay que desbloquear el audio con un toque del usuario.
+  const [audioOn, setAudioOn] = useState(isAudioUnlocked());
+  // Modal de alarma a pantalla completa que suena en bucle hasta pulsar OK.
+  const [alarmOpen, setAlarmOpen] = useState(false);
+
+  // Notificaciones push (para enterarse con el móvil bloqueado) + aviso iPhone.
+  const { subscribe } = usePushSubscription();
+  const isIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const [notifPerm, setNotifPerm] = useState<string>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+  );
+  const activarNotis = async () => {
+    await subscribe(sessionId, pedidoId).catch(() => {});
+    setNotifPerm(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
+  };
+
+  // Al desmontar, parar la alarma siempre (evita que siga sonando).
+  useEffect(() => () => stopAlarm(), []);
+
+  const activarAviso = useCallback(() => {
+    if (unlockAudio()) {
+      setAudioOn(true);
+      playBellSound(0.4); // pitido corto de confirmación
+    }
+  }, []);
+
+  const detenerAlarma = useCallback(() => {
+    stopAlarm();
+    setAlarmOpen(false);
+  }, []);
 
   // Cargar alérgenos del pedido una vez
   useEffect(() => {
@@ -215,24 +247,37 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
   }, [onNewOrder, pedidoId, sessionId]);
 
 
-  // Realtime updates + delete detection
+  // Realtime updates + delete detection.
+  // CRÍTICO: en iOS Safari, tras el salto cross-domain de Apple Pay, el ITP
+  // bloquea el WebSocket a Supabase y lanza "WebSocket not available: The
+  // operation is insecure". Si no se captura, tumba todo React (pantalla beige).
+  // Lo envolvemos en try/catch: el polling cada 2,5s (refreshOrderStatus) cubre
+  // las actualizaciones aunque el realtime no esté disponible.
   useEffect(() => {
-    const channel = supabase
-      .channel(`pedido-${pedidoId}`)
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` },
-        (payload) => {
-          const n = payload.new as any;
-          if (n.estado) setEstadoGlobal(n.estado as OrderStatus);
-          if (n.estado_cocina) setEstadoCocina(n.estado_cocina as OrderStatus);
-          if (n.estado_bebidas) setEstadoBebidas(n.estado_bebidas as OrderStatus);
-        })
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`pedido-${pedidoId}`)
+        .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` },
+          (payload) => {
+            const n = payload.new as any;
+            if (n.estado) setEstadoGlobal(n.estado as OrderStatus);
+            if (n.estado_cocina) setEstadoCocina(n.estado_cocina as OrderStatus);
+            if (n.estado_bebidas) setEstadoBebidas(n.estado_bebidas as OrderStatus);
+          })
 
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` },
-        () => { onNewOrder(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+        .on('postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` },
+          () => { onNewOrder(); })
+        .subscribe();
+    } catch (e) {
+      console.warn('[realtime] WebSocket no disponible, se usará solo polling', e);
+    }
+    return () => {
+      if (!channel) return;
+      try { supabase.removeChannel(channel); } catch { /* ignore */ }
+    };
   }, [pedidoId, onNewOrder]);
 
   // Confetti + bell when each part becomes ready
@@ -240,9 +285,9 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
     if (hasCocina && estadoCocina === 'listo' && !readyFiredCocina.current) {
       readyFiredCocina.current = true;
       fireReadyConfetti();
-      playBellSound(0.7);
+      startAlarm();
+      setAlarmOpen(true);
       try { navigator.vibrate?.([300, 100, 300, 100, 600]); } catch {}
-      toast.success('¡Tu pedido está listo! Pasa a recogerlo en la barra.');
     }
     if (estadoCocina !== 'listo') readyFiredCocina.current = false;
   }, [estadoCocina, hasCocina]);
@@ -251,9 +296,9 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
     if (hasBebidas && estadoBebidas === 'listo' && !readyFiredBebidas.current) {
       readyFiredBebidas.current = true;
       fireReadyConfetti();
-      playBellSound(0.7);
+      startAlarm();
+      setAlarmOpen(true);
       try { navigator.vibrate?.([300, 100, 300, 100, 600]); } catch {}
-      toast.success('¡Tu pedido está listo! Pasa a recogerlo en la barra.');
     }
     if (estadoBebidas !== 'listo') readyFiredBebidas.current = false;
   }, [estadoBebidas, hasBebidas]);
@@ -333,6 +378,46 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
         {hasBebidas && <TicketCard kind="bebidas" status={estadoBebidas} />}
       </div>
 
+      {/* Aviso sonoro: en iPhone requiere un toque del usuario para desbloquear el audio */}
+      {!allFinal && !audioOn && (
+        <button
+          onClick={activarAviso}
+          className="w-full max-w-sm px-5 py-3 rounded-2xl bg-gold/15 border border-gold/50 text-foreground font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+        >
+          🔔 Activa el aviso sonoro
+        </button>
+      )}
+      {!allFinal && audioOn && (
+        <p className="text-sm text-success font-semibold text-center">🔔 Aviso sonoro activado · te avisaremos cuando esté listo</p>
+      )}
+
+      {/* iPhone: el interruptor de silencio lateral silencia TODO el audio web */}
+      {!allFinal && isIOS && (
+        <div className="w-full max-w-sm rounded-2xl border-2 border-amber-500/60 bg-amber-50/70 dark:bg-amber-950/25 px-4 py-3.5 text-center">
+          <p className="text-base font-semibold text-amber-700 dark:text-amber-300 leading-snug">
+            📵 iPhone: sube el volumen y <b>desactiva el botón de silencio</b> (interruptor lateral). Si está en silencio, no sonará.
+          </p>
+        </div>
+      )}
+
+      {/* Aviso aunque el móvil esté bloqueado (notificación push del sistema) */}
+      {!allFinal && notifPerm !== 'granted' && notifPerm !== 'unsupported' && (
+        <button
+          onClick={activarNotis}
+          className="w-full max-w-sm px-5 py-4 rounded-2xl bg-primary/10 border-2 border-primary/40 text-foreground text-base font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+        >
+          📲 Avisarme aunque tenga el móvil bloqueado
+        </button>
+      )}
+      {!allFinal && notifPerm === 'granted' && (
+        <p className="text-sm text-success font-semibold text-center">📲 También te avisaremos con el móvil bloqueado</p>
+      )}
+      {!allFinal && isIOS && notifPerm !== 'granted' && (
+        <p className="text-sm text-muted-foreground text-center max-w-sm leading-snug">
+          En iPhone, para que avise con la pantalla apagada: pulsa <b>Compartir ▸ “Añadir a pantalla de inicio”</b> y abre la app desde ahí.
+        </p>
+      )}
+
       {orderAllergens.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -383,6 +468,39 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
         <p className="mt-2 text-xs text-muted-foreground text-center max-w-xs">
           No cierres esta pantalla: es tu comprobante para recoger comida y bebida.
         </p>
+      )}
+
+      {/* ALARMA a pantalla completa: suena en bucle hasta que el cliente pulsa OK */}
+      {alarmOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 px-8 text-center bg-primary"
+        >
+          <motion.div
+            animate={{ scale: [1, 1.2, 1], rotate: [0, -10, 10, 0] }}
+            transition={{ duration: 0.7, repeat: Infinity }}
+            className="text-8xl"
+            aria-hidden
+          >
+            🔔
+          </motion.div>
+          <div className="text-primary-foreground">
+            <p className="text-sm uppercase tracking-widest opacity-80 mb-2">
+              Pedido #{String(numeroDisplay).padStart(4, '0')}
+            </p>
+            <h2 className="font-display text-4xl font-black leading-tight">
+              ¡TU PEDIDO ESTÁ LISTO!
+            </h2>
+            <p className="mt-3 text-lg font-medium opacity-90">Pasa a recogerlo en la barra</p>
+          </div>
+          <button
+            onClick={detenerAlarma}
+            className="w-full max-w-xs px-8 py-5 rounded-3xl bg-white text-primary font-black text-2xl shadow-xl active:scale-95 transition-transform"
+          >
+            OK, ya voy
+          </button>
+        </motion.div>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase, type EstadoPedido } from "@/lib/supabase";
 import { useStaffLocal } from "@/lib/staff-local";
+import { playBeep, unlockAudio } from "@/lib/beep";
 import { StaffHeader } from "@/components/StaffHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,13 +24,18 @@ interface PedidoItem {
   pedido_id: string;
   cantidad: number;
   destino: "cocina" | "bebidas";
-  producto: { nombre: string } | null;
+  variante: string | null;
+  producto: { nombre: string; numero?: string | null } | null;
 }
 
-const COLUMNS: { key: EstadoPedido; title: string; next?: EstadoPedido; prev?: EstadoPedido; nextLabel?: string; prevLabel?: string }[] = [
-  { key: "recibido", title: "Recibido", next: "preparando", nextLabel: "Comenzar" },
-  { key: "preparando", title: "Preparando", next: "listo", prev: "recibido", nextLabel: "Marcar listo", prevLabel: "Volver" },
-  { key: "listo", title: "Listo", next: "entregado", prev: "preparando", nextLabel: "Entregar", prevLabel: "Volver" },
+/** Nombre del item + variante en una línea (ej. "Nachos · Cheddar y bacon"). */
+const itemLabel = (it: PedidoItem): string =>
+  (it.producto?.nombre ?? "—") + (it.variante ? ` · ${it.variante.replace(/\n/g, " · ")}` : "");
+
+const COLUMNS: { key: EstadoPedido; title: string; emoji: string; next?: EstadoPedido; prev?: EstadoPedido; nextLabel?: string }[] = [
+  { key: "recibido", title: "Recibido", emoji: "📥", next: "preparando", nextLabel: "▶ Empezar" },
+  { key: "preparando", title: "Preparando", emoji: "🔥", next: "listo", prev: "recibido", nextLabel: "Entregar" },
+  { key: "listo", title: "Listo", emoji: "✅", next: "entregado", prev: "preparando", nextLabel: "Entregado" },
 ];
 
 const minutesSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -79,7 +85,7 @@ const Cocina = () => {
       const ids = list.map((p) => p.id);
       const { data: its } = await supabase
         .from("pedido_items")
-        .select("id, pedido_id, cantidad, destino, producto:menu_productos(nombre)")
+        .select("id, pedido_id, cantidad, destino, variante, producto:menu_productos(nombre, numero)")
         .in("pedido_id", ids)
         .eq("destino", "cocina");
       const grouped: Record<string, PedidoItem[]> = {};
@@ -98,29 +104,66 @@ const Cocina = () => {
   useEffect(() => {
     if (!localId) return;
     loadAll();
-    const channel = supabase
-      .channel(`kds-pedidos-${localId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "pedidos",
-          filter: `local_id=eq.${localId}`,
-        },
-        () => loadAll(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pedido_items" },
-        () => loadAll(),
-      )
-      .subscribe();
+
+    // Respaldo por polling: si el WebSocket Realtime no entrega eventos (RLS,
+    // red del APK, etc.), refrescamos cada 5s para que los pedidos nuevos
+    // aparezcan solos sin tener que salir y volver a entrar.
+    const poll = setInterval(loadAll, 5000);
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`kds-pedidos-${localId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "pedidos",
+            filter: `local_id=eq.${localId}`,
+          },
+          () => loadAll(),
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "pedido_items" },
+          () => loadAll(),
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn("[realtime] no disponible en cocina, se usa polling", e);
+    }
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(poll);
+      if (channel) {
+        try { supabase.removeChannel(channel); } catch { /* ignore */ }
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localId]);
+
+  // 🔔 Alarma al llegar un pedido NUEVO a cocina (id que no estaba antes).
+  // No suena en la carga inicial.
+  const seenRef = useRef<Set<string>>(new Set());
+  const beepInitRef = useRef(false);
+  useEffect(() => {
+    if (loading) return;
+    const ids = pedidos.map((p) => p.id);
+    if (!beepInitRef.current) {
+      seenRef.current = new Set(ids);
+      beepInitRef.current = true;
+      return;
+    }
+    if (ids.some((id) => !seenRef.current.has(id))) playBeep();
+    seenRef.current = new Set(ids);
+  }, [pedidos, loading]);
+
+  // Desbloquea el audio del WebView de Android al primer toque del usuario.
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
 
   const updateEstado = async (id: string, estado_cocina: EstadoPedido) => {
     const { error } = await supabase
@@ -135,87 +178,64 @@ const Cocina = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <StaffHeader title="Cocina · KDS" subtitle="Pedidos en tiempo real" />
-      <main className="mx-auto max-w-[1800px] p-6">
+      <main className="mx-auto max-w-[1800px] px-4 pb-10 pt-4">
         {loading ? (
-          <div className="text-center text-muted-foreground py-20">Cargando pedidos…</div>
+          <div className="empty">Cargando pedidos…</div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="kds">
             {COLUMNS.map((col) => {
               const colPedidos = pedidos.filter((p) => p.estado_cocina === col.key);
               return (
-                <section key={col.key} className="flex flex-col">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-xl font-bold">{col.title}</h2>
-                    <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium">{colPedidos.length}</span>
-                  </div>
-                  <div className="space-y-4">
-                    {colPedidos.length === 0 && (
-                      <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                        Sin pedidos
-                      </div>
-                    )}
-                    {colPedidos.map((p) => {
-                      const mins = minutesSince(p.created_at);
-                      const its = items[p.id] ?? [];
-                      return (
-                        <Card key={p.id} className={`border-l-4 p-5 ${borderForAge(mins)}`}>
-                          <div className="mb-3 flex items-start justify-between">
-                            <div>
-                              <div className="text-3xl font-bold">#{p.numero_pedido}</div>
-                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <Clock className="h-3.5 w-3.5" />
-                                {formatDistanceToNowStrict(new Date(p.created_at), { locale: es })}
-                              </div>
-                            </div>
-                            <div className="text-right text-sm font-semibold text-muted-foreground">
-                              {Number(p.total).toFixed(2)} €
-                            </div>
-                          </div>
-                          <ul className="mb-4 space-y-1.5 text-base">
-                            {its.map((it) => (
-                              <li key={it.id} className="flex items-baseline gap-2">
-                                <span className="font-bold text-primary">{it.cantidad}×</span>
-                                <span>{it.producto?.nombre ?? "—"}</span>
-                              </li>
-                            ))}
-                            {its.length === 0 && (
-                              <li className="text-sm italic text-muted-foreground">Sin items de cocina</li>
-                            )}
-                          </ul>
-                          {p.notas && (
-                            <div className="mb-3 rounded-md bg-muted p-2 text-sm italic">
-                              📝 {p.notas}
-                            </div>
+                <section key={col.key} className="kcol glass">
+                  <h3>
+                    <span>{col.emoji} {col.title}</span>
+                    <span className="count">{colPedidos.length}</span>
+                  </h3>
+                  {colPedidos.length === 0 && <div className="empty">Sin pedidos</div>}
+                  {colPedidos.map((p) => {
+                    const mins = minutesSince(p.created_at);
+                    const timerClass = mins < 5 ? "t-fresh" : mins < 10 ? "t-warn" : "t-late";
+                    const timerText = mins < 1 ? "ahora" : `${mins} min`;
+                    const its = items[p.id] ?? [];
+                    return (
+                      <div key={p.id} className="ticket glass">
+                        <div className="head">
+                          <span className="num">#{p.numero_pedido}</span>
+                          <span className={`timer ${timerClass}`}>{timerText}</span>
+                        </div>
+                        <ul className="items">
+                          {its.map((it) => (
+                            <li key={it.id}>
+                              <span className="qty">{it.cantidad}×</span>
+                              {it.producto?.numero && <span className="nchip">#{it.producto.numero}</span>}
+                              <span>{itemLabel(it)}</span>
+                            </li>
+                          ))}
+                          {its.length === 0 && (
+                            <li style={{ color: "var(--b-dim)", fontStyle: "italic", fontSize: "13px" }}>Sin items de cocina</li>
                           )}
-                          <div className="flex gap-2">
-                            {col.prev && (
-                              <Button variant="outline" size="sm" onClick={() => updateEstado(p.id, col.prev!)}>
-                                <ArrowLeft className="h-4 w-4" />
-                                {col.prevLabel}
-                              </Button>
-                            )}
-                            {col.next && (
-                              <Button size="sm" className="flex-1" onClick={() => updateEstado(p.id, col.next!)}>
-                                {col.next === "listo" ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
-                                {col.nextLabel}
-                              </Button>
-                            )}
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
+                        </ul>
+                        {p.notas && (
+                          <div className="group-label" style={{ textTransform: "none" }}>📝 {p.notas}</div>
+                        )}
+                        <div className="actions">
+                          {col.next && (
+                            <button className="btn primary" onClick={() => updateEstado(p.id, col.next!)}>
+                              {col.nextLabel}
+                            </button>
+                          )}
+                          {col.prev && (
+                            <button className="btn ghost" title="Volver" onClick={() => updateEstado(p.id, col.prev!)}>↩</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </section>
               );
             })}
-          </div>
-        )}
-        {pedidos.length === 0 && !loading && (
-          <div className="mt-12 flex flex-col items-center justify-center text-muted-foreground">
-            <ChefHat className="mb-3 h-12 w-12 opacity-40" />
-            <p>No hay pedidos activos</p>
           </div>
         )}
       </main>

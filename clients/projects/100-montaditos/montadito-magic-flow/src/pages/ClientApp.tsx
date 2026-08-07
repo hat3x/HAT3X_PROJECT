@@ -5,8 +5,19 @@ import { ClientHeader } from '@/components/client/ClientHeader';
 import { LocalSelector } from '@/components/client/LocalSelector';
 import { useActiveLocal } from '@/lib/active-local';
 import { CategoryGrid } from '@/components/client/CategoryGrid';
+import { DesayunoCard } from '@/components/client/DesayunoCard';
+import { PromoCard } from '@/components/client/PromoCard';
+import { PromoComboCard } from '@/components/client/PromoComboCard';
+import { COMBOS_5E, COMBO5_COCINA_PRODUCT_ID } from '@/lib/promos-5e';
+import { DESAYUNO_VIEW_SECTIONS, isDesayunoTime, DESAYUNO_COMBOS, DESAYUNO_COCINA_PRODUCT_ID } from '@/lib/desayunos';
+import { DesayunoComboCard } from '@/components/client/DesayunoComboCard';
+import { SECTION_IMAGES } from '@/lib/section-images';
+import { useQuery } from '@tanstack/react-query';
+import { PROMO_NACHOS_PRODUCT_ID } from '@/lib/promo';
+import { isCocinaOpen } from '@/lib/kitchen-hours';
 import { SectionTabs } from '@/components/client/SectionTabs';
 import { ProductCard } from '@/components/client/ProductCard';
+import { MontyRuedaCard } from '@/components/client/MontyRuedaCard';
 import { CartSheet } from '@/components/client/CartSheet';
 import { AlcoholWarningSheet } from '@/components/client/AlcoholWarningSheet';
 import { AllergenFilterSheet } from '@/components/client/AllergenFilterSheet';
@@ -18,6 +29,7 @@ import { MontyLoader } from '@/components/client/MontyLoader';
 import { useCategories, useProducts } from '@/hooks/use-menu';
 import { useAllergens } from '@/hooks/use-allergens';
 import { useLocalRestricciones, buildRestriccionFilter } from '@/hooks/use-local-restricciones';
+import { useAgotados } from '@/hooks/use-agotados';
 import { useCartStore } from '@/lib/cart-store';
 import { useAllergenFilter } from '@/lib/allergen-filter';
 import { supabase } from '@/integrations/supabase/client';
@@ -44,13 +56,16 @@ const MONTADITO_SECTIONS = [
 ] as const;
 
 const BEBIDAS_SECTIONS = [
-  'Clásicas',
-  'Energéticas',
-  'Tardeo Chill',
-  'Tardeo Premium',
+  // Jarras y cervezas arriba del todo
   'Jarras Heladas',
   'Cerveza Premium',
   'Cerveza en Botella',
+  // Luego las bebidas clásicas
+  'Clásicas',
+  // Resto
+  'Energéticas',
+  'Tardeo Chill',
+  'Tardeo Premium',
   'Vino',
   'Café e Infusiones',
 ] as const;
@@ -122,10 +137,31 @@ const ClientApp = () => {
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [promo5eOpen, setPromo5eOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [showLocalSelector, setShowLocalSelector] = useState(false);
-  const [orderState, setOrderState] = useState<ActiveOrder | null>(null);
+  const [orderState, setOrderState] = useState<ActiveOrder | null>(() => {
+    // Recuperación síncrona en el primer render para evitar flash de LocalSelector
+    // cuando iOS borra localStorage tras el redirect cross-domain de Apple Pay.
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('pago') !== 'ok') return null;
+    const saved = loadActiveOrder();
+    if (saved) return saved;
+    const pid = urlParams.get('pid');
+    const num = urlParams.get('num');
+    const sid = urlParams.get('sid');
+    if (!pid || num === null) return null;
+    const recovered: ActiveOrder = {
+      pedidoId: pid,
+      numeroPedido: parseInt(num, 10),
+      hasCocina: urlParams.get('cocina') !== '0',
+      hasBebidas: urlParams.get('bebidas') === '1',
+      sessionId: sid ?? undefined,
+    };
+    localStorage.setItem(ACTIVE_ORDER_KEY, JSON.stringify(recovered));
+    return recovered;
+  });
   const [pendingCheckout, setPendingCheckout] = useState<ActiveOrder | null>(null);
   const [resumableOrder, setResumableOrder] = useState<ActiveOrder | null>(null);
   // Si venimos del redirect de Apple Pay (/?pago=ok), empezamos sin recovering
@@ -182,6 +218,21 @@ const ClientApp = () => {
 
   useEffect(() => { registerPushServiceWorker(); }, []);
 
+  // Salvaguarda anti-congelado: a veces Radix deja `pointer-events:none` en <body>
+  // al cerrar un diálogo/sheet (bug conocido) y bloquea toda la pantalla hasta recargar.
+  // Lo limpiamos automáticamente cuando ya no hay ningún overlay abierto.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.body.style.pointerEvents === 'none') {
+        const overlayOpen = document.querySelector(
+          '[data-state="open"][role="dialog"],[data-state="open"][role="alertdialog"],[data-radix-popper-content-wrapper]',
+        );
+        if (!overlayOpen) document.body.style.pointerEvents = '';
+      }
+    }, 400);
+    return () => clearInterval(id);
+  }, []);
+
   // Recuperar sesión al arrancar: verificar en DB el estado real del pedido guardado
   useEffect(() => {
     const saved = loadActiveOrder();
@@ -227,7 +278,14 @@ const ClientApp = () => {
         } else if (pedido.estado === 'cancelado' || pedido.estado === 'entregado') {
           localStorage.removeItem(ACTIVE_ORDER_KEY);
         } else if (pedido.estado === 'pendiente_pago') {
-          setResumableOrder(saved);
+          // Con activeLocal null (iOS borró localStorage tras redirect Apple Pay),
+          // ir directo a OrderTracking evita quedarse bloqueado en LocalSelector.
+          // OrderTracking muestra "Pago pendiente" + botón "Reintentar pago".
+          if (!activeLocal) {
+            setOrderState(saved);
+          } else {
+            setResumableOrder(saved);
+          }
         } else {
           setOrderState(saved);
         }
@@ -321,31 +379,74 @@ const ClientApp = () => {
 
   const { data: categories = [], isLoading: loadingCategories } = useCategories();
   const { data: rawProducts = [] } = useProducts(activeCategory || undefined);
+  // Montaditos (para resolver los componentes de las MontyRuedas). Misma queryKey
+  // que cuando la categoría activa es Montaditos → react-query lo deduplica.
+  const montaditosCatId = (categories as any[]).find((c) => c.nombre === 'Montaditos')?.id;
+  const { data: allMontaditos = [] } = useProducts(montaditosCatId);
+  const ruedaMontaditos = (allMontaditos as any[]).map((p) => ({ id: p.id, numero: p.numero ?? null, nombre: p.nombre }));
   const { data: restricciones = [] } = useLocalRestricciones();
   const { isProductoAllowed, isSeccionAllowed: isSeccionAllowedDB } = buildRestriccionFilter(restricciones);
+  const { isProductoAgotado, isIngredienteAgotado } = useAgotados();
 
-  const now = new Date();
-  const isAfter17 = now.getHours() >= 17;
-  const CAFE_SECTION = 'Café e Infusiones';
+  // Café e Infusiones ya no tiene restricción horaria: visible todo el día en Bebidas.
+  const isSeccionAllowed = isSeccionAllowedDB;
 
-  // After 17:00: keep Café e Infusiones visible (DB hides it entirely, we override to show only Agua)
-  const isSeccionAllowed = (sec: string) => {
-    if (isAfter17 && sec === CAFE_SECTION) return true;
-    return isSeccionAllowedDB(sec);
-  };
-
+  // Productos internos (combos de desayuno, marcador de cocina y nachos de la promo):
+  // deben existir y ser legibles (disponible=true) pero NO mostrarse como tarjetas del menú.
+  const INTERNAL_HIDDEN_IDS = new Set([
+    DESAYUNO_COMBOS.clasico.productoId,
+    DESAYUNO_COMBOS.dulce.productoId,
+    DESAYUNO_COCINA_PRODUCT_ID,
+    PROMO_NACHOS_PRODUCT_ID,
+    COMBO5_COCINA_PRODUCT_ID,
+  ]);
   const products = (rawProducts as any[]).filter((p) => {
+    if (INTERNAL_HIDDEN_IDS.has(p.id)) return false;
     if (!isProductoAllowed(p.id)) return false;
-    // After 17:00: only Agua survives in Café e Infusiones
-    if (isAfter17 && p.seccion === CAFE_SECTION) {
-      const nombre: string = (p.nombre ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-      return nombre.includes('agua');
-    }
     return true;
   });
   const cart = useCartStore();
 
   const selectedCategory = categories.find((c: any) => c.id === activeCategory);
+
+  // Secciones especiales: Desayunos (banner arriba, 10:00–12:00) y Promociones (banner abajo, solo si hay promos).
+  const desayunoCat = (categories as any[]).find((c) => c.nombre === 'Desayunos');
+  const promoCat = (categories as any[]).find((c) => c.nombre === 'Promociones');
+  const { data: promoProducts = [] } = useProducts(promoCat?.id ?? '00000000-0000-0000-0000-000000000000');
+  // Ración interna "Nachos Salséo Guacamole" (oculta del menú). Si existe, la promo añade su línea a cocina.
+  const { data: nachosId = null } = useQuery({
+    queryKey: ['promo-nachos', PROMO_NACHOS_PRODUCT_ID],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('menu_productos')
+        .select('id')
+        .eq('id', PROMO_NACHOS_PRODUCT_ID)
+        .maybeSingle();
+      return (data as any)?.id ?? null;
+    },
+  });
+  // MontyCookies (68–70) para el Desayuno Dulce.
+  const gourmets = (ruedaMontaditos as any[]).filter((m) => {
+    const n = parseInt((m.numero ?? '').toString(), 10);
+    return n >= 68 && n <= 70;
+  });
+  // ¿Existen en BD los 3 productos internos del combo desayuno? (si no, los banners son solo visuales).
+  const { data: comboReady = false } = useQuery({
+    queryKey: ['desayuno-combos-ready'],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const ids = [DESAYUNO_COMBOS.clasico.productoId, DESAYUNO_COMBOS.dulce.productoId, DESAYUNO_COCINA_PRODUCT_ID];
+      const { data } = await supabase.from('menu_productos').select('id').in('id', ids);
+      return (data?.length ?? 0) === 3;
+    },
+  });
+  // Promociones y Desayunos ACTIVOS. Desayunos solo aparece 10:00–12:00 (isDesayunoTime).
+  const DESAYUNOS_ON = true;
+  const PROMOS_ON = true;
+  const showDesayunos = isDesayunoTime() && !!desayunoCat && DESAYUNOS_ON;
+  const hasPromos = (promoProducts as any[]).some((p) => !INTERNAL_HIDDEN_IDS.has(p.id)) && PROMOS_ON;
+  const gridCategories = (categories as any[]).filter((c) => c.nombre !== 'Desayunos' && c.nombre !== 'Promociones');
 
 
   const showLoader = loadingCategories && !welcomeOpen && !!activeLocal;
@@ -390,8 +491,19 @@ const ClientApp = () => {
         return false;
       };
 
-      const hasBebidas = cart.items.some((i) => isBebida(i.productoId));
-      const hasCocina = cart.items.some((i) => !isBebida(i.productoId));
+      // Destino efectivo de cada línea: override explícito (promos) o por categoría.
+      const lineDestino = (i: typeof cart.items[number]): 'bebidas' | 'cocina' =>
+        i.destino ?? (isBebida(i.productoId) ? 'bebidas' : 'cocina');
+
+      const hasBebidas = cart.items.some((i) => lineDestino(i) === 'bebidas');
+      const hasCocina = cart.items.some((i) => lineDestino(i) === 'cocina' || !!i.extraCocina);
+
+      // Horario de cocina: si está cerrada, no se puede crear un pedido con comida de cocina.
+      if (hasCocina && !isCocinaOpen()) {
+        toast.error('La cocina está cerrada ahora mismo. Solo puedes pedir bebidas y aperitivos de barra (aceitunas, gildas, cucurucho).');
+        setIsCheckingOut(false);
+        return;
+      }
 
       // Determinar estados iniciales según las partes del pedido
       const total = cart.items.reduce((s, i) => s + i.precio * i.cantidad, 0);
@@ -413,13 +525,44 @@ const ClientApp = () => {
         .single();
       if (pErr) throw pErr;
 
-      const itemRows = cart.items.map((item) => ({
-        pedido_id: pedido.id,
-        producto_id: item.productoId,
-        cantidad: item.cantidad,
-        precio_unitario: item.precio,
-        destino: isBebida(item.productoId) ? 'bebidas' : 'cocina',
-      }));
+      const itemRows = cart.items.flatMap((item) => {
+        // Combos con línea aparte de cocina (extraCocina): ambas líneas comparten
+        // combo_grupo para que caja/histórico las muestren AGRUPADAS como 1 ticket,
+        // sin romper el ruteo por destino (comida→cocina, café/zumo→barra).
+        const grupo = item.extraCocina ? item.id : null;
+        // La comida del combo va SOLO en la línea de cocina. En la línea de barra
+        // (bebidas) se excluye para que el barista vea únicamente café/zumo y no se
+        // duplique la comida (que ya aparece en la línea de cocina).
+        const mainComps = item.extraCocina?.label
+          ? (item.componentes ?? []).filter((c) => c !== item.extraCocina!.label)
+          : item.componentes;
+        const rows: any[] = [{
+          pedido_id: pedido.id,
+          producto_id: item.productoId,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio,
+          destino: lineDestino(item),
+          // Tamaño/variante elegido (ej. "Jarra Quijote") o, en MontyRuedas/promos,
+          // los componentes (uno por línea: montaditos o jarras) para caja/cocina.
+          variante: (mainComps && mainComps.length
+            ? mainComps.join('\n')
+            : item.variantLabel) ?? null,
+          combo_grupo: grupo,
+        }];
+        // Promo/combo compuesto: comida/ración incluida que va a COCINA como línea aparte a 0€.
+        if (item.extraCocina) {
+          rows.push({
+            pedido_id: pedido.id,
+            producto_id: item.extraCocina.producto_id,
+            cantidad: item.cantidad,
+            precio_unitario: 0, // incluida en el combo (el trigger la fija al base 0)
+            destino: 'cocina',
+            variante: item.extraCocina.label ?? null,
+            combo_grupo: grupo,
+          });
+        }
+        return rows;
+      });
 
       const { error: iErr } = await supabase
         .from('pedido_items')
@@ -546,6 +689,7 @@ const ClientApp = () => {
         onCartClick={() => setCartOpen(true)}
         onChangeLocal={() => setShowLocalSelector(true)}
         onFilterClick={() => setFilterOpen(true)}
+        onHome={() => { setActiveCategory(null); setActiveSection(null); setPromo5eOpen(false); setCartOpen(false); setFilterOpen(false); }}
       />
 
       {resumableOrder && (
@@ -604,23 +748,53 @@ const ClientApp = () => {
 
       {!activeCategory ? (
         <>
-          <div className="px-4 pt-6 pb-6 max-w-lg mx-auto text-center">
-            <h2 className="font-display text-3xl font-black leading-tight text-foreground">
+          <div className="px-4 pt-2 pb-3 max-w-lg mx-auto text-center">
+            <h2 className="font-display text-xl font-black leading-tight text-foreground whitespace-nowrap">
               ¿Qué te <span className="text-primary italic">apetece</span> hoy?
             </h2>
-            <p className="text-muted-foreground mt-2 text-sm">
-              Elige una sección para empezar
-            </p>
           </div>
-          <div className="pb-8">
-            <CategoryGrid categories={categories} onSelect={setActiveCategory} />
+          <div className="pb-28 flex flex-col gap-3">
+            {/* 10:00–12:00: Desayunos arriba */}
+            {showDesayunos && desayunoCat && (
+              <div className="px-4 max-w-lg mx-auto w-full">
+                <button
+                  onClick={() => setActiveCategory(desayunoCat.id)}
+                  className="block w-full max-w-xs mx-auto active:scale-[0.98] transition-transform"
+                >
+                  <img src={SECTION_IMAGES['Desayunos']} alt="Desayunos" className="w-full h-auto" />
+                </button>
+              </div>
+            )}
+            {/* Promociones ARRIBA solo cuando NO hay desayunos (fuera de 10–12) */}
+            {hasPromos && promoCat && !showDesayunos && (
+              <div className="px-4 max-w-lg mx-auto w-full">
+                <button
+                  onClick={() => setActiveCategory(promoCat.id)}
+                  className="block w-full max-w-xs mx-auto active:scale-[0.98] transition-transform"
+                >
+                  <img src={SECTION_IMAGES['Promociones'] ?? promoCat.imagen_url} alt="Promociones" className="w-full h-auto" />
+                </button>
+              </div>
+            )}
+            <CategoryGrid categories={gridCategories} onSelect={setActiveCategory} />
+            {/* Promociones ABAJO cuando hay desayunos (10–12). El pb-28 deja hueco para Monty. */}
+            {hasPromos && promoCat && showDesayunos && (
+              <div className="px-4 max-w-lg mx-auto w-full">
+                <button
+                  onClick={() => setActiveCategory(promoCat.id)}
+                  className="block w-full max-w-xs mx-auto active:scale-[0.98] transition-transform"
+                >
+                  <img src={SECTION_IMAGES['Promociones'] ?? promoCat.imagen_url} alt="Promociones" className="w-full h-auto" />
+                </button>
+              </div>
+            )}
           </div>
         </>
       ) : (
         <>
           <div className="px-4 pt-6 pb-2 max-w-lg mx-auto flex items-center gap-3">
             <button
-              onClick={() => { setActiveCategory(null); setActiveSection(null); }}
+              onClick={() => { setActiveCategory(null); setActiveSection(null); setPromo5eOpen(false); }}
               className="shrink-0 w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-lg hover:bg-surface-elevated transition-colors"
               aria-label="Volver"
             >
@@ -635,27 +809,78 @@ const ClientApp = () => {
             const isMontaditos = selectedCategory?.nombre === 'Montaditos';
             const isBebidas = selectedCategory?.nombre === 'Bebidas';
             const isAperitivos = selectedCategory?.nombre === 'Aperitivos';
+            const isDesayunos = selectedCategory?.nombre === 'Desayunos';
+            const isPromociones = selectedCategory?.nombre === 'Promociones';
             const sectionList: readonly string[] | null = isMontaditos
               ? MONTADITO_SECTIONS
               : isBebidas
               ? BEBIDAS_SECTIONS
               : isAperitivos
               ? APERITIVOS_SECTIONS
+              : isDesayunos
+              ? DESAYUNO_VIEW_SECTIONS
               : null;
             const isDrink = isBebidas;
 
 
-            const isMontyAhorro = selectedCategory?.nombre === 'MontyAhorro';
+            const isMontyAhorro = selectedCategory?.nombre === 'MontyRuedas';
 
             if (!sectionList) {
               return (
                 <div className="px-4 pb-32 max-w-lg mx-auto">
-
-                  <div className="flex flex-col gap-2">
-                    {products.map((product, i) => (
-                      <ProductCard key={product.id} product={product as any} index={i} hideAllergens={isMontyAhorro} />
-                    ))}
-                  </div>
+                  {isPromociones ? (
+                    promo5eOpen ? (
+                      <div className="rounded-3xl border-2 border-primary/15 bg-primary/[0.04] p-3">
+                        <div className="flex items-center gap-2 mb-3">
+                          <button
+                            onClick={() => setPromo5eOpen(false)}
+                            className="shrink-0 w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center text-sm hover:bg-surface-elevated transition-colors"
+                            aria-label="Volver a Promociones"
+                          >
+                            ←
+                          </button>
+                          <span className="font-display text-sm font-black uppercase tracking-wider text-primary">Promos 5€</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 items-stretch">
+                          {products.map((product, i) =>
+                            COMBOS_5E[product.id] ? (
+                              <PromoComboCard key={product.id} product={product as any} def={COMBOS_5E[product.id]} index={i} />
+                            ) : (
+                              <PromoCard key={product.id} product={product as any} index={i} nachosId={nachosId} />
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setPromo5eOpen(true)}
+                        className="block w-full active:scale-[0.98] transition-transform"
+                      >
+                        <img
+                          src="/assets/img/promos/promociones-5e-header.png"
+                          alt="Promociones 5€"
+                          className="w-full h-auto rounded-2xl"
+                          loading="lazy"
+                        />
+                      </button>
+                    )
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {products.map((product, i) =>
+                        isMontyAhorro ? (
+                          <MontyRuedaCard
+                            key={product.id}
+                            product={product as any}
+                            montaditos={ruedaMontaditos}
+                            isProductoAgotado={isProductoAgotado}
+                            index={i}
+                          />
+                        ) : (
+                          <ProductCard key={product.id} product={product as any} index={i} hideAllergens={isMontyAhorro} agotado={isProductoAgotado(product.id)} isIngredienteAgotado={isIngredienteAgotado} />
+                        ),
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -681,6 +906,12 @@ const ClientApp = () => {
             let idx = 0;
             return (
               <>
+                {isDesayunos && (
+                  <div className="px-4 pt-1 pb-3 max-w-lg mx-auto w-full flex flex-col gap-3">
+                    <DesayunoComboCard tipo="dulce" gourmets={gourmets} isProductoAgotado={isProductoAgotado} ready={comboReady || import.meta.env.VITE_DESAYUNO_TEST === '1'} index={0} />
+                    <DesayunoComboCard tipo="clasico" ready={comboReady || import.meta.env.VITE_DESAYUNO_TEST === '1'} index={1} />
+                  </div>
+                )}
                 <div className="px-4 pb-3 max-w-lg mx-auto">
                   <SectionTabs
                     sections={available}
@@ -698,14 +929,20 @@ const ClientApp = () => {
                           </h3>
                         )}
                         <div className="flex flex-col gap-2">
-                          {g.items.map((p) => (
-                            <ProductCard
-                              key={p.id}
-                              product={p}
-                              index={idx++}
-                              variant={isDrink ? 'drink' : 'default'}
-                            />
-                          ))}
+                          {g.items.map((p) =>
+                            isDesayunos ? (
+                              <DesayunoCard key={p.id} product={p} index={idx++} />
+                            ) : (
+                              <ProductCard
+                                key={p.id}
+                                product={p}
+                                index={idx++}
+                                variant={isDrink ? 'drink' : 'default'}
+                                agotado={isProductoAgotado(p.id)}
+                                isIngredienteAgotado={isIngredienteAgotado}
+                              />
+                            ),
+                          )}
                         </div>
                       </section>
                     ))}
@@ -721,6 +958,8 @@ const ClientApp = () => {
                               product={p}
                               index={idx++}
                               variant={isDrink ? 'drink' : 'default'}
+                              agotado={isProductoAgotado(p.id)}
+                              isIngredienteAgotado={isIngredienteAgotado}
                             />
                           ))}
                         </div>

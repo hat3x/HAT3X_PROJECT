@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Propuesta de servicio · 100 Montaditos Móstoles</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root{
+    --ink:#1b1815;
+    --ink-soft:#4d453e;
+    --dim:#867c73;
+    --paper:#ffffff;
+    --surface:#f7f3ed;
+    --line:#e6ded3;
+    --line-hard:#d5c9ba;
+    --brand:#c4122f;
+    --brand-soft:#fdeef0;
+    --value:#14724a;
+    --value-soft:#e8f4ee;
+    --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--paper)}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    font-size:10.5pt;
+    line-height:1.55;
+    font-variant-numeric:tabular-nums;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+  .page{
+    width:210mm;height:297mm;
+    padding:15mm 16mm 12mm;
+    display:flex;flex-direction:column;
+    page-break-after:always;position:relative;
+  }
+  .page:last-child{page-break-after:auto}
+
+  .brandbar{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:2.5px solid var(--ink);padding-bottom:7px}
+  .logo{font-size:15pt;font-weight:800;letter-spacing:-.02em}
+  .logo span{color:var(--brand)}
+  .kicker{font-size:7.5pt;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+
+  h1{font-size:23pt;line-height:1.1;letter-spacing:-.035em;font-weight:800;margin-top:14px}
+  .lede{font-size:11pt;color:var(--ink-soft);margin-top:5px}
+  .refline{display:flex;gap:20px;margin-top:9px;font-size:8.5pt;color:var(--dim)}
+  .refline b{color:var(--ink-soft);font-weight:600}
+
+  h2{font-size:8pt;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);
+     display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  h2::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  section{margin-top:20px}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .kpi{background:var(--surface);border-radius:9px;padding:11px 12px;border:1px solid var(--line)}
+  .kpi .v{font-size:19pt;font-weight:800;letter-spacing:-.035em;line-height:1;color:var(--brand)}
+  .kpi .v small{font-size:10pt;font-weight:700}
+  .kpi .k{font-size:7.5pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-top:5px}
+  .cap{font-size:8pt;color:var(--dim);margin-top:7px}
+
+  .delivered{display:grid;grid-template-columns:1fr 1fr;gap:5px 22px}
+  .d{display:flex;gap:8px;font-size:9.5pt;color:var(--ink-soft);line-height:1.4}
+  .d::before{content:"";flex:none;width:5px;height:5px;border-radius:50%;background:var(--brand);margin-top:6px}
+  .anchor{margin-top:10px;background:var(--surface);border-left:3px solid var(--brand);
+    padding:9px 13px;font-size:9pt;color:var(--ink-soft);border-radius:0 7px 7px 0}
+  .anchor b{color:var(--ink)}
+
+  .price{margin-top:6px;border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+  .price .top{background:var(--ink);color:#fff;padding:6px 16px;
+    font-size:7.5pt;font-weight:800;letter-spacing:.15em;text-transform:uppercase}
+  .price .body{padding:15px 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .price .fig{font-size:29pt;font-weight:800;letter-spacing:-.045em;line-height:1;white-space:nowrap}
+  .price .fig em{font-style:normal;color:var(--brand)}
+  .price .fig small{font-size:12pt;font-weight:700;color:var(--dim);letter-spacing:-.01em}
+  .price .now{text-align:right;flex:none}
+  .price .now .lbl{font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+  .price .now .amt{font-size:21pt;font-weight:800;letter-spacing:-.03em;color:var(--value);line-height:1.05}
+  .price .foot{border-top:1px solid var(--line);padding:7px 16px;font-size:8.5pt;color:var(--dim);background:var(--surface)}
+
+  .bars{display:flex;flex-direction:column;gap:9px;margin-top:2px}
+  .bar .head{display:flex;justify-content:space-between;font-size:9.5pt;margin-bottom:3px}
+  .bar .head .n{font-weight:600;color:var(--ink-soft)}
+  .bar .head .amt{font-weight:800;letter-spacing:-.02em}
+  .track{height:19px;background:var(--surface);border-radius:5px;overflow:hidden}
+  .fill{height:100%;border-radius:5px;display:flex;align-items:center;padding-left:9px;
+    color:#fff;font-size:8pt;font-weight:700;letter-spacing:.03em}
+  .fill.red{background:var(--brand);width:100%}
+  .fill.green{background:var(--value);width:12%}
+  .saving{margin-top:9px;background:var(--value-soft);border:1px solid #bfe0cf;border-radius:9px;
+    padding:9px 14px;display:flex;align-items:baseline;justify-content:space-between}
+  .saving .lbl{font-size:9.5pt;font-weight:700;color:#0f5c3c}
+  .saving .n{font-size:15pt;font-weight:800;color:var(--value);letter-spacing:-.03em}
+
+  table{width:100%;border-collapse:collapse;font-size:9.5pt}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+  thead th{font-size:7.5pt;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
+    font-weight:800;background:var(--surface);border-bottom:1px solid var(--line-hard)}
+  td.r,th.r{text-align:right;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  .tbl{border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  tr.now-row td{background:var(--brand-soft);font-weight:800}
+  tr.now-row td:first-child::after{content:"HOY";font-size:6.5pt;font-weight:800;letter-spacing:.1em;
+    background:var(--brand);color:#fff;padding:1.5px 5px;border-radius:20px;margin-left:7px;vertical-align:middle}
+
+  .inc{display:grid;grid-template-columns:1fr 1fr;gap:6px 22px}
+  .i{display:flex;gap:9px;font-size:9.5pt;color:var(--ink-soft);line-height:1.4}
+  .i .ck{flex:none;width:14px;height:14px;border-radius:50%;background:var(--value-soft);
+    border:1px solid #a9d4bd;position:relative;margin-top:2px}
+  .i .ck::after{content:"";position:absolute;left:4px;top:1.5px;width:3.5px;height:7px;
+    border:solid var(--value);border-width:0 1.9px 1.9px 0;transform:rotate(43deg)}
+
+  .terms{display:flex;flex-direction:column;gap:6px}
+  .terms .t{display:flex;gap:9px;font-size:9.5pt;color:var(--ink-soft)}
+  .terms .t b{color:var(--ink)}
+  .terms .t::before{content:"";flex:none;width:5px;height:5px;background:var(--ink);
+    transform:rotate(45deg);margin-top:6px}
+
+  .close{margin-top:auto;padding-top:14px;border-top:2.5px solid var(--ink);
+    display:flex;justify-content:space-between;align-items:flex-end;gap:20px}
+  .close .msg{font-size:9.5pt;color:var(--ink-soft);max-width:105mm}
+  .close .msg b{color:var(--ink)}
+  .sign{text-align:right;font-size:8.5pt;color:var(--dim);flex:none}
+  .sign .who{font-size:11pt;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+  .pagenum{position:absolute;bottom:8mm;right:16mm;font-size:7.5pt;color:var(--dim);letter-spacing:.08em}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">Propuesta de servicio</div>
+  </div>
+
+  <h1>Mantenimiento y evolución<br>de la app de pedidos</h1>
+  <p class="lede">100 Montaditos Móstoles — continuidad del servicio tras el primer mes en funcionamiento.</p>
+  <div class="refline">
+    <span><b>Fecha</b> 22 de julio de 2026</span>
+    <span><b>Referencia</b> HX-100M-MOS-01</span>
+    <span><b>Validez</b> 30 días</span>
+  </div>
+
+  <section>
+    <h2>El primer mes, en datos reales</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="v">108</div><div class="k">Pedidos</div></div>
+      <div class="kpi"><div class="v">1.018<small> €</small></div><div class="k">Facturado</div></div>
+      <div class="kpi"><div class="v">9,43<small> €</small></div><div class="k">Ticket medio</div></div>
+      <div class="kpi"><div class="v">4,9</div><div class="k">Pedidos / día</div></div>
+    </div>
+    <p class="cap">Pedidos cobrados a través de la app desde su puesta en marcha, el 22 de junio, hasta el 21 de julio de 2026.
+      La media diaria se calcula sobre <b>22 días de servicio</b>: la app no opera los días de Euromanía (miércoles y domingos).</p>
+  </section>
+
+  <section>
+    <h2>Lo que ya está funcionando</h2>
+    <div class="delivered">
+      <div class="d">App de pedidos con la carta completa, alérgenos y control de agotados</div>
+      <div class="d">Pago con tarjeta y Apple Pay integrado</div>
+      <div class="d">Pantalla de cocina y de caja sincronizadas en tiempo real</div>
+      <div class="d">App instalable en tablet con aviso sonoro de pedido nuevo</div>
+      <div class="d">Monty, el asistente con inteligencia artificial</div>
+      <div class="d">Histórico de ventas por hora, día y mes</div>
+    </div>
+    <div class="anchor">
+      Un desarrollo a medida de estas características tiene un coste de mercado de <b>18.000 a 30.000 €</b>.
+      Se entregó por <b>250 €</b> como colaboración de lanzamiento. Esta propuesta cubre únicamente el
+      <b>mantenimiento y la evolución</b> del sistema a partir de ahora.
+    </div>
+  </section>
+
+  <section>
+    <h2>La propuesta</h2>
+    <div class="price">
+      <div class="top">Cuota de servicio</div>
+      <div class="body">
+        <div class="fig"><em>49 €</em><small>/mes</small> + <em>3 %</em><small> de los pedidos</small></div>
+        <div class="now">
+          <div class="lbl">Con tu volumen actual</div>
+          <div class="amt">≈ 79 €/mes</div>
+        </div>
+      </div>
+      <div class="foot">Sin permanencia · La parte variable se calcula solo sobre pedidos cobrados por la app</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Por qué 3 % y no una comisión de plataforma</h2>
+    <div class="bars">
+      <div class="bar">
+        <div class="head"><span class="n">Plataforma de reparto (comisión 25 %)</span><span class="amt">255 €</span></div>
+        <div class="track"><div class="fill red">lo que te costaría al mes</div></div>
+      </div>
+      <div class="bar">
+        <div class="head"><span class="n">Tu propia app (3 %)</span><span class="amt">31 €</span></div>
+        <div class="track"><div class="fill green"></div></div>
+      </div>
+    </div>
+    <div class="saving">
+      <span class="lbl">Diferencia sobre los 1.018 € facturados este mes</span>
+      <span class="n">224 € / mes</span>
+    </div>
+    <p class="cap">Comparativa orientativa: aplica si esos mismos pedidos hubieran entrado por una plataforma de reparto.
+      Además, el cliente es tuyo y los datos también.</p>
+  </section>
+
+  <div class="pagenum">1 / 2</div>
+</div>
+
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">100 Montaditos Móstoles · HX-100M-MOS-01</div>
+  </div>
+
+  <section style="margin-top:18px">
+    <h2>La cuota sube solo si tú creces</h2>
+    <div class="tbl">
+      <table>
+        <thead>
+          <tr><th>Facturación mensual por la app</th><th class="r">Parte fija</th><th class="r">3 % variable</th><th class="r">Total mes</th></tr>
+        </thead>
+        <tbody>
+          <tr class="now-row"><td>1.000 €</td><td class="r">49 €</td><td class="r">30 €</td><td class="r">79 €</td></tr>
+          <tr><td>2.500 €</td><td class="r">49 €</td><td class="r">75 €</td><td class="r">124 €</td></tr>
+          <tr><td>5.000 €</td><td class="r">49 €</td><td class="r">150 €</td><td class="r">199 €</td></tr>
+          <tr><td>10.000 €</td><td class="r">49 €</td><td class="r">300 €</td><td class="r">349 €</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="cap">Si un mes vendes menos, pagas menos. La parte fija cubre los costes de infraestructura del sistema.</p>
+  </section>
+
+  <section>
+    <h2>Qué incluye la cuota</h2>
+    <div class="inc">
+      <div class="i"><span class="ck"></span><span>Servidores, base de datos y alojamiento</span></div>
+      <div class="i"><span class="ck"></span><span>Soporte y resolución de incidencias</span></div>
+      <div class="i"><span class="ck"></span><span>Cambios de carta, precios y promociones</span></div>
+      <div class="i"><span class="ck"></span><span>Nuevas funciones y mejoras continuas</span></div>
+      <div class="i"><span class="ck"></span><span>Monty (IA) y todo su consumo</span></div>
+      <div class="i"><span class="ck"></span><span>Copias de seguridad y actualizaciones de seguridad</span></div>
+      <div class="i"><span class="ck"></span><span>Vigilancia de los pagos y de los pedidos</span></div>
+      <div class="i"><span class="ck"></span><span>Acceso al histórico y a los datos de ventas</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Condiciones</h2>
+    <div class="terms">
+      <div class="t"><span><b>Sin permanencia.</b> Puedes cancelar en cualquier momento avisando con 30 días.</span></div>
+      <div class="t"><span><b>Precio de lanzamiento durante los primeros 6 meses.</b> Revisión conjunta en enero de 2027.</span></div>
+      <div class="t"><span><b>Facturación mensual</b> a mes vencido. Importes sin IVA.</span></div>
+      <div class="t"><span><b>La comisión del 3 %</b> se calcula únicamente sobre pedidos cobrados por la app. Las comisiones bancarias de Stripe son ajenas a esta cuota.</span></div>
+      <div class="t"><span><b>Tiempo de respuesta:</b> mismo día laborable para incidencias que impidan vender.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>El plan de crecimiento</h2>
+    <p style="font-size:9.5pt;color:var(--ink-soft);margin-bottom:8px">
+      El sistema ya funciona. Lo que queda no es técnico, es de <b>volumen</b> — y el mayor está donde hoy
+      la app no llega: <b>los días de Euromanía</b>, que son precisamente los de más venta. Hoy se desactiva
+      para no saturar la cocina, y es una decisión razonable. La solución no es abrirla sin más, sino
+      <b>controlar el ritmo de entrada</b>:
+    </p>
+    <div class="terms">
+      <div class="t"><span><b>Paso 1 — solo barra.</b> Habilitar únicamente bebidas y los aperitivos que no pasan por cocina.
+        Cero carga para los cocineros y descongestiona la cola de la barra, que es la peor esos días.</span></div>
+      <div class="t"><span><b>Paso 2 — límite por franja.</b> Añadir montaditos con un tope de pedidos cada 15 minutos.
+        La cocina nunca recibe más de lo que puede sacar: el freno lo pone el sistema, no el miedo.</span></div>
+      <div class="t"><span><b>El resto de días:</b> QR visible en mesas y barra, cartelería en el local y que el personal
+        mencione la app al cobrar. Objetivo: pasar de 5 pedidos diarios a 15–20.</span></div>
+    </div>
+    <p class="cap">Todo ello entra dentro de la cuota, sin coste de desarrollo aparte. Lo medimos juntos con el histórico de ventas.</p>
+  </section>
+
+  <div class="close">
+    <div class="msg">
+      <b>Gracias por confiar en HAT3X desde el primer día.</b><br>
+      Móstoles ha sido el primer local en poner esto en marcha y eso tiene un valor que no está en esta hoja.
+      Cualquier duda, hablamos cuando quieras.
+    </div>
+    <div class="sign">
+      <div class="who">HAT3X</div>
+      Consultoría de IA<br>
+      info@hat3x.com
+    </div>
+  </div>
+
+  <div class="pagenum">2 / 2</div>
+</div>
+
+</body>
+</html>

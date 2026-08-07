@@ -6,9 +6,13 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore, useAgeGate } from '@/lib/cart-store';
+import { useAgotados } from '@/hooks/use-agotados';
 import { getDrinkImage } from '@/lib/drink-image';
 import { PRODUCT_IMAGES, MONTADITO_IMAGES_BY_NUMERO } from '@/lib/product-images';
 import { Monty } from './Monty';
+import { getRueda, ruedaComponentes, ruedaAgotada, compLabel, type RuedaMontadito } from '@/lib/ruedas';
+import { isDesayunoTime, DESAYUNO_SECTIONS, DESAYUNO_PRODUCT_IMAGES } from '@/lib/desayunos';
+import { RuedaGourmetDialog } from './RuedaGourmetDialog';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +20,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 import jarraQuijoteImg from '@/assets/drinks/jarra-quijote.png';
 import jarraSanchoImg from '@/assets/drinks/jarra-sancho.png';
 import jarraQuijoteLadronVeranoImg from '@/assets/drinks/jarra-quijote-ladron-verano.png';
@@ -47,7 +52,12 @@ type FlyingItem = {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-menu`;
 const TYPEWRITER_CPS = 150;
 const JARRA_SECTIONS = new Set(['Jarras Heladas', 'Cerveza Premium']);
-const SANCHO_EXTRA = 0.5;
+const SANCHO_EXTRA = 0.5; // Cambio de carta jul-2026: Sancho cuesta 0,50€ más que Quijote
+const CAFE_TIPOS = ['Solo', 'Cortado', 'Con leche', 'Bombón'] as const;
+// Variantes que dependen de un ingrediente concreto (si falta, se desactiva la opción).
+const ALITAS_VARIANT_ING: Record<string, string> = { bbq: 'Salsa BBQ', brava: 'Salsa brava' };
+const NACHOS_VARIANT_ING: Record<string, string> = { bacon: 'Bacon ahumado', guacamole: 'Guacamole' };
+const GILDA_VARIANT_ING: Record<string, string> = { boqueron: 'Gilda boquerón', anchoa: 'Gilda anchoa' };
 
 const SUGGESTIONS = [
   '¿Qué montaditos de pollo tenéis?',
@@ -73,11 +83,20 @@ const isNachosProduct = (p: Product) => normalizeName(p.nombre) === 'nachos';
 
 const isAlitasProduct = (p: Product) => normalizeName(p.nombre) === 'alitas de pollo';
 
-function parseMessage(raw: string): { text: string; productNames: string[] } {
+const isCafeProduct = (p: Product) => normalizeName(p.nombre) === 'cafe';
+
+const isAceitunaProduct = (p: Product) => normalizeName(p.nombre) === 'aceitunas';
+
+function parseMessage(raw: string): { text: string; productNames: string[]; banners: string[] } {
   const productNames: string[] = [];
+  const banners: string[] = [];
   const text = raw
     .replace(/\[\[add:([^\]]+)\]\]/g, (_, name) => {
       productNames.push(name.trim());
+      return '';
+    })
+    .replace(/\[\[banner:([^\]]+)\]\]/g, (_, key) => {
+      banners.push(key.trim().toLowerCase());
       return '';
     })
     .replace(/\n{3,}/g, '\n\n')
@@ -89,8 +108,15 @@ function parseMessage(raw: string): { text: string; productNames: string[] } {
     seen.add(k);
     return true;
   });
-  return { text, productNames: unique };
+  return { text, productNames: unique, banners: Array.from(new Set(banners)) };
 }
+
+// Banners que Monty puede mostrar al recomendar desayunos/promociones.
+const BANNER_IMAGES: Record<string, { src: string; caption: string }> = {
+  'desayuno-dulce': { src: '/assets/img/montaditos/montycookie-doble-chocolate-y-sirope-de-caramelo-toffee.png', caption: 'Pídelo en la sección Desayunos (10:00–12:00)' },
+  'desayuno-clasico': { src: '/assets/img/desayunos/desayuno-clasico.png', caption: 'Pídelo en la sección Desayunos (10:00–12:00)' },
+  'promo-salseo': { src: '/assets/img/promos/salseo.jpg', caption: 'Pídela en la sección Promociones' },
+};
 
 function findProduct(name: string, products: Product[] | undefined): Product | null {
   if (!products) return null;
@@ -110,7 +136,19 @@ function findProduct(name: string, products: Product[] | undefined): Product | n
   );
 }
 
+// Un producto de desayuno (tostadas/croissant/bollería) se identifica por su sección.
+function esDesayuno(product: Product): boolean {
+  return !!product.seccion && (DESAYUNO_SECTIONS as readonly string[]).includes(product.seccion);
+}
+// La promo compuesta (Salséo) tampoco se añade desde el chat.
+function esPromo(product: Product): boolean {
+  return product.seccion === 'Promociones';
+}
+
 function resolveProductImage(product: Product): string | null {
+  if (DESAYUNO_PRODUCT_IMAGES[product.nombre]) return DESAYUNO_PRODUCT_IMAGES[product.nombre];
+  const rueda = getRueda(product.numero);
+  if (rueda?.img) return rueda.img;
   if (product.numero && MONTADITO_IMAGES_BY_NUMERO[product.numero]) {
     return MONTADITO_IMAGES_BY_NUMERO[product.numero];
   }
@@ -122,14 +160,16 @@ function resolveProductImage(product: Product): string | null {
 interface ProductChipProps {
   product: Product;
   onAdd: (product: Product, originRect: DOMRect) => void;
+  agotado?: boolean;
 }
 
-function ProductChip({ product, onAdd }: ProductChipProps) {
+function ProductChip({ product, onAdd, agotado = false }: ProductChipProps) {
   const [added, setAdded] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const imageSrc = resolveProductImage(product);
 
   const handleClick = () => {
+    if (agotado) return; // producto agotado: no se puede añadir desde el chat
     if (!ref.current) return;
     onAdd(product, ref.current.getBoundingClientRect());
     setAdded(true);
@@ -140,8 +180,10 @@ function ProductChip({ product, onAdd }: ProductChipProps) {
     <motion.button
       ref={ref}
       onClick={handleClick}
-      whileTap={{ scale: 0.96 }}
-      className="group flex items-center gap-3 w-full p-2 pr-3 rounded-2xl bg-background border border-border hover:border-primary/60 hover:bg-primary/5 transition-colors text-left"
+      whileTap={agotado ? undefined : { scale: 0.96 }}
+      className={`group flex items-center gap-3 w-full p-2 pr-3 rounded-2xl bg-background border transition-colors text-left ${
+        agotado ? 'border-destructive/40 opacity-60' : 'border-border hover:border-primary/60 hover:bg-primary/5'
+      }`}
     >
       <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-muted shrink-0">
         {imageSrc ? (
@@ -156,18 +198,29 @@ function ProductChip({ product, onAdd }: ProductChipProps) {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-bold text-foreground truncate">{product.nombre}</p>
+        <p className="text-xs font-bold text-foreground truncate">
+          {product.numero && (
+            <span className="text-muted-foreground font-mono mr-1">#{product.numero}</span>
+          )}
+          {product.nombre}
+        </p>
         <p className="text-[11px] text-muted-foreground">{product.precio.toFixed(2)}€</p>
       </div>
-      <span
-        className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-          added
-            ? 'bg-accent text-accent-foreground'
-            : 'bg-primary text-primary-foreground group-hover:bg-primary/90'
-        }`}
-      >
-        {added ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-      </span>
+      {agotado ? (
+        <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-destructive">
+          Agotado
+        </span>
+      ) : (
+        <span
+          className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+            added
+              ? 'bg-accent text-accent-foreground'
+              : 'bg-primary text-primary-foreground group-hover:bg-primary/90'
+          }`}
+        >
+          {added ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+        </span>
+      )}
     </motion.button>
   );
 }
@@ -189,6 +242,10 @@ export function MenuChatBot() {
   const [gildaOpen, setGildaOpen] = useState(false);
   const [nachosOpen, setNachosOpen] = useState(false);
   const [alitasOpen, setAlitasOpen] = useState(false);
+  const [cafeOpen, setCafeOpen] = useState(false);
+  const [cafeDescafeinado, setCafeDescafeinado] = useState(false);
+  const [aceitunaOpen, setAceitunaOpen] = useState(false);
+  const [ruedaOpen, setRuedaOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const cartIconRef = useRef<HTMLButtonElement>(null);
@@ -196,6 +253,19 @@ export function MenuChatBot() {
   const pendingRectRef = useRef<DOMRect | null>(null);
 
   const addItem = useCartStore((s) => s.addItem);
+  const { isProductoAgotado, isIngredienteAgotado } = useAgotados();
+
+  // Agotado efectivo: marcado/ingrediente, o todas las variantes agotadas (alitas/nachos).
+  const productoEfectivoAgotado = (product: Product) => {
+    if (isProductoAgotado(product.id)) return true;
+    const ruedaDef = getRueda(product.numero);
+    if (ruedaDef) return ruedaAgotada(ruedaDef, ruedaMontaditos, isProductoAgotado);
+    const n = normalizeName(product.nombre);
+    if (n === 'alitas de pollo') return Object.values(ALITAS_VARIANT_ING).every(isIngredienteAgotado);
+    if (n === 'nachos') return Object.values(NACHOS_VARIANT_ING).every(isIngredienteAgotado);
+    if (n === 'gildas' || n === 'gilda') return Object.values(GILDA_VARIANT_ING).every(isIngredienteAgotado);
+    return false;
+  };
   const itemCount = useCartStore((s) => s.itemCount);
   const cartItems = useCartStore((s) => s.items);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
@@ -220,6 +290,9 @@ export function MenuChatBot() {
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  // Montaditos (para resolver los componentes de las MontyRuedas).
+  const ruedaMontaditos: RuedaMontadito[] = (products ?? []).map((p) => ({ id: p.id, numero: p.numero ?? null, nombre: p.nombre }));
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -328,6 +401,7 @@ export function MenuChatBot() {
 
   const addGildaVariant = (tipo: 'boqueron' | 'anchoa') => {
     if (!pendingVariantProduct) return;
+    if (isIngredienteAgotado(GILDA_VARIANT_ING[tipo])) return;
     const p = pendingVariantProduct;
     const label = tipo === 'boqueron' ? 'Boquerón' : 'Anchoa';
     const img = tipo === 'boqueron' ? PRODUCT_IMAGES._gildaBoqueron : PRODUCT_IMAGES._gildaAnchoa;
@@ -351,6 +425,7 @@ export function MenuChatBot() {
 
   const addNachosVariant = (salsa: 'bacon' | 'guacamole') => {
     if (!pendingVariantProduct) return;
+    if (isIngredienteAgotado(NACHOS_VARIANT_ING[salsa])) return;
     const p = pendingVariantProduct;
     const label = salsa === 'bacon' ? 'Cheddar y bacon ahumado' : 'Cheddar y guacamole';
     const img = salsa === 'bacon' ? PRODUCT_IMAGES._nachosBacon : PRODUCT_IMAGES._nachosGuaca;
@@ -374,6 +449,7 @@ export function MenuChatBot() {
 
   const addAlitasVariant = (sabor: 'bbq' | 'brava') => {
     if (!pendingVariantProduct) return;
+    if (isIngredienteAgotado(ALITAS_VARIANT_ING[sabor])) return;
     const p = pendingVariantProduct;
     const label = sabor === 'bbq' ? 'BBQ' : 'Brava';
     const img = sabor === 'bbq' ? PRODUCT_IMAGES._alitasBbq : PRODUCT_IMAGES._alitasBrava;
@@ -395,9 +471,106 @@ export function MenuChatBot() {
     setPendingVariantProduct(null);
   };
 
+  const addCafeVariant = (tipo: typeof CAFE_TIPOS[number]) => {
+    if (!pendingVariantProduct) return;
+    const p = pendingVariantProduct;
+    const label = cafeDescafeinado ? `${tipo} descafeinado` : tipo;
+    const img = resolveProductImage(p);
+    const nombre = `Café · ${label}`;
+    const payload = {
+      id: `${p.id}::${tipo.toLowerCase().replace(/\s+/g, '-')}${cafeDescafeinado ? '-descaf' : ''}`,
+      productoId: p.id,
+      variant: tipo,
+      variantLabel: label,
+      nombre,
+      precio: p.precio,
+      foto_url: img,
+      contiene_alcohol: false,
+    };
+    addItem(payload);
+    pendingRectRef.current && triggerFlyingAnimation(img, nombre, pendingRectRef.current);
+    toast.success(`${nombre} añadido al carrito`);
+    setCafeOpen(false);
+    setCafeDescafeinado(false);
+    setPendingVariantProduct(null);
+  };
+
+  const addAceitunaVariant = (tipo: 'abuela' | 'manzanilla') => {
+    if (!pendingVariantProduct) return;
+    const p = pendingVariantProduct;
+    const label = tipo === 'abuela' ? 'De la abuela' : 'Manzanilla';
+    const nombre = tipo === 'abuela' ? 'Aceitunas de la abuela' : 'Aceitunas manzanilla';
+    const img = resolveProductImage(p);
+    const payload = {
+      id: `${p.id}::${tipo}`,
+      productoId: p.id,
+      variant: tipo,
+      variantLabel: label,
+      nombre,
+      precio: p.precio,
+      foto_url: img,
+      contiene_alcohol: false,
+    };
+    addItem(payload);
+    pendingRectRef.current && triggerFlyingAnimation(img, nombre, pendingRectRef.current);
+    toast.success(`${nombre} añadidas al carrito`);
+    setAceitunaOpen(false);
+    setPendingVariantProduct(null);
+  };
+
+  // Añade una MontyRueda (con sus montaditos en `componentes`) con animación.
+  const addRuedaToCart = (product: Product, cartId: string, componentes: string[], originRect: DOMRect | null) => {
+    const resolvedImage = resolveProductImage(product);
+    const payload = {
+      id: cartId,
+      productoId: product.id,
+      nombre: product.nombre,
+      precio: product.precio,
+      foto_url: resolvedImage,
+      componentes,
+    };
+    const cartRect = cartIconRef.current?.getBoundingClientRect();
+    if (cartRect && originRect) {
+      const id = ++flyingIdRef.current;
+      setFlying((prev) => [
+        ...prev,
+        {
+          id,
+          product: { ...product, foto_url: resolvedImage },
+          fromX: originRect.left,
+          fromY: originRect.top,
+          toX: cartRect.left + cartRect.width / 2 - 20,
+          toY: cartRect.top + cartRect.height / 2 - 20,
+        },
+      ]);
+      setTimeout(() => {
+        addItem(payload);
+        setCartPulse(true);
+        setTimeout(() => setCartPulse(false), 400);
+      }, 650);
+      setTimeout(() => setFlying((prev) => prev.filter((f) => f.id !== id)), 900);
+    } else {
+      addItem(payload);
+    }
+    toast.success(`${product.nombre} añadida al carrito`);
+  };
+
   // ── Main add handler (checks for variants first) ──────────────────────────
 
   const handleAddProduct = (product: Product, originRect: DOMRect) => {
+    if (productoEfectivoAgotado(product)) {
+      toast.error('Ese producto está agotado ahora mismo');
+      return;
+    }
+    // Desayunos: solo 10:00–12:00 y siempre desde su sección (hay que elegir pan/mermelada/zumo).
+    if (esDesayuno(product)) {
+      toast(isDesayunoTime() ? 'Elígelo en la sección Desayunos' : 'Los desayunos solo se piden de 10:00 a 12:00');
+      return;
+    }
+    if (esPromo(product)) {
+      toast('Añade la promo desde la sección Promociones');
+      return;
+    }
     if (isJarraProduct(product)) {
       setPendingVariantProduct(product);
       pendingRectRef.current = originRect;
@@ -422,6 +595,31 @@ export function MenuChatBot() {
       setAlitasOpen(true);
       return;
     }
+    if (isCafeProduct(product)) {
+      setPendingVariantProduct(product);
+      pendingRectRef.current = originRect;
+      setCafeOpen(true);
+      return;
+    }
+    if (isAceitunaProduct(product)) {
+      setPendingVariantProduct(product);
+      pendingRectRef.current = originRect;
+      setAceitunaOpen(true);
+      return;
+    }
+    const ruedaDef = getRueda(product.numero);
+    if (ruedaDef) {
+      if (ruedaDef.selectCount) {
+        // MontyRueda Gourmets: abrir selector "elige 5".
+        setPendingVariantProduct(product);
+        pendingRectRef.current = originRect;
+        setRuedaOpen(true);
+        return;
+      }
+      // Rueda fija: añadir con sus montaditos como componentes.
+      addRuedaToCart(product, product.id, ruedaComponentes(ruedaDef, ruedaMontaditos).map(compLabel), originRect);
+      return;
+    }
 
     const resolvedImage = resolveProductImage(product);
     const cartRect = cartIconRef.current?.getBoundingClientRect();
@@ -443,6 +641,7 @@ export function MenuChatBot() {
           id: product.id,
           productoId: product.id,
           nombre: product.nombre,
+          numero: product.numero ?? null,
           precio: product.precio,
           foto_url: resolvedImage,
         });
@@ -457,6 +656,7 @@ export function MenuChatBot() {
         id: product.id,
         productoId: product.id,
         nombre: product.nombre,
+        numero: product.numero ?? null,
         precio: product.precio,
         foto_url: resolvedImage,
       });
@@ -488,7 +688,7 @@ export function MenuChatBot() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ messages: newMessages, session_id: sessionStorage.getItem('montaditos_session') }),
       });
 
       if (resp.status === 429) {
@@ -806,11 +1006,14 @@ export function MenuChatBot() {
                     );
                   }
 
-                  const { text, productNames } = parseMessage(m.content);
+                  const { text, productNames, banners } = parseMessage(m.content);
                   const stillStreaming = isStreamingLast(i);
                   const matchedProducts = productNames
                     .map((n) => findProduct(n, products))
-                    .filter((p): p is Product => p !== null);
+                    .filter((p): p is Product => p !== null)
+                    // Desayunos y promo NO se añaden desde el chat (requieren elegir opciones en su sección).
+                    .filter((p) => !esDesayuno(p) && !esPromo(p));
+                  const matchedBanners = banners.map((b) => BANNER_IMAGES[b]).filter(Boolean);
 
                   return (
                     <div key={i} className="flex flex-col items-start gap-2 max-w-[90%]">
@@ -829,7 +1032,18 @@ export function MenuChatBot() {
                       {!stillStreaming && matchedProducts.length > 0 && (
                         <div className="flex flex-col gap-1.5 w-full">
                           {matchedProducts.map((p) => (
-                            <ProductChip key={p.id} product={p} onAdd={handleAddProduct} />
+                            <ProductChip key={p.id} product={p} onAdd={handleAddProduct} agotado={productoEfectivoAgotado(p)} />
+                          ))}
+                        </div>
+                      )}
+
+                      {!stillStreaming && matchedBanners.length > 0 && (
+                        <div className="flex flex-col gap-2 w-full">
+                          {matchedBanners.map((b, bi) => (
+                            <div key={bi} className="w-full">
+                              <img src={b!.src} alt="" className="w-full h-auto rounded-2xl" loading="lazy" />
+                              <p className="text-[11px] text-muted-foreground mt-1 text-center">{b!.caption}</p>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -968,7 +1182,8 @@ export function MenuChatBot() {
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button
               onClick={() => addGildaVariant('boqueron')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isIngredienteAgotado(GILDA_VARIANT_ING.boqueron)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isIngredienteAgotado(GILDA_VARIANT_ING.boqueron) ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img
                 src={PRODUCT_IMAGES._gildaBoqueron}
@@ -977,14 +1192,21 @@ export function MenuChatBot() {
                 loading="lazy"
               />
               <span className="font-display font-bold text-base text-foreground">Boquerón</span>
-              <span className="text-xs text-muted-foreground text-center">Suave y fresco</span>
-              <span className="text-lg font-black text-gold mt-1">
-                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
-              </span>
+              {isIngredienteAgotado(GILDA_VARIANT_ING.boqueron) ? (
+                <span className="text-[11px] font-black uppercase text-destructive mt-1">Agotado</span>
+              ) : (
+                <>
+                  <span className="text-xs text-muted-foreground text-center">Suave y fresco</span>
+                  <span className="text-lg font-black text-gold mt-1">
+                    {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+                  </span>
+                </>
+              )}
             </button>
             <button
               onClick={() => addGildaVariant('anchoa')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isIngredienteAgotado(GILDA_VARIANT_ING.anchoa)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isIngredienteAgotado(GILDA_VARIANT_ING.anchoa) ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img
                 src={PRODUCT_IMAGES._gildaAnchoa}
@@ -993,10 +1215,16 @@ export function MenuChatBot() {
                 loading="lazy"
               />
               <span className="font-display font-bold text-base text-foreground">Anchoa</span>
-              <span className="text-xs text-muted-foreground text-center">Intenso y curado</span>
-              <span className="text-lg font-black text-gold mt-1">
-                {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
-              </span>
+              {isIngredienteAgotado(GILDA_VARIANT_ING.anchoa) ? (
+                <span className="text-[11px] font-black uppercase text-destructive mt-1">Agotado</span>
+              ) : (
+                <>
+                  <span className="text-xs text-muted-foreground text-center">Intenso y curado</span>
+                  <span className="text-lg font-black text-gold mt-1">
+                    {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+                  </span>
+                </>
+              )}
             </button>
           </div>
         </DialogContent>
@@ -1020,7 +1248,8 @@ export function MenuChatBot() {
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button
               onClick={() => addNachosVariant('bacon')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isIngredienteAgotado(NACHOS_VARIANT_ING.bacon)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isIngredienteAgotado(NACHOS_VARIANT_ING.bacon) ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img
                 src={PRODUCT_IMAGES._nachosBacon}
@@ -1037,7 +1266,8 @@ export function MenuChatBot() {
             </button>
             <button
               onClick={() => addNachosVariant('guacamole')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isIngredienteAgotado(NACHOS_VARIANT_ING.guacamole)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isIngredienteAgotado(NACHOS_VARIANT_ING.guacamole) ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img
                 src={PRODUCT_IMAGES._nachosGuaca}
@@ -1074,7 +1304,8 @@ export function MenuChatBot() {
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button
               onClick={() => addAlitasVariant('bbq')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isIngredienteAgotado(ALITAS_VARIANT_ING.bbq)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isIngredienteAgotado(ALITAS_VARIANT_ING.bbq) ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img
                 src={PRODUCT_IMAGES._alitasBbq}
@@ -1090,7 +1321,8 @@ export function MenuChatBot() {
             </button>
             <button
               onClick={() => addAlitasVariant('brava')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isIngredienteAgotado(ALITAS_VARIANT_ING.brava)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isIngredienteAgotado(ALITAS_VARIANT_ING.brava) ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img
                 src={PRODUCT_IMAGES._alitasBrava}
@@ -1107,6 +1339,103 @@ export function MenuChatBot() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Café variant dialog ─────────────────────────────────────────────── */}
+      <Dialog
+        open={cafeOpen}
+        onOpenChange={(v) => {
+          setCafeOpen(v);
+          if (!v) {
+            setPendingVariantProduct(null);
+            setCafeDescafeinado(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">¿Cómo te gusta el café?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground pt-1">
+              Elige el tipo · {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+            </DialogDescription>
+          </DialogHeader>
+          <label
+            className={`flex items-center justify-between px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer ${cafeDescafeinado ? 'border-primary bg-primary/5' : 'border-border'}`}
+          >
+            <span className="font-display font-bold text-sm text-foreground">Descafeinado</span>
+            <Switch checked={cafeDescafeinado} onCheckedChange={setCafeDescafeinado} />
+          </label>
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            {CAFE_TIPOS.map((tipo) => (
+              <button
+                key={tipo}
+                onClick={() => addCafeVariant(tipo)}
+                className="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95 min-h-[64px]"
+              >
+                <span className="font-display font-bold text-sm text-foreground text-center">{tipo}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Aceitunas variant dialog ─────────────────────────────────────────── */}
+      <Dialog
+        open={aceitunaOpen}
+        onOpenChange={(v) => {
+          setAceitunaOpen(v);
+          if (!v) setPendingVariantProduct(null);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">¿Qué aceitunas prefieres?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground pt-1">
+              Elige el tipo · {pendingVariantProduct?.precio.toFixed(2) ?? '—'} €
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <button
+              onClick={() => addAceitunaVariant('abuela')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <span className="font-display font-bold text-base text-foreground text-center">De la abuela</span>
+            </button>
+            <button
+              onClick={() => addAceitunaVariant('manzanilla')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              <span className="font-display font-bold text-base text-foreground text-center">Manzanilla</span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── MontyRueda Gourmets: selector "elige 5" ──────────────────────────── */}
+      {pendingVariantProduct && getRueda(pendingVariantProduct.numero)?.selectCount && (
+        <RuedaGourmetDialog
+          open={ruedaOpen}
+          onOpenChange={(v) => {
+            setRuedaOpen(v);
+            if (!v) setPendingVariantProduct(null);
+          }}
+          nombre={pendingVariantProduct.nombre}
+          precio={pendingVariantProduct.precio}
+          need={getRueda(pendingVariantProduct.numero)!.selectCount!}
+          comps={ruedaComponentes(getRueda(pendingVariantProduct.numero)!, ruedaMontaditos)}
+          isProductoAgotado={isProductoAgotado}
+          onConfirm={(selected) => {
+            const p = pendingVariantProduct;
+            addRuedaToCart(
+              p,
+              `${p.id}::${selected.map((m) => m.id).sort().join('-')}`,
+              selected.map(compLabel),
+              pendingRectRef.current,
+            );
+            setRuedaOpen(false);
+            setPendingVariantProduct(null);
+          }}
+        />
+      )}
     </>
   );
 }

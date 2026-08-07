@@ -1,7 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="es" translate="no">
   <head>
     <meta charset="UTF-8" />
+    <!-- La traducción automática del navegador (Google Translate) muta el DOM y
+         rompe React (NotFoundError insertBefore). La carta está en español, así
+         que desactivamos la traducción para mantener la app estable. -->
+    <meta name="google" content="notranslate" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pedidos 100 Montaditos</title>
     <meta name="description" content="Pide tus montaditos favoritos sin esperar colas." />

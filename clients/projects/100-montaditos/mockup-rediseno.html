@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rediseño Caja & Cocina — Modelos</title>
+<style>
+  :root{
+    --r-lg:26px; --r-md:18px; --r-sm:12px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Inter,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--font);color:var(--text);min-height:100vh;
+    background:var(--bg);background-attachment:fixed;transition:background .5s ease,color .3s ease;
+    -webkit-font-smoothing:antialiased;padding-bottom:60px}
+
+  /* ============ TEMAS ============ */
+  body.aire{
+    --bg:radial-gradient(1200px 700px at 15% -10%,#dfe9ff 0%,transparent 55%),
+         radial-gradient(1000px 700px at 110% 10%,#ffe7ef 0%,transparent 50%),
+         linear-gradient(160deg,#eef1f6 0%,#f6f2ec 100%);
+    --text:#1d1d1f; --dim:#6b6b70; --accent:#c81e3a; --accent2:#ff8a5b;
+    --glass:rgba(255,255,255,.58); --glass2:rgba(255,255,255,.78);
+    --stroke:rgba(255,255,255,.85); --hair:rgba(20,20,40,.08);
+    --shadow:0 10px 40px rgba(30,40,90,.12); --chip:rgba(20,20,40,.05);
+  }
+  body.noche{
+    --bg:radial-gradient(1000px 700px at 12% -10%,#3a1430 0%,transparent 55%),
+         radial-gradient(1000px 700px at 110% 0%,#102a3a 0%,transparent 55%),
+         linear-gradient(160deg,#0d0e13 0%,#15131c 100%);
+    --text:#f4f4f7; --dim:#9c9ca8; --accent:#ff5d73; --accent2:#ffcf6a;
+    --glass:rgba(255,255,255,.07); --glass2:rgba(255,255,255,.12);
+    --stroke:rgba(255,255,255,.14); --hair:rgba(255,255,255,.09);
+    --shadow:0 18px 50px rgba(0,0,0,.5); --chip:rgba(255,255,255,.08);
+  }
+  body.brasa{
+    --bg:radial-gradient(1100px 700px at 10% -10%,#ffe4c4 0%,transparent 55%),
+         radial-gradient(900px 700px at 115% 5%,#ffd0c0 0%,transparent 50%),
+         linear-gradient(160deg,#f4ead9 0%,#ecd6c2 100%);
+    --text:#2a201a; --dim:#7c6a5c; --accent:#b3122a; --accent2:#e07b3e;
+    --glass:rgba(255,252,247,.5); --glass2:rgba(255,253,250,.72);
+    --stroke:rgba(255,255,255,.7); --hair:rgba(80,50,30,.1);
+    --shadow:0 12px 40px rgba(120,70,40,.16); --chip:rgba(120,70,40,.07);
+  }
+
+  .glass{background:var(--glass);backdrop-filter:blur(22px) saturate(160%);
+    -webkit-backdrop-filter:blur(22px) saturate(160%);
+    border:1px solid var(--stroke);border-radius:var(--r-lg);box-shadow:var(--shadow)}
+
+  /* ============ TOP BAR ============ */
+  .topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:16px;
+    flex-wrap:wrap;padding:14px 22px;margin:14px;border-radius:22px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;letter-spacing:-.02em}
+  .brand .dot{width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:grid;place-items:center;color:#fff;font-size:16px;box-shadow:0 6px 16px rgba(200,30,58,.35)}
+  .spacer{flex:1}
+  .seg{display:inline-flex;background:var(--chip);border-radius:14px;padding:4px;gap:2px}
+  .seg button{appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-weight:600;
+    font-size:13px;padding:7px 16px;border-radius:11px;cursor:pointer;transition:.2s}
+  .seg button.on{background:var(--glass2);color:var(--text);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+  .pills{display:inline-flex;gap:8px}
+  .pill{appearance:none;border:1px solid var(--hair);background:var(--chip);color:var(--dim);
+    font:inherit;font-weight:600;font-size:13px;padding:8px 14px;border-radius:13px;cursor:pointer;transition:.2s}
+  .pill.on{color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--accent),var(--accent2));
+    box-shadow:0 8px 20px rgba(200,30,58,.3)}
+
+  main{max-width:1280px;margin:0 auto;padding:6px 18px}
+  .screen{display:none;animation:fade .45s ease}
+  .screen.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  h2.sec{font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);
+    margin:22px 6px 12px;display:flex;align-items:center;gap:8px}
+
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .stat{padding:18px 20px;border-radius:var(--r-md)}
+  .stat .k{font-size:12px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .stat .v{font-size:30px;font-weight:800;letter-spacing:-.03em;margin-top:6px}
+  .stat .v small{font-size:15px;font-weight:600;color:var(--dim)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .col{padding:6px}
+
+  /* order card */
+  .order{padding:16px 18px;border-radius:var(--r-md);margin-bottom:14px;position:relative;overflow:hidden}
+  .order::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--accent);opacity:.85}
+  .order.warn::before{background:var(--accent2)}
+  .order.ok::before{background:#34c759}
+  .order .head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+  .num{font-size:30px;font-weight:850;letter-spacing:-.03em;line-height:1}
+  .badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:.02em}
+  .badge.amber{background:rgba(255,159,10,.16);color:#d98300}
+  .badge.cocina{background:rgba(255,90,40,.14);color:#e0561f}
+  .badge.beb{background:rgba(0,140,220,.14);color:#0a84c4}
+  .badge.green{background:rgba(52,199,89,.16);color:#28a745}
+  .time{font-size:12px;color:var(--dim);font-weight:600}
+  .total{font-size:17px;font-weight:800;letter-spacing:-.02em}
+  ul.items{list-style:none;display:flex;flex-direction:column;gap:5px;margin:6px 0 12px}
+  ul.items li{display:flex;align-items:center;gap:10px;font-size:14px}
+  .qty{font-weight:800;color:var(--accent)}
+  .nchip{font-size:11px;font-weight:800;min-width:30px;text-align:center;padding:2px 6px;border-radius:8px;
+    background:var(--chip);color:var(--dim)}
+  .group-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:6px 0 2px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{appearance:none;border:0;font:inherit;font-weight:700;font-size:13px;padding:10px 16px;border-radius:13px;cursor:pointer;transition:.15s}
+  .btn:active{transform:scale(.96)}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 8px 18px rgba(200,30,58,.28)}
+  .btn.ghost{background:var(--chip);color:var(--text)}
+  .empty{padding:28px;text-align:center;color:var(--dim);font-size:14px;border:1px dashed var(--hair);border-radius:var(--r-md)}
+
+  /* cocina KDS */
+  .kds{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .kcol{padding:10px}
+  .kcol h3{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:6px 8px 12px;
+    display:flex;align-items:center;justify-content:space-between;color:var(--dim)}
+  .kcol h3 .count{background:var(--chip);border-radius:999px;padding:2px 9px;font-size:12px}
+  .ticket{padding:14px 16px;border-radius:var(--r-md);margin-bottom:12px}
+  .timer{font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px}
+  .t-fresh{background:rgba(52,199,89,.16);color:#28a745}
+  .t-warn{background:rgba(255,159,10,.16);color:#d98300}
+  .t-late{background:rgba(255,69,58,.16);color:#e0301f}
+  .hint{font-size:12px;color:var(--dim);text-align:center;margin:10px 0 0}
+
+  /* login */
+  .login-wrap{display:flex;justify-content:center;padding:48px 0 20px}
+  .login-card{width:400px;max-width:92%;padding:40px 34px;text-align:center}
+  .login-logo{width:64px;height:64px;border-radius:20px;margin:0 auto 18px;display:grid;place-items:center;
+    font-size:30px;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 12px 26px rgba(200,30,58,.4)}
+  .login-title{font-size:34px;font-weight:850;letter-spacing:-.03em}
+  .login-sub{color:var(--dim);margin:6px 0 24px;font-size:15px}
+  .login-btn{width:100%;padding:16px;font-size:16px;border-radius:16px}
+
+  /* search */
+  .searchbar{display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:var(--r-md);margin-bottom:6px}
+  .searchbar input{flex:1;border:0;background:transparent;font:inherit;font-size:15px;color:var(--text);outline:none}
+  .searchbar input::placeholder{color:var(--dim)}
+
+  /* chips agotados */
+  .chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px}
+  .chip{display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:14px;font-size:13px;font-weight:600;
+    cursor:pointer;border:1px solid var(--hair);background:var(--glass2);transition:.15s}
+  .chip:active{transform:scale(.97)}
+  .chip .ic{font-size:18px;width:24px;text-align:center}
+  .chip .ok{margin-left:auto;color:#34c759;font-weight:800}
+  .chip.off{background:rgba(255,69,58,.14);border-color:rgba(255,69,58,.3);color:#e0301f}
+  .chip.off .txt{text-decoration:line-through;opacity:.85}
+  .chip.off .ic{filter:grayscale(1) opacity(.6)}
+  .chip.off .ban{margin-left:auto;font-weight:800}
+
+  /* histórico */
+  .filters{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border-radius:var(--r-md);margin-bottom:14px}
+  .select{padding:9px 14px;border-radius:12px;background:var(--chip);border:1px solid var(--hair);font:inherit;font-weight:600;font-size:13px;color:var(--text)}
+  .chart{padding:16px 18px;border-radius:var(--r-md);margin-bottom:14px}
+  .chart .ct{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin-bottom:12px}
+  .bars{display:flex;align-items:flex-end;gap:9px;height:120px}
+  .bar{flex:1;border-radius:8px 8px 0 0;background:linear-gradient(var(--accent2),var(--accent));opacity:.9}
+  .table-card{padding:0;overflow:hidden}
+  table.hist{width:100%;border-collapse:collapse;font-size:13px}
+  .hist th{text-align:left;padding:13px 16px;color:var(--dim);font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  .hist td{padding:13px 16px;border-top:1px solid var(--hair)}
+  .hist tr:hover td{background:var(--chip)}
+  .hist .n{font-weight:800}
+  .pill-state{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+
+  @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.grid2,.kds{grid-template-columns:1fr}}
+</style>
+</head>
+<body class="brasa">
+
+  <div class="topbar glass">
+    <div class="brand"><span class="dot">◴</span> Panel · Rediseño</div>
+    <div class="spacer"></div>
+    <div class="pills" id="models">
+      <button class="pill" data-theme="aire">☀️ Aire</button>
+      <button class="pill" data-theme="noche">🌙 Noche</button>
+      <button class="pill on" data-theme="brasa">🔥 Brasa</button>
+    </div>
+    <div class="seg" id="screens">
+      <button data-screen="login">Login</button>
+      <button class="on" data-screen="caja">Caja</button>
+      <button data-screen="cocina">Cocina</button>
+      <button data-screen="agotados">Agotados</button>
+      <button data-screen="historico">Histórico</button>
+    </div>
+  </div>
+
+  <main>
+    <!-- ================= CAJA ================= -->
+    <section class="screen on" id="caja">
+      <div class="stats">
+        <div class="stat glass"><div class="k">Pedidos hoy</div><div class="v">37</div></div>
+        <div class="stat glass"><div class="k">Ingresos</div><div class="v">412,90 <small>€</small></div></div>
+        <div class="stat glass"><div class="k">Ticket medio</div><div class="v">11,16 <small>€</small></div></div>
+        <div class="stat glass"><div class="k">Activos · Listos</div><div class="v">5 · 2</div></div>
+      </div>
+
+      <h2 class="sec">🧾 Por ticar (2)</h2>
+      <div class="grid2">
+        <div class="col">
+          <div class="order glass warn">
+            <div class="head">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span class="num">#0042</span>
+                <span class="badge amber">Por ticar</span>
+                <span class="badge cocina">Cocina</span>
+              </div>
+              <span class="total">14,20 €</span>
+            </div>
+            <div class="time">⏱ hace 1 min · 20:14</div>
+            <div class="group-label">🍳 Cocina</div>
+            <ul class="items">
+              <li><span class="qty">2×</span><span class="nchip">#13</span> Pulled pork BBQ</li>
+              <li><span class="qty">1×</span><span class="nchip">#48</span> Jamón gran reserva y aceite</li>
+              <li><span class="qty">1×</span><span class="nchip">#86</span> BBQ bacon y mozzarella</li>
+            </ul>
+            <div class="group-label">🍺 Bebidas</div>
+            <ul class="items"><li><span class="qty">2×</span><span class="nchip">B1</span> Coca-Cola</li></ul>
+            <div class="actions">
+              <button class="btn primary">✓ Ticar todo y enviar</button>
+              <button class="btn ghost">Ver</button>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="order glass">
+            <div class="head">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span class="num">#0043</span>
+                <span class="badge amber">Por ticar</span>
+                <span class="badge beb">Bebidas</span>
+              </div>
+              <span class="total">6,00 €</span>
+            </div>
+            <div class="time">⏱ ahora · 20:16</div>
+            <div class="group-label">🍺 Bebidas</div>
+            <ul class="items">
+              <li><span class="qty">1×</span><span class="nchip">B23</span> Jarra Cruzcampo Radler</li>
+              <li><span class="qty">2×</span><span class="nchip">B41</span> Zumo de naranja</li>
+            </ul>
+            <div class="actions">
+              <button class="btn primary">✓ Ticar y enviar</button>
+              <button class="btn ghost">Ver</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2" style="margin-top:8px">
+        <div class="col">
+          <h2 class="sec">🍺 Bebidas activas (1)</h2>
+          <div class="order glass">
+            <div class="head"><span class="num">#0041</span><span class="badge beb">Preparando</span></div>
+            <ul class="items"><li><span class="qty">1×</span><span class="nchip">B30</span> Paulaner</li></ul>
+            <div class="actions"><button class="btn primary">Listo</button><button class="btn ghost">Ver</button></div>
+          </div>
+        </div>
+        <div class="col">
+          <h2 class="sec">🍳 Cocina · listos (1)</h2>
+          <div class="order glass ok">
+            <div class="head"><span class="num">#0039</span><span class="badge green">Listo</span></div>
+            <ul class="items">
+              <li><span class="qty">1×</span><span class="nchip">RU4</span> MontyRueda Pizzas</li>
+            </ul>
+            <div class="actions"><button class="btn primary">Entregar</button><button class="btn ghost">Ver</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= COCINA ================= -->
+    <section class="screen" id="cocina">
+      <div class="kds">
+        <div class="kcol glass">
+          <h3>📥 Recibido <span class="count">2</span></h3>
+          <div class="ticket glass warn">
+            <div class="head"><span class="num">#0044</span><span class="timer t-fresh">2 min</span></div>
+            <ul class="items">
+              <li><span class="qty">2×</span><span class="nchip">#13</span> Pulled pork BBQ</li>
+              <li><span class="qty">1×</span><span class="nchip">#48</span> Jamón gran reserva</li>
+            </ul>
+            <div class="actions"><button class="btn primary">▶ Empezar</button></div>
+          </div>
+          <div class="ticket glass">
+            <div class="head"><span class="num">#0045</span><span class="timer t-fresh">ahora</span></div>
+            <ul class="items"><li><span class="qty">5×</span><span class="nchip">RU2</span> MontyRueda Perros</li></ul>
+            <div class="actions"><button class="btn primary">▶ Empezar</button></div>
+          </div>
+        </div>
+        <div class="kcol glass">
+          <h3>🔥 Preparando <span class="count">1</span></h3>
+          <div class="ticket glass">
+            <div class="head"><span class="num">#0042</span><span class="timer t-warn">7 min</span></div>
+            <ul class="items">
+              <li><span class="qty">1×</span><span class="nchip">#86</span> BBQ bacon y mozzarella</li>
+              <li><span class="qty">1×</span><span class="nchip">#90</span> Pepperoni y mozzarella</li>
+            </ul>
+            <div class="actions"><button class="btn primary">✓ Marcar listo</button><button class="btn ghost">↩</button></div>
+          </div>
+        </div>
+        <div class="kcol glass">
+          <h3>✅ Listo <span class="count">1</span></h3>
+          <div class="ticket glass ok">
+            <div class="head"><span class="num">#0039</span><span class="timer t-late">12 min</span></div>
+            <ul class="items"><li><span class="qty">1×</span><span class="nchip">RU4</span> MontyRueda Pizzas</li></ul>
+            <div class="actions"><button class="btn primary">Entregar</button><button class="btn ghost">↩</button></div>
+          </div>
+        </div>
+      </div>
+      <p class="hint">Cambia entre Login · Caja · Cocina · Agotados · Histórico (barra superior).</p>
+    </section>
+
+    <!-- ================= LOGIN ================= -->
+    <section class="screen" id="login">
+      <div class="login-wrap">
+        <div class="login-card glass">
+          <div class="login-logo">◴</div>
+          <div class="login-title">Staff</div>
+          <div class="login-sub">Pulsa para entrar al panel</div>
+          <button class="btn primary login-btn">Admin</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= AGOTADOS ================= -->
+    <section class="screen" id="agotados">
+      <div class="searchbar glass"><span style="font-size:18px">🔎</span><input placeholder="Buscar pan, salsa, ingrediente o producto…"></div>
+      <p style="color:var(--accent);font-size:13px;font-weight:800;margin:10px 6px">3 agotado(s) ahora mismo</p>
+
+      <h2 class="sec">🥖 Panes</h2>
+      <div class="chips">
+        <div class="chip"><span class="ic">🥖</span><span class="txt">Pan piadina</span><span class="ok">●</span></div>
+        <div class="chip off"><span class="ic">🥖</span><span class="txt">Pan perrito</span><span class="ban">🚫</span></div>
+        <div class="chip"><span class="ic">🥖</span><span class="txt">Pan burguer</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🥖</span><span class="txt">Pan pizza</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🥖</span><span class="txt">Pan gourmet</span><span class="ok">●</span></div>
+      </div>
+
+      <h2 class="sec">🥫 Salsas</h2>
+      <div class="chips">
+        <div class="chip"><span class="ic">🥫</span><span class="txt">Salsa BBQ</span><span class="ok">●</span></div>
+        <div class="chip off"><span class="ic">🥫</span><span class="txt">Salsa brava</span><span class="ban">🚫</span></div>
+        <div class="chip"><span class="ic">🥫</span><span class="txt">Salsa alioli</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🥫</span><span class="txt">Mojo picón</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🧀</span><span class="txt">Cheddar</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🥫</span><span class="txt">Mayonesa</span><span class="ok">●</span></div>
+      </div>
+
+      <h2 class="sec">🧀 Ingredientes</h2>
+      <div class="chips">
+        <div class="chip"><span class="ic">🥓</span><span class="txt">Bacon ahumado</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🥑</span><span class="txt">Guacamole</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🍗</span><span class="txt">Pollo</span><span class="ok">●</span></div>
+        <div class="chip off"><span class="ic">🧀</span><span class="txt">Queso madurado</span><span class="ban">🚫</span></div>
+        <div class="chip"><span class="ic">🍅</span><span class="txt">Tomate</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🥬</span><span class="txt">Lechuga</span><span class="ok">●</span></div>
+      </div>
+
+      <h2 class="sec">🍢 Aperitivos</h2>
+      <div class="chips">
+        <div class="chip"><span class="ic">🫒</span><span class="txt">Gilda boquerón</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🫒</span><span class="txt">Gilda anchoa</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🧀</span><span class="txt">Nachos</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🍟</span><span class="txt">Patatas fritas</span><span class="ok">●</span></div>
+      </div>
+
+      <h2 class="sec">🍪 Cookies</h2>
+      <div class="chips">
+        <div class="chip"><span class="ic">🍪</span><span class="txt">Doble chocolate</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🍪</span><span class="txt">Chocolate y pistacho</span><span class="ok">●</span></div>
+        <div class="chip"><span class="ic">🍪</span><span class="txt">Chocolate y sirope</span><span class="ok">●</span></div>
+      </div>
+    </section>
+
+    <!-- ================= HISTÓRICO ================= -->
+    <section class="screen" id="historico">
+      <div class="filters glass">
+        <div class="seg"><button class="on">Día</button><button>Semana</button><button>Mes</button></div>
+        <span class="select">📅 23 jun 2026</span>
+        <span class="select">Estado: Todos ▾</span>
+        <div class="spacer"></div>
+        <span style="color:var(--dim);font-size:13px;font-weight:700">37 tickets · 412,90 €</span>
+      </div>
+
+      <div class="stats" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat glass"><div class="k">Tickets</div><div class="v">37</div></div>
+        <div class="stat glass"><div class="k">Ingresos</div><div class="v">412,90 <small>€</small></div></div>
+        <div class="stat glass"><div class="k">Ticket medio</div><div class="v">11,16 <small>€</small></div></div>
+      </div>
+
+      <div class="chart glass" style="margin-top:14px">
+        <div class="ct">📈 Ingresos por hora</div>
+        <div class="bars">
+          <div class="bar" style="height:22%"></div><div class="bar" style="height:35%"></div>
+          <div class="bar" style="height:48%"></div><div class="bar" style="height:70%"></div>
+          <div class="bar" style="height:92%"></div><div class="bar" style="height:64%"></div>
+          <div class="bar" style="height:40%"></div><div class="bar" style="height:55%"></div>
+          <div class="bar" style="height:80%"></div><div class="bar" style="height:100%"></div>
+          <div class="bar" style="height:74%"></div><div class="bar" style="height:30%"></div>
+        </div>
+      </div>
+
+      <div class="table-card glass">
+        <table class="hist">
+          <thead><tr><th>Nº</th><th>Hora</th><th>Productos</th><th>Estado</th><th style="text-align:right">Total</th></tr></thead>
+          <tbody>
+            <tr><td class="n">#0043</td><td>20:16</td><td>1× Jarra Radler · 2× Zumo naranja</td><td><span class="pill-state badge amber">Recibido</span></td><td style="text-align:right;font-weight:700">6,00 €</td></tr>
+            <tr><td class="n">#0042</td><td>20:14</td><td>2× #13 Pulled pork · 1× #48 · 2× Coca-Cola</td><td><span class="pill-state badge cocina">Preparando</span></td><td style="text-align:right;font-weight:700">14,20 €</td></tr>
+            <tr><td class="n">#0041</td><td>20:09</td><td>1× #90 Pepperoni · 1× Paulaner</td><td><span class="pill-state badge green">Entregado</span></td><td style="text-align:right;font-weight:700">5,80 €</td></tr>
+            <tr><td class="n">#0040</td><td>19:58</td><td>1× RU4 MontyRueda Pizzas</td><td><span class="pill-state badge green">Entregado</span></td><td style="text-align:right;font-weight:700">8,00 €</td></tr>
+            <tr><td class="n">#0039</td><td>19:51</td><td>5× #71-75 MontyRueda Dinas</td><td><span class="pill-state badge green">Entregado</span></td><td style="text-align:right;font-weight:700">8,00 €</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+<script>
+  const body=document.body;
+  document.getElementById('models').addEventListener('click',e=>{
+    const b=e.target.closest('[data-theme]'); if(!b)return;
+    body.className=b.dataset.theme;
+    document.querySelectorAll('#models .pill').forEach(p=>p.classList.toggle('on',p===b));
+  });
+  document.getElementById('screens').addEventListener('click',e=>{
+    const b=e.target.closest('[data-screen]'); if(!b)return;
+    document.querySelectorAll('#screens button').forEach(p=>p.classList.toggle('on',p===b));
+    document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===b.dataset.screen));
+  });
+</script>
+</body>
+</html>

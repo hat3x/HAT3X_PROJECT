@@ -5,6 +5,9 @@ import { useCartStore, useAgeGate } from '@/lib/cart-store';
 import { useAllergenFilter } from '@/lib/allergen-filter';
 import { getDrinkIcon } from '@/lib/drink-icon';
 import { getDrinkImage } from '@/lib/drink-image';
+import { isCocinaOpen, esAperitivoBarra } from '@/lib/kitchen-hours';
+import { toast } from 'sonner';
+import { Switch } from '@/components/ui/switch';
 import jarraQuijoteImg from '@/assets/drinks/jarra-quijote.png';
 import jarraSanchoImg from '@/assets/drinks/jarra-sancho.png';
 import jarraQuijoteLadronVeranoImg from '@/assets/drinks/jarra-quijote-ladron-verano.png';
@@ -43,7 +46,16 @@ interface Props {
   index: number;
   variant?: 'default' | 'drink';
   hideAllergens?: boolean;
+  agotado?: boolean;
+  isIngredienteAgotado?: (nombre: string) => boolean;
 }
+
+// Variantes que dependen de un ingrediente concreto: si falta, se desactiva
+// esa opción (no el producto entero, salvo que se agoten todas).
+const ALITAS_VARIANT_ING: Record<string, string> = { bbq: 'Salsa BBQ', brava: 'Salsa brava' };
+const NACHOS_VARIANT_ING: Record<string, string> = { bacon: 'Bacon ahumado', guacamole: 'Guacamole' };
+const GILDA_VARIANT_ING: Record<string, string> = { boqueron: 'Gilda boquerón', anchoa: 'Gilda anchoa' };
+const CAFE_TIPOS = ['Solo', 'Cortado', 'Con leche', 'Bombón'] as const;
 
 const BREAD_BADGES: Record<string, string> = {
   '100M':        'bg-muted text-muted-foreground border-border',
@@ -55,9 +67,9 @@ const BREAD_BADGES: Record<string, string> = {
 };
 
 const JARRA_SECTIONS = new Set(['Jarras Heladas', 'Cerveza Premium']);
-const SANCHO_EXTRA = 0.5; // Sancho cuesta 0.50€ más que Quijote (Cerveza Premium: 2€/2.50€ · Jarras Heladas: 1.50€/2€)
+const SANCHO_EXTRA = 0.5; // Cambio de carta jul-2026: Sancho cuesta 0,50€ más que Quijote
 
-export function ProductCard({ product, index, variant = 'default', hideAllergens = false }: Props) {
+export function ProductCard({ product, index, variant = 'default', hideAllergens = false, agotado = false, isIngredienteAgotado = () => false }: Props) {
   const addItem = useCartStore((s) => s.addItem);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const items = useCartStore((s) => s.items);
@@ -72,6 +84,9 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
   const [gildaOpen, setGildaOpen] = useState(false);
   const [nachosOpen, setNachosOpen] = useState(false);
   const [alitasOpen, setAlitasOpen] = useState(false);
+  const [cafeOpen, setCafeOpen] = useState(false);
+  const [cafeDescafeinado, setCafeDescafeinado] = useState(false);
+  const [aceitunaOpen, setAceitunaOpen] = useState(false);
 
 
   const num = product.numero ?? null;
@@ -95,6 +110,16 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
   const isGilda = productName === 'gildas' || productName === 'gilda';
   const isNachos = productName === 'nachos';
   const isAlitas = productName === 'alitas de pollo';
+  const isCafe = productName === 'cafe';
+  const isAceituna = productName === 'aceitunas';
+
+  // Disponibilidad de variantes según ingredientes agotados (alitas/nachos).
+  const variantIngMap = isAlitas ? ALITAS_VARIANT_ING : isNachos ? NACHOS_VARIANT_ING : isGilda ? GILDA_VARIANT_ING : null;
+  const variantKeys = variantIngMap ? Object.keys(variantIngMap) : [];
+  const isVariantAgotada = (key: string) => !!variantIngMap && isIngredienteAgotado(variantIngMap[key]);
+  const todasVariantesAgotadas = variantKeys.length > 0 && variantKeys.every((k) => isVariantAgotada(k));
+  // Agotado efectivo: marcado/ingrediente común agotado, o TODAS las variantes agotadas.
+  const efectivoAgotado = agotado || todasVariantesAgotadas;
 
   const gildaBoqueronImage = PRODUCT_IMAGES._gildaBoqueron;
   const gildaAnchoaImage = PRODUCT_IMAGES._gildaAnchoa;
@@ -147,6 +172,7 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
       id: product.id,
       productoId: product.id,
       nombre: product.nombre,
+      numero: num,
       precio: product.precio,
       foto_url: productImage ?? product.foto_url,
       contiene_alcohol: !!product.contiene_alcohol,
@@ -170,6 +196,7 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
   };
 
   const addGildaVariant = (tipo: 'boqueron' | 'anchoa') => {
+    if (isVariantAgotada(tipo)) return;
     const payload = buildGildaPayload(tipo);
     if (product.contiene_alcohol) requestAlcohol(payload);
     else addItem(payload);
@@ -182,6 +209,7 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
   };
 
   const addNachosVariant = (salsa: 'bacon' | 'guacamole') => {
+    if (isVariantAgotada(salsa)) return;
     const payload = buildNachosPayload(salsa);
     if (product.contiene_alcohol) requestAlcohol(payload);
     else addItem(payload);
@@ -200,15 +228,59 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
     );
 
   const addAlitasVariant = (sabor: 'bbq' | 'brava') => {
+    if (isVariantAgotada(sabor)) return;
     const payload = buildAlitasPayload(sabor);
     if (product.contiene_alcohol) requestAlcohol(payload);
     else addItem(payload);
     setAlitasOpen(false);
   };
 
+  const buildCafePayload = (tipo: typeof CAFE_TIPOS[number], descafeinado: boolean) => {
+    const label = descafeinado ? `${tipo} descafeinado` : tipo;
+    return buildVariantPayload(
+      tipo.toLowerCase().replace(/\s+/g, '-') + (descafeinado ? '-descaf' : ''),
+      label,
+      `Café ${label.toLowerCase()}`,
+      productImage,
+    );
+  };
+
+  const addCafeVariant = (tipo: typeof CAFE_TIPOS[number]) => {
+    const payload = buildCafePayload(tipo, cafeDescafeinado);
+    addItem(payload);
+    setCafeOpen(false);
+    setCafeDescafeinado(false);
+  };
+
+  const buildAceitunaPayload = (tipo: 'abuela' | 'manzanilla') =>
+    buildVariantPayload(
+      tipo,
+      tipo === 'abuela' ? 'De la abuela' : 'Manzanilla',
+      tipo === 'abuela' ? 'Aceitunas de la abuela' : 'Aceitunas manzanilla',
+      productImage,
+    );
+
+  const addAceitunaVariant = (tipo: 'abuela' | 'manzanilla') => {
+    const payload = buildAceitunaPayload(tipo);
+    if (product.contiene_alcohol) requestAlcohol(payload);
+    else addItem(payload);
+    setAceitunaOpen(false);
+  };
+
+  // Va a cocina si NO es bebida y NO es uno de los 3 aperitivos de barra.
+  const vaACocina = variant !== 'drink' && !esAperitivoBarra(product.nombre);
+  const cocinaCerrada = vaACocina && !isCocinaOpen();
+
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (efectivoAgotado) return; // producto agotado: no se puede añadir
+    if (cocinaCerrada) {
+      toast.error('La cocina está cerrada ahora mismo. Solo bebidas y aperitivos de barra.');
+      return;
+    }
     if (isJarra) {
+      // El Ladrón de Manzanas solo se vende en Quijote (no hay Sancho): se añade directo.
+      if (isLadronDeManzanas) { addJarraVariant('quijote'); return; }
       setJarraOpen(true);
       return;
     }
@@ -222,6 +294,14 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
     }
     if (isAlitas) {
       setAlitasOpen(true);
+      return;
+    }
+    if (isCafe) {
+      setCafeOpen(true);
+      return;
+    }
+    if (isAceituna) {
+      setAceitunaOpen(true);
       return;
     }
 
@@ -242,7 +322,7 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.02, duration: 0.3 }}
         whileTap={{ scale: 0.98 }}
-        className={`relative glass-card flex items-center gap-3 p-3 cursor-pointer group ${hasExcluded ? 'ring-1 ring-destructive/40' : ''}`}
+        className={`relative glass-card flex items-center gap-3 p-3 cursor-pointer group ${hasExcluded ? 'ring-1 ring-[#FFA012]/50' : ''}`}
         onClick={() => setDetailOpen(true)}
       >
         {productImage && (
@@ -271,8 +351,8 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
           </span>
         )}
 
-        {!num && product.nuevo && (
-          <span className="px-1.5 py-0.5 bg-accent text-accent-foreground text-[9px] font-bold uppercase tracking-wider rounded shrink-0">
+        {product.nuevo && (
+          <span className="px-1.5 py-0.5 bg-primary text-primary-foreground text-[9px] font-bold uppercase tracking-wider rounded shrink-0">
             Nuevo
           </span>
         )}
@@ -296,11 +376,16 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-sm font-bold text-gold whitespace-nowrap">
             {isJarra
-              ? `${precioQuijote.toFixed(2)} / ${precioSancho.toFixed(2)} €`
+              ? (isLadronDeManzanas ? `${precioQuijote.toFixed(2)} €` : `${precioQuijote.toFixed(2)} / ${precioSancho.toFixed(2)} €`)
               : `${product.precio.toFixed(2)} €`}
           </span>
+          {efectivoAgotado ? (
+            <span className="text-[10px] font-black uppercase tracking-wide text-destructive border border-destructive/40 rounded-full px-2.5 py-1">
+              Agotado
+            </span>
+          ) : (
           <AnimatePresence mode="wait" initial={false}>
-            {cantidadEnCarrito === 0 || isJarra || isGilda || isNachos || isAlitas ? (
+            {cantidadEnCarrito === 0 || isJarra || isGilda || isNachos || isAlitas || isCafe || isAceituna ? (
               <motion.button
                 key="add"
                 type="button"
@@ -309,11 +394,11 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
                 exit={{ opacity: 0, scale: 0.6 }}
                 whileTap={{ scale: 0.85 }}
                 onClick={handleAdd}
-                aria-label={isJarra ? 'Elegir tamaño de jarra' : isGilda ? 'Elegir tipo de gilda' : isNachos ? 'Elegir salsa de nachos' : isAlitas ? 'Elegir sabor de alitas' : 'Añadir al carrito'}
+                aria-label={isJarra ? 'Elegir tamaño de jarra' : isGilda ? 'Elegir tipo de gilda' : isNachos ? 'Elegir salsa de nachos' : isAlitas ? 'Elegir sabor de alitas' : isCafe ? 'Elegir tipo de café' : isAceituna ? 'Elegir tipo de aceitunas' : 'Añadir al carrito'}
                 className="relative w-8 h-8 rounded-full bg-primary flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity"
               >
                 <Plus className="w-4 h-4 text-primary-foreground" />
-                {(isJarra || isGilda || isNachos || isAlitas) && cantidadEnCarrito > 0 && (
+                {(isJarra || isGilda || isNachos || isAlitas || isCafe || isAceituna) && cantidadEnCarrito > 0 && (
 
                   <span className="absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-accent text-accent-foreground text-[10px] font-bold flex items-center justify-center tabular-nums">
                     {cantidadEnCarrito}
@@ -356,11 +441,20 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
               </motion.div>
             )}
           </AnimatePresence>
+          )}
         </div>
 
+        {efectivoAgotado && (
+          <div className="absolute inset-0 rounded-[inherit] bg-background/70 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+            <span className="bg-destructive text-destructive-foreground text-[11px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full shadow-lg">
+              Producto agotado
+            </span>
+          </div>
+        )}
+
         {hasExcluded && (
-          <div className="absolute inset-0 rounded-[inherit] bg-destructive/30 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
-            <span className="bg-destructive text-destructive-foreground text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+          <div className="absolute inset-0 rounded-[inherit] bg-[#FFA012]/25 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+            <span className="bg-[#FFA012] text-white text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
               <AlertCircle className="w-3.5 h-3.5" />
               Contiene alérgenos seleccionados
             </span>
@@ -439,7 +533,7 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
           <div className="px-5 py-4 border-t border-border-subtle bg-card flex items-center justify-between gap-3">
             <span className="text-xl font-black text-gold whitespace-nowrap">
               {isJarra
-                ? `${precioQuijote.toFixed(2)} / ${precioSancho.toFixed(2)} €`
+                ? (isLadronDeManzanas ? `${precioQuijote.toFixed(2)} €` : `${precioQuijote.toFixed(2)} / ${precioSancho.toFixed(2)} €`)
                 : `${product.precio.toFixed(2)} €`}
             </span>
             <button
@@ -450,7 +544,7 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
               className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-bold shadow-primary active:scale-95 transition-transform"
             >
               <Plus className="w-4 h-4" />
-              {isJarra ? 'Elegir tamaño' : isGilda || isNachos || isAlitas ? 'Elegir' : 'Añadir'}
+              {isJarra ? 'Elegir tamaño' : isGilda || isNachos || isAlitas || isCafe || isAceituna ? 'Elegir' : 'Añadir'}
             </button>
           </div>
         </DialogContent>
@@ -498,21 +592,35 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button
               onClick={() => addGildaVariant('boqueron')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isVariantAgotada('boqueron')}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isVariantAgotada('boqueron') ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img src={gildaBoqueronImage} alt="Gilda de boquerón" className="h-24 w-auto object-contain" loading="lazy" />
               <span className="font-display font-bold text-base text-foreground">Boquerón</span>
-              <span className="text-xs text-muted-foreground text-center">Suave y fresco</span>
-              <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>
+              {isVariantAgotada('boqueron') ? (
+                <span className="text-[11px] font-black uppercase text-destructive mt-1">Agotado</span>
+              ) : (
+                <>
+                  <span className="text-xs text-muted-foreground text-center">Suave y fresco</span>
+                  <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>
+                </>
+              )}
             </button>
             <button
               onClick={() => addGildaVariant('anchoa')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isVariantAgotada('anchoa')}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isVariantAgotada('anchoa') ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img src={gildaAnchoaImage} alt="Gilda de anchoa" className="h-24 w-auto object-contain" loading="lazy" />
               <span className="font-display font-bold text-base text-foreground">Anchoa</span>
-              <span className="text-xs text-muted-foreground text-center">Intenso y curado</span>
-              <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>
+              {isVariantAgotada('anchoa') ? (
+                <span className="text-[11px] font-black uppercase text-destructive mt-1">Agotado</span>
+              ) : (
+                <>
+                  <span className="text-xs text-muted-foreground text-center">Intenso y curado</span>
+                  <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>
+                </>
+              )}
             </button>
           </div>
         </DialogContent>
@@ -529,19 +637,25 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button
               onClick={() => addNachosVariant('bacon')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isVariantAgotada('bacon')}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isVariantAgotada('bacon') ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img src={nachosBaconImage} alt="Nachos con cheddar y bacon ahumado" className="h-24 w-auto object-contain" loading="lazy" />
               <span className="font-display font-bold text-base text-foreground text-center">Cheddar y bacon ahumado</span>
-              <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>
+              {isVariantAgotada('bacon')
+                ? <span className="text-[11px] font-black uppercase text-destructive mt-1">Agotado</span>
+                : <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>}
             </button>
             <button
               onClick={() => addNachosVariant('guacamole')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isVariantAgotada('guacamole')}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isVariantAgotada('guacamole') ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img src={nachosGuacamoleImage} alt="Nachos con cheddar y guacamole" className="h-24 w-auto object-contain" loading="lazy" />
               <span className="font-display font-bold text-base text-foreground text-center">Cheddar y guacamole</span>
-              <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>
+              {isVariantAgotada('guacamole')
+                ? <span className="text-[11px] font-black uppercase text-destructive mt-1">Agotado</span>
+                : <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>}
             </button>
           </div>
         </DialogContent>
@@ -558,21 +672,85 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button
               onClick={() => addAlitasVariant('bbq')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isVariantAgotada('bbq')}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isVariantAgotada('bbq') ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img src={alitasBbqImage} alt="Alitas BBQ" className="h-24 w-auto object-contain" loading="lazy" />
               <span className="font-display font-bold text-base text-foreground text-center">Sabor BBQ</span>
               <span className="text-xs text-muted-foreground text-center">Ahumado y dulce</span>
-              <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>
+              {isVariantAgotada('bbq')
+                ? <span className="text-[11px] font-black uppercase text-destructive mt-1">Agotado</span>
+                : <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>}
             </button>
             <button
               onClick={() => addAlitasVariant('brava')}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+              disabled={isVariantAgotada('brava')}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 transition-all ${isVariantAgotada('brava') ? 'border-destructive/40 opacity-50' : 'border-border hover:border-primary hover:bg-primary/5 active:scale-95'}`}
             >
               <img src={alitasBravaImage} alt="Alitas Brava" className="h-24 w-auto object-contain" loading="lazy" />
               <span className="font-display font-bold text-base text-foreground text-center">Sabor Brava</span>
               <span className="text-xs text-muted-foreground text-center">Picante e intenso</span>
-              <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>
+              {isVariantAgotada('brava')
+                ? <span className="text-[11px] font-black uppercase text-destructive mt-1">Agotado</span>
+                : <span className="text-lg font-black text-gold mt-1">{product.precio.toFixed(2)} €</span>}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={cafeOpen} onOpenChange={setCafeOpen}>
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">¿Cómo te gusta el café?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground pt-1">
+              Elige el tipo · {product.precio.toFixed(2)} €
+            </DialogDescription>
+          </DialogHeader>
+          <label
+            className={`flex items-center justify-between px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer ${cafeDescafeinado ? 'border-primary bg-primary/5' : 'border-border'}`}
+          >
+            <span className="font-display font-bold text-sm text-foreground">Descafeinado</span>
+            <Switch checked={cafeDescafeinado} onCheckedChange={setCafeDescafeinado} />
+          </label>
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            {CAFE_TIPOS.map((tipo) => (
+              <button
+                key={tipo}
+                onClick={() => addCafeVariant(tipo)}
+                className="flex flex-col items-center justify-center gap-1 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95 min-h-[64px]"
+              >
+                <span className="font-display font-bold text-sm text-foreground text-center">{tipo}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={aceitunaOpen} onOpenChange={setAceitunaOpen}>
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="font-display text-lg">¿Qué aceitunas prefieres?</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground pt-1">
+              Elige el tipo · {product.precio.toFixed(2)} €
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <button
+              onClick={() => addAceitunaVariant('abuela')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              {productImage && (
+                <img src={productImage} alt="Aceitunas de la abuela" className="h-24 w-auto object-contain" loading="lazy" />
+              )}
+              <span className="font-display font-bold text-base text-foreground text-center">De la abuela</span>
+            </button>
+            <button
+              onClick={() => addAceitunaVariant('manzanilla')}
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-card border-2 border-border hover:border-primary hover:bg-primary/5 transition-all active:scale-95"
+            >
+              {productImage && (
+                <img src={productImage} alt="Aceitunas manzanilla" className="h-24 w-auto object-contain" loading="lazy" />
+              )}
+              <span className="font-display font-bold text-base text-foreground text-center">Manzanilla</span>
             </button>
           </div>
         </DialogContent>

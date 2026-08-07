@@ -11,6 +11,8 @@ import Login from "./pages/Login.tsx";
 import Cocina from "./pages/Cocina.tsx";
 import Caja from "./pages/Caja.tsx";
 import Historico from "./pages/Historico.tsx";
+import Analitica from "./pages/Analitica.tsx";
+import Agotados from "./pages/Agotados.tsx";
 import StaffLocalPicker from "./pages/StaffLocalPicker.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -66,6 +68,22 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole={["caja", "admin"]}>
                   <Historico />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analitica"
+              element={
+                <ProtectedRoute requiredRole={["caja", "cocina", "admin"]}>
+                  <Analitica />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/agotados"
+              element={
+                <ProtectedRoute requiredRole={["caja", "cocina", "admin"]}>
+                  <Agotados />
                 </ProtectedRoute>
               }
             />

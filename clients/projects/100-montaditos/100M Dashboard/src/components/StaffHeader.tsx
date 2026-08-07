@@ -14,6 +14,8 @@ export const StaffHeader = ({ title, subtitle }: Props) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isHistorico = location.pathname.startsWith("/historico");
+  const isAnalitica = location.pathname.startsWith("/analitica");
+  const isAgotados = location.pathname.startsWith("/agotados");
   const local = useStaffLocal((s) => s.local);
   const isAdmin = role === "admin";
 
@@ -29,7 +31,7 @@ export const StaffHeader = ({ title, subtitle }: Props) => {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur">
+    <header className="sticky top-3 z-40 mx-3 mt-3 mb-2 rounded-[22px] border border-white/60 bg-card/70 shadow-lg backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1800px] items-center justify-between px-6 py-4">
         <div className="flex items-center gap-4">
           <div>
@@ -59,6 +61,19 @@ export const StaffHeader = ({ title, subtitle }: Props) => {
             <div className="text-sm font-medium">{user?.email}</div>
             <div className="text-xs uppercase tracking-wider text-muted-foreground">{role}</div>
           </div>
+          {(role === "caja" || role === "cocina" || role === "admin") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                isAgotados
+                  ? navigate(role === "cocina" ? "/cocina" : role === "caja" ? "/caja" : "/")
+                  : navigate("/agotados")
+              }
+            >
+              {isAgotados ? "Volver" : "Agotados"}
+            </Button>
+          )}
           {(role === "caja" || role === "admin") && (
             <Button
               variant="outline"
@@ -66,6 +81,19 @@ export const StaffHeader = ({ title, subtitle }: Props) => {
               onClick={() => navigate(isHistorico ? "/caja" : "/historico")}
             >
               {isHistorico ? "Caja" : "Histórico"}
+            </Button>
+          )}
+          {(role === "caja" || role === "cocina" || role === "admin") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                isAnalitica
+                  ? navigate(role === "cocina" ? "/cocina" : role === "caja" ? "/caja" : "/")
+                  : navigate("/analitica")
+              }
+            >
+              {isAnalitica ? "Volver" : "Analítica"}
             </Button>
           )}
           {role === "admin" && (

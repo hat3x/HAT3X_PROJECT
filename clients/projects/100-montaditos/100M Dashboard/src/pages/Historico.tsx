@@ -28,10 +28,6 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Calendar as CalendarIcon,
-  Euro,
-  Receipt,
-  ShoppingBag,
   Download,
   Search,
   ArrowUpDown,
@@ -40,16 +36,6 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-} from "recharts";
 
 type Periodo = "dia" | "mes" | "anio";
 type SortKey = "numero_pedido" | "created_at" | "total" | "estado";
@@ -67,23 +53,20 @@ interface Pedido {
   created_at: string;
 }
 
-interface Agregado {
-  hora: string;
-  dia: string;
-  mes: string;
-  anio: string;
-  estado: EstadoPedido;
-  tickets: number;
-  ingresos: number;
-}
-
 interface DetailItem {
   id: string;
   cantidad: number;
   precio_unitario: number;
   destino: "cocina" | "bebidas";
+  variante: string | null;
   producto: { nombre: string } | null;
 }
+
+/** Nombre del item + variante (ej. "Jarra Cruzcampo · Jarra Sancho"). */
+const itemLabel = (it: DetailItem): string => {
+  const v = it.variante ? it.variante.replace(/\n/g, " · ") : "";
+  return (it.producto?.nombre ?? "—") + (v ? ` · ${v}` : "");
+};
 
 const ESTADO_VARIANT: Record<EstadoPedido, { label: string; cls: string }> = {
   pendiente: { label: "Pendiente", cls: "bg-amber-500 text-white" },
@@ -128,12 +111,8 @@ const todayInputValue = () => {
 const Historico = () => {
   const [periodo, setPeriodo] = useState<Periodo>("dia");
   const [fechaStr, setFechaStr] = useState(todayInputValue());
-  const [estadoFilter, setEstadoFilter] = useState<string>("entregado");
+  const [estadoFilter, setEstadoFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
-
-  // Agregaciones (desde la vista)
-  const [agregados, setAgregados] = useState<Agregado[]>([]);
-  const [aggLoading, setAggLoading] = useState(true);
 
   // Tabla paginada
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -154,25 +133,6 @@ const Historico = () => {
   }, [fechaStr]);
 
   const range = useMemo(() => rangeFor(periodo, fecha), [periodo, fecha]);
-
-  // Cargar agregaciones desde la vista
-  const loadAgregados = async () => {
-    setAggLoading(true);
-    let query = supabase
-      .from("v_pedidos_agregados")
-      .select("hora, dia, mes, anio, estado, tickets, ingresos")
-      .gte("hora", range.start)
-      .lte("hora", range.end);
-    if (estadoFilter !== "all") query = query.eq("estado", estadoFilter);
-    const { data, error } = await query;
-    if (error) {
-      toast.error("Error cargando agregados", { description: error.message });
-      setAgregados([]);
-    } else {
-      setAgregados((data ?? []) as Agregado[]);
-    }
-    setAggLoading(false);
-  };
 
   // Cargar tabla paginada
   const loadTable = async () => {
@@ -208,11 +168,6 @@ const Historico = () => {
   };
 
   useEffect(() => {
-    loadAgregados();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodo, fechaStr, estadoFilter]);
-
-  useEffect(() => {
     loadTable();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo, fechaStr, estadoFilter, search, page, pageSize, sortKey, sortDir]);
@@ -221,45 +176,6 @@ const Historico = () => {
   useEffect(() => {
     setPage(0);
   }, [periodo, fechaStr, estadoFilter, search, pageSize]);
-
-  const stats = useMemo(() => {
-    const total = agregados.reduce((s, a) => s + a.tickets, 0);
-    const ingresos = agregados.reduce((s, a) => s + Number(a.ingresos), 0);
-    const ticket = total ? ingresos / total : 0;
-    return { total, ingresos, ticket };
-  }, [agregados]);
-
-  // Series para gráfico y tabla agregada
-  const grupos = useMemo(() => {
-    const map = new Map<
-      string,
-      { sortKey: string; label: string; tickets: number; ingresos: number }
-    >();
-    agregados.forEach((a) => {
-      let bucketIso = "";
-      if (periodo === "dia") bucketIso = a.hora;
-      else if (periodo === "mes") bucketIso = a.dia;
-      else bucketIso = a.mes;
-      const d = new Date(bucketIso);
-      let label = "";
-      let key = "";
-      if (periodo === "dia") {
-        key = pad(d.getHours());
-        label = `${pad(d.getHours())}h`;
-      } else if (periodo === "mes") {
-        key = pad(d.getDate());
-        label = pad(d.getDate());
-      } else {
-        key = pad(d.getMonth() + 1);
-        label = format(d, "MMM", { locale: es });
-      }
-      const cur = map.get(key) ?? { sortKey: key, label, tickets: 0, ingresos: 0 };
-      cur.tickets += a.tickets;
-      cur.ingresos += Number(a.ingresos);
-      map.set(key, cur);
-    });
-    return Array.from(map.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  }, [agregados, periodo]);
 
   const periodoLabel = useMemo(() => {
     if (periodo === "dia") return format(fecha, "EEEE d 'de' MMMM yyyy", { locale: es });
@@ -272,7 +188,7 @@ const Historico = () => {
     setDetailLoading(true);
     const { data } = await supabase
       .from("pedido_items")
-      .select("id, cantidad, precio_unitario, destino, producto:menu_productos(nombre)")
+      .select("id, cantidad, precio_unitario, destino, variante, producto:menu_productos(nombre)")
       .eq("pedido_id", id);
     setDetailItems((data ?? []) as unknown as DetailItem[]);
     setDetailLoading(false);
@@ -369,55 +285,6 @@ const Historico = () => {
             <Button variant="outline" onClick={exportCsv}>
               <Download className="h-4 w-4" />Exportar CSV
             </Button>
-          </CardContent>
-        </Card>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <StatCard icon={<ShoppingBag />} label="Tickets" value={stats.total.toString()} />
-          <StatCard icon={<Euro />} label="Ingresos" value={`${stats.ingresos.toFixed(2)} €`} />
-          <StatCard icon={<Receipt />} label="Ticket medio" value={`${stats.ticket.toFixed(2)} €`} />
-        </div>
-
-        {/* Gráfico */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <CalendarIcon className="h-5 w-5" />
-              {periodo === "dia" ? "Por hora" : periodo === "mes" ? "Por día" : "Por mes"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {aggLoading ? (
-              <div className="py-12 text-center text-muted-foreground">Cargando…</div>
-            ) : grupos.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground">Sin datos</div>
-            ) : (
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={grupos} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="label" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                    <YAxis yAxisId="left" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{
-                        background: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                      formatter={(v: number, name) =>
-                        name === "Ingresos" ? [`${v.toFixed(2)} €`, name] : [v, name]
-                      }
-                    />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar yAxisId="left" dataKey="tickets" name="Tickets" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                    <Bar yAxisId="right" dataKey="ingresos" name="Ingresos" fill="hsl(var(--status-listo))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -549,7 +416,7 @@ const Historico = () => {
                         <li key={it.id} className="flex items-center justify-between py-2">
                           <div>
                             <span className="font-bold">{it.cantidad}×</span>{" "}
-                            <span>{it.producto?.nombre ?? "—"}</span>
+                            <span>{itemLabel(it)}</span>
                           </div>
                           <div className="text-sm text-muted-foreground">
                             {(it.cantidad * Number(it.precio_unitario)).toFixed(2)} €
@@ -599,20 +466,6 @@ const SortableHead = ({
       {active && <span className="text-xs">{dir === "asc" ? "↑" : "↓"}</span>}
     </button>
   </TableHead>
-);
-
-const StatCard = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
-  <Card>
-    <CardContent className="flex items-center gap-4 p-5">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary [&>svg]:h-5 [&>svg]:w-5">
-        {icon}
-      </div>
-      <div>
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-        <div className="text-xl font-bold">{value}</div>
-      </div>
-    </CardContent>
-  </Card>
 );
 
 export default Historico;

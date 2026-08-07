@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>100M · Panel — Liquid Glass</title>
+<style>
+  :root{
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
+    --ink:#1c1b1a;
+    --ink-dim:#7d7670;
+    --accent:#c4122f;
+    --accent2:#ff7a3d;
+    --green:#2bb673;
+    --amber:#f2a23c;
+    --blue:#3a9bdc;
+
+    --glass:rgba(255,255,255,.55);
+    --glass-strong:rgba(255,255,255,.72);
+    --hair:rgba(255,255,255,.65);
+    --edge:rgba(40,25,15,.06);
+    --shadow:0 1px 1px rgba(40,25,15,.04), 0 10px 24px rgba(60,35,20,.10), 0 30px 60px rgba(60,35,20,.10);
+    --radius:28px; --radius-sm:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;
+    letter-spacing:-.01em;padding:0 0 60px;
+    background:
+      radial-gradient(900px 600px at 8% -8%, #ffe0c6 0%, transparent 55%),
+      radial-gradient(900px 600px at 100% 0%, #ffd2cf 0%, transparent 50%),
+      radial-gradient(700px 700px at 60% 120%, #ffe8d2 0%, transparent 60%),
+      linear-gradient(165deg,#f6efe7 0%,#efe5da 100%);
+    background-attachment:fixed;
+  }
+
+  .glass{
+    background:var(--glass);
+    backdrop-filter:blur(30px) saturate(180%);
+    -webkit-backdrop-filter:blur(30px) saturate(180%);
+    border:1px solid var(--edge);
+    border-top:1px solid var(--hair);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+  }
+
+  .nav{position:sticky;top:14px;z-index:50;margin:14px;display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:24px}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:600;font-size:17px}
+  .logo{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;color:#fff;font-size:18px;font-weight:800;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 6px 16px rgba(196,18,47,.4), inset 0 1px 0 rgba(255,255,255,.4)}
+  .brand small{display:block;font-size:12px;font-weight:500;color:var(--ink-dim);letter-spacing:0}
+  .spacer{flex:1}
+  .seg{display:inline-flex;padding:4px;gap:3px;border-radius:15px;background:rgba(40,25,15,.05)}
+  .seg button{appearance:none;border:0;background:transparent;font:inherit;font-weight:600;font-size:14px;color:var(--ink-dim);
+    padding:8px 18px;border-radius:12px;cursor:pointer;transition:.22s}
+  .seg button.on{background:var(--glass-strong);color:var(--ink);box-shadow:0 1px 1px rgba(0,0,0,.03),0 4px 12px rgba(60,35,20,.12);border:1px solid var(--hair)}
+  .me{display:flex;align-items:center;gap:10px;padding:6px 8px 6px 14px;border-radius:16px;background:rgba(40,25,15,.05)}
+  .me .who{font-size:13px;font-weight:600}
+  .me .who small{display:block;color:var(--ink-dim);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .av{width:34px;height:34px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;color:#fff;font-weight:700}
+
+  main{max-width:1340px;margin:0 auto;padding:8px 18px}
+  .screen{display:none;animation:fade .5s cubic-bezier(.2,.7,.2,1)}
+  .screen.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  h2.sec{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);margin:24px 8px 14px}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .stat{padding:22px 22px}
+  .stat .k{font-size:12px;font-weight:600;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.05em}
+  .stat .v{font-size:34px;font-weight:800;letter-spacing:-.03em;margin-top:8px}
+  .stat .v small{font-size:16px;font-weight:600;color:var(--ink-dim);letter-spacing:0}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.stats{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+  .card{padding:20px 22px;position:relative;overflow:hidden}
+  .card .top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .num{font-size:32px;font-weight:850;letter-spacing:-.04em;line-height:1}
+  .pill{font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;letter-spacing:.01em;border:1px solid transparent}
+  .pill.amber{background:rgba(242,162,60,.16);color:#c97f1e}
+  .pill.cocina{background:rgba(255,122,61,.16);color:#d8571c}
+  .pill.beb{background:rgba(58,155,220,.16);color:#1f7fb8}
+  .pill.green{background:rgba(43,182,115,.16);color:#1d8a55}
+  .total{margin-left:auto;font-size:19px;font-weight:800;letter-spacing:-.02em}
+  .time{font-size:13px;color:var(--ink-dim);font-weight:500;margin:-6px 0 12px}
+  .glabel{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);margin:12px 0 6px;display:flex;align-items:center;gap:6px}
+  ul.items{list-style:none;display:flex;flex-direction:column;gap:7px}
+  ul.items li{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:500}
+  .qty{font-weight:800;color:var(--accent);min-width:26px}
+  .nchip{font-size:11px;font-weight:800;padding:3px 8px;border-radius:9px;background:rgba(40,25,15,.06);color:var(--ink-dim)}
+  .acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+
+  .btn{appearance:none;border:0;font:inherit;font-weight:700;font-size:14px;padding:12px 20px;border-radius:15px;cursor:pointer;transition:.18s cubic-bezier(.2,.7,.2,1);display:inline-flex;align-items:center;gap:8px}
+  .btn:active{transform:scale(.95)}
+  .btn.primary{color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 8px 20px rgba(196,18,47,.32), inset 0 1px 0 rgba(255,255,255,.35)}
+  .btn.glass{background:var(--glass-strong);border:1px solid var(--hair);color:var(--ink);box-shadow:0 4px 12px rgba(60,35,20,.10)}
+  .btn.icon{padding:12px 14px}
+  .btn.lg{padding:16px 22px;font-size:16px;width:100%;justify-content:center}
+
+  .kds{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:960px){.kds{grid-template-columns:1fr}}
+  .kcol{padding:16px}
+  .kcol .kh{display:flex;align-items:center;justify-content:space-between;margin:4px 6px 14px}
+  .kcol .kh .t{font-size:15px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+  .kcol .kh .c{min-width:26px;height:26px;padding:0 8px;border-radius:999px;background:rgba(40,25,15,.06);display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--ink-dim)}
+  .ticket{padding:18px 18px;margin-bottom:14px}
+  .timer{font-size:12px;font-weight:800;padding:5px 11px;border-radius:999px}
+  .t-fresh{background:rgba(43,182,115,.16);color:#1d8a55}
+  .t-warn{background:rgba(242,162,60,.18);color:#c97f1e}
+  .t-late{background:rgba(196,18,47,.14);color:var(--accent)}
+  .dot{width:9px;height:9px;border-radius:50%}
+
+  .login{min-height:78vh;display:flex;align-items:center;justify-content:center}
+  .login .box{width:380px;max-width:92%;padding:44px 36px;text-align:center}
+  .login .lg{width:72px;height:72px;border-radius:22px;margin:0 auto 22px;display:grid;place-items:center;color:#fff;font-size:32px;font-weight:800;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 14px 30px rgba(196,18,47,.45), inset 0 1px 0 rgba(255,255,255,.4)}
+  .login h1{font-size:30px;font-weight:850;letter-spacing:-.03em}
+  .login p{color:var(--ink-dim);margin:8px 0 26px;font-size:15px}
+</style>
+</head>
+<body>
+
+<nav class="nav glass">
+  <div class="brand"><span class="logo">M</span><div>100 Montaditos<small>Panel del personal</small></div></div>
+  <div class="spacer"></div>
+  <div class="seg" id="screens">
+    <button data-s="login">Login</button>
+    <button class="on" data-s="caja">Caja</button>
+    <button data-s="cocina">Cocina</button>
+  </div>
+  <div class="me"><div class="who">Móstoles<small>Admin</small></div><span class="av">A</span></div>
+</nav>
+
+<main>
+  <section class="screen on" id="caja">
+    <div class="stats">
+      <div class="stat glass"><div class="k">Pedidos hoy</div><div class="v">37</div></div>
+      <div class="stat glass"><div class="k">Ingresos</div><div class="v">412,90<small> €</small></div></div>
+      <div class="stat glass"><div class="k">Ticket medio</div><div class="v">11,16<small> €</small></div></div>
+      <div class="stat glass"><div class="k">Activos · Listos</div><div class="v">5 · 2</div></div>
+    </div>
+
+    <h2 class="sec">Por ticar · 2</h2>
+    <div class="grid2">
+      <div class="card glass">
+        <div class="top">
+          <span class="num">#42</span>
+          <span class="pill amber">Por ticar</span>
+          <span class="pill cocina">Cocina</span>
+          <span class="total">14,20 €</span>
+        </div>
+        <div class="time">hace 1 min · 20:14</div>
+        <div class="glabel">🍳 Cocina</div>
+        <ul class="items">
+          <li><span class="qty">2×</span><span class="nchip">#13</span>Pulled pork BBQ</li>
+          <li><span class="qty">1×</span><span class="nchip">#48</span>Jamón gran reserva y aceite</li>
+        </ul>
+        <div class="glabel">🍺 Bebidas</div>
+        <ul class="items"><li><span class="qty">2×</span><span class="nchip">B1</span>Coca-Cola</li></ul>
+        <div class="acts">
+          <button class="btn primary">✓ Ticar todo y enviar</button>
+          <button class="btn glass">Ver</button>
+        </div>
+      </div>
+
+      <div class="card glass">
+        <div class="top">
+          <span class="num">#43</span>
+          <span class="pill amber">Por ticar</span>
+          <span class="pill beb">Bebidas</span>
+          <span class="total">6,00 €</span>
+        </div>
+        <div class="time">ahora · 20:16</div>
+        <div class="glabel">🍺 Bebidas</div>
+        <ul class="items">
+          <li><span class="qty">1×</span><span class="nchip">B23</span>Jarra Cruzcampo Radler</li>
+          <li><span class="qty">2×</span><span class="nchip">B41</span>Zumo de naranja</li>
+        </ul>
+        <div class="acts">
+          <button class="btn primary">✓ Ticar y enviar</button>
+          <button class="btn glass">Ver</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:6px">
+      <div>
+        <h2 class="sec">Bebidas activas · 1</h2>
+        <div class="card glass">
+          <div class="top"><span class="num">#41</span><span class="pill beb">Preparando</span><span class="total">3,20 €</span></div>
+          <ul class="items"><li><span class="qty">1×</span><span class="nchip">B30</span>Paulaner</li></ul>
+          <div class="acts"><button class="btn primary">Listo</button><button class="btn glass">Ver</button></div>
+        </div>
+      </div>
+      <div>
+        <h2 class="sec">Cocina · listos · 1</h2>
+        <div class="card glass">
+          <div class="top"><span class="num">#39</span><span class="pill green">Listo</span><span class="total">8,00 €</span></div>
+          <ul class="items"><li><span class="qty">1×</span><span class="nchip">RU4</span>MontyRueda Pizzas</li></ul>
+          <div class="acts"><button class="btn primary">Entregar</button><button class="btn glass">Ver</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="cocina">
+    <div class="kds">
+      <div class="kcol glass">
+        <div class="kh"><span class="t"><span class="dot" style="background:var(--blue)"></span> Recibido</span><span class="c">2</span></div>
+        <div class="ticket glass">
+          <div class="top"><span class="num">#44</span><span class="timer t-fresh">2 min</span></div>
+          <ul class="items">
+            <li><span class="qty">2×</span><span class="nchip">#13</span>Pulled pork BBQ</li>
+            <li><span class="qty">1×</span><span class="nchip">#48</span>Jamón gran reserva</li>
+          </ul>
+          <div class="acts"><button class="btn primary lg">▶ Empezar</button></div>
+        </div>
+        <div class="ticket glass">
+          <div class="top"><span class="num">#45</span><span class="timer t-fresh">ahora</span></div>
+          <ul class="items"><li><span class="qty">5×</span><span class="nchip">RU2</span>MontyRueda Perros</li></ul>
+          <div class="acts"><button class="btn primary lg">▶ Empezar</button></div>
+        </div>
+      </div>
+
+      <div class="kcol glass">
+        <div class="kh"><span class="t"><span class="dot" style="background:var(--amber)"></span> Preparando</span><span class="c">1</span></div>
+        <div class="ticket glass">
+          <div class="top"><span class="num">#42</span><span class="timer t-warn">7 min</span></div>
+          <ul class="items">
+            <li><span class="qty">1×</span><span class="nchip">#86</span>BBQ bacon y mozzarella</li>
+            <li><span class="qty">1×</span><span class="nchip">#90</span>Pepperoni y mozzarella</li>
+          </ul>
+          <div class="acts"><button class="btn primary">✓ Marcar listo</button><button class="btn glass icon">↩</button></div>
+        </div>
+      </div>
+
+      <div class="kcol glass">
+        <div class="kh"><span class="t"><span class="dot" style="background:var(--green)"></span> Listo</span><span class="c">1</span></div>
+        <div class="ticket glass">
+          <div class="top"><span class="num">#39</span><span class="timer t-late">12 min</span></div>
+          <ul class="items"><li><span class="qty">1×</span><span class="nchip">RU4</span>MontyRueda Pizzas</li></ul>
+          <div class="acts"><button class="btn primary">Entregar</button><button class="btn glass icon">↩</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="login">
+    <div class="login">
+      <div class="box glass">
+        <div class="lg">M</div>
+        <h1>Panel del personal</h1>
+        <p>Pulsa para entrar</p>
+        <button class="btn primary lg">Entrar</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  document.getElementById('screens').addEventListener('click',e=>{
+    const b=e.target.closest('[data-s]'); if(!b)return;
+    document.querySelectorAll('#screens button').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===b.dataset.s));
+  });
+</script>
+</body>
+</html>

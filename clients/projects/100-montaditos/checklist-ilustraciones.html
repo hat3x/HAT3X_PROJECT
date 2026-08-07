@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Checklist de ilustraciones — Cambio de carta julio 2026</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root{
+    --ink:#1b1815; --ink-soft:#4d453e; --dim:#867c73;
+    --paper:#ffffff; --surface:#f7f3ed; --line:#e6ded3; --line-hard:#d5c9ba;
+    --accent:#c4122f; --accent-soft:#fdeef0;
+    --value:#166b47; --value-soft:#e8f4ee; --amber:#b26a12; --amber-soft:#fbf1e1;
+    --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    --mono:"Cascadia Mono","SF Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--paper)}
+  body{font-family:var(--sans);color:var(--ink);font-size:10pt;line-height:1.5;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;min-height:297mm;padding:14mm 15mm 16mm;page-break-after:always;position:relative}
+  .page:last-child{page-break-after:auto}
+
+  .brandbar{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:2.5px solid var(--ink);padding-bottom:7px}
+  .logo{font-size:14pt;font-weight:800;letter-spacing:-.02em}
+  .logo span{color:var(--accent)}
+  .kicker{font-size:7.5pt;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+
+  h1{font-size:19pt;letter-spacing:-.03em;font-weight:800;margin-top:12px}
+  .lede{font-size:10pt;color:var(--ink-soft);margin-top:5px;max-width:145mm}
+
+  .summary{display:flex;gap:8px;margin-top:14px}
+  .chip{flex:1;border-radius:9px;padding:9px 12px;border:1px solid var(--line)}
+  .chip .n{font-size:17pt;font-weight:800;letter-spacing:-.02em;line-height:1}
+  .chip .l{font-size:7pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-top:3px}
+  .chip.need{background:var(--accent-soft)} .chip.need .n{color:var(--accent)}
+  .chip.review{background:var(--amber-soft)} .chip.review .n{color:var(--amber)}
+  .chip.ok{background:var(--value-soft)} .chip.ok .n{color:var(--value)}
+
+  h2{font-size:8pt;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
+     display:flex;align-items:center;gap:9px;margin:16px 0 8px}
+  h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  h2 .cnt{background:var(--ink);color:#fff;font-size:7pt;padding:1.5px 7px;border-radius:20px;letter-spacing:.02em}
+
+  .grupo{margin-bottom:5px}
+  .grupo-nota{font-size:8.5pt;color:var(--ink-soft);margin-bottom:6px}
+
+  table{width:100%;border-collapse:collapse;font-size:8.8pt}
+  .tbl{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:4px}
+  th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--line)}
+  thead th{font-size:6.8pt;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);
+    font-weight:800;background:var(--surface);border-bottom:1px solid var(--line-hard)}
+  tbody tr:last-child td{border-bottom:0}
+  td.chk{width:16px;text-align:center}
+  td.num{width:26px;font-weight:800;color:var(--accent);white-space:nowrap}
+  td.file{font-family:var(--mono);font-size:7.3pt;color:var(--dim);white-space:nowrap}
+  .box{width:10px;height:10px;border:1.6px solid var(--ink-soft);border-radius:2.5px;display:inline-block}
+
+  .review-tbl thead th{background:var(--amber-soft)}
+  .banner-tbl thead th{background:var(--accent-soft)}
+  .ok-tbl thead th{background:var(--value-soft)}
+
+  .instr{background:var(--surface);border-left:3px solid var(--ink);border-radius:0 8px 8px 0;
+    padding:9px 13px;font-size:8.8pt;color:var(--ink-soft);margin:10px 0 4px}
+  .instr b{color:var(--ink)}
+
+  footer{position:absolute;bottom:10mm;left:15mm;right:15mm;font-size:7pt;color:var(--dim);
+    border-top:1px solid var(--line);padding-top:6px;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">100 Montaditos · Móstoles</div>
+  </div>
+
+  <h1>Checklist de ilustraciones a actualizar</h1>
+  <p class="lede">Cambio de carta julio 2026. Para no dejar imágenes rotas mientras se sincronizaba la carta, varios montaditos con ingredientes nuevos están mostrando temporalmente el dibujo de otro plato. Este documento es la lista de qué ilustraciones hay que encargar de verdad.</p>
+
+  <div class="summary">
+    <div class="chip need"><div class="n">29</div><div class="l">Necesitan ilustración nueva</div></div>
+    <div class="chip review"><div class="n">2</div><div class="l">Revisar con calma</div></div>
+    <div class="chip ok"><div class="n">8</div><div class="l">Correctas, no tocar</div></div>
+  </div>
+
+  <div class="instr">
+    <b>Instrucción general para quien ilustre:</b> mismo estilo plano/ilustrado que la carta actual, fondo transparente, mismo tamaño de lienzo. La columna "Archivo a sustituir" es el nombre exacto del fichero que hay que entregar — al guardarlo con ese mismo nombre, sustituye automáticamente la imagen provisional sin tocar código.
+  </div>
+
+  <h2>Rabas de calamar <span class="cnt">6</span></h2>
+  <div class="grupo-nota">Restalia los trata como producto distinto de "Calamarcitos" (IN/OUT del comunicado) — no es un simple cambio de nombre, el corte es otro.</div>
+  <div class="tbl"><table>
+    <thead><tr><th class="chk"></th><th class="num">#</th><th>Plato (ingredientes reales)</th><th>Archivo a sustituir</th></tr></thead>
+    <tbody>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">6</td><td>Rabas de calamar y mayonesa</td><td class="file">calamarcitos-y-mayonesa.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">38</td><td>Rabas de calamar y salsa alioli</td><td class="file">calamarcitos-y-salsa-alioli.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">39</td><td>Rabas de calamar y tomate</td><td class="file">calamarcitos-y-salsa-naranja.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">40</td><td>Rabas de calamar y guacamole</td><td class="file">calamarcitos-y-guacamole.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">41</td><td>Rabas de calamar, salsa brava y mayonesa</td><td class="file">calamarcitos-salsa-brava-y-mayonesa.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">42</td><td>Rabas de calamar, alioli y salsa brava</td><td class="file">calamarcitos-tomate-y-mayonesa.png</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Oreja en salsa picantona <span class="cnt">7</span></h2>
+  <div class="grupo-nota">Ingrediente completamente nuevo — hoy muestran bacon ahumado, queso o tomate de otros platos antiguos.</div>
+  <div class="tbl"><table>
+    <thead><tr><th class="chk"></th><th class="num">#</th><th>Plato (ingredientes reales)</th><th>Archivo a sustituir</th></tr></thead>
+    <tbody>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">8</td><td>Oreja en salsa picantona</td><td class="file">bacon-ahumado-y-queso-madurado.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">14</td><td>Tortilla de patatas y oreja en salsa picantona</td><td class="file">tortilla-de-patatas-y-mojo-picon.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">43</td><td>Oreja en salsa picantona y salsa brava</td><td class="file">bacon-ahumado-tomate-y-mayonesa.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">44</td><td>Oreja en salsa picantona y salsa alioli</td><td class="file">bacon-ahumado-cebolla-crujiente-y-salsa-naranja.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">45</td><td>Oreja en salsa picantona y mojo picón</td><td class="file">bacon-ahumado-tomate-y-queso-gorgonzola.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">46</td><td>Oreja en salsa picantona y salsa 100M</td><td class="file">bacon-ahumado-patatas-paja-y-mayonesa.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">47</td><td>Oreja en salsa picantona y patatas paja</td><td class="file">bacon-ahumado-tomate-y-queso-madurado.png</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Atún — combinación nueva en Clásicos <span class="cnt">3</span></h2>
+  <div class="grupo-nota">Hoy muestran pollo kebab en vez de atún.</div>
+  <div class="tbl"><table>
+    <thead><tr><th class="chk"></th><th class="num">#</th><th>Plato (ingredientes reales)</th><th>Archivo a sustituir</th></tr></thead>
+    <tbody>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">9</td><td>Atún y mayonesa</td><td class="file">torreznos-y-salsa-brava.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">24</td><td>Atún y tomate</td><td class="file">pollo-kebab-tomate-y-salsa-naranja.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">25</td><td>Atún, mayonesa y huevo hilado</td><td class="file">pollo-kebab-patatas-paja-y-salsa-bbq.png</td></tr>
+    </tbody>
+  </table></div>
+
+  <footer><span>Checklist de ilustraciones · 100 Montaditos Móstoles</span><span>1 / 2</span></footer>
+</div>
+
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">100 Montaditos · Móstoles</div>
+  </div>
+
+  <h2 style="margin-top:14px">Crema de queso camembert <span class="cnt">4</span></h2>
+  <div class="grupo-nota">Ingrediente nuevo — hoy no se ve ningún camembert en la imagen.</div>
+  <div class="tbl"><table>
+    <thead><tr><th class="chk"></th><th class="num">#</th><th>Plato (ingredientes reales)</th><th>Archivo a sustituir</th></tr></thead>
+    <tbody>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">18</td><td>Pollo, crema de queso camembert y salsa de mostaza y miel</td><td class="file">pollo-tomate-y-mojo-picon.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">29</td><td>Pulled pork BBQ y crema de queso camembert</td><td class="file">pulled-pork-bbq-y-salsa-brava.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">35</td><td>Lomo al ajillo, crema de queso camembert y tomate</td><td class="file">lomo-al-ajillo-tomate-y-patatas-paja.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">61</td><td>Salmón ahumado y crema de queso camembert</td><td class="file">salmon-ahumado-y-tomate.png</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>MontyCookie y Piadina <span class="cnt">2</span></h2>
+  <div class="grupo-nota">El sirope de la cookie cambió de color (toffee ámbar → chocolate blanco); la piadina hoy muestra jamón y tomate en vez de doble queso.</div>
+  <div class="tbl"><table>
+    <thead><tr><th class="chk"></th><th class="num">#</th><th>Plato (ingredientes reales)</th><th>Archivo a sustituir</th></tr></thead>
+    <tbody>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">68</td><td>Doble chocolate y sirope de chocolate blanco</td><td class="file">montycookie-doble-chocolate-y-sirope-de-caramelo-toffee.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">75</td><td>Queso mozzarella, queso gorgonzola y orégano</td><td class="file">piadina-de-jamon-cocido-queso-madurado-y-tomate.png</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Otras recombinaciones sueltas <span class="cnt">6</span></h2>
+  <div class="grupo-nota">Cada uno muestra un ingrediente distinto al real (mantequilla en vez de queso, BBQ en vez de cheddar, etc.).</div>
+  <div class="tbl"><table>
+    <thead><tr><th class="chk"></th><th class="num">#</th><th>Plato (ingredientes reales)</th><th>Archivo a sustituir</th></tr></thead>
+    <tbody>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">48</td><td>Jamón Gran Reserva y queso madurado</td><td class="file">jamon-gran-reserva-y-mantequilla.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">50</td><td>Jamón Gran Reserva, tomate y queso madurado</td><td class="file">jamon-gran-reserva-tomate-y-patatas-paja.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">54</td><td>Carrillera al vino tinto y salsa cheddar</td><td class="file">carrillera-al-vino-tinto-y-tomate.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">57</td><td>Torreznos y mojo picón</td><td class="file">torreznos-y-mayonesa.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">66</td><td>Chorizo parrillero y queso madurado</td><td class="file">chorizo-parrillero-y-salsa-bbq.png</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">67</td><td>Chorizo parrillero, salsa cheddar y cebolla crujiente</td><td class="file">chorizo-parrillero-y-guacamole.png</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Banner de promoción <span class="cnt">1</span></h2>
+  <div class="grupo-nota">No es un montadito — es el cartel de la sección Desayunos. Hoy reutiliza la foto de la MontyCookie (la versión antigua de toffee) como imagen de portada.</div>
+  <div class="tbl banner-tbl"><table>
+    <thead><tr><th class="chk"></th><th>Elemento</th><th>Qué debe mostrar</th><th>Archivo a sustituir</th></tr></thead>
+    <tbody>
+      <tr><td class="chk"><span class="box"></span></td><td style="font-weight:700">Desayuno Dulce</td><td>Café + 1 MontyCookie (a elegir), como en el tabletent oficial</td><td class="file">montycookie-doble-chocolate-y-sirope-de-caramelo-toffee.png</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Revisar con calma <span class="cnt">2</span></h2>
+  <div class="tbl review-tbl"><table>
+    <thead><tr><th class="chk"></th><th class="num">#</th><th>Plato</th><th>Duda</th></tr></thead>
+    <tbody>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">10</td><td>Lomo al ajillo</td><td>La imagen actual podría mostrar una salsa de más que ya no lleva el plato</td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">26</td><td>Atún, tomate y mayonesa</td><td>Ingredientes correctos (comparte foto con el Gourmet #98); el pan podría no ser el mismo estilo</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Correctas — no encargar <span class="cnt">8</span></h2>
+  <div class="grupo-nota">Son el mismo plato exacto que antes; Restalia solo les cambió el número de casilla.</div>
+  <div class="tbl ok-tbl"><table>
+    <thead><tr><th class="num">#</th><th>Plato</th></tr></thead>
+    <tbody>
+      <tr><td class="num">19</td><td>Pollo, bacon ahumado y mayonesa</td></tr>
+      <tr><td class="num">20</td><td>Pollo, patatas paja y salsa BBQ</td></tr>
+      <tr><td class="num">21</td><td>Pollo kebab y salsa cheddar</td></tr>
+      <tr><td class="num">22</td><td>Pollo kebab, patatas paja y salsa BBQ</td></tr>
+      <tr><td class="num">23</td><td>Pollo kebab, bacon ahumado y mayonesa</td></tr>
+      <tr><td class="num">79</td><td>Hot dog, patatas paja y salsa BBQ</td></tr>
+      <tr><td class="num">85</td><td>Burger, cebolla crujiente y salsa cheddar</td></tr>
+      <tr><td class="num">94</td><td>Pintxo Donostiarra y cebolla crujiente</td></tr>
+    </tbody>
+  </table></div>
+
+  <footer><span>Checklist de ilustraciones · 100 Montaditos Móstoles</span><span>2 / 2</span></footer>
+</div>
+
+</body>
+</html>

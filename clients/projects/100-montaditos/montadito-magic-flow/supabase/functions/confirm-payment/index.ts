@@ -30,8 +30,9 @@ Deno.serve(async (req) => {
     if (pErr || !pedido) throw new Error("pedido no encontrado");
     if (pedido.session_id !== session_id) throw new Error("session_id no coincide");
 
-    // Idempotente: si ya está confirmado, devolvemos ok
-    if (pedido.estado !== "pendiente_pago") {
+    // Idempotente: si ya está confirmado, devolvemos ok. PERO si está 'cancelado'
+    // (el cron lo canceló por tardar en pagar), seguimos para REACTIVARLO con el pago.
+    if (pedido.estado !== "pendiente_pago" && pedido.estado !== "cancelado") {
       return new Response(JSON.stringify({ ok: true, already: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -63,7 +64,7 @@ Deno.serve(async (req) => {
         stripe_payment_id: intent.id,
       })
       .eq("id", pedido_id)
-      .eq("estado", "pendiente_pago");
+      .in("estado", ["pendiente_pago", "cancelado"]); // reactivar también si el cron lo canceló
     if (upErr) throw upErr;
 
     return new Response(JSON.stringify({ ok: true }), {

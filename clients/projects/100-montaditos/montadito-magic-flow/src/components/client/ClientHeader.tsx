@@ -10,16 +10,24 @@ interface Props {
   onCartClick: () => void;
   onChangeLocal?: () => void;
   onFilterClick?: () => void;
+  onHome?: () => void;
 }
 
-export function ClientHeader({ localName, mesa, onCartClick, onChangeLocal, onFilterClick }: Props) {
+export function ClientHeader({ localName, mesa, onCartClick, onChangeLocal, onFilterClick, onHome }: Props) {
   const itemCount = useCartStore((s) => s.itemCount);
   const excludedCount = useAllergenFilter((s) => s.excluded.length);
 
   return (
     <header className="sticky top-0 z-30 glass px-4 py-3">
       <div className="flex items-center justify-between gap-2 max-w-lg mx-auto">
-        <img src={logo} alt="100 Montaditos" className="h-12 shrink-0" />
+        <motion.button
+          whileTap={{ scale: 0.92 }}
+          onClick={onHome}
+          aria-label="Volver al inicio"
+          className="shrink-0"
+        >
+          <img src={logo} alt="100 Montaditos · Inicio" className="h-12" />
+        </motion.button>
 
         {localName && (
           <button
