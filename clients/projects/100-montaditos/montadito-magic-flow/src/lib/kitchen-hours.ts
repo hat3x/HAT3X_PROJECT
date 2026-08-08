@@ -24,6 +24,15 @@ function madridParts(d = new Date()): { dow: number; minutes: number } {
 
 /** ¿La cocina está abierta ahora mismo (hora de Madrid)? */
 export function isCocinaOpen(d = new Date()): boolean {
+  // Bypass de PRUEBAS: añade ?cocina=1 a la URL para forzar la cocina abierta y poder
+  // pedir comida fuera de horario (tests desde la app). Inofensivo en producción: solo
+  // se activa si se pone el parámetro a mano; para el cliente normal sigue el horario.
+  if (typeof window !== 'undefined') {
+    try {
+      if (new URLSearchParams(window.location.search).get('cocina') === '1') return true;
+    } catch { /* ignore */ }
+  }
+
   const { dow, minutes } = madridParts(d);
 
   // Madrugada (00:00–05:59): pertenece al servicio del día anterior.

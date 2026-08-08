@@ -10,6 +10,7 @@ import { unlockAudio, startAlarm, stopAlarm, isAudioUnlocked } from '@/lib/alarm
 import { usePushSubscription } from '@/hooks/use-push-notifications';
 import { AllergenIcon } from './AllergenIcon';
 import { AllergenLegalNotice } from './AllergenLegalNotice';
+import { RatingCard } from './RatingCard';
 
 
 const fireReadyConfetti = () => {
@@ -469,6 +470,9 @@ export function OrderTracking({ pedidoId, numeroPedido, hasCocina, hasBebidas, s
           No cierres esta pantalla: es tu comprobante para recoger comida y bebida.
         </p>
       )}
+
+      {/* Valoración del cliente: máx. 1 vez al día por móvil, tras el pedido */}
+      <RatingCard pedidoId={pedidoId} />
 
       {/* ALARMA a pantalla completa: suena en bucle hasta que el cliente pulsa OK */}
       {alarmOpen && (

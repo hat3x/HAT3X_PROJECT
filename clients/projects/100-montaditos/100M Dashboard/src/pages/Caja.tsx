@@ -270,8 +270,12 @@ const Caja = () => {
   );
 
   const stats = useMemo(() => {
-    const total = pedidos.length;
-    const ingresos = pedidos.reduce((s, p) => s + Number(p.total), 0);
+    // Solo cuentan los pedidos PAGADOS de verdad (estado ni 'pendiente_pago' ni
+    // 'cancelado'): así "Ingresos"/"Ticket medio"/"Pedidos hoy" no incluyen pagos
+    // abandonados ni cancelados (que antes inflaban los ingresos).
+    const pagados = pedidos.filter((p) => p.estado !== "pendiente_pago" && p.estado !== "cancelado");
+    const total = pagados.length;
+    const ingresos = pagados.reduce((s, p) => s + Number(p.total), 0);
     const ticket = total ? ingresos / total : 0;
     const pendientes = pedidos.filter(
       (p) => isActivo(p.estado_cocina) || isActivo(p.estado_bebidas),

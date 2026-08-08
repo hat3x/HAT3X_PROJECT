@@ -16,6 +16,7 @@ export const StaffHeader = ({ title, subtitle }: Props) => {
   const isHistorico = location.pathname.startsWith("/historico");
   const isAnalitica = location.pathname.startsWith("/analitica");
   const isAgotados = location.pathname.startsWith("/agotados");
+  const isValoraciones = location.pathname.startsWith("/valoraciones");
   const local = useStaffLocal((s) => s.local);
   const isAdmin = role === "admin";
 
@@ -81,6 +82,15 @@ export const StaffHeader = ({ title, subtitle }: Props) => {
               onClick={() => navigate(isHistorico ? "/caja" : "/historico")}
             >
               {isHistorico ? "Caja" : "Histórico"}
+            </Button>
+          )}
+          {(role === "caja" || role === "admin") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(isValoraciones ? "/caja" : "/valoraciones")}
+            >
+              {isValoraciones ? "Caja" : "Valoraciones"}
             </Button>
           )}
           {(role === "caja" || role === "cocina" || role === "admin") && (
