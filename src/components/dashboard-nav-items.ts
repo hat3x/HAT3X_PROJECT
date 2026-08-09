@@ -55,9 +55,9 @@ export const PRIMARY_NAV_ITEMS: readonly NavItem[] = [
   { href: "/appointments", label: "Citas", icon: CalendarClock },
   { href: "/recordatorios", label: "Recordatorios", icon: BellRing },
   { href: "/tpv", label: "Caja", icon: ShoppingBag },
-  { href: "/arqueo", label: "Arqueo", icon: Wallet },
   { href: "/customers", label: "Clientes", icon: Users },
   { href: "/products", label: "Productos", icon: Package },
+  { href: "/fichaje", label: "Fichaje", icon: Clock },
 ];
 
 /**
@@ -80,6 +80,16 @@ export const FACTURACION_ITEM: NavItem = {
   href: "/facturacion",
   label: "Facturación",
   icon: FileText,
+};
+
+/**
+ * Arqueo de caja (recuento y cuadre del efectivo del día). Materia de gestión
+ * sensible (movimientos de dinero) → solo owner/manager, como Analítica.
+ */
+export const ARQUEO_ITEM: NavItem = {
+  href: "/arqueo",
+  label: "Arqueo",
+  icon: Wallet,
 };
 
 /** Ajustes del salón. Materia de gestión → solo owner/manager. */
@@ -176,6 +186,7 @@ export function buildDashboardNavItems({
     if (hasPos) {
       items.push(FACTURACION_ITEM);
     }
+    items.push(ARQUEO_ITEM);
     items.push(SETTINGS_ITEM);
   }
 

@@ -33,7 +33,12 @@ import {
   getNewVsReturningCustomers,
   getSalesSummary,
 } from "@/lib/metrics";
-import { getActiveSalon, type ActiveSalon } from "@/lib/salon";
+import {
+  canManageSettings,
+  getActiveMembership,
+  getActiveSalon,
+  type ActiveSalon,
+} from "@/lib/salon";
 import { salonHasFeature } from "@/lib/salon-features";
 import { sectorTerms, type SectorTerms } from "@/lib/sector/registry";
 import { createClient } from "@/lib/supabase/server";
@@ -128,16 +133,19 @@ function buildShortcuts(
 async function loadDashboardMetrics(
   supabase: ServerSupabase,
   salon: ActiveSalon,
+  canSeeRevenue: boolean,
 ): Promise<DashboardMetric[]> {
   const today = localDateInZone(salon.timezone); // YYYY-MM-DD en la zona del salón
   const monthStart = `${today.slice(0, 7)}-01`; // primer día del mes en curso
   const todayPeriod = { from: today, to: today };
   const monthPeriod = { from: monthStart, to: today };
 
-  const hasPos = await salonHasFeature(supabase, salon.id, "pos");
+  // Los KPIs de INGRESOS son materia sensible: requieren add-on `pos` Y rol de
+  // gestión (owner/manager). Un `staff` ve ocupación y clientes, pero no dinero.
+  const showRevenue = (await salonHasFeature(supabase, salon.id, "pos")) && canSeeRevenue;
 
   const [sales, newVsReturning, occupancy] = await Promise.all([
-    hasPos
+    showRevenue
       ? getSalesSummary(supabase, salon.id, todayPeriod)
       : Promise.resolve(null),
     getNewVsReturningCustomers(supabase, salon.id, monthPeriod),
@@ -145,7 +153,7 @@ async function loadDashboardMetrics(
   ]);
 
   return buildDashboardMetrics({
-    hasPos,
+    hasPos: showRevenue,
     sales,
     newCustomers: newVsReturning.new_customers,
     occupancy,
@@ -165,7 +173,11 @@ export default async function DashboardPage(): Promise<React.ReactElement> {
   }
 
   const salon = await getActiveSalon();
-  const metrics = salon ? await loadDashboardMetrics(supabase, salon) : null;
+  const membership = await getActiveMembership();
+  const canSeeRevenue = canManageSettings(membership?.role);
+  const metrics = salon
+    ? await loadDashboardMetrics(supabase, salon, canSeeRevenue)
+    : null;
 
   // Sin salón: empty state apagado (no hay datos que agregar). Con salón: KPIs reales.
   const cards = metrics ?? PLACEHOLDER_METRICS;

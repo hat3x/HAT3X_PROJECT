@@ -35,3 +35,4 @@ next-env.d.ts
 
 # Supabase CLI local state (project ref, pooler cache) — no versionar
 supabase/.temp/
+.env*

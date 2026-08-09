@@ -1,19 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   CalendarRange,
   ChevronLeft,
   ChevronRight,
   Clock,
+  Euro,
   MessageCircle,
   Phone,
   Plus,
   Scissors,
+  StickyNote,
+  Trash2,
   User,
 } from "lucide-react";
 
 import { AppointmentForm } from "@/app/(dashboard)/appointments/appointment-form";
+import {
+  CalendarView,
+  type CalendarMode,
+} from "@/app/(dashboard)/appointments/calendar-view";
 import { RescheduleDialog } from "@/app/(dashboard)/appointments/reschedule-dialog";
 import {
   AppointmentStatusBadge,
@@ -35,10 +43,12 @@ import { formatLongDate, formatPrice, formatSlotTime } from "@/lib/booking/forma
 import { localDateInZone } from "@/lib/booking/timezone";
 import {
   useAppointments,
+  useDeleteAppointment,
   useProfessionals,
   useSendAppointmentReminder,
   useUpdateAppointmentStatus,
 } from "@/hooks/use-appointments";
+import { useDayPanelRealtime } from "@/hooks/use-day-panel-realtime";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
 import type { AppointmentStatus } from "@/types/database";
 
@@ -61,6 +71,7 @@ export function AppointmentsView({
   const today = localDateInZone(timezone);
 
   const [date, setDate] = useState<string>(today);
+  const [view, setView] = useState<"dia" | CalendarMode>("dia");
   const [filterProfessionalId, setFilterProfessionalId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [cancelState, setCancelState] = useState<{
@@ -68,6 +79,10 @@ export function AppointmentsView({
     appointmentId: string;
     reason: string;
   }>({ open: false, appointmentId: "", reason: "" });
+  const [deleteState, setDeleteState] = useState<{
+    open: boolean;
+    appointment: AppointmentWithDetails | null;
+  }>({ open: false, appointment: null });
   const [rescheduleState, setRescheduleState] = useState<{
     open: boolean;
     appointment: AppointmentWithDetails | null;
@@ -76,6 +91,10 @@ export function AppointmentsView({
   const appointmentsQuery = useAppointments(salonId, date, timezone, filterProfessionalId);
   const professionalsQuery = useProfessionals(salonId);
   const statusMutation = useUpdateAppointmentStatus(salonId, date, filterProfessionalId);
+  const deleteMutation = useDeleteAppointment(salonId, date, filterProfessionalId);
+  // Tiempo real: al crear/mover/cancelar una cita (p. ej. Sara la coge por teléfono),
+  // Supabase Realtime invalida la caché y la lista se actualiza sola, sin recargar.
+  const realtimeStatus = useDayPanelRealtime(salonId);
   const reminderMutation = useSendAppointmentReminder();
   const [reminderResult, setReminderResult] = useState<{
     appointmentId: string;
@@ -89,6 +108,10 @@ export function AppointmentsView({
       return;
     }
     statusMutation.mutate({ id, status });
+  }
+
+  function handleDelete(appointment: AppointmentWithDetails): void {
+    setDeleteState({ open: true, appointment });
   }
 
   function handleSendReminder(appointmentId: string): void {
@@ -124,13 +147,31 @@ export function AppointmentsView({
     );
   }
 
+  function confirmDelete(): void {
+    if (!deleteState.appointment) return;
+    deleteMutation.mutate(deleteState.appointment.id, {
+      onSuccess: () => setDeleteState({ open: false, appointment: null }),
+    });
+  }
+
   return (
     <main className="container max-w-4xl py-10 sm:py-12">
       {/* Header */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Citas</h1>
-          <p className="text-muted-foreground">Agenda del salón</p>
+          <p className="flex items-center gap-2 text-muted-foreground">
+            Agenda del salón
+            {realtimeStatus === "connected" && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                En directo
+              </span>
+            )}
+          </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <Button onClick={() => setCreateOpen(true)} className="shadow-brand">
@@ -155,7 +196,49 @@ export function AppointmentsView({
         </Dialog>
       </div>
 
-      {/* Navegación de fecha */}
+      {/* Conmutador de vista: día · semana · mes · año */}
+      <div className="mb-5 flex flex-wrap gap-2 animate-fade-in">
+        {(
+          [
+            ["dia", "Día"],
+            ["semana", "Semana"],
+            ["mes", "Mes"],
+            ["ano", "Año"],
+          ] as const
+        ).map(([value, labelText]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setView(value)}
+            className={cn(
+              "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 ease-apple-out",
+              view === value
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-accent-foreground",
+            )}
+          >
+            {labelText}
+          </button>
+        ))}
+      </div>
+
+      {view !== "dia" ? (
+        <CalendarView
+          salonId={salonId}
+          timezone={timezone}
+          mode={view}
+          date={date}
+          onDateChange={setDate}
+          onPickDay={(d) => {
+            setDate(d);
+            setView("dia");
+          }}
+        />
+      ) : null}
+
+      {/* Contenido de la vista DÍA: navegación de fecha + filtro + lista */}
+      {view === "dia" && (
+        <>
       <div className="mb-5 flex flex-wrap items-center gap-3 animate-fade-in">
         <div className="inline-flex items-center gap-1 rounded-full border bg-card p-1 shadow-sm">
           <Button
@@ -271,6 +354,7 @@ export function AppointmentsView({
                 onReschedule={(a) =>
                   setRescheduleState({ open: true, appointment: a })
                 }
+                onDelete={handleDelete}
                 mutating={statusMutation.isPending}
                 onSendReminder={handleSendReminder}
                 reminderPending={
@@ -283,6 +367,8 @@ export function AppointmentsView({
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
 
       {/* Dialog de cancelación */}
@@ -334,6 +420,54 @@ export function AppointmentsView({
         </DialogContent>
       </Dialog>
 
+      {/* Dialog de borrado (hard delete) */}
+      <Dialog
+        open={deleteState.open}
+        onOpenChange={(open) => {
+          if (!open) setDeleteState((s) => ({ ...s, open: false }));
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Borrar cita</DialogTitle>
+            <DialogDescription>
+              Se eliminará la cita por completo. Esta acción no se puede deshacer. Si solo
+              quieres anularla conservando el registro, usa «Cancelar».
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {deleteState.appointment && (
+              <p className="text-sm text-muted-foreground">
+                {deleteState.appointment.customer?.full_name ?? "—"}
+                <span className="mx-1.5 text-muted-foreground/50">·</span>
+                {deleteState.appointment.service?.name ?? "—"}
+              </p>
+            )}
+            {deleteMutation.isError && (
+              <p className="text-sm text-destructive">
+                {(deleteMutation.error as Error).message}
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteState((s) => ({ ...s, open: false }))}
+                disabled={deleteMutation.isPending}
+              >
+                Volver
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDelete}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? "Borrando…" : "Borrar definitivamente"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog de reprogramación */}
       {rescheduleState.appointment && (
         <RescheduleDialog
@@ -357,6 +491,7 @@ interface AppointmentCardProps {
   timezone: string;
   onStatusChange: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appointment: AppointmentWithDetails) => void;
+  onDelete: (appointment: AppointmentWithDetails) => void;
   mutating: boolean;
   onSendReminder: (id: string) => void;
   reminderPending: boolean;
@@ -368,6 +503,7 @@ function AppointmentCard({
   timezone,
   onStatusChange,
   onReschedule,
+  onDelete,
   mutating,
   onSendReminder,
   reminderPending,
@@ -376,6 +512,7 @@ function AppointmentCard({
   const isPending = appt.status === "pending";
   const isConfirmed = appt.status === "confirmed";
   const isActive = isPending || isConfirmed;
+  const isCompleted = appt.status === "completed";
   const isMuted = appt.status === "cancelled" || appt.status === "no_show";
 
   return (
@@ -433,6 +570,13 @@ function AppointmentCard({
             </span>
           </p>
 
+          {appt.notes && appt.notes.trim() !== "" && (
+            <p className="flex items-start gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-foreground/80">
+              <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="whitespace-pre-wrap">{appt.notes}</span>
+            </p>
+          )}
+
           {appt.status === "cancelled" && appt.cancelled_reason && (
             <p className="text-xs italic text-muted-foreground">
               Motivo: {appt.cancelled_reason}
@@ -461,6 +605,12 @@ function AppointmentCard({
             >
               <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
               {reminderPending ? "Enviando…" : "Enviar recordatorio"}
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/tpv?appointment=${appt.id}`}>
+                <Euro className="mr-1.5 h-3.5 w-3.5" />
+                Cobrar
+              </Link>
             </Button>
             {isPending && (
               <Button
@@ -504,6 +654,31 @@ function AppointmentCard({
               onClick={() => onStatusChange(appt.id, "cancelled")}
             >
               Cancelar
+            </Button>
+          </div>
+        )}
+
+        {isCompleted && (
+          <div className="flex sm:flex-col sm:items-stretch">
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/tpv?appointment=${appt.id}`}>
+                <Euro className="mr-1.5 h-3.5 w-3.5" />
+                Cobrar
+              </Link>
+            </Button>
+          </div>
+        )}
+
+        {appt.status === "cancelled" && (
+          <div className="flex sm:flex-col sm:items-stretch">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => onDelete(appt)}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Borrar
             </Button>
           </div>
         )}

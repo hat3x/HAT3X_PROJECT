@@ -20,6 +20,8 @@ import {
 
 import { CustomerAvatar } from "@/app/(dashboard)/customers/customer-avatar";
 import { CustomerForm } from "@/app/(dashboard)/customers/customer-form";
+import { BillingHistoryCard } from "@/app/(dashboard)/customers/[id]/billing-history-card";
+import { ClinicalHistoryCard } from "@/app/(dashboard)/customers/[id]/clinical-history-card";
 import { ClinicalRecordCard } from "@/app/(dashboard)/customers/[id]/clinical-record-card";
 import { InsuranceCard } from "@/app/(dashboard)/customers/[id]/insurance-card";
 import { VisitNotesCard } from "@/app/(dashboard)/customers/[id]/visit-notes-card";
@@ -326,6 +328,20 @@ export function CustomerDetailView({
       {salonSector === "odontologia" ? (
         <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:320ms]">
           <ClinicalRecordCard salonId={salonId} customerId={customerId} />
+        </div>
+      ) : null}
+
+      {/* Historial clínico / evolutivo — solo sector odontología */}
+      {salonSector === "odontologia" ? (
+        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:340ms]">
+          <ClinicalHistoryCard salonId={salonId} customerId={customerId} />
+        </div>
+      ) : null}
+
+      {/* Facturación histórica — solo sector odontología */}
+      {salonSector === "odontologia" ? (
+        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:350ms]">
+          <BillingHistoryCard salonId={salonId} customerId={customerId} />
         </div>
       ) : null}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Award,
@@ -156,6 +156,12 @@ interface TpvViewProps {
    * 403); el resto del cobro funciona igual, la fidelización es aditiva.
    */
   loyaltyEnabled: boolean;
+  /**
+   * Cita de la que arrancar el cobro automáticamente al abrir la caja (viene de
+   * "Cobrar" en el panel de citas: /tpv?appointment=<id>). Solo surte efecto si
+   * la cita está en las citas abiertas de hoy.
+   */
+  initialAppointmentId?: string;
 }
 
 /**
@@ -169,6 +175,7 @@ export function TpvView({
   salonName,
   timezone,
   loyaltyEnabled,
+  initialAppointmentId,
 }: TpvViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
@@ -193,6 +200,20 @@ export function TpvView({
   const products = useSaleProducts(salonId, tab === "products" ? search : "");
   const paymentMethods = useSalePaymentMethods(salonId);
   const appointments = useOpenAppointments(salonId, today, timezone);
+
+  // "Cobrar" desde el panel de citas abre /tpv?appointment=<id>: en cuanto la
+  // lista de citas abiertas de hoy carga, arrancamos esa venta una sola vez.
+  const startedFromParamRef = useRef(false);
+  useEffect(() => {
+    if (startedFromParamRef.current || initialAppointmentId === undefined) return;
+    const match = appointments.data?.find((a) => a.id === initialAppointmentId);
+    if (match !== undefined) {
+      startedFromParamRef.current = true;
+      startFromAppointment(match);
+    }
+    // startFromAppointment es una declaración hoisted y estable; no va en deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAppointmentId, appointments.data]);
   const createSale = useCreateSale(salonId);
   // Fidelización: lookup de SOLO LECTURA por QR. Aditivo — no interviene en el
   // cobro; si no se escanea a nadie, la caja se comporta igual que siempre.

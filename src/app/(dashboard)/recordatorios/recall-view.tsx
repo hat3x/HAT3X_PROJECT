@@ -129,7 +129,7 @@ export function RecallView({ salonId }: RecallViewProps): React.ReactElement {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm animate-fade-up [animation-delay:120ms]">
+      <div className="overflow-x-auto rounded-xl border bg-card shadow-sm animate-fade-up [animation-delay:120ms]">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -214,8 +214,11 @@ export function RecallView({ salonId }: RecallViewProps): React.ReactElement {
                           disabled={isSending}
                           onClick={() => handleSend(patient.customerId)}
                         >
-                          <BellRing className="mr-2 h-3.5 w-3.5" />
-                          {isSending ? "Enviando…" : "Enviar recordatorio de revisión"}
+                          <BellRing className="h-3.5 w-3.5 sm:mr-2" />
+                          <span className="hidden sm:inline">
+                            {isSending ? "Enviando…" : "Enviar recordatorio de revisión"}
+                          </span>
+                          <span className="sr-only sm:hidden">Enviar recordatorio</span>
                         </Button>
                         {rowResult && (
                           <p

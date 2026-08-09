@@ -6,6 +6,7 @@ import {
   updateAppointmentStatus,
   createAppointment,
   rescheduleAppointment,
+  deleteAppointment,
   type CreateAppointmentInput,
   type RescheduleAppointmentInput,
 } from "@/app/(dashboard)/appointments/actions";
@@ -13,6 +14,7 @@ import { sendAppointmentReminder } from "@/app/(dashboard)/appointments/reminder
 import {
   appointmentKeys,
   fetchAppointments,
+  fetchAppointmentsRange,
   fetchProfessionalsForDashboard,
   fetchServiceProfessionalsMap,
   fetchServicesForDashboard,
@@ -35,6 +37,23 @@ export function useAppointments(
   return useQuery({
     queryKey: appointmentKeys.list(salonId, date, professionalId),
     queryFn: () => fetchAppointments(salonId, date, timezone, professionalId),
+  });
+}
+
+/**
+ * Citas del salón en un rango de días locales [startDate, endDateExclusive)
+ * ("YYYY-MM-DD"). Para las vistas de calendario (semana / mes / año).
+ */
+export function useAppointmentsRange(
+  salonId: string,
+  startDate: string,
+  endDateExclusive: string,
+  timezone: string,
+) {
+  return useQuery({
+    queryKey: appointmentKeys.range(salonId, startDate, endDateExclusive),
+    queryFn: () =>
+      fetchAppointmentsRange(salonId, startDate, endDateExclusive, timezone),
   });
 }
 
@@ -157,6 +176,31 @@ export function useUpdateAppointmentStatus(
       status: AppointmentStatus;
       reason?: string;
     }) => updateAppointmentStatus(id, status, reason),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: appointmentKeys.list(salonId, date, professionalId),
+      });
+    },
+  });
+}
+
+/**
+ * BORRA (hard delete) una cita e invalida la lista del día. La mutación LANZA si
+ * la action devuelve `{ ok: false }` (p. ej. FK / sin permiso), para que la UI
+ * pueda mostrar el error vía `isError`/`onError`.
+ */
+export function useDeleteAppointment(
+  salonId: string,
+  date: string,
+  professionalId: string | null,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await deleteAppointment(id);
+      if (!res.ok) throw new Error(res.error);
+      return res.data;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: appointmentKeys.list(salonId, date, professionalId),

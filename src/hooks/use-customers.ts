@@ -30,6 +30,22 @@ export function useCustomers(salonId: string, search: string) {
   });
 }
 
+/**
+ * Búsqueda de clientes para pickers (p. ej. crear cita). A diferencia de
+ * useCustomers, solo consulta cuando hay ≥ 2 caracteres, evitando cargar todo
+ * el fichero de clientes hasta que el usuario teclea. Busca por nombre, email
+ * o teléfono (ver fetchCustomers).
+ */
+export function useCustomerSearch(salonId: string, term: string) {
+  const q = term.trim();
+  return useQuery({
+    queryKey: customerKeys.list(salonId, q),
+    queryFn: () => fetchCustomers(salonId, q),
+    enabled: q.length >= 2,
+    placeholderData: keepPreviousData,
+  });
+}
+
 /** Ficha individual; acepta `initialData` del Server Component para hidratar. */
 export function useCustomer(
   salonId: string,

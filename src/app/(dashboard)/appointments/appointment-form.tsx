@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Search, X } from "lucide-react";
 
 import { DaySlots, DaySlotsSkeleton } from "@/components/booking/day-slots";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ import {
   useServiceProfessionalsMap,
   useServices,
 } from "@/hooks/use-appointments";
+import { useCustomerSearch } from "@/hooks/use-customers";
+import type { Customer } from "@/types/database";
 
 interface AppointmentFormProps {
   salonId: string;
@@ -57,6 +59,33 @@ export function AppointmentForm({
   const [date, setDate] = useState<string>(today);
   const [selectedSlot, setSelectedSlot] = useState<PublicSlot | null>(null);
   const [contact, setContact] = useState<ContactState>(EMPTY_CONTACT);
+
+  // Buscador de cliente existente (por nombre o teléfono). Si se selecciona uno,
+  // la cita se crea sobre ese cliente; si no, se crea/reutiliza por los datos manuales.
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [search, setSearch] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+  const customerSearch = useCustomerSearch(salonId, debouncedSearch);
+
+  function handlePickCustomer(c: Customer): void {
+    setSelectedCustomer(c);
+    setContact((prev) => ({
+      ...prev,
+      fullName: c.full_name,
+      phone: c.phone ?? "",
+      email: c.email ?? "",
+    }));
+    setSearch("");
+  }
+
+  function clearSelectedCustomer(): void {
+    setSelectedCustomer(null);
+    setContact((prev) => ({ ...prev, fullName: "", phone: "", email: "" }));
+  }
 
   const servicesQuery = useServices(salonId);
   const professionalsQuery = useProfessionals(salonId);
@@ -95,8 +124,8 @@ export function AppointmentForm({
 
   const canSubmit =
     Boolean(selectedSlot) &&
-    contact.fullName.trim().length >= 2 &&
-    contact.phone.trim().length >= 6;
+    (selectedCustomer !== null ||
+      (contact.fullName.trim().length >= 2 && contact.phone.trim().length >= 6));
 
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
@@ -108,6 +137,7 @@ export function AppointmentForm({
         professionalId: selectedSlot.professionalId,
         startsAt: selectedSlot.startsAt,
         endsAt: selectedSlot.endsAt,
+        customerId: selectedCustomer?.id,
         customer: {
           fullName: contact.fullName,
           phone: contact.phone,
@@ -219,41 +249,104 @@ export function AppointmentForm({
         </div>
       )}
 
-      {/* Datos del cliente */}
+      {/* Cliente: buscar uno existente (por nombre o teléfono) o crear uno nuevo */}
       <div className="space-y-4 border-t pt-4">
-        <p className="text-sm font-medium">Datos del cliente</p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="form-name">Nombre y apellidos *</Label>
-            <Input
-              id="form-name"
-              required
-              value={contact.fullName}
-              onChange={(e) => setContact((c) => ({ ...c, fullName: e.target.value }))}
-            />
+        <p className="text-sm font-medium">Cliente *</p>
+
+        {selectedCustomer ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{selectedCustomer.full_name}</p>
+              <p className="truncate text-xs text-muted-foreground tabular-nums">
+                {selectedCustomer.phone ?? selectedCustomer.email ?? "Sin contacto"}
+              </p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={clearSelectedCustomer}>
+              <X className="mr-1 h-3.5 w-3.5" />
+              Cambiar
+            </Button>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="form-phone">Teléfono *</Label>
-            <Input
-              id="form-phone"
-              type="tel"
-              required
-              value={contact.phone}
-              onChange={(e) => setContact((c) => ({ ...c, phone: e.target.value }))}
-            />
-          </div>
-        </div>
+        ) : (
+          <>
+            {/* Buscador de cliente existente */}
+            <div className="relative">
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                className="pl-9"
+                placeholder="Buscar cliente por nombre o teléfono…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Buscar cliente por nombre o teléfono"
+              />
+            </div>
+
+            {search.trim().length >= 2 && (
+              <div className="max-h-56 divide-y overflow-y-auto rounded-md border">
+                {customerSearch.isFetching && !customerSearch.data ? (
+                  <p className="px-3 py-3 text-sm text-muted-foreground">Buscando…</p>
+                ) : (customerSearch.data ?? []).length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-muted-foreground">
+                    Sin coincidencias. Puedes crear un cliente nuevo abajo.
+                  </p>
+                ) : (
+                  (customerSearch.data ?? []).slice(0, 20).map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent"
+                      onClick={() => handlePickCustomer(c)}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{c.full_name}</p>
+                        <p className="truncate text-xs text-muted-foreground tabular-nums">
+                          {c.phone ?? c.email ?? ""}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* …o crear un cliente nuevo */}
+            <p className="pt-1 text-xs text-muted-foreground">…o crea un cliente nuevo:</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="form-name">Nombre y apellidos</Label>
+                <Input
+                  id="form-name"
+                  value={contact.fullName}
+                  onChange={(e) => setContact((c) => ({ ...c, fullName: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="form-phone">Teléfono</Label>
+                <Input
+                  id="form-phone"
+                  type="tel"
+                  value={contact.phone}
+                  onChange={(e) => setContact((c) => ({ ...c, phone: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="form-email">Email (opcional)</Label>
+              <Input
+                id="form-email"
+                type="email"
+                value={contact.email}
+                onChange={(e) => setContact((c) => ({ ...c, email: e.target.value }))}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Notas de la cita (siempre) */}
         <div className="space-y-2">
-          <Label htmlFor="form-email">Email (opcional)</Label>
-          <Input
-            id="form-email"
-            type="email"
-            value={contact.email}
-            onChange={(e) => setContact((c) => ({ ...c, email: e.target.value }))}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="form-notes">Notas (opcional)</Label>
+          <Label htmlFor="form-notes">Notas de la cita (opcional)</Label>
           <Textarea
             id="form-notes"
             rows={2}

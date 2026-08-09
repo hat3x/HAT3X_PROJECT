@@ -43,6 +43,36 @@ export async function fetchAppointments(
   return (data ?? []) as AppointmentWithDetails[];
 }
 
+/**
+ * Citas del salón en un rango de días locales [startDate, endDateExclusive)
+ * (ambos "YYYY-MM-DD", el fin es exclusivo), convertidos a UTC. Para las vistas
+ * de calendario (semana / mes / año) del panel de citas.
+ */
+export async function fetchAppointmentsRange(
+  salonId: string,
+  startDate: string,
+  endDateExclusive: string,
+  timezone: string,
+): Promise<AppointmentWithDetails[]> {
+  const supabase = createClient();
+
+  const start = zonedWallTimeToUtc(startDate, "00:00", timezone);
+  const end = zonedWallTimeToUtc(endDateExclusive, "00:00", timezone);
+
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(
+      "*, customer:customers(full_name, phone, email), professional:professionals(full_name, color), service:services(name, duration_minutes)",
+    )
+    .eq("salon_id", salonId)
+    .gte("starts_at", start.toISOString())
+    .lt("starts_at", end.toISOString())
+    .order("starts_at", { ascending: true });
+
+  if (error !== null) throw new Error(error.message);
+  return (data ?? []) as AppointmentWithDetails[];
+}
+
 /** Catálogo de servicios activos del salón (para el formulario de creación). */
 export async function fetchServicesForDashboard(salonId: string): Promise<Service[]> {
   const supabase = createClient();
@@ -94,6 +124,8 @@ export const appointmentKeys = {
   all: (salonId: string) => ["appointments", salonId] as const,
   list: (salonId: string, date: string, professionalId: string | null) =>
     [...appointmentKeys.all(salonId), "list", date, professionalId ?? "all"] as const,
+  range: (salonId: string, start: string, end: string) =>
+    [...appointmentKeys.all(salonId), "range", start, end] as const,
   services: (salonId: string) => ["appt-services", salonId] as const,
   professionals: (salonId: string) => ["appt-professionals", salonId] as const,
   serviceProfessionals: (salonId: string) => ["appt-service-prof", salonId] as const,

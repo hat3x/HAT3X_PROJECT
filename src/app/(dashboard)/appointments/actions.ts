@@ -22,6 +22,12 @@ export interface CreateAppointmentInput {
   professionalId: string;
   startsAt: string;
   endsAt: string;
+  /**
+   * Cliente EXISTENTE seleccionado en el buscador del formulario. Si viene, se
+   * usa directamente (previa validación de tenant) y se ignora la búsqueda/alta
+   * por email/teléfono. Si no viene, se busca o se crea a partir de `customer`.
+   */
+  customerId?: string;
   customer: {
     fullName: string;
     phone: string;
@@ -61,6 +67,42 @@ export async function updateAppointmentStatus(
 }
 
 /**
+ * BORRA (hard delete) una cita del salón activo. Irreversible: a diferencia de
+ * cancelar —que conserva el registro en estado 'cancelled'—, elimina la fila.
+ * Requiere rol de manager (política RLS `managers_delete_appointments`); los
+ * bloques de ocupación asociados se eliminan en cascada. Útil para quitar citas
+ * de prueba o canceladas que ya no interesan. Acotado por `salon_id`.
+ */
+export async function deleteAppointment(
+  appointmentId: string,
+): Promise<ActionResult<null>> {
+  const salonId = await getActiveSalonId();
+  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("appointments")
+    .delete()
+    .eq("id", appointmentId)
+    .eq("salon_id", salonId);
+
+  if (error !== null) {
+    // 23503 = violación de FK: algo (p. ej. una venta de TPV) referencia la cita.
+    if (error.code === "23503") {
+      return {
+        ok: false,
+        error:
+          "No se puede borrar: la cita tiene registros asociados (p. ej. una venta). Cancélala en su lugar.",
+      };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/appointments");
+  return { ok: true, data: null };
+}
+
+/**
  * Crea una cita desde el panel (estado inicial: confirmed).
  * Busca o crea el cliente por email/teléfono antes de insertar.
  */
@@ -75,41 +117,54 @@ export async function createAppointment(
   const email = input.customer.email?.trim().toLowerCase() || null;
   const phone = input.customer.phone.trim();
 
-  // Buscar cliente existente por email (preferido) o teléfono.
   let customerId: string;
-  const existingQuery = email
-    ? supabase
-        .from("customers")
-        .select("id")
-        .eq("salon_id", salonId)
-        .eq("email", email)
-        .maybeSingle()
-    : supabase
-        .from("customers")
-        .select("id")
-        .eq("salon_id", salonId)
-        .eq("phone", phone)
-        .maybeSingle();
-
-  const { data: existing } = await existingQuery;
-  if (existing) {
-    customerId = existing.id;
-  } else {
-    const { data: created, error: createErr } = await supabase
+  if (input.customerId) {
+    // Cliente existente elegido en el buscador. Validar que pertenece al salón
+    // activo antes de usarlo (defensa en profundidad sobre RLS).
+    const { data: picked } = await supabase
       .from("customers")
-      .insert({
-        salon_id: salonId,
-        full_name: input.customer.fullName.trim(),
-        email,
-        phone,
-      })
       .select("id")
-      .single();
+      .eq("salon_id", salonId)
+      .eq("id", input.customerId)
+      .maybeSingle();
+    if (!picked) return { ok: false, error: "El cliente seleccionado no existe" };
+    customerId = picked.id;
+  } else {
+    // Buscar cliente existente por email (preferido) o teléfono; si no, crearlo.
+    const existingQuery = email
+      ? supabase
+          .from("customers")
+          .select("id")
+          .eq("salon_id", salonId)
+          .eq("email", email)
+          .maybeSingle()
+      : supabase
+          .from("customers")
+          .select("id")
+          .eq("salon_id", salonId)
+          .eq("phone", phone)
+          .maybeSingle();
 
-    if (createErr !== null || !created) {
-      return { ok: false, error: "No se pudo registrar el cliente" };
+    const { data: existing } = await existingQuery;
+    if (existing) {
+      customerId = existing.id;
+    } else {
+      const { data: created, error: createErr } = await supabase
+        .from("customers")
+        .insert({
+          salon_id: salonId,
+          full_name: input.customer.fullName.trim(),
+          email,
+          phone,
+        })
+        .select("id")
+        .single();
+
+      if (createErr !== null || !created) {
+        return { ok: false, error: "No se pudo registrar el cliente" };
+      }
+      customerId = created.id;
     }
-    customerId = created.id;
   }
 
   // Snapshot de precio del servicio en el momento de la reserva.

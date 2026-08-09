@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ANALITICA_ITEM,
+  ARQUEO_ITEM,
   FACTURACION_ITEM,
   PRIMARY_NAV_ITEMS,
   SETTINGS_ITEM,
@@ -32,11 +33,12 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
     expect(hrefs(items)).not.toContain(SETTINGS_ITEM.href);
   });
 
-  it("owner/manager con `pos`: Analítica, Facturación y Ajustes visibles", () => {
+  it("owner/manager con `pos`: Analítica, Facturación, Arqueo y Ajustes visibles", () => {
     const items = hrefs(buildDashboardNavItems({ showSettings: true, hasPos: true }));
 
     expect(items).toContain(ANALITICA_ITEM.href);
     expect(items).toContain(FACTURACION_ITEM.href);
+    expect(items).toContain(ARQUEO_ITEM.href);
     expect(items).toContain(SETTINGS_ITEM.href);
   });
 
@@ -57,7 +59,8 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
 
     expect(withPos).toEqual(withoutPos);
     expect(withoutPos).toContain("/tpv");
-    expect(withoutPos).toContain("/arqueo");
+    // Arqueo es materia de gestión (dinero): NO lo ve un staff, esté o no `pos`.
+    expect(withoutPos).not.toContain("/arqueo");
   });
 
   it("Facturación se coloca entre Analítica y Ajustes (del «cómo va» al «papeleo»)", () => {

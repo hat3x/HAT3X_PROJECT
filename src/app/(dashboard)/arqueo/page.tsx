@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { ArqueoView } from "@/app/(dashboard)/arqueo/arqueo-view";
-import { getActiveSalon } from "@/lib/salon";
+import { canManageSettings, getActiveMembership, getActiveSalon } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -30,6 +30,13 @@ export default async function ArqueoPage(): Promise<React.ReactElement> {
         </p>
       </main>
     );
+  }
+
+  // El arqueo muestra el dinero de caja (materia sensible): solo owner/manager.
+  // Un staff que navegue directo a /arqueo se redirige al panel.
+  const membership = await getActiveMembership();
+  if (!canManageSettings(membership?.role)) {
+    redirect("/dashboard");
   }
 
   return <ArqueoView salonId={salon.id} />;

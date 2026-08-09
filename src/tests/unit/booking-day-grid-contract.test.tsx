@@ -108,6 +108,12 @@ vi.mock("@/hooks/use-appointments", () => ({
   }),
 }));
 
+// El formulario usa useCustomerSearch (buscador de cliente existente). Se mockea
+// para no requerir QueryClient; devuelve una búsqueda vacía (el test usa alta manual).
+vi.mock("@/hooks/use-customers", () => ({
+  useCustomerSearch: () => ({ data: [], isFetching: false }),
+}));
+
 // `<select>` nativo equivalente al Select de Radix (evita sus eventos de puntero).
 vi.mock("@/components/ui/select", async () => {
   const { createElement: h } = await import("react");
@@ -319,8 +325,10 @@ describe("Contrato · el panel reserva solo huecos libres pese a la rejilla comp
 
     // El hueco de EXPOSICIÓN (10:30, libre) sí se elige.
     await user.click(screen.getByRole("button", { name: "10:30" }));
-    await user.type(screen.getByLabelText(/Nombre y apellidos/i), "Ana García");
-    await user.type(screen.getByLabelText(/Teléfono/i), "600123123");
+    await user.type(screen.getByLabelText("Nombre y apellidos"), "Ana García");
+    // Match exacto: el buscador de cliente tiene un aria-label que también contiene
+    // "teléfono", así que un regex /Teléfono/i sería ambiguo.
+    await user.type(screen.getByLabelText("Teléfono"), "600123123");
     await user.click(screen.getByRole("button", { name: /Crear cita/i }));
 
     // Creó EXACTAMENTE la cita del hueco de exposición, con el profesional del slot.

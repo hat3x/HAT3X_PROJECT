@@ -9,7 +9,11 @@ export const metadata: Metadata = {
   title: "Caja",
 };
 
-export default async function TpvPage(): Promise<React.ReactElement> {
+export default async function TpvPage({
+  searchParams,
+}: {
+  searchParams: { appointment?: string };
+}): Promise<React.ReactElement> {
   const supabase = createClient();
   const {
     data: { user },
@@ -43,6 +47,11 @@ export default async function TpvPage(): Promise<React.ReactElement> {
       salonName={salon.name}
       timezone={salon.timezone}
       loyaltyEnabled={loyaltyEnabled}
+      initialAppointmentId={
+        typeof searchParams.appointment === "string"
+          ? searchParams.appointment
+          : undefined
+      }
     />
   );
 }

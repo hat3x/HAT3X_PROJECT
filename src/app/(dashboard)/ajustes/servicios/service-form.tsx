@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useSector } from "@/components/providers/sector-provider";
 import { useProductsWithStock } from "@/hooks/use-stock";
 import {
   useAddServiceMaterial,
@@ -92,6 +93,12 @@ export function ServiceForm({
 }: ServiceFormProps): React.ReactElement {
   const [values, setValues] = useState<ServiceFormDefaults>(defaultValues);
 
+  // El modelo de 3 fases (aplicación/exposición/posterior) es propio de peluquería
+  // (tintes: aplicar → reposar → después). En el resto de sectores (p. ej. odontología)
+  // solo tiene sentido una duración única del tratamiento, que se guarda en
+  // application_min; exposición y posterior quedan a 0.
+  const phased = useSector() === "peluqueria";
+
   function update<K extends keyof ServiceFormDefaults>(
     key: K,
     value: ServiceFormDefaults[K],
@@ -128,7 +135,7 @@ export function ServiceForm({
             required
             value={values.name}
             onChange={(e) => update("name", e.target.value)}
-            placeholder="Corte y peinado"
+            placeholder={phased ? "Corte y peinado" : "Limpieza dental"}
           />
         </div>
         <div className="grid gap-2">
@@ -137,7 +144,7 @@ export function ServiceForm({
             id="category"
             value={values.category}
             onChange={(e) => update("category", e.target.value)}
-            placeholder="Peluquería, color, uñas…"
+            placeholder={phased ? "Peluquería, color, uñas…" : "Odontología, estética, cirugía…"}
           />
         </div>
       </div>
@@ -152,61 +159,82 @@ export function ServiceForm({
         />
       </div>
 
-      <fieldset className="grid gap-4 rounded-lg border border-border/70 bg-muted/30 p-4">
-        <legend className="px-1.5 text-sm font-medium">Duración por fases</legend>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="grid gap-2">
-            <Label htmlFor="application_min">Aplicación (min) *</Label>
-            <Input
-              id="application_min"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              step={1}
-              required
-              value={values.application_min}
-              onChange={(e) => update("application_min", e.target.value)}
-              placeholder="30"
-            />
+      {phased ? (
+        <fieldset className="grid gap-4 rounded-lg border border-border/70 bg-muted/30 p-4">
+          <legend className="px-1.5 text-sm font-medium">Duración por fases</legend>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="application_min">Aplicación (min) *</Label>
+              <Input
+                id="application_min"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                required
+                value={values.application_min}
+                onChange={(e) => update("application_min", e.target.value)}
+                placeholder="30"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="exposure_min">Exposición (min)</Label>
+              <Input
+                id="exposure_min"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={values.exposure_min}
+                onChange={(e) => update("exposure_min", e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="post_exposure_min">Posterior (min)</Label>
+              <Input
+                id="post_exposure_min"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={values.post_exposure_min}
+                onChange={(e) => update("post_exposure_min", e.target.value)}
+                placeholder="0"
+              />
+            </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="exposure_min">Exposición (min)</Label>
-            <Input
-              id="exposure_min"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1}
-              value={values.exposure_min}
-              onChange={(e) => update("exposure_min", e.target.value)}
-              placeholder="0"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="post_exposure_min">Posterior (min)</Label>
-            <Input
-              id="post_exposure_min"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1}
-              value={values.post_exposure_min}
-              onChange={(e) => update("post_exposure_min", e.target.value)}
-              placeholder="0"
-            />
-          </div>
+          <p
+            className="flex items-center gap-2 rounded-md border border-border/70 bg-background px-3 py-2 text-sm text-muted-foreground"
+            aria-live="polite"
+          >
+            <Clock className="h-4 w-4 text-primary" />
+            Duración total:{" "}
+            <span className="font-semibold text-foreground">
+              {totalMinutes} min
+            </span>
+          </p>
+        </fieldset>
+      ) : (
+        // Sectores no-peluquería (p. ej. odontología): duración única del tratamiento.
+        <div className="grid gap-2 sm:max-w-[16rem]">
+          <Label htmlFor="application_min" className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 text-primary" />
+            Duración del tratamiento (min) *
+          </Label>
+          <Input
+            id="application_min"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={1}
+            required
+            value={values.application_min}
+            onChange={(e) => update("application_min", e.target.value)}
+            placeholder="30"
+          />
         </div>
-        <p
-          className="flex items-center gap-2 rounded-md border border-border/70 bg-background px-3 py-2 text-sm text-muted-foreground"
-          aria-live="polite"
-        >
-          <Clock className="h-4 w-4 text-primary" />
-          Duración total:{" "}
-          <span className="font-semibold text-foreground">
-            {totalMinutes} min
-          </span>
-        </p>
-      </fieldset>
+      )}
 
       <div className="grid gap-2 sm:max-w-[12rem]">
         <Label htmlFor="price">Precio (€) *</Label>

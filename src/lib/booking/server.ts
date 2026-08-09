@@ -41,6 +41,14 @@ interface SalonConfig {
   timezone: string;
   slotIntervalMinutes: number;
   minLeadMinutes: number;
+  /**
+   * Modo "un paciente a la vez" (recurso único). Cuando es true, la
+   * disponibilidad es GLOBAL del salón: una cita a una hora ocupa ese hueco
+   * para TODOS los profesionales (no se puede solapar aunque otro dentista esté
+   * libre). Cuando es false (por defecto), cada profesional tiene su agenda
+   * independiente (varios pacientes a la vez, uno por profesional).
+   */
+  singleResource: boolean;
 }
 
 /** Lee números opcionales de salons.settings sin romper el tipado. */
@@ -52,6 +60,19 @@ function readSettingNumber(
   if (settings && typeof settings === "object" && key in settings) {
     const value = (settings as Record<string, unknown>)[key];
     if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return fallback;
+}
+
+/** Lee un booleano opcional de salons.settings sin romper el tipado. */
+function readSettingBoolean(
+  settings: unknown,
+  key: string,
+  fallback: boolean,
+): boolean {
+  if (settings && typeof settings === "object" && key in settings) {
+    const value = (settings as Record<string, unknown>)[key];
+    if (typeof value === "boolean") return value;
   }
   return fallback;
 }
@@ -72,6 +93,7 @@ async function loadSalon(admin: AdminClient, slug: string): Promise<SalonConfig>
     timezone: data.timezone,
     slotIntervalMinutes: readSettingNumber(data.settings, "slot_interval_minutes", 15),
     minLeadMinutes: readSettingNumber(data.settings, "min_lead_minutes", 0),
+    singleResource: readSettingBoolean(data.settings, "single_resource", false),
   };
 }
 
@@ -96,6 +118,7 @@ async function loadSalonById(admin: AdminClient, salonId: string): Promise<Salon
     timezone: data.timezone,
     slotIntervalMinutes: readSettingNumber(data.settings, "slot_interval_minutes", 15),
     minLeadMinutes: readSettingNumber(data.settings, "min_lead_minutes", 0),
+    singleResource: readSettingBoolean(data.settings, "single_resource", false),
   };
 }
 
@@ -254,14 +277,21 @@ async function loadProfessionalDayInputs(
 ): Promise<GenerateSlotsInput> {
   const { startIso, endIso } = dayBoundsUtc(date, salon.timezone);
 
-  // Solo bloques físicos de ocupación del profesional (application + post_exposure).
-  // El tramo de exposure de otras citas NO aparece aquí y por tanto no bloquea.
+  // Bloques físicos de ocupación (application + post_exposure). El tramo de
+  // exposure de otras citas NO aparece aquí y por tanto no bloquea.
+  //
+  // MODO RECURSO ÚNICO (salon.singleResource): la ocupación es GLOBAL del salón
+  // —cualquier cita de cualquier profesional bloquea el hueco— para impedir dos
+  // pacientes a la vez. En el modo normal (agendas independientes) solo cuenta la
+  // ocupación del PROPIO profesional.
   let blocksQuery = admin
     .from("appointment_blocks")
     .select("occupied_range")
     .eq("salon_id", salon.id)
-    .eq("professional_id", professionalId)
     .filter("occupied_range", "ov", `["${startIso}","${endIso}")`);
+  if (!salon.singleResource) {
+    blocksQuery = blocksQuery.eq("professional_id", professionalId);
+  }
   // Al reprogramar, la PROPIA cita no debe contarse a sí misma como ocupación.
   if (excludeAppointmentId) {
     blocksQuery = blocksQuery.neq("appointment_id", excludeAppointmentId);
