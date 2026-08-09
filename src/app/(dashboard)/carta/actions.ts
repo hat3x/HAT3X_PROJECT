@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 
+import { parseMenuCsv } from "@/lib/restauracion/csv-import";
 import { canManageSettings, getActiveMembership, getActiveSalonId } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -16,7 +17,7 @@ import {
   type SaveModifierGroupInput,
   type StationInput,
 } from "@/lib/validations/menu";
-import type { MenuCategory, ModifierGroup, Product, Station } from "@/types/database";
+import type { Allergen, MenuCategory, ModifierGroup, Product, Station } from "@/types/database";
 
 /**
  * Server actions de la carta (restauración): categorías, estaciones,
@@ -472,4 +473,98 @@ export async function saveCombo(
 
   revalidatePath("/carta");
   return { ok: true, data: null };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Importador CSV: `parseMenuCsv` (lib/restauracion/csv-import.ts) es puro y
+// recolecta errores por fila sin abortar el parseo. Esta action da el paso
+// siguiente: por cada categoría/estación referenciada que no exista ya en el
+// salón la crea (mapeando nombre → id), y luego inserta cada producto válido
+// resuelto contra esos ids. Los errores de fila del parseo (y los que pueda
+// dar un insert individual de producto) NO abortan el resto de filas válidas
+// — se acumulan y, si queda alguno, se devuelven en el mensaje de error junto
+// al recuento de lo sí importado; solo si nada resultó válido se devuelve
+// `ok:false` sin haber tocado la base de datos.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resuelve `name → id` para una tabla de nombre único por salón
+ * (`menu_categories` o `stations`, misma forma `{salon_id, name, sort_order}`),
+ * creando las filas que falten. Devuelve el mapa y, si alguna consulta falla,
+ * el mensaje de error de Postgres (el mapa parcial se descarta por el
+ * llamador en ese caso).
+ */
+async function ensureNamesExist(
+  supabase: SupabaseServerClient,
+  salonId: string,
+  table: "menu_categories" | "stations",
+  names: string[],
+): Promise<{ idByName: Map<string, string>; error: string | null }> {
+  const idByName = new Map<string, string>();
+  if (names.length === 0) return { idByName, error: null };
+
+  const { data: existing, error: fetchError } = await supabase
+    .from(table)
+    .select("id, name")
+    .eq("salon_id", salonId)
+    .in("name", names);
+  if (fetchError !== null) return { idByName, error: fetchError.message };
+  for (const row of existing) idByName.set(row.name, row.id);
+
+  for (const name of names) {
+    if (idByName.has(name)) continue;
+    const { data, error } = await supabase
+      .from(table)
+      .insert({ salon_id: salonId, name, sort_order: 0 })
+      .select("id, name").single();
+    if (error !== null) return { idByName, error: error.message };
+    idByName.set(data.name, data.id);
+  }
+  return { idByName, error: null };
+}
+
+export async function importMenuCsv(csv: string): Promise<ActionResult<{ created: number }>> {
+  const salonId = await assertManager();
+  if (salonId === null) return { ok: false, error: NO_PERMISSION };
+
+  const parsed = parseMenuCsv(csv);
+  const errors = [...parsed.errors];
+  if (parsed.products.length === 0) {
+    const detail = errors.length > 0 ? `: ${errors.join("; ")}` : "";
+    return { ok: false, error: `No se importó ningún producto${detail}` };
+  }
+
+  const supabase = createClient();
+
+  const categoryResult = await ensureNamesExist(supabase, salonId, "menu_categories", parsed.categories);
+  if (categoryResult.error !== null) return { ok: false, error: categoryResult.error };
+
+  const stationResult = await ensureNamesExist(supabase, salonId, "stations", parsed.stations);
+  if (stationResult.error !== null) return { ok: false, error: stationResult.error };
+
+  let created = 0;
+  for (const product of parsed.products) {
+    const { error } = await supabase.from("products").insert({
+      salon_id: salonId,
+      name: product.name,
+      price_cents: product.priceCents,
+      vat_rate: product.vatRate,
+      category_id: categoryResult.idByName.get(product.categoryName) ?? null,
+      station_id: stationResult.idByName.get(product.stationName) ?? null,
+      allergens: product.allergens as Allergen[],
+      is_combo: product.isCombo,
+    });
+    if (error !== null) { errors.push(`"${product.name}": ${error.message}`); continue; }
+    created += 1;
+  }
+
+  revalidatePath("/carta");
+
+  if (errors.length > 0) {
+    return {
+      ok: false,
+      error: `${created} producto(s) importado(s), ${errors.length} error(es): ${errors.join("; ")}`,
+    };
+  }
+  return { ok: true, data: { created } };
 }
