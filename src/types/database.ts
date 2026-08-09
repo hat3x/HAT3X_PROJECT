@@ -868,6 +868,165 @@ export interface Database {
           },
         ];
       };
+      // Grupos de modificadores de la carta (restauración) — migración
+      // 20260809121000_restauracion_modifiers. min_select/max_select acotan
+      // cuántas opciones puede elegir el cliente dentro del grupo (constraint
+      // modifier_groups_min_le_max: min_select <= max_select). Clave compuesta
+      // modifier_groups_id_salon_key (id, salon_id) para permitir FKs
+      // compuestas de dominio desde modifiers.group_id y
+      // product_modifier_groups.group_id.
+      modifier_groups: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          min_select: number;
+          max_select: number;
+          required: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          min_select?: number;
+          max_select?: number;
+          required?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          min_select?: number;
+          max_select?: number;
+          required?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "modifier_groups_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Opciones de un grupo de modificadores — migración
+      // 20260809121000_restauracion_modifiers. price_delta_cents puede ser
+      // negativo (p. ej. un descuento por elegir "sin queso"). group_id es FK
+      // compuesta (id, salon_id) hacia modifier_groups
+      // (modifiers_group_id_fkey).
+      modifiers: {
+        Row: {
+          id: string;
+          salon_id: string;
+          group_id: string;
+          name: string;
+          price_delta_cents: number;
+          sort_order: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          group_id: string;
+          name: string;
+          price_delta_cents?: number;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          group_id?: string;
+          name?: string;
+          price_delta_cents?: number;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "modifiers_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "modifiers_group_id_fkey";
+            columns: ["group_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "modifier_groups";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      // Asignación de grupos de modificadores a productos — migración
+      // 20260809121000_restauracion_modifiers. product_id/group_id son FKs
+      // compuestas (id, salon_id) hacia products/modifier_groups
+      // (product_modifier_groups_product_fkey/product_modifier_groups_group_fkey).
+      // unique (salon_id, product_id, group_id): un grupo no puede asignarse
+      // dos veces al mismo producto.
+      product_modifier_groups: {
+        Row: {
+          id: string;
+          salon_id: string;
+          product_id: string;
+          group_id: string;
+          sort_order: number;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          product_id: string;
+          group_id: string;
+          sort_order?: number;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          product_id?: string;
+          group_id?: string;
+          sort_order?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_modifier_groups_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_modifier_groups_product_fkey";
+            columns: ["product_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "product_modifier_groups_group_fkey";
+            columns: ["group_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "modifier_groups";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
       // Movimientos de stock (libro de inventario) — migración
       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
       // aplicado al stock resultante (no la magnitud introducida por el
@@ -3484,6 +3643,13 @@ export type ServiceMaterialInsert = TablesInsert<"service_material">;
 // migración 20260809120000_restauracion_menu_base.
 export type MenuCategory = Tables<"menu_categories">;
 export type Station = Tables<"stations">;
+
+// Modificadores de la carta (restauración) — grupos de opciones, opciones y
+// su asignación a productos. Ver migración
+// 20260809121000_restauracion_modifiers.
+export type ModifierGroup = Tables<"modifier_groups">;
+export type Modifier = Tables<"modifiers">;
+export type ProductModifierGroup = Tables<"product_modifier_groups">;
 
 // Phase helpers -----------------------------------------------------------------
 
