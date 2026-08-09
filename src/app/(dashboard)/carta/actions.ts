@@ -527,44 +527,53 @@ export async function importMenuCsv(csv: string): Promise<ActionResult<{ created
   const salonId = await assertManager();
   if (salonId === null) return { ok: false, error: NO_PERMISSION };
 
-  const parsed = parseMenuCsv(csv);
-  const errors = [...parsed.errors];
-  if (parsed.products.length === 0) {
-    const detail = errors.length > 0 ? `: ${errors.join("; ")}` : "";
-    return { ok: false, error: `No se importó ningún producto${detail}` };
+  // `try/finally`: `ensureNamesExist` (categorías, luego estaciones) puede
+  // crear filas y fallar DESPUÉS de haber creado algunas (p. ej. crea 2
+  // categorías y la 3ª falla). Sin el `finally`, un `return` temprano tras
+  // ese fallo se saltaría el `revalidatePath` y `/carta` no reflejaría lo ya
+  // creado hasta una revalidación no relacionada. `revalidatePath` sin
+  // cambios reales es inocuo, así que se llama siempre al final del flujo,
+  // en TODOS los caminos de salida a partir de aquí (haya o no error).
+  try {
+    const parsed = parseMenuCsv(csv);
+    const errors = [...parsed.errors];
+    if (parsed.products.length === 0) {
+      const detail = errors.length > 0 ? `: ${errors.join("; ")}` : "";
+      return { ok: false, error: `No se importó ningún producto${detail}` };
+    }
+
+    const supabase = createClient();
+
+    const categoryResult = await ensureNamesExist(supabase, salonId, "menu_categories", parsed.categories);
+    if (categoryResult.error !== null) return { ok: false, error: categoryResult.error };
+
+    const stationResult = await ensureNamesExist(supabase, salonId, "stations", parsed.stations);
+    if (stationResult.error !== null) return { ok: false, error: stationResult.error };
+
+    let created = 0;
+    for (const product of parsed.products) {
+      const { error } = await supabase.from("products").insert({
+        salon_id: salonId,
+        name: product.name,
+        price_cents: product.priceCents,
+        vat_rate: product.vatRate,
+        category_id: categoryResult.idByName.get(product.categoryName) ?? null,
+        station_id: stationResult.idByName.get(product.stationName) ?? null,
+        allergens: product.allergens as Allergen[],
+        is_combo: product.isCombo,
+      });
+      if (error !== null) { errors.push(`"${product.name}": ${error.message}`); continue; }
+      created += 1;
+    }
+
+    if (errors.length > 0) {
+      return {
+        ok: false,
+        error: `${created} producto(s) importado(s), ${errors.length} error(es): ${errors.join("; ")}`,
+      };
+    }
+    return { ok: true, data: { created } };
+  } finally {
+    revalidatePath("/carta");
   }
-
-  const supabase = createClient();
-
-  const categoryResult = await ensureNamesExist(supabase, salonId, "menu_categories", parsed.categories);
-  if (categoryResult.error !== null) return { ok: false, error: categoryResult.error };
-
-  const stationResult = await ensureNamesExist(supabase, salonId, "stations", parsed.stations);
-  if (stationResult.error !== null) return { ok: false, error: stationResult.error };
-
-  let created = 0;
-  for (const product of parsed.products) {
-    const { error } = await supabase.from("products").insert({
-      salon_id: salonId,
-      name: product.name,
-      price_cents: product.priceCents,
-      vat_rate: product.vatRate,
-      category_id: categoryResult.idByName.get(product.categoryName) ?? null,
-      station_id: stationResult.idByName.get(product.stationName) ?? null,
-      allergens: product.allergens as Allergen[],
-      is_combo: product.isCombo,
-    });
-    if (error !== null) { errors.push(`"${product.name}": ${error.message}`); continue; }
-    created += 1;
-  }
-
-  revalidatePath("/carta");
-
-  if (errors.length > 0) {
-    return {
-      ok: false,
-      error: `${created} producto(s) importado(s), ${errors.length} error(es): ${errors.join("; ")}`,
-    };
-  }
-  return { ok: true, data: { created } };
 }
