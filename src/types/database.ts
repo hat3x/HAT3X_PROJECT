@@ -139,6 +139,14 @@ export type SalonFeature =
  */
 export type SalonSector = "peluqueria" | "odontologia" | "restauracion";
 
+/**
+ * Alérgenos de declaración obligatoria (Reglamento UE 1169/2011). Espejo TS
+ * del enum `public.allergen` (migración 20260809120000_restauracion_menu_base).
+ */
+export type Allergen =
+  | "gluten" | "crustaceos" | "huevos" | "pescado" | "cacahuetes" | "soja" | "lacteos"
+  | "frutos_cascara" | "apio" | "mostaza" | "sesamo" | "sulfitos" | "altramuces" | "moluscos";
+
 /** Tipo de consentimiento informado (espejo del enum public.consent_type). */
 export type ConsentType =
   | "general"
@@ -174,6 +182,144 @@ export type PrescriptionStatus = "draft" | "issued" | "revoked";
 export interface Database {
   public: {
     Tables: {
+      time_clock: {
+        Row: {
+          id: string;
+          salon_id: string;
+          user_id: string | null;
+          clock_in: string;
+          clock_out: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          user_id?: string | null;
+          clock_in?: string;
+          clock_out?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          user_id?: string | null;
+          clock_in?: string;
+          clock_out?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      clinical_history: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          occurred_on: string;
+          kind: string | null;
+          category: "clinica" | "comunicacion" | "nota" | "otro";
+          note: string | null;
+          fdi_tooth: number | null;
+          amount_cents: number | null;
+          done: boolean;
+          professional: string | null;
+          source_ref: string | null;
+          data: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          occurred_on: string;
+          kind?: string | null;
+          category?: "clinica" | "comunicacion" | "nota" | "otro";
+          note?: string | null;
+          fdi_tooth?: number | null;
+          amount_cents?: number | null;
+          done?: boolean;
+          professional?: string | null;
+          source_ref?: string | null;
+          data?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          occurred_on?: string;
+          kind?: string | null;
+          category?: "clinica" | "comunicacion" | "nota" | "otro";
+          note?: string | null;
+          fdi_tooth?: number | null;
+          amount_cents?: number | null;
+          done?: boolean;
+          professional?: string | null;
+          source_ref?: string | null;
+          data?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      billing_history: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string | null;
+          issued_on: string;
+          series: string | null;
+          number: number | null;
+          full_number: string | null;
+          total_cents: number;
+          tax_cents: number | null;
+          paid: boolean;
+          paid_on: string | null;
+          payment_method: string | null;
+          status: string | null;
+          concept: string | null;
+          source_ref: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id?: string | null;
+          issued_on: string;
+          series?: string | null;
+          number?: number | null;
+          full_number?: string | null;
+          total_cents?: number;
+          tax_cents?: number | null;
+          paid?: boolean;
+          paid_on?: string | null;
+          payment_method?: string | null;
+          status?: string | null;
+          concept?: string | null;
+          source_ref?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string | null;
+          issued_on?: string;
+          series?: string | null;
+          number?: number | null;
+          full_number?: string | null;
+          total_cents?: number;
+          tax_cents?: number | null;
+          paid?: boolean;
+          paid_on?: string | null;
+          payment_method?: string | null;
+          status?: string | null;
+          concept?: string | null;
+          source_ref?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       salons: {
         Row: {
           id: string;
@@ -541,6 +687,90 @@ export interface Database {
           },
         ];
       };
+      // Categorías de la carta (restauración) — migración
+      // 20260809120000_restauracion_menu_base. Clave compuesta
+      // menu_categories_id_salon_key (id, salon_id) para permitir FK
+      // compuestas de dominio desde products.category_id.
+      menu_categories: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          sort_order: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "menu_categories_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Estaciones de producción (cocina, barra, plancha, ...) — migración
+      // 20260809120000_restauracion_menu_base. Clave compuesta
+      // stations_id_salon_key (id, salon_id) para permitir FK compuestas de
+      // dominio desde products.station_id.
+      stations: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          sort_order: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stations_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       products: {
         Row: {
           id: string;
@@ -561,6 +791,16 @@ export interface Database {
           active: boolean;
           created_at: string;
           updated_at: string;
+          // Carta (restauración) — migración
+          // 20260809120000_restauracion_menu_base. category_id/station_id son
+          // FKs compuestas (id, salon_id) hacia menu_categories/stations
+          // (products_category_id_fkey/products_station_id_fkey).
+          category_id: string | null;
+          station_id: string | null;
+          is_combo: boolean;
+          image_url: string | null;
+          allergens: Allergen[];
+          available_channels: string[];
         };
         Insert: {
           id?: string;
@@ -576,6 +816,12 @@ export interface Database {
           active?: boolean;
           created_at?: string;
           updated_at?: string;
+          category_id?: string | null;
+          station_id?: string | null;
+          is_combo?: boolean;
+          image_url?: string | null;
+          allergens?: Allergen[];
+          available_channels?: string[];
         };
         Update: {
           id?: string;
@@ -591,6 +837,12 @@ export interface Database {
           active?: boolean;
           created_at?: string;
           updated_at?: string;
+          category_id?: string | null;
+          station_id?: string | null;
+          is_combo?: boolean;
+          image_url?: string | null;
+          allergens?: Allergen[];
+          available_channels?: string[];
         };
         Relationships: [
           {
@@ -599,6 +851,20 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "salons";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "products_category_id_fkey";
+            columns: ["category_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "menu_categories";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "products_station_id_fkey";
+            columns: ["station_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "stations";
+            referencedColumns: ["id", "salon_id"];
           },
         ];
       };
@@ -3089,6 +3355,7 @@ export interface Database {
       reward_status: RewardStatus;
       salon_feature: SalonFeature;
       salon_sector: SalonSector;
+      allergen: Allergen;
       consent_type: ConsentType;
       consent_status: ConsentStatus;
       image_modality: ImageModality;
@@ -3212,6 +3479,11 @@ export type StockMovementInsert = TablesInsert<"stock_movement">;
 // `ajustes/servicios/material-actions.ts`.
 export type ServiceMaterial = Tables<"service_material">;
 export type ServiceMaterialInsert = TablesInsert<"service_material">;
+
+// Carta (restauración) — categorías y estaciones de producción. Ver
+// migración 20260809120000_restauracion_menu_base.
+export type MenuCategory = Tables<"menu_categories">;
+export type Station = Tables<"stations">;
 
 // Phase helpers -----------------------------------------------------------------
 

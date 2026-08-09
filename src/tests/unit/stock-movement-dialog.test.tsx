@@ -55,6 +55,12 @@ function product(overrides: Partial<Product> = {}): Product {
     active: true,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
+    category_id: null,
+    station_id: null,
+    is_combo: false,
+    image_url: null,
+    allergens: [],
+    available_channels: ["mostrador"],
     ...overrides,
   };
 }
