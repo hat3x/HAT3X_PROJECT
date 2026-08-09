@@ -31,6 +31,9 @@ import type { MenuCategory, ModifierGroup, Product, Station } from "@/types/data
  */
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+/** Cliente de Supabase con el tipo `Database` (para pasar entre helpers de guarda). */
+type SupabaseServerClient = ReturnType<typeof createClient>;
+
 /**
  * Resuelve el salón activo SI el usuario tiene rol de gestión (owner/manager).
  * Devuelve `null` cuando no hay permiso (rol insuficiente) o no hay salón
@@ -282,7 +285,50 @@ export async function saveModifierGroup(
 // Asignación de grupos de modificadores a un producto: reemplaza por
 // completo las filas de `product_modifier_groups` del producto (borra e
 // inserta), acotado por `salon_id`.
+//
+// El FK compuesto (product_id/group_id, salon_id) ya impide en la base que se
+// asignen productos o grupos de otro salón — el aislamiento multi-tenant no
+// depende de esta comprobación. `assertProductAndGroupsInSalon` es solo
+// PARIDAD con la convención de `assertLocationInSalon`/`assertServicesInSalon`
+// (ajustes/personal/actions.ts): devuelve un mensaje legible en español en vez
+// de dejar que el insert falle con un error crudo de constraint de Postgres.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Guarda de tenant: confirma que el producto y TODOS los grupos de
+ * modificadores pertenecen al salón activo antes de reemplazar la
+ * asignación. Un solo mensaje combinado (no se distingue cuál de los dos
+ * falló) porque al cliente le basta saber que algo no pertenece a su salón.
+ */
+async function assertProductAndGroupsInSalon(
+  supabase: SupabaseServerClient,
+  salonId: string,
+  productId: string,
+  groupIds: string[],
+): Promise<string | null> {
+  const MISMATCH = "El producto o alguno de los grupos no pertenece a tu salón";
+
+  const { data: product, error: productError } = await supabase
+    .from("products")
+    .select("id")
+    .eq("id", productId)
+    .eq("salon_id", salonId)
+    .maybeSingle();
+  if (productError !== null) return productError.message;
+  if (product === null) return MISMATCH;
+
+  if (groupIds.length === 0) return null;
+
+  const { data: groups, error: groupsError } = await supabase
+    .from("modifier_groups")
+    .select("id")
+    .eq("salon_id", salonId)
+    .in("id", groupIds);
+  if (groupsError !== null) return groupsError.message;
+  if (groups.length !== groupIds.length) return MISMATCH;
+
+  return null;
+}
 
 export async function setProductModifierGroups(
   productId: string,
@@ -294,6 +340,15 @@ export async function setProductModifierGroups(
   if (salonId === null) return { ok: false, error: NO_PERMISSION };
 
   const supabase = createClient();
+
+  const membershipError = await assertProductAndGroupsInSalon(
+    supabase,
+    salonId,
+    productId,
+    parsed.data,
+  );
+  if (membershipError !== null) return { ok: false, error: membershipError };
+
   const { error: deleteError } = await supabase
     .from("product_modifier_groups")
     .delete()
@@ -319,7 +374,64 @@ export async function setProductModifierGroups(
 // ─────────────────────────────────────────────────────────────────────────────
 // Piezas de un combo: reemplaza por completo `combo_components` del combo
 // (borra e inserta), acotado por `salon_id`.
+//
+// Igual que en `setProductModifierGroups`: los FK compuestos de
+// `combo_components` (combo_product_id/component_product_id/station_id_override,
+// salon_id) ya garantizan el aislamiento en la base. Estas comprobaciones son
+// PARIDAD con la convención del repo y dan un error amable en español antes
+// de intentar el insert.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Guarda de tenant para el combo: el producto combo y cada
+ * `componentProductId` deben pertenecer al salón activo (una sola consulta a
+ * `products` por lote, vía `in`).
+ */
+async function assertComboProductsInSalon(
+  supabase: SupabaseServerClient,
+  salonId: string,
+  comboProductId: string,
+  pieces: ComboPieceInput[],
+): Promise<string | null> {
+  const productIds = [...new Set([comboProductId, ...pieces.map((p) => p.componentProductId)])];
+
+  const { data: products, error } = await supabase
+    .from("products")
+    .select("id")
+    .eq("salon_id", salonId)
+    .in("id", productIds);
+  if (error !== null) return error.message;
+  if (products.length !== productIds.length) {
+    return "El combo o alguna de sus piezas no pertenece a tu salón";
+  }
+  return null;
+}
+
+/**
+ * Guarda de tenant para el ruteo por pieza: cada `stationIdOverride` NO nulo
+ * debe pertenecer al salón activo.
+ */
+async function assertComboStationOverridesInSalon(
+  supabase: SupabaseServerClient,
+  salonId: string,
+  pieces: ComboPieceInput[],
+): Promise<string | null> {
+  const stationIds = [
+    ...new Set(pieces.map((p) => p.stationIdOverride).filter((id): id is string => id !== null)),
+  ];
+  if (stationIds.length === 0) return null;
+
+  const { data: stations, error } = await supabase
+    .from("stations")
+    .select("id")
+    .eq("salon_id", salonId)
+    .in("id", stationIds);
+  if (error !== null) return error.message;
+  if (stations.length !== stationIds.length) {
+    return "La estación de ruteo de alguna pieza no pertenece a tu salón";
+  }
+  return null;
+}
 
 export async function saveCombo(
   comboProductId: string,
@@ -331,6 +443,13 @@ export async function saveCombo(
   if (salonId === null) return { ok: false, error: NO_PERMISSION };
 
   const supabase = createClient();
+
+  const productsError = await assertComboProductsInSalon(supabase, salonId, comboProductId, parsed.data);
+  if (productsError !== null) return { ok: false, error: productsError };
+
+  const stationsError = await assertComboStationOverridesInSalon(supabase, salonId, parsed.data);
+  if (stationsError !== null) return { ok: false, error: stationsError };
+
   const { error: deleteError } = await supabase
     .from("combo_components")
     .delete()
