@@ -1027,6 +1027,78 @@ export interface Database {
           },
         ];
       };
+      // Piezas de un producto combo (restauración) — migración
+      // 20260809122000_restauracion_combos. combo_product_id/component_product_id
+      // son FKs compuestas (id, salon_id) hacia products (el combo en sí y cada
+      // pieza que lo compone: combo_components_combo_fkey/
+      // combo_components_component_fkey). station_id_override permite el ruteo
+      // por pieza (p. ej. comida→cocina, bebida→barra) cuando difiere de la
+      // estación por defecto del producto pieza; FK compuesta opcional hacia
+      // stations (combo_components_station_fkey, on delete set null). qty > 0
+      // (combo_components_id_salon_key: (id, salon_id) unique para permitir
+      // FKs compuestas de dominio desde otras tablas).
+      combo_components: {
+        Row: {
+          id: string;
+          salon_id: string;
+          combo_product_id: string;
+          component_product_id: string;
+          qty: number;
+          station_id_override: string | null;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          combo_product_id: string;
+          component_product_id: string;
+          qty?: number;
+          station_id_override?: string | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          combo_product_id?: string;
+          component_product_id?: string;
+          qty?: number;
+          station_id_override?: string | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "combo_components_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "combo_components_combo_fkey";
+            columns: ["combo_product_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "combo_components_component_fkey";
+            columns: ["component_product_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "combo_components_station_fkey";
+            columns: ["station_id_override", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "stations";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
       // Movimientos de stock (libro de inventario) — migración
       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
       // aplicado al stock resultante (no la magnitud introducida por el
@@ -3650,6 +3722,10 @@ export type Station = Tables<"stations">;
 export type ModifierGroup = Tables<"modifier_groups">;
 export type Modifier = Tables<"modifiers">;
 export type ProductModifierGroup = Tables<"product_modifier_groups">;
+
+// Combos (restauración) — piezas de un producto combo con ruteo por estación
+// opcional. Ver migración 20260809122000_restauracion_combos.
+export type ComboComponent = Tables<"combo_components">;
 
 // Phase helpers -----------------------------------------------------------------
 
