@@ -14,7 +14,7 @@ import { elapsedMinutes } from "@/lib/restauracion/kds";
 import { settleTotals, type SettleLineInput } from "@/lib/restauracion/order";
 import { canTransition } from "@/lib/restauracion/tables";
 import type { SettleTenderInput } from "@/lib/validations/order";
-import type { DiningTable, Order, TableStatus } from "@/types/database";
+import type { DiningTable, Order, PosPaymentMethodRow, TableStatus } from "@/types/database";
 
 const STATUS_LABELS: Record<TableStatus, string> = {
   libre: "Libre",
@@ -28,9 +28,15 @@ const STATUS_LABELS: Record<TableStatus, string> = {
  * `order_items` en crudo (solo `product_id`, sin el nombre resuelto que sí
  * lleva `OrderPanelItem` en el mostrador — ahí el nombre se conoce en
  * cliente porque la línea nace de la carta ya cargada). Sin un join al
- * catálogo (que esta tarea no trae, ver "Dudas" del reporte), se usa el
- * mismo fallback que ya adopta el KDS cuando no puede resolver el nombre
- * (`fetchKdsItems`, `@/lib/queries/kds.ts`: `row.products?.name ?? "Producto"`).
+ * catálogo, se usa el mismo fallback que ya adopta el KDS cuando no puede
+ * resolver el nombre (`fetchKdsItems`, `@/lib/queries/kds.ts`:
+ * `row.products?.name ?? "Producto"`).
+ *
+ * Task 7 (cableado cross-task #1): el padre (`sala-view.tsx`) SÍ conoce el
+ * catálogo (carga `useMenuProducts`, igual que el mostrador) y puede pasar
+ * `productNames` con el nombre real; este fallback solo entra en juego si
+ * `productNames` se omite (compatibilidad con el test existente) o no
+ * contiene ese `product_id`.
  */
 const LINE_FALLBACK_NAME = "Producto";
 
@@ -41,6 +47,15 @@ interface TablePanelProps {
   now: Date;
   onClose: () => void;
   onAdd: () => void;
+  /** Mapa `product_id → nombre`, para etiquetar las líneas de la comanda con
+   * el nombre real del producto (Task 7, cableado cross-task #1). OPCIONAL:
+   * si se omite (p.ej. el test existente de este componente no lo pasa),
+   * cada línea cae al mismo fallback `LINE_FALLBACK_NAME` de siempre. */
+  productNames?: Record<string, string>;
+  /** Métodos de pago del salón, reenviados a `PaymentSheet` (Task 7, cableado
+   * cross-task #2). OPCIONAL: si se omite, `PaymentSheet` recibe `[]` — mismo
+   * comportamiento que antes de este cableado. */
+  paymentMethods?: PosPaymentMethodRow[];
 }
 
 /**
@@ -59,6 +74,8 @@ export function TablePanel({
   now,
   onClose,
   onAdd,
+  productNames,
+  paymentMethods,
 }: TablePanelProps): React.ReactElement {
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -213,7 +230,9 @@ export function TablePanel({
                   >
                     <span className="min-w-0 flex-1">
                       <span className="font-medium tabular-nums text-foreground">{item.qty}×</span>{" "}
-                      <span className="text-foreground">{LINE_FALLBACK_NAME}</span>
+                      <span className="text-foreground">
+                        {productNames?.[item.product_id] ?? LINE_FALLBACK_NAME}
+                      </span>
                     </span>
                     <span className="shrink-0 font-semibold tabular-nums text-foreground">
                       {formatMoney(item.unit_price_cents * item.qty)}
@@ -293,7 +312,7 @@ export function TablePanel({
                 if (!open) settleOrder.reset();
               }}
               totalCents={totals.totalCents}
-              paymentMethods={[]}
+              paymentMethods={paymentMethods ?? []}
               pending={settleOrder.isPending}
               error={error}
               onConfirm={handleConfirmPayment}
