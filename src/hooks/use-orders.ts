@@ -1,6 +1,10 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { addOrderItems, createOrder, voidOrderItem } from "@/app/(dashboard)/mostrador/actions";
 import { fetchOpenOrders, fetchOrderItems, orderKeys } from "@/lib/queries/orders";
+import type { AddOrderItemsInput, CreateOrderInput, VoidOrderItemInput } from "@/lib/validations/order";
+import type { Order, OrderItem } from "@/types/database";
 
 export function useOpenOrders(salonId: string) {
   return useQuery({ queryKey: orderKeys.open(salonId), queryFn: () => fetchOpenOrders(salonId) });
@@ -10,5 +14,47 @@ export function useOrderItems(salonId: string, orderId: string | null) {
     queryKey: orderKeys.detail(salonId, orderId ?? "none"),
     queryFn: () => fetchOrderItems(salonId, orderId as string),
     enabled: orderId !== null,
+  });
+}
+
+/** Invalida todas las queries de pedidos del salón (abiertos + detalle de cada uno). */
+function useInvalidateOrders(salonId: string) {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: orderKeys.all(salonId) });
+}
+
+export function useCreateOrder(salonId: string) {
+  const invalidate = useInvalidateOrders(salonId);
+  return useMutation({
+    mutationFn: async (input: CreateOrderInput): Promise<Order> => {
+      const result = await createOrder(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useAddOrderItems(salonId: string) {
+  const invalidate = useInvalidateOrders(salonId);
+  return useMutation({
+    mutationFn: async (input: AddOrderItemsInput): Promise<{ added: number }> => {
+      const result = await addOrderItems(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useVoidOrderItem(salonId: string) {
+  const invalidate = useInvalidateOrders(salonId);
+  return useMutation({
+    mutationFn: async (input: VoidOrderItemInput): Promise<OrderItem> => {
+      const result = await voidOrderItem(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
   });
 }
