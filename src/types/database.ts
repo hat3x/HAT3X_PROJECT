@@ -66,6 +66,21 @@ export type PlanItemState =
  */
 export type StockMovementKind = "entrada" | "salida" | "ajuste" | "merma";
 
+/**
+ * Estado del pedido de mostrador (espejo del enum public.order_status).
+ * Migración 20260810100000_restauracion_orders.
+ */
+export type OrderStatus = "abierta" | "cobrada" | "cerrada" | "anulada";
+
+/** Estado de una línea de pedido (espejo del enum public.order_item_status). */
+export type OrderItemStatus =
+  | "pendiente"
+  | "enviado"
+  | "preparando"
+  | "listo"
+  | "entregado"
+  | "anulado";
+
 export type AppointmentStatus =
   | "pending"
   | "confirmed"
@@ -1099,6 +1114,168 @@ export interface Database {
           },
         ];
       };
+      // Pedidos de mostrador (restauración), append-only — migración
+      // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE
+      // (offline-ready): sin default en BD → REQUERIDO en Insert.
+      // `order_number` es correlativo por salón (trigger app.set_order_number,
+      // omitir en Insert). session_id es FK compuesta opcional hacia
+      // pos_sessions (orders_session_id_fkey, on delete set null).
+      // idempotency_key es único por salón (orders_idempotency_key) para que
+      // reintentos del cliente no dupliquen el pedido. Clave de apoyo
+      // orders_id_salon_key (id, salon_id) para las FKs compuestas de
+      // order_items y pos_sales.order_id.
+      orders: {
+        Row: {
+          id: string;
+          salon_id: string;
+          session_id: string | null;
+          order_number: number | null; // bigint — correlativo por salón (trigger)
+          channel: string;
+          status: OrderStatus;
+          label: string | null;
+          idempotency_key: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string; // sin default en BD: generado en cliente
+          salon_id: string;
+          session_id?: string | null;
+          // order_number lo pone el trigger app.set_order_number: omitir
+          channel?: string;
+          status?: OrderStatus;
+          label?: string | null;
+          idempotency_key?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          session_id?: string | null;
+          order_number?: number | null;
+          channel?: string;
+          status?: OrderStatus;
+          label?: string | null;
+          idempotency_key?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "orders_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_session_id_fkey";
+            columns: ["session_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "pos_sessions";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      // Líneas de pedido (restauración), append-only — migración
+      // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE: sin
+      // default en BD → REQUERIDO en Insert. `void_of_item_id` !== null marca
+      // una fila como anulación de otra (append-only: nunca se hace UPDATE del
+      // qty/precio, se inserta una anulación). `modifiers_snapshot` guarda los
+      // modificadores elegidos en el momento del pedido (el catálogo puede
+      // cambiar). station_id es FK compuesta opcional hacia stations
+      // (order_items_station_id_fkey, on delete set null) para el ruteo a
+      // cocina/barra. Clave de apoyo order_items_id_salon_key (id, salon_id).
+      order_items: {
+        Row: {
+          id: string;
+          salon_id: string;
+          order_id: string;
+          product_id: string;
+          qty: number;
+          unit_price_cents: number;
+          vat_rate: number;
+          station_id: string | null;
+          status: OrderItemStatus;
+          combo_group: string | null;
+          modifiers_snapshot: Json;
+          void_of_item_id: string | null;
+          void_reason: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string; // sin default en BD: generado en cliente
+          salon_id: string;
+          order_id: string;
+          product_id: string;
+          qty?: number;
+          unit_price_cents?: number;
+          vat_rate?: number;
+          station_id?: string | null;
+          status?: OrderItemStatus;
+          combo_group?: string | null;
+          modifiers_snapshot?: Json;
+          void_of_item_id?: string | null;
+          void_reason?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          order_id?: string;
+          product_id?: string;
+          qty?: number;
+          unit_price_cents?: number;
+          vat_rate?: number;
+          station_id?: string | null;
+          status?: OrderItemStatus;
+          combo_group?: string | null;
+          modifiers_snapshot?: Json;
+          void_of_item_id?: string | null;
+          void_reason?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_items_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey";
+            columns: ["order_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey";
+            columns: ["product_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "order_items_station_id_fkey";
+            columns: ["station_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "stations";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
       // Movimientos de stock (libro de inventario) — migración
       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
       // aplicado al stock resultante (no la magnitud introducida por el
@@ -1860,6 +2037,10 @@ export interface Database {
           notes: string | null;
           created_at: string;
           updated_at: string;
+          // Enlace fiscal al pedido de origen (restauración) — migración
+          // 20260810100000_restauracion_orders. FK compuesta
+          // pos_sales_order_id_fkey (order_id, salon_id) → orders (id, salon_id).
+          order_id: string | null;
         };
         Insert: {
           id?: string;
@@ -1879,6 +2060,7 @@ export interface Database {
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
+          order_id?: string | null;
         };
         Update: {
           id?: string;
@@ -1898,6 +2080,7 @@ export interface Database {
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
+          order_id?: string | null;
         };
         Relationships: [
           {
@@ -1933,6 +2116,13 @@ export interface Database {
             columns: ["professional_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "professionals";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "pos_sales_order_id_fkey";
+            columns: ["order_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
             referencedColumns: ["id", "salon_id"];
           },
         ];
@@ -3591,6 +3781,8 @@ export interface Database {
       consent_status: ConsentStatus;
       image_modality: ImageModality;
       stock_movement_kind: StockMovementKind;
+      order_status: OrderStatus;
+      order_item_status: OrderItemStatus;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -3726,6 +3918,15 @@ export type ProductModifierGroup = Tables<"product_modifier_groups">;
 // Combos (restauración) — piezas de un producto combo con ruteo por estación
 // opcional. Ver migración 20260809122000_restauracion_combos.
 export type ComboComponent = Tables<"combo_components">;
+
+// Pedidos de mostrador (restauración), append-only — cabecera (orders) y
+// líneas (order_items). IDs generados en cliente (offline-ready): `id` es
+// REQUERIDO en los Insert (sin default en BD). Ver migración
+// 20260810100000_restauracion_orders.
+export type Order = Tables<"orders">;
+export type OrderInsert = TablesInsert<"orders">;
+export type OrderItem = Tables<"order_items">;
+export type OrderItemInsert = TablesInsert<"order_items">;
 
 // Phase helpers -----------------------------------------------------------------
 
