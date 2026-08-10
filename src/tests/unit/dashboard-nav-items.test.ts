@@ -112,4 +112,21 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
     expect(hrefs).toContain("/cocina");
     expect(hrefs).not.toContain("/carta");
   });
+
+  it("restauración: staff ve Mostrador, Sala y Cocina; NO Caja ni Carta", () => {
+    const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
+    const hrefs = items.map((i) => i.href);
+    expect(hrefs).toContain("/mostrador");
+    expect(hrefs).toContain("/sala");
+    expect(hrefs).toContain("/cocina");
+    expect(hrefs).not.toContain("/tpv"); // "Caja" (vender) se retira: se vende en Mostrador/Sala
+    expect(hrefs).not.toContain("/carta");
+  });
+  it("restauración: manager ve Sala y conserva Arqueo; sigue sin Caja", () => {
+    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
+    const hrefs = items.map((i) => i.href);
+    expect(hrefs).toContain("/sala");
+    expect(hrefs).toContain("/arqueo");
+    expect(hrefs).not.toContain("/tpv");
+  });
 });

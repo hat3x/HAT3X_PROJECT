@@ -13,6 +13,7 @@
  */
 import {
   Activity,
+  Armchair,
   BarChart3,
   BellRing,
   CalendarClock,
@@ -182,6 +183,19 @@ export const COCINA_ITEM: NavItem = {
   icon: ChefHat,
 };
 
+/**
+ * Sala (plano de mesas: comensales, comanda, cobro). Solo visible para el
+ * sector restauración, y para TODOS los miembros (incluido staff): igual que
+ * Mostrador y Cocina, es operativa de venta del día a día, no gestión. En
+ * restauración se vende en Mostrador/Sala, por lo que "Caja" (`/tpv`) se
+ * retira del menú para este sector.
+ */
+export const SALA_ITEM: NavItem = {
+  href: "/sala",
+  label: "Sala",
+  icon: Armchair,
+};
+
 /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
   /** El usuario puede ver materia de gestión (owner/manager). */
@@ -211,12 +225,18 @@ export interface NavGating {
  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
  * (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
  * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
- * staff incluido) — es operativa de venta del día a día, como la Caja. Justo
- * detrás, Cocina (KDS: comandas por estación en tiempo real) también SIEMPRE
- * (todos los miembros, staff incluido) — misma naturaleza operativa que
- * Mostrador. Por último, Carta (gestión de la carta: categorías/estaciones/
- * productos/combos) solo si `showSettings` (owner/manager); sin gestión no se
- * añade (staff no ve Carta, pero sí Mostrador y Cocina).
+ * staff incluido) — es operativa de venta del día a día, como la Caja lo es
+ * para el resto de sectores. Justo detrás, Sala (plano de mesas: comensales,
+ * comanda, cobro) también SIEMPRE (todos los miembros, staff incluido) —
+ * misma naturaleza operativa que Mostrador. Justo detrás, Cocina (KDS:
+ * comandas por estación en tiempo real) también SIEMPRE (todos los miembros,
+ * staff incluido) — misma naturaleza operativa que Mostrador y Sala. Por
+ * último, Carta (gestión de la carta: categorías/estaciones/productos/combos)
+ * solo si `showSettings` (owner/manager); sin gestión no se añade (staff no
+ * ve Carta, pero sí Mostrador, Sala y Cocina). En restauración se vende en
+ * Mostrador/Sala, así que "Caja" (`/tpv`, pantalla de vender) se RETIRA del
+ * menú para este sector; "Arqueo" (`/arqueo`, abrir/cerrar turno + cierre Z)
+ * se mantiene, solo para owner/manager, igual que en el resto de sectores.
  */
 export function buildDashboardNavItems({
   showSettings,
@@ -272,13 +292,15 @@ export function buildDashboardNavItems({
   }
 
   if (sector === "restauracion") {
-    // "Mostrador" y "Cocina" son operativa de venta: SIEMPRE (todos los miembros,
-    // staff incluido). "Carta" es gestión (owner/manager): solo si showSettings.
-    const base = withSectorLabels.slice(0, 1);
-    const rest = withSectorLabels.slice(1);
+    // Se vende en Mostrador/Sala → "Caja" (/tpv, pantalla de vender) se retira del menú.
+    // "Arqueo" (/arqueo) se mantiene: abrir/cerrar turno + cierre Z, donde caen los cobros.
+    // "Mostrador", "Sala" y "Cocina" son operativa de venta: SIEMPRE (todos los
+    // miembros, staff incluido). "Carta" es gestión (owner/manager): solo si showSettings.
+    const base = withSectorLabels.slice(0, 1); // Panel
+    const rest = withSectorLabels.slice(1).filter((item) => item.href !== "/tpv");
     const extras = showSettings
-      ? [MOSTRADOR_ITEM, COCINA_ITEM, CARTA_ITEM]
-      : [MOSTRADOR_ITEM, COCINA_ITEM];
+      ? [MOSTRADOR_ITEM, SALA_ITEM, COCINA_ITEM, CARTA_ITEM]
+      : [MOSTRADOR_ITEM, SALA_ITEM, COCINA_ITEM];
     return [...base, ...extras, ...rest];
   }
 
