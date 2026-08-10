@@ -81,6 +81,15 @@ export type OrderItemStatus =
   | "entregado"
   | "anulado";
 
+/**
+ * Forma de la mesa en el plano de sala (espejo del enum public.table_shape).
+ * Migración 20260810130000_restauracion_sala.
+ */
+export type TableShape = "round" | "square";
+
+/** Estado de la mesa (espejo del enum public.table_status). */
+export type TableStatus = "libre" | "ocupada" | "cuenta_pedida" | "por_limpiar";
+
 export type AppointmentStatus =
   | "pending"
   | "confirmed"
@@ -1124,6 +1133,10 @@ export interface Database {
       // reintentos del cliente no dupliquen el pedido. Clave de apoyo
       // orders_id_salon_key (id, salon_id) para las FKs compuestas de
       // order_items y pos_sales.order_id.
+      // dining_table_id/covers — migración 20260810130000_restauracion_sala:
+      // enlace opcional con la mesa (channel='mesa'); dining_table_id es FK
+      // compuesta hacia dining_tables (orders_dining_table_id_fkey, on delete
+      // set null). covers = número de comensales.
       orders: {
         Row: {
           id: string;
@@ -1134,6 +1147,8 @@ export interface Database {
           status: OrderStatus;
           label: string | null;
           idempotency_key: string | null;
+          dining_table_id: string | null;
+          covers: number | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -1147,6 +1162,8 @@ export interface Database {
           status?: OrderStatus;
           label?: string | null;
           idempotency_key?: string | null;
+          dining_table_id?: string | null;
+          covers?: number | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -1160,6 +1177,8 @@ export interface Database {
           status?: OrderStatus;
           label?: string | null;
           idempotency_key?: string | null;
+          dining_table_id?: string | null;
+          covers?: number | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -1177,6 +1196,13 @@ export interface Database {
             columns: ["session_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "pos_sessions";
+            referencedColumns: ["id", "salon_id"];
+          },
+          {
+            foreignKeyName: "orders_dining_table_id_fkey";
+            columns: ["dining_table_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "dining_tables";
             referencedColumns: ["id", "salon_id"];
           },
         ];
@@ -1272,6 +1298,121 @@ export interface Database {
             columns: ["station_id", "salon_id"];
             isOneToOne: false;
             referencedRelation: "stations";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
+      // Zonas de sala (restauración) — migración
+      // 20260810130000_restauracion_sala. Clave compuesta
+      // dining_zones_id_salon_key (id, salon_id) para permitir la FK compuesta
+      // de dominio desde dining_tables.zone_id.
+      dining_zones: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          sort_order: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dining_zones_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Mesas del plano de sala (restauración) — migración
+      // 20260810130000_restauracion_sala. zone_id es FK compuesta hacia
+      // dining_zones (dining_tables_zone_fkey, on delete cascade).
+      // capacity_max >= capacity_min (constraint dining_tables_capacity_order).
+      // pos_x/pos_y son coordenadas del plano visual (porcentaje 0-100). Clave
+      // de apoyo dining_tables_id_salon_key (id, salon_id) para la FK compuesta
+      // de dominio desde orders.dining_table_id.
+      dining_tables: {
+        Row: {
+          id: string;
+          salon_id: string;
+          zone_id: string;
+          name: string;
+          capacity_min: number;
+          capacity_max: number;
+          pos_x: number;
+          pos_y: number;
+          shape: TableShape;
+          status: TableStatus;
+          sort_order: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          zone_id: string;
+          name: string;
+          capacity_min?: number;
+          capacity_max?: number;
+          pos_x?: number;
+          pos_y?: number;
+          shape?: TableShape;
+          status?: TableStatus;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          zone_id?: string;
+          name?: string;
+          capacity_min?: number;
+          capacity_max?: number;
+          pos_x?: number;
+          pos_y?: number;
+          shape?: TableShape;
+          status?: TableStatus;
+          sort_order?: number;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dining_tables_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "dining_tables_zone_fkey";
+            columns: ["zone_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "dining_zones";
             referencedColumns: ["id", "salon_id"];
           },
         ];
@@ -3783,6 +3924,8 @@ export interface Database {
       stock_movement_kind: StockMovementKind;
       order_status: OrderStatus;
       order_item_status: OrderItemStatus;
+      table_shape: TableShape;
+      table_status: TableStatus;
     };
     CompositeTypes: Record<never, never>;
   };
@@ -3927,6 +4070,11 @@ export type Order = Tables<"orders">;
 export type OrderInsert = TablesInsert<"orders">;
 export type OrderItem = Tables<"order_items">;
 export type OrderItemInsert = TablesInsert<"order_items">;
+
+// Sala (restauración) — zonas y mesas del plano, enlazadas con orders vía
+// dining_table_id/covers. Ver migración 20260810130000_restauracion_sala.
+export type DiningZone = Tables<"dining_zones">;
+export type DiningTable = Tables<"dining_tables">;
 
 // Phase helpers -----------------------------------------------------------------
 
