@@ -127,6 +127,15 @@ export function MostradorView({ salonId, salonName }: MostradorViewProps): React
   function handleSelectOrder(selected: Order): void {
     // Fuerza la recarga de líneas de la cuenta elegida (distinta a la actual).
     loadedOrderIdRef.current = null;
+    // Limpieza SÍNCRONA de las líneas de la cuenta anterior — sin esto, hay
+    // una ventana entre `setOrder(selected)` (order.id ya apunta a la cuenta
+    // B) y a que `useOrderItems` resuelva sus líneas (el `useEffect` de
+    // arriba las carga) en la que `items`/`pendingIds` siguen siendo los de
+    // la cuenta A. Si en esa ventana se pulsa Mandar/Cobrar, se enviarían
+    // líneas de A contra el `orderId` de B (cargo/comanda cruzados). Mismo
+    // criterio que `handleNewOrder`.
+    setItems([]);
+    setPendingIds(new Set());
     setOrder(selected);
   }
 

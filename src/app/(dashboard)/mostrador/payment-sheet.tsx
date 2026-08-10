@@ -173,11 +173,18 @@ export function PaymentSheet({
   }
 
   function handleConfirm(): void {
-    const tenders: SettleTenderInput[] = rows.map((row, i) => ({
-      method: row.method,
-      amountCents: applied[i]!.appliedCents,
-      paymentMethodId: row.paymentMethodId,
-    }));
+    // Filtra filas con importe aplicado <= 0 (p. ej. una fila que `addRow`
+    // sembró vacía porque el resto YA estaba cubierto, o un tender a 0€
+    // tecleado por error): `settleTenderSchema` exige `amountCents > 0` — un
+    // tender fantasma haría que el servidor rechazase el cobro aunque el
+    // AGREGADO (que es lo que vigila `covered`) sí cuadre con el total.
+    const tenders: SettleTenderInput[] = rows
+      .map((row, i) => ({
+        method: row.method,
+        amountCents: applied[i]!.appliedCents,
+        paymentMethodId: row.paymentMethodId,
+      }))
+      .filter((tender) => tender.amountCents > 0);
     onConfirm(tenders);
   }
 
