@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { revalidatePath } from "next/cache";
 
-import { computeLineTotals } from "@/lib/payments";
+import { computeLineTotals, sumTenders } from "@/lib/payments";
 import { buildSettleLines, settleTotals } from "@/lib/restauracion/order";
 import { getActiveSalonId } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
@@ -311,17 +311,31 @@ export async function setOrderItemStatus(input: unknown): Promise<ActionResult<O
 // diferencia frente a `createSale`: aquí las líneas NO las teclea el cajero
 // (vienen del pedido ya tomado) y el cobro no pasa por `getPaymentGateway` —
 // los tenders ya vienen resueltos en céntimos desde el flujo de cobro de
-// mostrador, se insertan tal cual en `pos_payments`.
+// mostrador, se insertan directo en `pos_payments`. SÍ se replica, a mano, la
+// validación de cobertura de la pasarela (`assertTendersCoverTotal`: Σ tenders
+// === totalCents EXACTO) justo después de calcular los totales — ver ese
+// bloque más abajo.
 //
-// ── Idempotencia ─────────────────────────────────────────────────────────────
+// ── Idempotencia (fast-path + backstop en BD) ─────────────────────────────────
 // Cobrar el MISMO pedido dos veces (doble tap en el botón de cobrar, reintento
-// de red) NO debe crear una segunda venta. La guarda comprueba, en este orden:
-// (1) si YA existe un `pos_sales` con `order_id = orderId` en este salón, esa
-// es la fuente autoritativa — se devuelve tal cual, sin volver a cobrar; (2) si
-// no hay venta pero el pedido YA está `status = "cobrada"`, es un estado
-// inconsistente (no debería poder pasar salvo un fallo entre el UPDATE de
-// `orders` y la lectura) y se informa en vez de cobrar a ciegas una segunda
-// vez. El caso normal (primera llamada) no entra en ninguna de las dos ramas.
+// de red) NO debe crear una segunda venta. La guarda de aplicación comprueba,
+// en este orden: (1) si YA existe un `pos_sales` con `order_id = orderId` en
+// este salón, esa es la fuente autoritativa — se devuelve tal cual, sin volver
+// a cobrar; (2) si no hay venta pero el pedido YA está `status = "cobrada"`,
+// es un estado inconsistente (no debería poder pasar salvo un fallo entre el
+// UPDATE de `orders` y la lectura) y se informa en vez de cobrar a ciegas una
+// segunda vez. El caso normal (primera llamada) no entra en ninguna de las dos
+// ramas. Solo se cobra un pedido `"abierta"`: si está `"cerrada"`/`"anulada"`
+// (o `"cobrada"` con venta encontrada arriba) no se llega a esta comprobación.
+//
+// Este fast-path es "select-luego-insert", NO atómico (mismo motivo que
+// `createOrder`, ver comentario de ese bloque): dos requests concurrentes para
+// el MISMO pedido pueden pasar AMBOS el select (ninguno ve todavía la fila del
+// otro) y el segundo `insert` de `pos_sales` choca con el índice único parcial
+// `pos_sales_order_id_unique` (migración 20260810110000, Postgres `23505`).
+// Ese caso se trata como BACKSTOP de idempotencia, no como fallo: se relee la
+// venta de ese `order_id` (el otro request ya la insertó) y se devuelve como
+// propia — ver el `catch` de `23505` más abajo, junto al insert de `pos_sales`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Fila de `pos_sales` mínima para responder en la rama idempotente. */
@@ -389,6 +403,13 @@ export async function settleOrder(
       error: "El pedido ya está cobrado pero no se encontró la venta asociada",
     };
   }
+  // Solo se cobra un pedido abierto: un pedido `"cerrada"`/`"anulada"` es un
+  // documento cerrado (mismo criterio que `assertOrderOpenInSalon`), no algo
+  // pendiente de facturar. `"cobrada"` ya se descartó arriba con su propio
+  // mensaje (más específico: venta esperada pero no encontrada).
+  if (order.status !== "abierta") {
+    return { ok: false, error: "El pedido no está abierto" };
+  }
 
   // 3) Líneas a cobrar: NO anuladas (Task 4 marca el original `status:"anulado"`
   //    al anular, así que basta este filtro — no hace falta excluir por `id`).
@@ -414,6 +435,17 @@ export async function settleOrder(
     })),
   );
   const totals = settleTotals(lines);
+
+  // (Fix Critical) Los pagos deben cubrir el total EXACTO — mismo criterio que
+  // `createSale`/`assertTendersCoverTotal` (Σ tenders === totalCents, ni de
+  // menos ni de más; ver `@/lib/payments/gateway.ts`). Fail-fast ANTES de
+  // tocar la BD: en este punto no se ha escrito nada todavía (ni `pos_sales`
+  // ni nada más), así que no hace falta `rollback()`. Se usa `sumTenders`
+  // (reutilizada de `@/lib/payments`, la misma que usa la pasarela) en vez de
+  // sumar a mano.
+  if (sumTenders(tenders) !== totals.totalCents) {
+    return { ok: false, error: "Los pagos no cubren el total del pedido" };
+  }
 
   // 5) Caja abierta del salón (si la hay) — mismo patrón que `createSale`.
   const { data: openSession, error: openSessionError } = await supabase
@@ -444,8 +476,31 @@ export async function settleOrder(
     .insert(saleInsert)
     .select("id")
     .single();
-  if (saleError !== null || saleData === null) {
-    return { ok: false, error: saleError?.message ?? "No se pudo crear la venta" };
+  if (saleError !== null) {
+    // Backstop de idempotencia en BD (índice único parcial
+    // `pos_sales_order_id_unique`, migración 20260810110000): si el fast-path
+    // del paso 2 NO vio ninguna venta (carrera entre dos requests para el
+    // MISMO pedido) pero este INSERT choca con el índice único, NO es un
+    // fallo real — es la venta del OTRO request ganando la carrera. Se relee
+    // por `order_id`+`salon_id` (la fuente autoritativa) y se devuelve como
+    // propia, sin crear una segunda venta ni propagar el error.
+    if (saleError.code === "23505") {
+      const { data: raceSaleData, error: raceSaleError } = await supabase
+        .from("pos_sales")
+        .select("id,total_cents")
+        .eq("order_id", orderId)
+        .eq("salon_id", salonId)
+        .maybeSingle();
+      if (raceSaleError !== null) return { ok: false, error: raceSaleError.message };
+      const raceSale = raceSaleData as ExistingSaleRow | null;
+      if (raceSale !== null) {
+        return { ok: true, data: { saleId: raceSale.id, totalCents: raceSale.total_cents } };
+      }
+    }
+    return { ok: false, error: saleError.message };
+  }
+  if (saleData === null) {
+    return { ok: false, error: "No se pudo crear la venta" };
   }
   const saleId = (saleData as { id: string }).id;
 
@@ -501,16 +556,23 @@ export async function settleOrder(
   }
 
   // 9) El pedido queda cerrado a facturación: un pedido cobrado es un
-  //    documento cerrado (mismo criterio que `assertOrderOpenInSalon`). Este
-  //    paso NO revierte la venta si falla — el cobro ya está firme (mismas
-  //    filas en pos_sales/pos_sale_lines/pos_payments que si hubiera ido
-  //    bien); revertirlo sería peor que dejar el pedido con el estado desfasado.
+  //    documento cerrado (mismo criterio que `assertOrderOpenInSalon`). Si
+  //    este UPDATE falla, TAMBIÉN se revierte la venta (`rollback()`, mismo
+  //    criterio que los pasos 7/8): dejar `pos_sales`/`pos_sale_lines`/
+  //    `pos_payments` creados con el pedido todavía `"abierta"` es peligroso —
+  //    la UI seguiría ofreciendo cobrarlo, y un segundo intento (esta vez SÍ
+  //    habría fila en `pos_sales`) quedaría bloqueado por el fast-path de
+  //    idempotencia del paso 2 sin que el pedido refleje que ya se cobró.
+  //    Mejor deshacer la venta entera y que el cajero reintente.
   const { error: orderUpdateError } = await supabase
     .from("orders")
     .update({ status: "cobrada" })
     .eq("id", orderId)
     .eq("salon_id", salonId);
-  if (orderUpdateError !== null) return { ok: false, error: orderUpdateError.message };
+  if (orderUpdateError !== null) {
+    await rollback();
+    return { ok: false, error: orderUpdateError.message };
+  }
 
   // 10) "Pagar primero": si se pidió, las líneas `pendiente` que quedaran se
   //     mandan a cocina/barra ahora que el cobro ya está firme (mismo UPDATE

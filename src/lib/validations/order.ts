@@ -79,7 +79,8 @@ export type SetOrderItemStatusInput = z.infer<typeof setOrderItemStatusSchema>;
  */
 export const settleTenderSchema = z.object({
   method: paymentMethodEnum,
-  amountCents: z.number().int().min(0),
+  /** Un tender de 0 no tiene sentido (no es un medio de pago real); debe ser > 0. */
+  amountCents: z.number().int().positive(),
   /** Método concreto del catálogo del salón (opcional, para informes); `null` si no se eligió uno. */
   paymentMethodId: z.string().uuid().nullable(),
   reference: z.string().trim().max(120).optional(),
