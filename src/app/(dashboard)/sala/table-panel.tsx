@@ -12,6 +12,7 @@ import { useSetTableStatus } from "@/hooks/use-tables";
 import { formatMoney } from "@/lib/format";
 import { elapsedMinutes } from "@/lib/restauracion/kds";
 import { settleTotals, type SettleLineInput } from "@/lib/restauracion/order";
+import { canTransition } from "@/lib/restauracion/tables";
 import type { SettleTenderInput } from "@/lib/validations/order";
 import type { DiningTable, Order, TableStatus } from "@/types/database";
 
@@ -103,8 +104,14 @@ export function TablePanel({
           setPaying(false);
           // Orquestación pedida por el brief: al cobrar con éxito, la mesa
           // pasa a `por_limpiar` (nunca directamente a `libre` — hace falta
-          // que alguien confirme que la mesa quedó recogida).
-          setTableStatus.mutate({ tableId: table.id, from: table.status, to: "por_limpiar" });
+          // que alguien confirme que la mesa quedó recogida). Reusa
+          // `changeStatus` (con su propio `onError`) en vez de un
+          // `.mutate()` crudo: si ESTA transición falla (p.ej. conflicto de
+          // concurrencia entre terminales — 0 filas afectadas), el fallo
+          // debe surfacear igual que cualquier otro cambio de estado, no
+          // tragarse en silencio (fix revisión Task 6, Important: la mesa
+          // se quedaba atascada en `ocupada`/`cuenta_pedida` sin aviso).
+          changeStatus("por_limpiar");
         },
         onError: (e) => setError(e instanceof Error ? e.message : "No se pudo cobrar el pedido"),
       },
@@ -136,10 +143,50 @@ export function TablePanel({
       </div>
 
       {order === null ? (
-        <CardContent className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
+        <CardContent className="flex flex-1 flex-col items-center justify-center gap-3 p-10 text-center">
           <p className="max-w-[16rem] text-sm text-muted-foreground">
             Esta mesa no tiene una cuenta abierta.
           </p>
+
+          {error !== null ? (
+            <p
+              role="alert"
+              className="flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {error}
+            </p>
+          ) : null}
+
+          {/* Ruta de recuperación/limpieza (fix revisión Task 6, Important):
+              tras cobrar, `order` pasa a `null` (deja de estar `abierta`) pero
+              la mesa queda en `por_limpiar` — sin esto, "Limpiar" era
+              inalcanzable justo cuando más se necesita. `canTransition`
+              (`@/lib/restauracion/tables`, Task 3) decide qué botón aplica en
+              vez de listar los estados a mano aquí. Si `table.status ===
+              "libre"` ninguna de las dos condiciones aplica y no se muestra
+              ningún botón. */}
+          {canTransition(table.status, "libre") ? (
+            <Button
+              className="h-12 rounded-xl text-sm font-semibold"
+              disabled={busy}
+              onClick={() => changeStatus("libre")}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Limpiar
+            </Button>
+          ) : null}
+          {canTransition(table.status, "por_limpiar") ? (
+            <Button
+              variant="outline"
+              className="h-12 rounded-xl text-sm font-semibold"
+              disabled={busy}
+              onClick={() => changeStatus("por_limpiar")}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Marcar para limpiar
+            </Button>
+          ) : null}
         </CardContent>
       ) : (
         <>

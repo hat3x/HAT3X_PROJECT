@@ -178,4 +178,29 @@ describe("TablePanel", () => {
     expect(screen.queryByRole("button", { name: /añadir/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /cobrar/i })).not.toBeInTheDocument();
   });
+
+  /**
+   * Fix revisión Task 6 (Important): tras cobrar, `settleOrder` marca el
+   * pedido como cobrado → `order` pasa a `null` en el siguiente refetch,
+   * pero la mesa queda en `por_limpiar`. Sin ruta de recuperación en el
+   * estado vacío, "Limpiar" era inalcanzable justo cuando más se necesita.
+   */
+  it("sin pedido y mesa 'por_limpiar' (caso normal tras cobrar), ofrece el botón Limpiar", () => {
+    renderPanel({ order: null, table: { ...TABLE, status: "por_limpiar" } });
+
+    expect(screen.getByRole("button", { name: /limpiar/i })).toBeInTheDocument();
+  });
+
+  it("sin pedido y mesa 'ocupada' (caso de recuperación), ofrece 'Marcar para limpiar' pero no 'Limpiar'", () => {
+    renderPanel({ order: null, table: { ...TABLE, status: "ocupada" } });
+
+    expect(screen.getByRole("button", { name: /marcar para limpiar/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^limpiar$/i })).not.toBeInTheDocument();
+  });
+
+  it("sin pedido y mesa 'libre', no ofrece ningún botón de limpieza", () => {
+    renderPanel({ order: null, table: { ...TABLE, status: "libre" } });
+
+    expect(screen.queryByRole("button", { name: /limpiar/i })).not.toBeInTheDocument();
+  });
 });
