@@ -5,7 +5,13 @@ import { revalidatePath } from "next/cache";
 
 import { getActiveSalonId } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
-import { addOrderItemsSchema, createOrderSchema, voidOrderItemSchema } from "@/lib/validations/order";
+import {
+  addOrderItemsSchema,
+  createOrderSchema,
+  sendOrderToStationsSchema,
+  setOrderItemStatusSchema,
+  voidOrderItemSchema,
+} from "@/lib/validations/order";
 import type { Order, OrderItem, OrderItemInsert } from "@/types/database";
 
 /**
@@ -217,4 +223,74 @@ export async function voidOrderItem(input: unknown): Promise<ActionResult<OrderI
   if (error !== null) return { ok: false, error: error.message };
   revalidatePath("/mostrador");
   return { ok: true, data };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sendOrderToStations (Task 5): manda a cocina/barra las líneas `pendiente` de
+// un pedido — es el "enviar comanda" del mostrador. Un único UPDATE acotado
+// por `salon_id` + `order_id` + `status = "pendiente"`: solo mueve las líneas
+// que TODAVÍA no se enviaron (si se llama dos veces seguidas, la segunda no
+// vuelve a mover nada — `sent` da 0, no es un error). No hay guarda de
+// `assertOrderOpenInSalon` explícita porque el propio filtro por `salon_id`
+// ya impide tocar líneas de otro salón, y el pedido sigue `abierta`: este
+// paso NO cierra ni cobra el pedido, solo adelanta el estado de sus líneas
+// para que cocina/barra las vean. `select("id")` es lo mínimo necesario para
+// contar cuántas filas afectó el UPDATE — no se necesita la fila completa.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendOrderToStations(input: unknown): Promise<ActionResult<{ sent: number }>> {
+  const parsed = sendOrderToStationsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const salonId = await getActiveSalonId();
+  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("order_items")
+    .update({ status: "enviado" })
+    .eq("salon_id", salonId).eq("order_id", parsed.data.orderId).eq("status", "pendiente")
+    .select("id");
+  if (error !== null) return { ok: false, error: error.message };
+  revalidatePath("/mostrador");
+  return { ok: true, data: { sent: (data ?? []).length } };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// setOrderItemStatus (Task 5): transición de estado de UNA línea (p.ej.
+// cocina marca "preparando"→"listo") SEGURA frente a concurrencia — varias
+// pantallas (cocina, barra, mostrador) pueden estar mirando el mismo pedido a
+// la vez. La seguridad no viene de leer-y-luego-escribir (eso tiene ventana
+// de carrera) sino de condicionar el UPDATE por `status = from` EN LA MISMA
+// query: si otra pantalla ya movió la línea (o si `from` no coincide con el
+// estado real por cualquier otro motivo), el UPDATE afecta 0 filas y eso ES
+// la señal de conflicto — no hace falta un SELECT previo para detectarlo.
+//
+// `data.length === 0` tras el UPDATE condicionado ⇒ CONFLICTO: alguien más ya
+// cambió el estado (o la pantalla tenía una copia obsoleta). La UI debe
+// recargar y no reintentar ciegamente. Cuando SÍ afecta una fila, `data[0]`
+// es la línea ya actualizada — se devuelve completa (`select("*")`) porque el
+// caller (kanban de cocina/barra) necesita pintarla tal cual quedó, no solo
+// confirmar el cambio.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function setOrderItemStatus(input: unknown): Promise<ActionResult<OrderItem>> {
+  const parsed = setOrderItemStatusSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const salonId = await getActiveSalonId();
+  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("order_items")
+    .update({ status: parsed.data.to })
+    .eq("id", parsed.data.itemId).eq("salon_id", salonId).eq("status", parsed.data.from)
+    .select("*");
+  if (error !== null) return { ok: false, error: error.message };
+  // Destructuring (no `data[0]`) para que TS narrowe sin `!`: con
+  // `noUncheckedIndexedAccess`, `data[0]` seguiría tipando `T | undefined`
+  // aunque ya hubiéramos comprobado `data.length > 0` en la línea de arriba.
+  const [updated] = data ?? [];
+  if (updated === undefined) return { ok: false, error: "CONFLICTO: el estado ya cambió" };
+  revalidatePath("/mostrador");
+  return { ok: true, data: updated };
 }

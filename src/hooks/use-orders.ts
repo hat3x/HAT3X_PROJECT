@@ -1,9 +1,21 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { addOrderItems, createOrder, voidOrderItem } from "@/app/(dashboard)/mostrador/actions";
+import {
+  addOrderItems,
+  createOrder,
+  sendOrderToStations,
+  setOrderItemStatus,
+  voidOrderItem,
+} from "@/app/(dashboard)/mostrador/actions";
 import { fetchOpenOrders, fetchOrderItems, orderKeys } from "@/lib/queries/orders";
-import type { AddOrderItemsInput, CreateOrderInput, VoidOrderItemInput } from "@/lib/validations/order";
+import type {
+  AddOrderItemsInput,
+  CreateOrderInput,
+  SendOrderToStationsInput,
+  SetOrderItemStatusInput,
+  VoidOrderItemInput,
+} from "@/lib/validations/order";
 import type { Order, OrderItem } from "@/types/database";
 
 export function useOpenOrders(salonId: string) {
@@ -52,6 +64,30 @@ export function useVoidOrderItem(salonId: string) {
   return useMutation({
     mutationFn: async (input: VoidOrderItemInput): Promise<OrderItem> => {
       const result = await voidOrderItem(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useSendOrderToStations(salonId: string) {
+  const invalidate = useInvalidateOrders(salonId);
+  return useMutation({
+    mutationFn: async (input: SendOrderToStationsInput): Promise<{ sent: number }> => {
+      const result = await sendOrderToStations(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useSetOrderItemStatus(salonId: string) {
+  const invalidate = useInvalidateOrders(salonId);
+  return useMutation({
+    mutationFn: async (input: SetOrderItemStatusInput): Promise<OrderItem> => {
+      const result = await setOrderItemStatus(input);
       if (!result.ok) throw new Error(result.error);
       return result.data;
     },

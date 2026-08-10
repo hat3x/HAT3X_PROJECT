@@ -38,3 +38,30 @@ export const voidOrderItemSchema = z.object({
   reason: z.string().trim().min(1).max(200),
 });
 export type VoidOrderItemInput = z.infer<typeof voidOrderItemSchema>;
+
+/** Espejo de `OrderItemStatus` (types/database.ts / enum public.order_item_status). */
+export const orderItemStatusEnum = z.enum([
+  "pendiente",
+  "enviado",
+  "preparando",
+  "listo",
+  "entregado",
+  "anulado",
+]);
+
+export const sendOrderToStationsSchema = z.object({
+  orderId: z.string().uuid(),
+});
+export type SendOrderToStationsInput = z.infer<typeof sendOrderToStationsSchema>;
+
+/**
+ * `from`/`to` acotan la transición que la UI espera aplicar; la action
+ * (`setOrderItemStatus`) es quien la hace SEGURA de verdad al condicionar el
+ * UPDATE por `status = from` en la propia query (ver `mostrador/actions.ts`).
+ */
+export const setOrderItemStatusSchema = z.object({
+  itemId: z.string().uuid(),
+  from: orderItemStatusEnum,
+  to: orderItemStatusEnum,
+});
+export type SetOrderItemStatusInput = z.infer<typeof setOrderItemStatusSchema>;
