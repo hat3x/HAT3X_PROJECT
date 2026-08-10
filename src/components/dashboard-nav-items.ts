@@ -19,6 +19,7 @@ import {
   CalendarDays,
   ClipboardList,
   Clock,
+  ConciergeBell,
   FileText,
   FolderOpen,
   LayoutDashboard,
@@ -157,6 +158,18 @@ export const CARTA_ITEM: NavItem = {
   icon: UtensilsCrossed,
 };
 
+/**
+ * Mostrador (venta de mostrador: comanda + cobro). Solo visible para el
+ * sector restauración, y para TODOS los miembros (incluido staff): a
+ * diferencia de Carta (gestión), Mostrador es operativa de venta del día a día,
+ * como la Caja lo es para el resto de sectores.
+ */
+export const MOSTRADOR_ITEM: NavItem = {
+  href: "/mostrador",
+  label: "Mostrador",
+  icon: ConciergeBell,
+};
+
 /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
   /** El usuario puede ver materia de gestión (owner/manager). */
@@ -184,9 +197,12 @@ export interface NavGating {
  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
- * (en ese orden) tras "Pacientes". Restauración inserta Carta (gestión de la carta:
- * categorías/estaciones/productos/combos) justo tras "Panel", solo si `showSettings`
- * (owner/manager); sin gestión no se añade (staff no ve Carta).
+ * (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
+ * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
+ * staff incluido) — es operativa de venta del día a día, como la Caja. Justo
+ * detrás, Carta (gestión de la carta: categorías/estaciones/productos/combos)
+ * solo si `showSettings` (owner/manager); sin gestión no se añade (staff no ve
+ * Carta, pero sí Mostrador).
  */
 export function buildDashboardNavItems({
   showSettings,
@@ -242,10 +258,12 @@ export function buildDashboardNavItems({
   }
 
   if (sector === "restauracion") {
+    // "Mostrador" es operativa de venta: SIEMPRE (todos los miembros, staff incluido).
     // "Carta" es gestión (owner/manager): solo si showSettings.
-    return showSettings
-      ? [...withSectorLabels.slice(0, 1), CARTA_ITEM, ...withSectorLabels.slice(1)]
-      : withSectorLabels;
+    const base = withSectorLabels.slice(0, 1);
+    const rest = withSectorLabels.slice(1);
+    const extras = showSettings ? [MOSTRADOR_ITEM, CARTA_ITEM] : [MOSTRADOR_ITEM];
+    return [...base, ...extras, ...rest];
   }
 
   return withSectorLabels;
