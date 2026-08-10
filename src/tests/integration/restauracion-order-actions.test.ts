@@ -89,8 +89,22 @@ describe("order actions", () => {
   });
 
   // Happy path que no existía todavía: pedido abierta + ítem pendiente →
-  // inserta la fila de anulación (append-only).
-  it("voidOrderItem inserta fila de anulación cuando el pedido está abierta", async () => {
+  // (1) UPDATE del original a status:"anulado" (excluye del cobro futuro de
+  // settleOrder, que filtrará status != 'anulado') + (2) INSERT de la fila de
+  // auditoría append-only. `onWrite` es un `vi.fn` para poder comprobar que
+  // el UPDATE se emitió de verdad (no solo confiar en el resultado final).
+  it("voidOrderItem marca el original como anulado (UPDATE) e inserta la fila de anulación (INSERT)", async () => {
+    const onWrite = vi.fn((op: string, table: string) => {
+      if (op === "update" && table === "order_items") return { data: null, error: null };
+      if (op === "insert" && table === "order_items") {
+        return { data: [{
+          id: "66666666-6666-4666-8666-666666666666", salon_id: "SALON", order_id: ORDER_ID_1,
+          product_id: PRODUCT_ID_1, qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null,
+          status: "anulado", void_of_item_id: ITEM_ID_1, void_reason: "pedido equivocado",
+        }] };
+      }
+      return {};
+    });
     holder.supabase = makeSupabaseMock({
       tables: {
         orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "abierta" }] },
@@ -100,14 +114,7 @@ describe("order actions", () => {
           combo_group: null, modifiers_snapshot: [], void_of_item_id: null, void_reason: null,
         }] },
       },
-      onWrite: (op: string, table: string) =>
-        op === "insert" && table === "order_items"
-          ? { data: [{
-              id: "66666666-6666-4666-8666-666666666666", salon_id: "SALON", order_id: ORDER_ID_1,
-              product_id: PRODUCT_ID_1, qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null,
-              status: "anulado", void_of_item_id: ITEM_ID_1, void_reason: "pedido equivocado",
-            }] }
-          : {},
+      onWrite,
     });
     const r = await voidOrderItem({ orderId: ORDER_ID_1, itemId: ITEM_ID_1, reason: "pedido equivocado" });
     expect(r.ok).toBe(true);
@@ -115,6 +122,14 @@ describe("order actions", () => {
       expect(r.data.status).toBe("anulado");
       expect(r.data.void_of_item_id).toBe(ITEM_ID_1);
     }
+    // El original se marcó anulado — esto es lo que lo excluye del cobro.
+    expect(onWrite).toHaveBeenCalledWith(
+      "update", "order_items", { status: "anulado", void_reason: "pedido equivocado" },
+    );
+    // Y sigue existiendo la fila de auditoría append-only.
+    expect(onWrite).toHaveBeenCalledWith(
+      "insert", "order_items", expect.objectContaining({ void_of_item_id: ITEM_ID_1 }),
+    );
   });
 
   // Ronda de fix (Minor #3): no tiene sentido anular una anulación.

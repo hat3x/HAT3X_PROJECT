@@ -132,27 +132,46 @@ export async function addOrderItems(input: unknown): Promise<ActionResult<{ adde
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// voidOrderItem: append-only — NUNCA se hace UPDATE/DELETE de la línea
-// original (histórico intacto para cocina/caja/auditoría). Primero pasa la
-// MISMA guarda que `addOrderItems` (`assertOrderOpenInSalon`): no tiene
-// sentido anular una línea de un pedido ya cobrado/cerrado (el ticket ya
-// salió) ni de un pedido que no pertenece a este salón. Luego se lee el ítem
-// original acotado por `order_id` + `salon_id` (garantiza que pertenece AL
-// PEDIDO y AL SALÓN indicados, aunque el `itemId` sea arbitrario), se
-// rechaza si esa línea YA es una anulación (no tiene sentido anular una
-// anulación), y se inserta una fila NUEVA que referencia la original vía
+// voidOrderItem: append-only para el HISTÓRICO — NUNCA se hace DELETE de la
+// línea original. Primero pasa la MISMA guarda que `addOrderItems`
+// (`assertOrderOpenInSalon`): no tiene sentido anular una línea de un pedido
+// ya cobrado/cerrado (el ticket ya salió) ni de un pedido que no pertenece a
+// este salón. Luego se lee el ítem original acotado por `order_id` +
+// `salon_id` (garantiza que pertenece AL PEDIDO y AL SALÓN indicados, aunque
+// el `itemId` sea arbitrario) y se rechaza si esa línea YA es una anulación
+// (no tiene sentido anular una anulación).
+//
+// Dos escrituras, no una: (1) UPDATE del ítem ORIGINAL a `status: "anulado"`
+// (+ `void_reason`) — necesario para que `settleOrder` (task futura, filtra
+// `status != 'anulado'` al cargar líneas a cobrar) EXCLUYA esta línea del
+// cobro. Sin este update, el original seguiría `pendiente`/`enviado`/…  y se
+// cobraría igual pese a estar anulada — el bug que corrige este cambio. (2)
+// INSERT de una fila NUEVA de auditoría que referencia la original vía
 // `void_of_item_id`, con un `id` de cliente NUEVO generado en el SERVIDOR
 // (`randomUUID` — a diferencia de createOrder/addOrderItems, esta fila no la
 // propone el cliente porque nace de una acción de servidor, no de
 // composición offline).
 //
-// Se copian solo los campos que importan para el histórico/cocina/caja
-// (product_id/qty/station_id/order_id/salon_id/unit_price_cents/vat_rate),
-// tal como pide el brief. `combo_group` y `modifiers_snapshot` NO se copian:
-// la fila de anulación es un registro de auditoría de cantidad/importe (para
-// que el ticket y el estado de cocina reflejen la baja), no una réplica
-// visual de la línea — el modificador/combo ya quedó registrado en la línea
-// original, que sigue existiendo (no se borra).
+// El UPDATE va ANTES del INSERT (no al revés): sin transacción explícita
+// entre ambas escrituras, si UNA de las dos fallara preferimos que sea el
+// registro de auditoría el que falte, no la exclusión del cobro — la
+// garantía financiera (no cobrar una línea anulada) importa más que la
+// completitud del histórico. Si el UPDATE fallara, se aborta antes de tocar
+// nada más (no queda una fila de auditoría "huérfana" sobre un original que
+// en realidad no cambió de estado).
+//
+// El propio UPDATE (marca `status: "anulado"` en el original) es también lo
+// que hace que la guarda de arriba ("no anular una anulación") bloquee
+// anular DOS VECES el mismo ítem: la segunda llamada lee el original ya
+// marcado `anulado` por la primera y lo rechaza antes de llegar aquí.
+//
+// La fila de auditoría copia solo los campos que importan para el
+// histórico/cocina/caja (product_id/qty/station_id/order_id/salon_id/
+// unit_price_cents/vat_rate), tal como pide el brief. `combo_group` y
+// `modifiers_snapshot` NO se copian: es un registro de cantidad/importe, no
+// una réplica visual — el modificador/combo ya quedó registrado en la línea
+// original, que sigue existiendo (nunca se borra, solo se actualiza su
+// `status`).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function voidOrderItem(input: unknown): Promise<ActionResult<OrderItem>> {
@@ -174,6 +193,12 @@ export async function voidOrderItem(input: unknown): Promise<ActionResult<OrderI
   if (original.status === "anulado" || original.void_of_item_id !== null) {
     return { ok: false, error: "Esta línea ya está anulada" };
   }
+
+  const { error: updateError } = await supabase
+    .from("order_items")
+    .update({ status: "anulado", void_reason: parsed.data.reason })
+    .eq("id", parsed.data.itemId).eq("salon_id", salonId);
+  if (updateError !== null) return { ok: false, error: updateError.message };
 
   const payload: OrderItemInsert = {
     id: randomUUID(),
