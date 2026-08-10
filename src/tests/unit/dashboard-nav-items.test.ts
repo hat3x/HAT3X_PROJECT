@@ -104,4 +104,12 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
     expect(hrefs).toContain("/mostrador");
     expect(hrefs).toContain("/carta");
   });
+
+  it("restauración: staff ve Mostrador y Cocina, no Carta", () => {
+    const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
+    const hrefs = items.map((i) => i.href);
+    expect(hrefs).toContain("/mostrador");
+    expect(hrefs).toContain("/cocina");
+    expect(hrefs).not.toContain("/carta");
+  });
 });
