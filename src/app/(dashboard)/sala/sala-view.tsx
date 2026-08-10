@@ -28,15 +28,16 @@ import {
   useZones,
 } from "@/hooks/use-tables";
 import { useSalePaymentMethods } from "@/hooks/use-tpv";
-import { canManageSettings } from "@/lib/salon";
 import { tableTone } from "@/lib/restauracion/tables";
-import type { DiningTable, MemberRole } from "@/types/database";
+import type { DiningTable } from "@/types/database";
 
 interface SalaViewProps {
   salonId: string;
-  /** `null` si el usuario no tiene una pertenencia resuelta (no debería
-   * ocurrir tras `SectorGate`, pero se trata como "sin permiso de gestión"). */
-  role: MemberRole | null;
+  /** El usuario puede gestionar el layout del plano (owner/manager). Se calcula
+   * en SERVIDOR (`page.tsx`) y se pasa como prop: `canManageSettings` vive en
+   * `@/lib/salon`, que importa `next/headers` y NO puede entrar en el bundle de
+   * cliente. El servidor vuelve a comprobar el permiso en las actions de layout. */
+  canEdit: boolean;
 }
 
 /**
@@ -167,9 +168,8 @@ function OpenTableDialog({
  * (`useSalePaymentMethods`, también compartido con el mostrador), ambos
  * reenviados a `TablePanel`.
  */
-export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
+export function SalaView({ salonId, canEdit }: SalaViewProps): React.ReactElement {
   const router = useRouter();
-  const canEdit = canManageSettings(role);
 
   const realtimeStatus = useTablesRealtime(salonId);
   const zonesQuery = useZones(salonId);

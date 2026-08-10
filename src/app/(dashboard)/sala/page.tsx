@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { SalaView } from "@/app/(dashboard)/sala/sala-view";
-import { getActiveMembership, getActiveSalon } from "@/lib/salon";
+import { canManageSettings, getActiveMembership, getActiveSalon } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -12,11 +12,12 @@ export const metadata: Metadata = {
 /**
  * `page.tsx` de `/sala` (Task 7): resuelve `salonId` y `role` en servidor —
  * mismo patrón que `mostrador/page.tsx` (comprobar sesión, resolver salón
- * activo, delegar el resto a la vista cliente). `role` se pasa a `SalaView`
- * para decidir si se muestra el modo edición del plano (solo owner/manager,
- * vía `canManageSettings` — Task 7 la comprueba en cliente para la UI Y el
- * servidor la vuelve a comprobar en `saveTablePosition`/`createZone`/
- * `createTable`, `sala/actions.ts`, Task 5: la UI oculta, el servidor rechaza).
+ * activo, delegar el resto a la vista cliente). El permiso de gestión del
+ * layout (`canEdit`) se calcula AQUÍ en servidor (`canManageSettings`) y se
+ * pasa a `SalaView`: `canManageSettings` vive en `@/lib/salon`, que importa
+ * `next/headers` y no puede entrar en el bundle de cliente. El servidor lo
+ * vuelve a comprobar en `saveTablePosition`/`createZone`/`createTable`
+ * (`sala/actions.ts`, Task 5): la UI oculta, el servidor rechaza.
  */
 export default async function SalaPage(): Promise<React.ReactElement> {
   const supabase = createClient();
@@ -42,6 +43,7 @@ export default async function SalaPage(): Promise<React.ReactElement> {
   }
 
   const membership = await getActiveMembership();
+  const canEdit = canManageSettings(membership?.role ?? null);
 
-  return <SalaView salonId={salon.id} role={membership?.role ?? null} />;
+  return <SalaView salonId={salon.id} canEdit={canEdit} />;
 }
