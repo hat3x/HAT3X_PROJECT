@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, WifiOff } from "lucide-react";
+import { AlertCircle, Loader2, WifiOff } from "lucide-react";
 
 import { FloorEditor } from "@/app/(dashboard)/sala/floor-editor";
 import { TableNode } from "@/app/(dashboard)/sala/table-node";
@@ -192,6 +192,7 @@ export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
   const [openDialogTable, setOpenDialogTable] = useState<DiningTable | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+  const [dragError, setDragError] = useState<string | null>(null);
 
   const zones = zonesQuery.data ?? [];
   const tables = tablesQuery.data ?? [];
@@ -247,7 +248,13 @@ export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
   }
 
   function handleDragEnd(table: DiningTable, pos: { posX: number; posY: number }): void {
-    savePosition.mutate({ tableId: table.id, posX: pos.posX, posY: pos.posY });
+    setDragError(null);
+    savePosition.mutate(
+      { tableId: table.id, posX: pos.posX, posY: pos.posY },
+      {
+        onError: (e) => setDragError(e instanceof Error ? e.message : "No se pudo mover la mesa"),
+      },
+    );
   }
 
   return (
@@ -287,6 +294,16 @@ export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
           />
         ) : null}
       </div>
+
+      {dragError !== null ? (
+        <p
+          role="alert"
+          className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {dragError}
+        </p>
+      ) : null}
 
       <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
         <div className="relative min-h-[34rem] w-full overflow-hidden rounded-2xl border border-dashed border-border bg-muted/20">

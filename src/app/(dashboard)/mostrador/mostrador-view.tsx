@@ -12,7 +12,7 @@ import {
   useModifierGroups,
   useStations,
 } from "@/hooks/use-menu";
-import { useOrderItems } from "@/hooks/use-orders";
+import { useOpenOrders, useOrderItems } from "@/hooks/use-orders";
 import { useSalePaymentMethods } from "@/hooks/use-tpv";
 import { buildOrderItemDrafts, type MenuSelection } from "@/lib/restauracion/order";
 import type { Order, OrderItem, Product } from "@/types/database";
@@ -21,6 +21,12 @@ interface MostradorViewProps {
   salonId: string;
   /** Nombre comercial del salón; cabecera del ticket impreso. */
   salonName: string;
+  /** Id de la cuenta con la que arrancar el mostrador ya seleccionada, tal
+   * como llega desde `/sala` (fix revisión Task 7, Important: "Añadir" en el
+   * panel de una mesa navega a `/mostrador?order=<id>`, `page.tsx` lee ese
+   * parámetro y lo pasa aquí). Mismo patrón que `initialAppointmentId` en
+   * `tpv-view.tsx`. */
+  initialOrderId?: string;
 }
 
 /** `order_items.modifiers_snapshot` es `Json` en la BD; en la práctica siempre
@@ -42,14 +48,20 @@ function isActiveOrderItem(row: OrderItem): boolean {
  * `crypto.randomUUID()`, patrón de `tpv-view.tsx`); es `OrderPanel` quien
  * decide CUÁNDO persistirlas (Mandar/Cobrar). Al reabrir una cuenta desde
  * `OpenOrdersBar`, las líneas ya persistidas se cargan una única vez con
- * `useOrderItems`.
+ * `useOrderItems`. `initialOrderId` (opcional) reanuda una cuenta abierta
+ * automáticamente al montar — llegada desde `/sala` vía `?order=<id>`.
  */
-export function MostradorView({ salonId, salonName }: MostradorViewProps): React.ReactElement {
+export function MostradorView({
+  salonId,
+  salonName,
+  initialOrderId,
+}: MostradorViewProps): React.ReactElement {
   const products = useMenuProducts(salonId);
   const stations = useStations(salonId);
   const modifierGroups = useModifierGroups(salonId);
   const productModifierGroups = useAllProductModifierGroups(salonId);
   const paymentMethods = useSalePaymentMethods(salonId);
+  const openOrders = useOpenOrders(salonId);
 
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<OrderPanelItem[]>([]);
@@ -95,6 +107,29 @@ export function MostradorView({ salonId, salonName }: MostradorViewProps): React
     setItems(loaded);
     setPendingIds(new Set());
   }, [order, orderItemsQuery.data, productsById]);
+
+  // "Añadir" desde el panel de una mesa en /sala abre /mostrador?order=<id>
+  // (fix revisión Task 7, Important): en cuanto las cuentas abiertas cargan,
+  // retomamos ESA cuenta una sola vez — mismo patrón `initialAppointmentId` /
+  // `startedFromParamRef` de `tpv-view.tsx`, y reutiliza `handleSelectOrder`
+  // (el MISMO handler que usa `OpenOrdersBar` al reanudar una cuenta) en vez
+  // de duplicar su lógica de limpieza síncrona. Así los productos que se
+  // añadan van al MISMO pedido, que ya lleva `dining_table_id`, en vez de
+  // crear uno nuevo desconectado de la mesa. Si no se encuentra (p.ej. ya se
+  // cobró entre que se abrió el enlace y cargó el mostrador), no hace nada:
+  // cae al mostrador en blanco de siempre.
+  const startedFromOrderParamRef = useRef(false);
+  useEffect(() => {
+    if (startedFromOrderParamRef.current || initialOrderId === undefined) return;
+    const match = openOrders.data?.find((o) => o.id === initialOrderId);
+    if (match !== undefined) {
+      startedFromOrderParamRef.current = true;
+      handleSelectOrder(match);
+    }
+    // handleSelectOrder es una declaración hoisted y estable; no va en deps
+    // (mismo criterio que `startFromAppointment` en `tpv-view.tsx`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOrderId, openOrders.data]);
 
   function addSelection(selection: MenuSelection): void {
     const drafts = buildOrderItemDrafts(selection, () => crypto.randomUUID());

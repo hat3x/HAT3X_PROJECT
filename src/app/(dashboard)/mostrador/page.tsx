@@ -9,7 +9,11 @@ export const metadata: Metadata = {
   title: "Mostrador",
 };
 
-export default async function MostradorPage(): Promise<React.ReactElement> {
+export default async function MostradorPage({
+  searchParams,
+}: {
+  searchParams: { order?: string };
+}): Promise<React.ReactElement> {
   const supabase = createClient();
   const {
     data: { user },
@@ -32,5 +36,14 @@ export default async function MostradorPage(): Promise<React.ReactElement> {
     );
   }
 
-  return <MostradorView salonId={salon.id} salonName={salon.name} />;
+  return (
+    <MostradorView
+      salonId={salon.id}
+      salonName={salon.name}
+      // Cuenta a reanudar desde /sala ("Añadir" del panel de una mesa abre
+      // /mostrador?order=<id>, fix revisión Task 7, Important) — mismo
+      // patrón que `initialAppointmentId` en `tpv/page.tsx`.
+      initialOrderId={typeof searchParams.order === "string" ? searchParams.order : undefined}
+    />
+  );
 }

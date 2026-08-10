@@ -90,6 +90,30 @@ export function TableNode({
     setDragPos(null);
   }
 
+  /**
+   * Un gesto de arrastre puede CANCELARSE sin soltar (p.ej. el navegador lo
+   * interrumpe por un gesto del sistema, o el elemento pierde el puntero) —
+   * `pointercancel` en vez de `pointerup`. Fix revisión Task 7 (Minor): sin
+   * este handler, `draggingRef` se quedaba en `true` y el nodo seguía
+   * "arrastrando" en el siguiente `pointermove`, aunque el usuario ya no
+   * tuviera el dedo/puntero sobre él. NO llama a `onDragEnd` — el gesto no
+   * terminó con normalidad, así que no hay una posición final que persistir.
+   */
+  function handlePointerCancel(event: ReactPointerEvent<HTMLButtonElement>): void {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    if (typeof ref.current?.releasePointerCapture === "function") {
+      try {
+        ref.current.releasePointerCapture(event.pointerId);
+      } catch {
+        // El navegador puede haber soltado la captura ANTES de disparar
+        // `pointercancel` (motivo típico de la propia cancelación) —
+        // liberar una captura ya perdida no es un error real aquí.
+      }
+    }
+    setDragPos(null);
+  }
+
   function handleClick(): void {
     if (editable) return;
     onSelect();
@@ -114,6 +138,7 @@ export function TableNode({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
     >
       <span className="max-w-[4.25rem] truncate px-1">{table.name}</span>
       <span className="text-xs font-normal opacity-80">
