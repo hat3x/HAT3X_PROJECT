@@ -53,4 +53,32 @@ describe("order status actions", () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.sent).toBe(0);
   });
+
+  // Ronda de fix (revisión final del Plan B, Important financiero): 'anulado'
+  // es TERMINAL — solo `voidOrderItem` lo fija (append-only, con fila de
+  // auditoría). Sin esta guarda, `from:'anulado'` reanimaría una línea ya
+  // anulada (quitándole `status:'anulado'` sin tocar `void_of_item_id`, que
+  // quedaría huérfano) y `settleOrder` la volvería a cobrar. Se rechaza ANTES
+  // de tocar la BD: `onWrite` no debe recibir ninguna llamada de tipo
+  // "update".
+  it("setOrderItemStatus rechaza from:'anulado' sin tocar la BD (no se puede reanimar una línea anulada)", async () => {
+    const onWrite = vi.fn(() => ({ data: [] }));
+    holder.supabase = makeSupabaseMock({ onWrite });
+    const r = await setOrderItemStatus({ itemId: ITEM_ID_1, from: "anulado", to: "pendiente" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("anulado");
+    expect(onWrite).not.toHaveBeenCalledWith("update", expect.anything(), expect.anything());
+  });
+
+  // Simétrico: tampoco se puede anular POR ESTA VÍA (to:'anulado') —
+  // saltaría el registro de auditoría de `voidOrderItem` (sin `void_reason`
+  // ni fila `void_of_item_id`).
+  it("setOrderItemStatus rechaza to:'anulado' sin tocar la BD (anular pasa por voidOrderItem)", async () => {
+    const onWrite = vi.fn(() => ({ data: [] }));
+    holder.supabase = makeSupabaseMock({ onWrite });
+    const r = await setOrderItemStatus({ itemId: ITEM_ID_1, from: "listo", to: "anulado" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("anulado");
+    expect(onWrite).not.toHaveBeenCalledWith("update", expect.anything(), expect.anything());
+  });
 });

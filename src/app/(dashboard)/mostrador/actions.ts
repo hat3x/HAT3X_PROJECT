@@ -274,11 +274,29 @@ export async function sendOrderToStations(input: unknown): Promise<ActionResult<
 // es la línea ya actualizada — se devuelve completa (`select("*")`) porque el
 // caller (kanban de cocina/barra) necesita pintarla tal cual quedó, no solo
 // confirmar el cambio.
+//
+// `'anulado'` es TERMINAL — fix de la revisión final del Plan B (Important,
+// financiero). Solo `voidOrderItem` puede fijarlo (append-only: UPDATE del
+// original a `anulado` + INSERT de la fila de auditoría con
+// `void_of_item_id`). Sin esta guarda, `setOrderItemStatus({ from:'anulado',
+// to:'pendiente' })` casaría con una línea ya anulada (el UPDATE condicionado
+// por `status = from` no distingue "anulado por buena razón" de cualquier
+// otro estado), le quitaría `status:'anulado'` dejando `void_of_item_id` sin
+// tocar (huérfano, apuntando a una línea que ya no dice estar anulada), y
+// `settleOrder` (que filtra `status != 'anulado'`) la re-incluiría y la
+// COBRARÍA otra vez — doble cobro de una línea que el mostrador ya anuló.
+// Se rechaza ANTES de tocar la BD (ni siquiera se llega al UPDATE) tanto para
+// `from:'anulado'` (reanimar una anulación) como para `to:'anulado'`
+// (anular por esta vía, saltándose el registro de auditoría de
+// `voidOrderItem`) — ambos sentidos abren el mismo agujero financiero.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function setOrderItemStatus(input: unknown): Promise<ActionResult<OrderItem>> {
   const parsed = setOrderItemStatusSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  if (parsed.data.from === "anulado" || parsed.data.to === "anulado") {
+    return { ok: false, error: "No se puede transicionar hacia/desde 'anulado' (usa anular la línea)" };
+  }
   const salonId = await getActiveSalonId();
   if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
   const supabase = createClient();
