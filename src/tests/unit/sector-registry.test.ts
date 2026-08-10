@@ -48,10 +48,10 @@ describe("sector registry", () => {
       priceCents: 1500,
     });
   });
-  it("implemented: peluqueria y odontologia true, restauracion false", () => {
+  it("implemented: peluqueria, odontologia y restauracion true", () => {
     expect(SECTOR_REGISTRY.peluqueria.implemented).toBe(true);
     expect(SECTOR_REGISTRY.odontologia.implemented).toBe(true);
-    expect(SECTOR_REGISTRY.restauracion.implemented).toBe(false);
+    expect(SECTOR_REGISTRY.restauracion.implemented).toBe(true);
   });
   it("SECTOR_ORDER lista los 3 sectores", () => {
     expect([...SECTOR_ORDER].sort()).toEqual([...ALL].sort());

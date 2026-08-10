@@ -42,10 +42,11 @@ describe("buildDashboardNavItems — por sector", () => {
     const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
     expect(peluqueria.some((i) => i.href === "/expediente")).toBe(false);
   });
-  it("restauracion (cascaron): item 'Próximamente'", () => {
+  it("restauracion: ya no es cascarón; item 'Carta' visible y sin 'Próximamente'", () => {
     const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
-    expect(items.some((i) => i.label === "Próximamente")).toBe(true);
-    expect(items.some((i) => i.href === "/proximamente")).toBe(true);
+    expect(items.some((i) => i.label === "Próximamente")).toBe(false);
+    expect(items.some((i) => i.href === "/proximamente")).toBe(false);
+    expect(items.some((i) => i.href === "/carta")).toBe(true);
   });
   it("sin sector = peluqueria", () => {
     const items = buildDashboardNavItems({ showSettings: true, hasPos: true });
