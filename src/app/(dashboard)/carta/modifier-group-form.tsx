@@ -193,9 +193,7 @@ export function ModifierGroupForm({
                   className="flex-1"
                 />
                 <Input
-                  type="number"
                   inputMode="decimal"
-                  step="0.01"
                   aria-label={`Suplemento de la opción ${index + 1} en euros`}
                   value={option.priceDeltaEuros}
                   onChange={(e) => updateOption(index, { priceDeltaEuros: e.target.value })}

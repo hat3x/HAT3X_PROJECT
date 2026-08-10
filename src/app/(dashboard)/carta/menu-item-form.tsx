@@ -158,10 +158,7 @@ export function MenuItemForm({
           <Label htmlFor="menu-item-price">Precio (€) *</Label>
           <Input
             id="menu-item-price"
-            type="number"
             inputMode="decimal"
-            step="0.01"
-            min="0"
             required
             value={price}
             onChange={(e) => setPrice(e.target.value)}
