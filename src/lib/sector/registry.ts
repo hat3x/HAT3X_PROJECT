@@ -67,7 +67,7 @@ export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
     label: "Restauración",
     brandName: "Kairos",
     defaultPrimary: "#c2410c",
-    implemented: false,
+    implemented: true,
     terms: {
       customer: "Cliente", customerPlural: "Clientes",
       service: "Producto", servicePlural: "Carta",

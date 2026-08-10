@@ -80,4 +80,15 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
     expect(items).toContain("/recordatorios");
     expect(items.indexOf("/recordatorios")).toBe(items.indexOf("/appointments") + 1);
   });
+
+  it("restauración: owner ve el item Carta y NO 'Próximamente'", () => {
+    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
+    const hrefs = items.map((i) => i.href);
+    expect(hrefs).toContain("/carta");
+    expect(hrefs).not.toContain("/proximamente");
+  });
+  it("restauración: staff (sin settings) no cae en 'Próximamente'", () => {
+    const items = buildDashboardNavItems({ showSettings: false, hasPos: false, sector: "restauracion" });
+    expect(items.map((i) => i.href)).not.toContain("/proximamente");
+  });
 });

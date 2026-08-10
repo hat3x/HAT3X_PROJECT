@@ -26,6 +26,7 @@ import {
   Settings,
   ShoppingBag,
   Stethoscope,
+  UtensilsCrossed,
   Users,
   Wallet,
   type LucideIcon,
@@ -145,6 +146,17 @@ export const EXPEDIENTE_ITEM: NavItem = {
   icon: FolderOpen,
 };
 
+/**
+ * Carta (backoffice de categorías/estaciones/productos/modificadores/combos).
+ * Solo visible para el sector restauración, y solo para gestión (owner/manager):
+ * es materia de gestión, igual que Odontograma lo es para odontología.
+ */
+export const CARTA_ITEM: NavItem = {
+  href: "/carta",
+  label: "Carta",
+  icon: UtensilsCrossed,
+};
+
 /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
   /** El usuario puede ver materia de gestión (owner/manager). */
@@ -172,7 +184,9 @@ export interface NavGating {
  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
- * (en ese orden) tras "Pacientes".
+ * (en ese orden) tras "Pacientes". Restauración inserta Carta (gestión de la carta:
+ * categorías/estaciones/productos/combos) justo tras "Panel", solo si `showSettings`
+ * (owner/manager); sin gestión no se añade (staff no ve Carta).
  */
 export function buildDashboardNavItems({
   showSettings,
@@ -211,19 +225,28 @@ export function buildDashboardNavItems({
       : item,
   );
 
-  if (sector !== "odontologia") return withSectorLabels;
+  if (sector === "odontologia") {
+    // Odontología: añadir Odontograma justo después de Pacientes, Periodontograma
+    // justo después de Odontograma, Planes justo después de Periodontograma, y
+    // Expediente justo después de Planes.
+    const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
+    const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
+    return [
+      ...withSectorLabels.slice(0, insertAt),
+      ODONTOGRAMA_ITEM,
+      PERIODONTOGRAMA_ITEM,
+      PLANES_ITEM,
+      EXPEDIENTE_ITEM,
+      ...withSectorLabels.slice(insertAt),
+    ];
+  }
 
-  // Odontología: añadir Odontograma justo después de Pacientes, Periodontograma
-  // justo después de Odontograma, Planes justo después de Periodontograma, y
-  // Expediente justo después de Planes.
-  const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
-  const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
-  return [
-    ...withSectorLabels.slice(0, insertAt),
-    ODONTOGRAMA_ITEM,
-    PERIODONTOGRAMA_ITEM,
-    PLANES_ITEM,
-    EXPEDIENTE_ITEM,
-    ...withSectorLabels.slice(insertAt),
-  ];
+  if (sector === "restauracion") {
+    // "Carta" es gestión (owner/manager): solo si showSettings.
+    return showSettings
+      ? [...withSectorLabels.slice(0, 1), CARTA_ITEM, ...withSectorLabels.slice(1)]
+      : withSectorLabels;
+  }
+
+  return withSectorLabels;
 }
