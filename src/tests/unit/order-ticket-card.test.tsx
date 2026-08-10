@@ -3,25 +3,35 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { kdsKeys } from "@/lib/queries/kds";
 import type { KdsOrderGroup } from "@/lib/restauracion/kds";
 
 /**
  * Mock de `@/hooks/use-orders` (patrón `order-panel.test.tsx` / `menu-item-form.test.tsx`,
  * vi.hoisted + createElement + getByRole): `OrderTicketCard` llama a
  * `useSetOrderItemStatus` directamente, así que el test no necesita
- * `QueryClientProvider`.
+ * `QueryClientProvider`. Mockeamos también `useQueryClient` de
+ * `@tanstack/react-query` (fix del refresco instantáneo del KDS): el
+ * componente lo llama para invalidar `kdsKeys.all(salonId)` en el
+ * `onSuccess` de la mutation — sin este mock, `useQueryClient` real lanzaría
+ * "No QueryClient set" al no haber `QueryClientProvider` en el árbol.
  */
 const m = vi.hoisted(() => ({
   setOrderItemStatus: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
+  queryClient: { invalidateQueries: vi.fn() },
 }));
 vi.mock("@/hooks/use-orders", () => ({
   useSetOrderItemStatus: () => m.setOrderItemStatus,
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => m.queryClient,
 }));
 
 import { OrderTicketCard } from "@/app/(dashboard)/cocina/order-ticket-card";
 
 beforeEach(() => {
   m.setOrderItemStatus.mutate = vi.fn();
+  m.queryClient.invalidateQueries = vi.fn();
 });
 afterEach(() => cleanup());
 
@@ -68,6 +78,15 @@ describe("OrderTicketCard", () => {
       from: "enviado",
       to: "listo",
     });
+
+    // Fix "el KDS no se refresca al Entregar/Entregado": el segundo argumento
+    // de `mutate` es un `onSuccess` que invalida `kdsKeys.all(salonId)` para
+    // refrescar la pantalla al instante (sin depender del roundtrip de
+    // Realtime). Invocamos aquí el callback capturado, como haría react-query
+    // real al resolver la mutation.
+    const options = m.setOrderItemStatus.mutate.mock.calls[0]![1] as { onSuccess: () => void };
+    options.onSuccess();
+    expect(m.queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: kdsKeys.all("SALON") });
   });
 
   it("un ítem 'listo' muestra Entregado y al pulsarlo pide pasar a 'entregado'", async () => {
@@ -82,5 +101,9 @@ describe("OrderTicketCard", () => {
       from: "listo",
       to: "entregado",
     });
+
+    const options = m.setOrderItemStatus.mutate.mock.calls[0]![1] as { onSuccess: () => void };
+    options.onSuccess();
+    expect(m.queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: kdsKeys.all("SALON") });
   });
 });

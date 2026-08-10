@@ -1,10 +1,12 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { Timer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useSetOrderItemStatus } from "@/hooks/use-orders";
+import { kdsKeys } from "@/lib/queries/kds";
 import { elapsedMinutes, type KdsItem, type KdsOrderGroup } from "@/lib/restauracion/kds";
 import { cn } from "@/lib/utils";
 import type { OrderItemStatus } from "@/types/database";
@@ -36,16 +38,26 @@ function timerTone(minutes: number): string {
  * botón — **Entregar** (enviado/preparando → listo) o **Entregado**
  * (listo → entregado) — llamando a `useSetOrderItemStatus`, cuya mutation
  * server-side condiciona el UPDATE por `status = from` (ver
- * `mostrador/actions.ts`). Si el servidor rechaza por CONFLICTO (otro
- * miembro del equipo ya cambió el estado de esa línea), no hace falta
- * manejarlo aquí explícitamente: `useKdsRealtime` invalida la query del KDS
- * en cualquier cambio de `order_items` y la lista se refresca sola.
+ * `mostrador/actions.ts`). Esa mutation (Plan B) invalida `orderKeys`, NO
+ * `kdsKeys` — no tiene forma de saber que esta pantalla existe — así que al
+ * éxito invalidamos `kdsKeys.all(salonId)` explícitamente aquí para que la
+ * tarjeta se actualice AL INSTANTE, sin depender del roundtrip de
+ * `useKdsRealtime` (que sigue activo como respaldo: si el evento Realtime
+ * llega igualmente, la invalidación es idempotente). Si el servidor rechaza
+ * por CONFLICTO (otro miembro del equipo ya cambió el estado de esa línea),
+ * no hace falta manejarlo aquí explícitamente: cualquiera de las dos vías
+ * (invalidación directa o Realtime) refresca la lista y la tarjeta se
+ * actualiza sola.
  */
 export function OrderTicketCard({ salonId, group, now }: OrderTicketCardProps): React.ReactElement {
   const setStatus = useSetOrderItemStatus(salonId);
+  const queryClient = useQueryClient();
 
   function advance(item: KdsItem, to: OrderItemStatus): void {
-    setStatus.mutate({ itemId: item.id, from: item.status as OrderItemStatus, to });
+    setStatus.mutate(
+      { itemId: item.id, from: item.status, to },
+      { onSuccess: () => queryClient.invalidateQueries({ queryKey: kdsKeys.all(salonId) }) },
+    );
   }
 
   return (

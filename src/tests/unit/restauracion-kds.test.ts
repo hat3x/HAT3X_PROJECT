@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { elapsedMinutes, groupKdsItemsByOrder, type KdsItem } from "@/lib/restauracion/kds";
+import { elapsedMinutes, groupKdsItemsByOrder, groupKdsItemsByStation, type KdsItem } from "@/lib/restauracion/kds";
 
 function item(over: Partial<KdsItem>): KdsItem {
   return {
@@ -24,5 +24,26 @@ describe("elapsedMinutes", () => {
   it("cuenta minutos enteros transcurridos, nunca negativo", () => {
     expect(elapsedMinutes("2026-08-10T12:00:00Z", new Date("2026-08-10T12:07:30Z"))).toBe(7);
     expect(elapsedMinutes("2026-08-10T12:00:00Z", new Date("2026-08-10T11:59:00Z"))).toBe(0);
+  });
+});
+
+describe("groupKdsItemsByStation", () => {
+  it("agrupa por nombre de estación y ordena los grupos alfabéticamente", () => {
+    const groups = groupKdsItemsByStation([
+      item({ id: "a", stationName: "Barra" }),
+      item({ id: "b", stationName: "Cocina" }),
+      item({ id: "c", stationName: "Cocina" }),
+    ]);
+    expect(groups.map((g) => g.stationName)).toEqual(["Barra", "Cocina"]);
+    expect(groups.find((g) => g.stationName === "Cocina")!.items.map((i) => i.id)).toEqual(["b", "c"]);
+  });
+
+  it("mete las líneas sin stationName en 'Sin estación'", () => {
+    const groups = groupKdsItemsByStation([
+      item({ id: "a", stationName: null }),
+      item({ id: "b", stationName: "Cocina" }),
+    ]);
+    expect(groups.map((g) => g.stationName)).toEqual(["Cocina", "Sin estación"]);
+    expect(groups.find((g) => g.stationName === "Sin estación")!.items.map((i) => i.id)).toEqual(["a"]);
   });
 });

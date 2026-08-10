@@ -5,14 +5,11 @@ import { Loader2, WifiOff } from "lucide-react";
 
 import { StationColumn } from "@/app/(dashboard)/cocina/station-column";
 import { useKdsItems, useKdsRealtime } from "@/hooks/use-kds";
-import { groupKdsItemsByOrder, type KdsItem } from "@/lib/restauracion/kds";
+import { groupKdsItemsByOrder, groupKdsItemsByStation } from "@/lib/restauracion/kds";
 
 interface CocinaViewProps {
   salonId: string;
 }
-
-/** Estación sentinela para líneas sin `stationId` asignado en la carta. */
-const UNASSIGNED_STATION = "Sin estación";
 
 /**
  * Indicador "En directo" del estado de `useKdsRealtime` — mismo patrón
@@ -58,18 +55,6 @@ function LiveIndicator({
   );
 }
 
-/** Agrupa las líneas activas del KDS por nombre de estación. */
-function groupByStation(items: readonly KdsItem[]): Map<string, KdsItem[]> {
-  const byStation = new Map<string, KdsItem[]>();
-  for (const item of items) {
-    const key = item.stationName ?? UNASSIGNED_STATION;
-    const list = byStation.get(key) ?? [];
-    list.push(item);
-    byStation.set(key, list);
-  }
-  return byStation;
-}
-
 /**
  * Pantalla de cocina (KDS, Task 4): columnas por estación con las comandas
  * activas en tiempo real. `useKdsRealtime` invalida la query del KDS en
@@ -90,8 +75,7 @@ export function CocinaView({ salonId }: CocinaViewProps): React.ReactElement {
   }, []);
 
   const items = itemsQuery.data ?? [];
-  const byStation = groupByStation(items);
-  const stationNames = [...byStation.keys()].sort((a, b) => a.localeCompare(b, "es"));
+  const stationGroups = groupKdsItemsByStation(items);
 
   return (
     <main className="container py-6 lg:py-8">
@@ -109,18 +93,18 @@ export function CocinaView({ salonId }: CocinaViewProps): React.ReactElement {
         <p className="text-sm text-destructive">
           No se pudieron cargar las comandas: {(itemsQuery.error as Error).message}
         </p>
-      ) : stationNames.length === 0 ? (
+      ) : stationGroups.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
           <p className="text-sm text-muted-foreground">No hay comandas activas.</p>
         </div>
       ) : (
         <div className="flex animate-fade-up gap-5 overflow-x-auto pb-2">
-          {stationNames.map((stationName) => (
+          {stationGroups.map(({ stationName, items: stationItems }) => (
             <StationColumn
               key={stationName}
               salonId={salonId}
               stationName={stationName}
-              groups={groupKdsItemsByOrder(byStation.get(stationName) ?? [])}
+              groups={groupKdsItemsByOrder(stationItems)}
               now={now}
             />
           ))}
