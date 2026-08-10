@@ -5,6 +5,7 @@ import {
   addOrderItems,
   createOrder,
   sendOrderToStations,
+  settleOrder,
   setOrderItemStatus,
   voidOrderItem,
 } from "@/app/(dashboard)/mostrador/actions";
@@ -13,6 +14,7 @@ import type {
   AddOrderItemsInput,
   CreateOrderInput,
   SendOrderToStationsInput,
+  SettleOrderInput,
   SetOrderItemStatusInput,
   VoidOrderItemInput,
 } from "@/lib/validations/order";
@@ -88,6 +90,23 @@ export function useSetOrderItemStatus(salonId: string) {
   return useMutation({
     mutationFn: async (input: SetOrderItemStatusInput): Promise<OrderItem> => {
       const result = await setOrderItemStatus(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+/**
+ * Cobra un pedido de mostrador (Task 6): materializa el `pos_sale` vía
+ * `settleOrder`. Invalida los pedidos abiertos del salón al terminar —el
+ * pedido cobrado deja de aparecer entre los abiertos (`status: "cobrada"`).
+ */
+export function useSettleOrder(salonId: string) {
+  const invalidate = useInvalidateOrders(salonId);
+  return useMutation({
+    mutationFn: async (input: SettleOrderInput): Promise<{ saleId: string; totalCents: number }> => {
+      const result = await settleOrder(input);
       if (!result.ok) throw new Error(result.error);
       return result.data;
     },

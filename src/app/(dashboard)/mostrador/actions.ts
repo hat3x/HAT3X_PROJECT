@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 
 import { revalidatePath } from "next/cache";
 
+import { computeLineTotals } from "@/lib/payments";
+import { buildSettleLines, settleTotals } from "@/lib/restauracion/order";
 import { getActiveSalonId } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -10,9 +12,10 @@ import {
   createOrderSchema,
   sendOrderToStationsSchema,
   setOrderItemStatusSchema,
+  settleOrderSchema,
   voidOrderItemSchema,
 } from "@/lib/validations/order";
-import type { Order, OrderItem, OrderItemInsert } from "@/types/database";
+import type { Order, OrderItem, OrderItemInsert, TablesInsert } from "@/types/database";
 
 /**
  * Server actions de pedido de mostrador (restauración, Task 4): crear pedido
@@ -293,4 +296,235 @@ export async function setOrderItemStatus(input: unknown): Promise<ActionResult<O
   if (updated === undefined) return { ok: false, error: "CONFLICTO: el estado ya cambió" };
   revalidatePath("/mostrador");
   return { ok: true, data: updated };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// settleOrder (Task 6): cobra un pedido de mostrador MATERIALIZANDO un
+// `pos_sale` — es el puente entre "restauración" (pedidos/comandas) y "TPV"
+// (caja/facturación): un pedido no se factura hasta que pasa por aquí. La
+// estructura replica `createSale` (tpv/actions.ts) a propósito: misma cabecera
+// `pos_sales` (status "completed", `session_id` de la caja abierta), mismas
+// líneas `pos_sale_lines` y mismos pagos `pos_payments`, con el MISMO patrón
+// de rollback manual — supabase-js no expone transacciones multi-sentencia
+// desde el cliente, así que un fallo posterior a crear la cabecera se COMPENSA
+// borrándola (el `on delete cascade` de las FKs arrastra líneas y pagos). La
+// diferencia frente a `createSale`: aquí las líneas NO las teclea el cajero
+// (vienen del pedido ya tomado) y el cobro no pasa por `getPaymentGateway` —
+// los tenders ya vienen resueltos en céntimos desde el flujo de cobro de
+// mostrador, se insertan tal cual en `pos_payments`.
+//
+// ── Idempotencia ─────────────────────────────────────────────────────────────
+// Cobrar el MISMO pedido dos veces (doble tap en el botón de cobrar, reintento
+// de red) NO debe crear una segunda venta. La guarda comprueba, en este orden:
+// (1) si YA existe un `pos_sales` con `order_id = orderId` en este salón, esa
+// es la fuente autoritativa — se devuelve tal cual, sin volver a cobrar; (2) si
+// no hay venta pero el pedido YA está `status = "cobrada"`, es un estado
+// inconsistente (no debería poder pasar salvo un fallo entre el UPDATE de
+// `orders` y la lectura) y se informa en vez de cobrar a ciegas una segunda
+// vez. El caso normal (primera llamada) no entra en ninguna de las dos ramas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Fila de `pos_sales` mínima para responder en la rama idempotente. */
+interface ExistingSaleRow {
+  id: string;
+  total_cents: number;
+}
+
+/** `order_items` con el join `products(name)` que pide `buildSettleLines`. */
+interface SettleableOrderItemRow {
+  product_id: string;
+  qty: number;
+  unit_price_cents: number;
+  vat_rate: number;
+  modifiers_snapshot: unknown;
+  products: { name: string } | null;
+}
+
+/** `modifiers_snapshot` es `Json` en la BD; en la práctica siempre es esta forma (la escribe `addOrderItems`). */
+function asModifiersSnapshot(value: unknown): Array<{ name: string; priceDeltaCents: number }> {
+  return Array.isArray(value) ? (value as Array<{ name: string; priceDeltaCents: number }>) : [];
+}
+
+export async function settleOrder(
+  input: unknown,
+): Promise<ActionResult<{ saleId: string; totalCents: number }>> {
+  const parsed = settleOrderSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const { orderId, tenders, sendPending } = parsed.data;
+
+  const salonId = await getActiveSalonId();
+  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user === null) return { ok: false, error: "Sesión no válida" };
+
+  // 1) El pedido debe existir EN ESTE salón (aislamiento multi-tenant, además de RLS).
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .select("id,status")
+    .eq("id", orderId)
+    .eq("salon_id", salonId)
+    .maybeSingle();
+  if (orderError !== null) return { ok: false, error: orderError.message };
+  if (order === null) return { ok: false, error: "El pedido no existe o no pertenece a tu salón" };
+
+  // 2) Idempotencia — ver comentario de bloque arriba.
+  const { data: existingSaleData, error: existingSaleError } = await supabase
+    .from("pos_sales")
+    .select("id,total_cents")
+    .eq("order_id", orderId)
+    .eq("salon_id", salonId)
+    .maybeSingle();
+  if (existingSaleError !== null) return { ok: false, error: existingSaleError.message };
+  const existingSale = existingSaleData as ExistingSaleRow | null;
+  if (existingSale !== null) {
+    return { ok: true, data: { saleId: existingSale.id, totalCents: existingSale.total_cents } };
+  }
+  if (order.status === "cobrada") {
+    return {
+      ok: false,
+      error: "El pedido ya está cobrado pero no se encontró la venta asociada",
+    };
+  }
+
+  // 3) Líneas a cobrar: NO anuladas (Task 4 marca el original `status:"anulado"`
+  //    al anular, así que basta este filtro — no hace falta excluir por `id`).
+  const { data: itemsData, error: itemsError } = await supabase
+    .from("order_items")
+    .select("*, products(name)")
+    .eq("order_id", orderId)
+    .eq("salon_id", salonId)
+    .is("void_of_item_id", null)
+    .neq("status", "anulado");
+  if (itemsError !== null) return { ok: false, error: itemsError.message };
+  const items = (itemsData ?? []) as unknown as SettleableOrderItemRow[];
+  if (items.length === 0) return { ok: false, error: "El pedido no tiene líneas para cobrar" };
+
+  // 4) Líneas + totales — misma fuente única de verdad que el TPV (`@/lib/payments`).
+  const lines = buildSettleLines(
+    items.map((it) => ({
+      productName: it.products?.name ?? "Producto",
+      qty: it.qty,
+      unitPriceCents: it.unit_price_cents,
+      vatRate: it.vat_rate,
+      modifiersSnapshot: asModifiersSnapshot(it.modifiers_snapshot),
+    })),
+  );
+  const totals = settleTotals(lines);
+
+  // 5) Caja abierta del salón (si la hay) — mismo patrón que `createSale`.
+  const { data: openSession, error: openSessionError } = await supabase
+    .from("pos_sessions")
+    .select("id")
+    .eq("salon_id", salonId)
+    .eq("status", "open")
+    .limit(1)
+    .maybeSingle();
+  if (openSessionError !== null) return { ok: false, error: openSessionError.message };
+  const sessionId = (openSession as { id: string } | null)?.id ?? null;
+
+  // 6) Cabecera de la venta, enlazada al pedido de origen (`order_id`).
+  const saleInsert: TablesInsert<"pos_sales"> = {
+    salon_id: salonId,
+    order_id: orderId,
+    session_id: sessionId,
+    status: "completed",
+    subtotal_cents: totals.subtotalCents,
+    discount_cents: 0,
+    tax_cents: totals.taxCents,
+    total_cents: totals.totalCents,
+    currency: "EUR",
+    sold_by: user.id,
+  };
+  const { data: saleData, error: saleError } = await supabase
+    .from("pos_sales")
+    .insert(saleInsert)
+    .select("id")
+    .single();
+  if (saleError !== null || saleData === null) {
+    return { ok: false, error: saleError?.message ?? "No se pudo crear la venta" };
+  }
+  const saleId = (saleData as { id: string }).id;
+
+  // A partir de aquí, cualquier fallo compensa borrando la venta (cascade
+  // arrastra líneas y pagos) — mismo patrón que `createSale`.
+  async function rollback(): Promise<void> {
+    await supabase.from("pos_sales").delete().eq("id", saleId).eq("salon_id", salonId!);
+  }
+
+  // 7) Líneas del ticket (snapshot de importes por línea), 1:1 con `items`
+  //    (`buildSettleLines` preserva el orden) para poder anotar `product_id`.
+  const lineInserts: TablesInsert<"pos_sale_lines">[] = lines.map((line, i) => {
+    const sourceItem = items[i]!;
+    const lineTotals = computeLineTotals({
+      quantity: line.qty,
+      unitPriceCents: line.unitPriceCents,
+      vatRate: line.vatRate,
+    });
+    return {
+      salon_id: salonId,
+      sale_id: saleId,
+      product_id: sourceItem.product_id,
+      description: line.description,
+      quantity: line.qty,
+      unit_price_cents: line.unitPriceCents,
+      vat_rate: line.vatRate,
+      line_total_cents: lineTotals.grossCents,
+    };
+  });
+  const { error: linesError } = await supabase.from("pos_sale_lines").insert(lineInserts);
+  if (linesError !== null) {
+    await rollback();
+    return { ok: false, error: `No se pudieron guardar las líneas: ${linesError.message}` };
+  }
+
+  // 8) Cobro — a diferencia de `createSale`, aquí NO se pasa por
+  //    `getPaymentGateway`: los tenders ya vienen resueltos en céntimos desde
+  //    el flujo de cobro de mostrador (validados por `settleTenderSchema`), se
+  //    insertan directo en `pos_payments` (una fila por tender = pago mixto).
+  const paymentInserts: TablesInsert<"pos_payments">[] = tenders.map((tender) => ({
+    salon_id: salonId,
+    sale_id: saleId,
+    session_id: sessionId,
+    method: tender.method,
+    payment_method_id: tender.paymentMethodId,
+    amount_cents: tender.amountCents,
+    reference: tender.reference ?? null,
+  }));
+  const { error: paymentsError } = await supabase.from("pos_payments").insert(paymentInserts);
+  if (paymentsError !== null) {
+    await rollback();
+    return { ok: false, error: `No se pudo registrar el cobro: ${paymentsError.message}` };
+  }
+
+  // 9) El pedido queda cerrado a facturación: un pedido cobrado es un
+  //    documento cerrado (mismo criterio que `assertOrderOpenInSalon`). Este
+  //    paso NO revierte la venta si falla — el cobro ya está firme (mismas
+  //    filas en pos_sales/pos_sale_lines/pos_payments que si hubiera ido
+  //    bien); revertirlo sería peor que dejar el pedido con el estado desfasado.
+  const { error: orderUpdateError } = await supabase
+    .from("orders")
+    .update({ status: "cobrada" })
+    .eq("id", orderId)
+    .eq("salon_id", salonId);
+  if (orderUpdateError !== null) return { ok: false, error: orderUpdateError.message };
+
+  // 10) "Pagar primero": si se pidió, las líneas `pendiente` que quedaran se
+  //     mandan a cocina/barra ahora que el cobro ya está firme (mismo UPDATE
+  //     que `sendOrderToStations`, inline). Best-effort: la venta ya está
+  //     cerrada — un fallo aquí no debe revertir ni bloquear la respuesta.
+  if (sendPending) {
+    await supabase
+      .from("order_items")
+      .update({ status: "enviado" })
+      .eq("salon_id", salonId)
+      .eq("order_id", orderId)
+      .eq("status", "pendiente");
+  }
+
+  revalidatePath("/mostrador");
+  return { ok: true, data: { saleId, totalCents: totals.totalCents } };
 }

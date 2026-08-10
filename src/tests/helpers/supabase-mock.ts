@@ -22,6 +22,13 @@ export interface MockConfig {
     table: string,
     payload: unknown,
   ) => TableResult;
+  /**
+   * Usuario de `supabase.auth.getUser()` (Task 6, `settleOrder`: necesita
+   * `user.id` para `pos_sales.sold_by`, igual que `createSale`). Por defecto
+   * resuelve a un usuario fijo — los tests que no ejercitan ninguna ruta con
+   * `auth.getUser()` pueden ignorar esta opción sin más.
+   */
+  auth?: { user: { id: string } | null; error?: { message: string } | null };
 }
 
 export function makeSupabaseMock(config: MockConfig) {
@@ -54,6 +61,13 @@ export function makeSupabaseMock(config: MockConfig) {
       select: () => b,
       eq: () => b,
       in: () => b,
+      // `is`/`neq` (Task 6, `settleOrder`: filtra `order_items` no anulados vía
+      // `.is("void_of_item_id", null).neq("status","anulado")`) son, como el
+      // resto de filtros de este doble, no-ops encadenables: el mock no filtra
+      // de verdad — `tables[table].data` ya llega preparado por el test —, solo
+      // necesitan EXISTIR para que la cadena de filtros no reviente.
+      is: () => b,
+      neq: () => b,
       order: () => b,
       limit: () => b,
       insert: (payload: unknown) => {
@@ -76,5 +90,15 @@ export function makeSupabaseMock(config: MockConfig) {
     return b;
   }
 
-  return { from: (table: string) => builder(table) };
+  return {
+    from: (table: string) => builder(table),
+    // `auth.getUser()` (Task 6, `settleOrder`): ver `MockConfig.auth` arriba.
+    auth: {
+      getUser: () =>
+        Promise.resolve({
+          data: { user: config.auth?.user ?? { id: "mock-user" } },
+          error: config.auth?.error ?? null,
+        }),
+    },
+  };
 }

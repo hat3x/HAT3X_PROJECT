@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { paymentMethodEnum } from "@/lib/validations/sale";
+
 /**
  * Validaciones de las server actions de pedido de mostrador (restauración,
  * Task 4). Los nombres de campo replican `OrderItemDraft`
@@ -65,3 +67,35 @@ export const setOrderItemStatusSchema = z.object({
   to: orderItemStatusEnum,
 });
 export type SetOrderItemStatusInput = z.infer<typeof setOrderItemStatusSchema>;
+
+/**
+ * Un medio de pago aplicado al cobro del pedido (Task 6, `settleOrder`).
+ * A diferencia de `tenderSchema` (lib/validations/sale.ts, TPV: `amount` llega
+ * como texto en euros desde un `<input>`), aquí `amountCents` ya llega como
+ * entero — el importe lo calcula el propio flujo de cobro de mostrador a
+ * partir de `settleTotals`, no lo teclea el cajero línea a línea. `method`
+ * reutiliza el mismo enum (`paymentMethodEnum`) que el TPV: es el mismo
+ * catálogo `pos_payment_method` de la BD, no tiene sentido duplicarlo.
+ */
+export const settleTenderSchema = z.object({
+  method: paymentMethodEnum,
+  amountCents: z.number().int().min(0),
+  /** Método concreto del catálogo del salón (opcional, para informes); `null` si no se eligió uno. */
+  paymentMethodId: z.string().uuid().nullable(),
+  reference: z.string().trim().max(120).optional(),
+});
+export type SettleTenderInput = z.infer<typeof settleTenderSchema>;
+
+/**
+ * Payload de `settleOrder` (Task 6): liquida un pedido de mostrador,
+ * materializando un `pos_sale` (ver `mostrador/actions.ts`). `sendPending`
+ * cubre el flujo "pagar primero, comanda después" — si es `true`, las líneas
+ * `pendiente` del pedido se mandan a cocina/barra tras cobrar (mismo efecto
+ * que `sendOrderToStations`, pero encadenado al cobro).
+ */
+export const settleOrderSchema = z.object({
+  orderId: z.string().uuid(),
+  tenders: z.array(settleTenderSchema).min(1, "Selecciona al menos un medio de pago"),
+  sendPending: z.boolean(),
+});
+export type SettleOrderInput = z.infer<typeof settleOrderSchema>;
