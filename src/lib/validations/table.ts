@@ -51,14 +51,21 @@ export type ZoneInput = z.infer<typeof zoneSchema>;
  * `capacityMin`/`capacityMax` reutilizan `validCapacity` (lib/restauracion/tables.ts,
  * Task 3) en vez de repetir la regla a mano — misma fuente única de verdad
  * que ya usa la UI del plano para pintar el rango de comensales de una mesa.
+ *
+ * Defaults alineados con la columna (migración
+ * `20260810130000_restauracion_sala.sql`, fix de revisión Minor):
+ * `capacity_min integer not null default 1`, `capacity_max integer not null
+ * default 4`, `shape public.table_shape not null default 'square'` — un
+ * payload que omite estos campos debe producir la misma fila que un INSERT
+ * sin ellos directamente en SQL.
  */
 export const tableSchema = z
   .object({
     name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
     zoneId: z.string().uuid(),
-    capacityMin: z.number().int().min(1).default(2),
+    capacityMin: z.number().int().min(1).default(1),
     capacityMax: z.number().int().min(1).default(4),
-    shape: tableShapeEnum.default("round"),
+    shape: tableShapeEnum.default("square"),
     sortOrder: z.number().int().min(0).default(0),
   })
   .refine((t) => validCapacity(t.capacityMin, t.capacityMax), {

@@ -104,15 +104,24 @@ export async function openTable(input: OpenTableInput): Promise<ActionResult<Ord
     .select("*")
     .single();
   if (orderError !== null) {
-    // Compensación: la mesa no debe quedar `ocupada` sin cuenta. Se ignora el
-    // resultado de esta segunda escritura (best-effort, igual que el
-    // `rollback()` de `settleOrder`) — propagar el error ORIGINAL del insert
-    // es más útil al llamador que uno secundario de la reversión.
+    // Compensación: la mesa no debe quedar `ocupada` sin cuenta. CONDICIONADA
+    // por `status = "ocupada"` (fix de revisión, Important) — igual criterio
+    // de concurrencia que el resto de UPDATEs del fichero: sin esta guarda,
+    // si entre el fallo del insert y este UPDATE otra petición ya movió la
+    // mesa a un estado distinto (p.ej. `cuenta_pedida` vía `setTableStatus`,
+    // improbable pero no imposible con reintentos concurrentes), esta
+    // reversión la pisaría a `libre` sin condición, perdiendo esa transición
+    // legítima. Solo revierte si la mesa sigue en el estado que ESTA llamada
+    // acaba de dejar. Se ignora el resultado de esta segunda escritura
+    // (best-effort, igual que el `rollback()` de `settleOrder`) — propagar el
+    // error ORIGINAL del insert es más útil al llamador que uno secundario de
+    // la reversión.
     await supabase
       .from("dining_tables")
       .update({ status: "libre" })
       .eq("id", parsed.data.tableId)
-      .eq("salon_id", salonId);
+      .eq("salon_id", salonId)
+      .eq("status", "ocupada");
     return { ok: false, error: orderError.message };
   }
   revalidatePath("/sala");
