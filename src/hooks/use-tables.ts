@@ -1,10 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import {
+  createTable,
+  createZone,
+  deleteTable,
+  deleteZone,
+  openTable,
+  saveTablePosition,
+  setTableStatus,
+  updateTable,
+  updateZone,
+} from "@/app/(dashboard)/sala/actions";
 import { createClient } from "@/lib/supabase/client";
 import { fetchTableOrders, fetchTables, fetchZones, tableKeys } from "@/lib/queries/tables";
+import type {
+  OpenTableInput,
+  SaveTablePositionInput,
+  SetTableStatusInput,
+  TableInput,
+  ZoneInput,
+} from "@/lib/validations/table";
+import type { DiningTable, DiningZone, Order } from "@/types/database";
 
 export function useZones(salonId: string) {
   return useQuery({ queryKey: tableKeys.zones(salonId), queryFn: () => fetchZones(salonId) });
@@ -86,4 +105,140 @@ export function useTablesRealtime(salonId: string): RealtimeStatus {
   }, [salonId, queryClient]);
 
   return status;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mutaciones (Task 5): cada una desempaqueta el `ActionResult` de la server
+// action (lanza si `ok:false`, TanStack Query lo expone como `error`) e
+// invalida TODO `tableKeys.all(salonId)` al terminar — más simple que
+// invalidar cada sub-key por separado y, a diferencia de `use-orders.ts`, aquí
+// no hay un detalle por id que sobreviva a una mutación (zonas/mesas se leen
+// siempre como listado completo). El plano también se refresca solo vía
+// `useTablesRealtime` cuando el cambio lo dispara OTRO cliente; esta
+// invalidación cubre el caso del propio autor de la mutación.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function useInvalidateTables(salonId: string) {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: tableKeys.all(salonId) });
+}
+
+/** Abre una mesa libre y crea su cuenta ({@link openTable}, operativa). */
+export function useOpenTable(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async (input: OpenTableInput): Promise<Order> => {
+      const result = await openTable(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+/** Transiciona el estado de una mesa ({@link setTableStatus}, operativa). */
+export function useSetTableStatus(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async (input: SetTableStatusInput): Promise<DiningTable> => {
+      const result = await setTableStatus(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+/** Guarda la posición de una mesa en el plano ({@link saveTablePosition}, gestión). */
+export function useSaveTablePosition(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async (input: SaveTablePositionInput): Promise<DiningTable> => {
+      const result = await saveTablePosition(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Zonas — mismo patrón `{ id, input }` para editar que `use-menu.ts`
+// (useUpdateCategory/useUpdateStation).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useCreateZone(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async (input: ZoneInput): Promise<DiningZone> => {
+      const result = await createZone(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useUpdateZone(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: ZoneInput }): Promise<DiningZone> => {
+      const result = await updateZone(id, input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useDeleteZone(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async (id: string): Promise<null> => {
+      const result = await deleteZone(id);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mesas
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useCreateTable(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async (input: TableInput): Promise<DiningTable> => {
+      const result = await createTable(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useUpdateTable(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: TableInput }): Promise<DiningTable> => {
+      const result = await updateTable(id, input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useDeleteTable(salonId: string) {
+  const invalidate = useInvalidateTables(salonId);
+  return useMutation({
+    mutationFn: async (id: string): Promise<null> => {
+      const result = await deleteTable(id);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => void invalidate(),
+  });
 }
