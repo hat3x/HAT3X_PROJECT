@@ -16,11 +16,13 @@ import {
   createMenuProduct as createMenuProductAction,
 } from "@/app/(dashboard)/carta/actions";
 import {
+  fetchAllProductModifierGroups,
   fetchComboComponents,
   fetchMenuCategories,
   fetchMenuProducts,
   fetchModifierGroups,
   fetchModifierOptions,
+  fetchModifierOptionsForGroups,
   fetchProductModifierGroups,
   fetchStations,
   menuKeys,
@@ -71,6 +73,32 @@ export function useProductModifierGroups(salonId: string, productId: string | nu
     queryKey: menuKeys.productModifierGroups(salonId, productId ?? ""),
     queryFn: () => fetchProductModifierGroups(salonId, productId as string),
     enabled: productId !== null,
+  });
+}
+
+/**
+ * TODAS las asignaciones producto↔grupo del salón (Task 8, mostrador): permite
+ * construir en un único mapa qué productos tienen modificadores, sin una
+ * consulta por botón de la rejilla. Ver {@link fetchAllProductModifierGroups}.
+ */
+export function useAllProductModifierGroups(salonId: string) {
+  return useQuery({
+    queryKey: [...menuKeys.all(salonId), "productModifierGroupsAll"] as const,
+    queryFn: () => fetchAllProductModifierGroups(salonId),
+  });
+}
+
+/**
+ * Opciones de VARIOS grupos de modificadores a la vez (Task 8, selector de
+ * mostrador). `groupIds: []` (producto sin grupos, o diálogo cerrado) no
+ * consulta. Ver {@link fetchModifierOptionsForGroups}.
+ */
+export function useModifierOptionsForGroups(salonId: string, groupIds: string[]) {
+  const key = [...groupIds].sort().join(",");
+  return useQuery({
+    queryKey: [...menuKeys.all(salonId), "modifierOptionsForGroups", key] as const,
+    queryFn: () => fetchModifierOptionsForGroups(salonId, groupIds),
+    enabled: groupIds.length > 0,
   });
 }
 

@@ -99,3 +99,48 @@ export async function fetchProductModifierGroups(
   if (error !== null) throw new Error(error.message);
   return data.map((row) => row.group_id);
 }
+
+/** Un enlace producto↔grupo de modificadores (fila cruda de `product_modifier_groups`). */
+export interface ProductModifierGroupLink {
+  product_id: string;
+  group_id: string;
+}
+
+/**
+ * TODAS las asignaciones producto↔grupo del salón en una sola consulta (Task 8,
+ * mostrador). A diferencia de {@link fetchProductModifierGroups} (un producto,
+ * para precargar su formulario de edición), esta trae el salón entero de una
+ * vez: el mostrador necesita decidir, para CADA botón de la rejilla, si el
+ * producto tiene grupos asignados (abre el selector de modificadores) o no
+ * (se añade directo) — una consulta por producto no escalaría.
+ */
+export async function fetchAllProductModifierGroups(
+  salonId: string,
+): Promise<ProductModifierGroupLink[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("product_modifier_groups").select("product_id,group_id")
+    .eq("salon_id", salonId);
+  if (error !== null) throw new Error(error.message);
+  return data;
+}
+
+/**
+ * Opciones (`modifiers`) de VARIOS grupos a la vez — para el selector de
+ * modificadores del mostrador (Task 8), que muestra todos los grupos
+ * asignados a un producto de golpe. A diferencia de {@link fetchModifierOptions}
+ * (un grupo, para precargar el formulario de edición de carta), agrupar la
+ * consulta evita un hook por cada grupo del producto.
+ */
+export async function fetchModifierOptionsForGroups(
+  salonId: string,
+  groupIds: string[],
+): Promise<Modifier[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("modifiers").select("*")
+    .eq("salon_id", salonId).in("group_id", groupIds)
+    .order("sort_order", { ascending: true });
+  if (error !== null) throw new Error(error.message);
+  return data;
+}
