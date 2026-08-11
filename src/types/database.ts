@@ -3182,6 +3182,49 @@ export interface Database {
           },
         ];
       };
+      // Ortodoncia — log de progreso por visita (Fase 1 del módulo de
+      // ortodoncia). La ficha y el tratamiento viven en
+      // clinical_records.data.ortho (JSONB); esta tabla guarda una entrada
+      // por visita. Ver migración 20260811120000_ortho_visit.sql.
+      ortho_visit: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          appointment_id: string | null;
+          visit_date: string;
+          actions: Json;
+          notes: string | null;
+          next_step: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          appointment_id?: string | null;
+          visit_date?: string;
+          actions?: Json;
+          notes?: string | null;
+          next_step?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          appointment_id?: string | null;
+          visit_date?: string;
+          actions?: Json;
+          notes?: string | null;
+          next_step?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       // Planes de tratamiento — fases (1:N desde treatment_plan vía
       // plan_id+salon_id). Sin updated_at (solo created_at). Ver migración
       // 20260801100000_treatment_plans.sql.
@@ -4004,6 +4047,11 @@ export type PerioTooth = Tables<"perio_tooth">;
 export type PerioToothInsert = TablesInsert<"perio_tooth">;
 export type PerioSite = Tables<"perio_site">;
 export type PerioSiteInsert = TablesInsert<"perio_site">;
+
+// Ortodoncia — log de progreso por visita (Fase 1). Ficha y tratamiento en
+// clinical_records.data.ortho (JSONB); esta tabla registra una entrada por
+// visita.
+export type OrthoVisit = Tables<"ortho_visit">;
 
 // Mutuas y seguros (odontología) — aseguradoras (insurer), póliza del paciente
 // (customer_insurance) y baremo por servicio (insurer_service_price).
