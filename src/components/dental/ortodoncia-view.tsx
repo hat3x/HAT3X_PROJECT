@@ -1,10 +1,463 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
+import { ConsentList } from "@/components/dental/consent-list";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useConsents, useCreateConsent } from "@/hooks/use-consents";
+import {
+  useAddOrthoVisit,
+  useDeleteOrthoVisit,
+  useOrthoData,
+  useOrthoVisits,
+  useSaveOrthoData,
+} from "@/hooks/use-ortodoncia";
+import {
+  APPLIANCE_TYPE_LABELS,
+  CROSSBITE_LABELS,
+  CROWDING_LEVEL_LABELS,
+  EMPTY_ORTHO_FICHA,
+  EMPTY_ORTHO_TREATMENT,
+  MALOCCLUSION_CLASS_LABELS,
+  ORTHO_ARCH_LABELS,
+  ORTHO_STATUS_LABELS,
+  type OrthoFicha,
+  type OrthoTreatment,
+  type OrthoVisitActions,
+} from "@/lib/dental/ortho";
+import type { OrthoVisitInput } from "@/lib/validations/ortho";
+import type { OrthoVisit } from "@/types/database";
+
 export interface OrtodonciaViewProps {
   salonId: string;
   customerId: string;
 }
 
-export function OrtodonciaView(_props: OrtodonciaViewProps): React.ReactElement | null {
-  return null;
+// <select> nativo tipado que emite el valor del enum o null.
+function EnumSelect<T extends string>({
+  id,
+  value,
+  labels,
+  onChange,
+}: {
+  id: string;
+  value: T | null;
+  labels: Record<T, string>;
+  onChange: (v: T | null) => void;
+}): React.ReactElement {
+  return (
+    <select
+      id={id}
+      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+      value={value ?? ""}
+      onChange={(e) => onChange((e.target.value || null) as T | null)}
+    >
+      <option value="">—</option>
+      {(Object.keys(labels) as T[]).map((k) => (
+        <option key={k} value={k}>
+          {labels[k]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function numberOrNull(v: string): number | null {
+  if (v.trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function OrtodonciaView({
+  salonId,
+  customerId,
+}: OrtodonciaViewProps): React.ReactElement {
+  const dataQuery = useOrthoData(salonId, customerId);
+  const visitsQuery = useOrthoVisits(salonId, customerId);
+  const consentsQuery = useConsents(salonId, customerId);
+  const saveData = useSaveOrthoData(salonId, customerId);
+  const addVisit = useAddOrthoVisit(salonId, customerId);
+  const deleteVisit = useDeleteOrthoVisit(salonId, customerId);
+  const createConsent = useCreateConsent(salonId, customerId);
+
+  const [ficha, setFicha] = useState<OrthoFicha>(EMPTY_ORTHO_FICHA);
+  const [treatment, setTreatment] = useState<OrthoTreatment>(EMPTY_ORTHO_TREATMENT);
+
+  useEffect(() => {
+    if (dataQuery.data) {
+      setFicha(dataQuery.data.ficha);
+      setTreatment(dataQuery.data.treatment);
+    }
+  }, [dataQuery.data]);
+
+  function handleSaveData(): void {
+    saveData.mutate({ ficha, treatment });
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Ficha ortodóncica */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Ficha ortodóncica</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="malocclusion">Maloclusión</Label>
+            <EnumSelect
+              id="malocclusion"
+              value={ficha.malocclusionClass}
+              labels={MALOCCLUSION_CLASS_LABELS}
+              onChange={(v) => setFicha((f) => ({ ...f, malocclusionClass: v }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="crossbite">Mordida cruzada</Label>
+            <EnumSelect
+              id="crossbite"
+              value={ficha.crossbite}
+              labels={CROSSBITE_LABELS}
+              onChange={(v) => setFicha((f) => ({ ...f, crossbite: v }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="crowdingUpper">Apiñamiento superior</Label>
+            <EnumSelect
+              id="crowdingUpper"
+              value={ficha.crowdingUpper}
+              labels={CROWDING_LEVEL_LABELS}
+              onChange={(v) => setFicha((f) => ({ ...f, crowdingUpper: v }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="crowdingLower">Apiñamiento inferior</Label>
+            <EnumSelect
+              id="crowdingLower"
+              value={ficha.crowdingLower}
+              labels={CROWDING_LEVEL_LABELS}
+              onChange={(v) => setFicha((f) => ({ ...f, crowdingLower: v }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="overjet">Resalte (mm)</Label>
+            <Input
+              id="overjet"
+              type="number"
+              value={ficha.overjetMm ?? ""}
+              onChange={(e) =>
+                setFicha((f) => ({ ...f, overjetMm: numberOrNull(e.target.value) }))
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="overbite">Sobremordida (mm)</Label>
+            <Input
+              id="overbite"
+              type="number"
+              value={ficha.overbiteMm ?? ""}
+              onChange={(e) =>
+                setFicha((f) => ({ ...f, overbiteMm: numberOrNull(e.target.value) }))
+              }
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={ficha.diastema}
+              onChange={(e) => setFicha((f) => ({ ...f, diastema: e.target.checked }))}
+            />
+            Diastemas
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={ficha.openBite}
+              onChange={(e) => setFicha((f) => ({ ...f, openBite: e.target.checked }))}
+            />
+            Mordida abierta
+          </label>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="diagnosisNotes">Notas de diagnóstico</Label>
+            <Textarea
+              id="diagnosisNotes"
+              value={ficha.diagnosisNotes ?? ""}
+              onChange={(e) =>
+                setFicha((f) => ({ ...f, diagnosisNotes: e.target.value || null }))
+              }
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tratamiento */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Tratamiento</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="appliance">Aparatología</Label>
+            <EnumSelect
+              id="appliance"
+              value={treatment.applianceType}
+              labels={APPLIANCE_TYPE_LABELS}
+              onChange={(v) => setTreatment((t) => ({ ...t, applianceType: v }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="arch">Arcada</Label>
+            <EnumSelect
+              id="arch"
+              value={treatment.arch}
+              labels={ORTHO_ARCH_LABELS}
+              onChange={(v) => setTreatment((t) => ({ ...t, arch: v }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="months">Duración estimada (meses)</Label>
+            <Input
+              id="months"
+              type="number"
+              value={treatment.estimatedMonths ?? ""}
+              onChange={(e) =>
+                setTreatment((t) => ({ ...t, estimatedMonths: numberOrNull(e.target.value) }))
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="startDate">Fecha de inicio</Label>
+            <Input
+              id="startDate"
+              type="date"
+              value={treatment.startDate ?? ""}
+              onChange={(e) =>
+                setTreatment((t) => ({ ...t, startDate: e.target.value || null }))
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="status">Estado</Label>
+            <EnumSelect
+              id="status"
+              value={treatment.status}
+              labels={ORTHO_STATUS_LABELS}
+              onChange={(v) => setTreatment((t) => ({ ...t, status: v }))}
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="objectives">Objetivos</Label>
+            <Textarea
+              id="objectives"
+              value={treatment.objectives ?? ""}
+              onChange={(e) =>
+                setTreatment((t) => ({ ...t, objectives: e.target.value || null }))
+              }
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSaveData} disabled={saveData.isPending}>
+          {saveData.isPending ? "Guardando…" : "Guardar ficha y tratamiento"}
+        </Button>
+        {saveData.isError && (
+          <span className="text-sm text-destructive">
+            {(saveData.error as Error).message}
+          </span>
+        )}
+      </div>
+
+      {/* Timeline de visitas */}
+      <OrthoVisitsCard
+        visits={visitsQuery.data ?? []}
+        onAdd={(input) => addVisit.mutate(input)}
+        onDelete={(id) => deleteVisit.mutate(id)}
+        adding={addVisit.isPending}
+      />
+
+      {/* Consentimiento (reutiliza el flujo existente) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Consentimiento de ortodoncia</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button
+            variant="outline"
+            onClick={() => createConsent.mutate({ customerId, type: "ortodoncia" })}
+            disabled={createConsent.isPending}
+          >
+            {createConsent.isPending ? "Creando…" : "Crear consentimiento de ortodoncia"}
+          </Button>
+          <ConsentList
+            salonId={salonId}
+            customerId={customerId}
+            consents={consentsQuery.data ?? []}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// --- Timeline de visitas ------------------------------------------------------
+
+const EMPTY_VISIT_ACTIONS: OrthoVisitActions = {
+  wireChange: false,
+  wireDetail: null,
+  ligatures: false,
+  elastics: false,
+  elasticsDetail: null,
+  alignerDelivered: null,
+};
+
+function OrthoVisitsCard({
+  visits,
+  onAdd,
+  onDelete,
+  adding,
+}: {
+  visits: readonly OrthoVisit[];
+  onAdd: (input: OrthoVisitInput) => void;
+  onDelete: (id: string) => void;
+  adding: boolean;
+}): React.ReactElement {
+  const [visitDate, setVisitDate] = useState<string>("");
+  const [actions, setActions] = useState<OrthoVisitActions>(EMPTY_VISIT_ACTIONS);
+  const [notes, setNotes] = useState<string>("");
+  const [nextStep, setNextStep] = useState<string>("");
+
+  function submit(): void {
+    if (visitDate.trim() === "") return;
+    onAdd({
+      visitDate,
+      appointmentId: null,
+      actions,
+      notes: notes || null,
+      nextStep: nextStep || null,
+    });
+    setActions(EMPTY_VISIT_ACTIONS);
+    setNotes("");
+    setNextStep("");
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Seguimiento de fases</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Formulario de nueva visita */}
+        <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="visitDate">Fecha de la visita</Label>
+            <Input
+              id="visitDate"
+              type="date"
+              value={visitDate}
+              onChange={(e) => setVisitDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="aligner">Alineador entregado (nº)</Label>
+            <Input
+              id="aligner"
+              type="number"
+              value={actions.alignerDelivered ?? ""}
+              onChange={(e) =>
+                setActions((a) => ({ ...a, alignerDelivered: numberOrNull(e.target.value) }))
+              }
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={actions.wireChange}
+              onChange={(e) => setActions((a) => ({ ...a, wireChange: e.target.checked }))}
+            />
+            Cambio de arco
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={actions.ligatures}
+              onChange={(e) => setActions((a) => ({ ...a, ligatures: e.target.checked }))}
+            />
+            Ligaduras
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={actions.elastics}
+              onChange={(e) => setActions((a) => ({ ...a, elastics: e.target.checked }))}
+            />
+            Elásticos
+          </label>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="visitNotes">Notas</Label>
+            <Textarea
+              id="visitNotes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="nextStep">Próximo paso</Label>
+            <Input
+              id="nextStep"
+              value={nextStep}
+              onChange={(e) => setNextStep(e.target.value)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Button onClick={submit} disabled={adding || visitDate.trim() === ""}>
+              {adding ? "Registrando…" : "Registrar visita"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Lista */}
+        {visits.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Sin visitas registradas.</p>
+        ) : (
+          <ul className="space-y-3">
+            {visits.map((v) => {
+              const a = (v.actions ?? {}) as Partial<OrthoVisitActions>;
+              const chips = [
+                a.wireChange ? "Cambio de arco" : null,
+                a.ligatures ? "Ligaduras" : null,
+                a.elastics ? "Elásticos" : null,
+                a.alignerDelivered != null ? `Alineador ${a.alignerDelivered}` : null,
+              ].filter(Boolean);
+              return (
+                <li key={v.id} className="rounded-lg border p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium tabular-nums">{v.visit_date}</span>
+                    <button
+                      type="button"
+                      className="text-xs text-destructive hover:underline"
+                      onClick={() => onDelete(v.id)}
+                    >
+                      Borrar
+                    </button>
+                  </div>
+                  {chips.length > 0 && (
+                    <p className="mt-1 text-muted-foreground">{chips.join(" · ")}</p>
+                  )}
+                  {v.notes && <p className="mt-1 whitespace-pre-wrap">{v.notes}</p>}
+                  {v.next_step && (
+                    <p className="mt-1 text-muted-foreground">Próximo: {v.next_step}</p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
