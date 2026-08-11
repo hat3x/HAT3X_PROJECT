@@ -22,12 +22,12 @@ describe("buildDashboardNavItems — por sector", () => {
     const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
     expect(peluqueria.some((i) => i.href === "/periodontograma")).toBe(false);
   });
-  it("odontologia: '/planes' aparece justo después de '/periodontograma'; en peluquería NO aparece", () => {
+  it("odontologia: '/planes' aparece justo después de '/ortodoncia'; en peluquería NO aparece", () => {
     const dental = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "odontologia" });
     expect(dental.some((i) => i.href === "/planes")).toBe(true);
-    const perioIdx = dental.findIndex((i) => i.href === "/periodontograma");
+    const ortoIdx = dental.findIndex((i) => i.href === "/ortodoncia");
     const planesIdx = dental.findIndex((i) => i.href === "/planes");
-    expect(planesIdx).toBe(perioIdx + 1);
+    expect(planesIdx).toBe(ortoIdx + 1);
 
     const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
     expect(peluqueria.some((i) => i.href === "/planes")).toBe(false);
@@ -51,5 +51,11 @@ describe("buildDashboardNavItems — por sector", () => {
   it("sin sector = peluqueria", () => {
     const items = buildDashboardNavItems({ showSettings: true, hasPos: true });
     expect(items.some((i) => i.label === "Clientes")).toBe(true);
+  });
+  it("incluye /ortodoncia para odontología y no para peluquería", () => {
+    const dental = buildDashboardNavItems({ showSettings: true, hasPos: false, sector: "odontologia" });
+    const hair = buildDashboardNavItems({ showSettings: true, hasPos: false, sector: "peluqueria" });
+    expect(dental.some((i) => i.href === "/ortodoncia")).toBe(true);
+    expect(hair.some((i) => i.href === "/ortodoncia")).toBe(false);
   });
 });

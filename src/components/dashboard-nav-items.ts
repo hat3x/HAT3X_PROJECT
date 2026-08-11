@@ -16,6 +16,7 @@ import {
   Armchair,
   BarChart3,
   BellRing,
+  Braces,
   CalendarClock,
   CalendarDays,
   ChefHat,
@@ -125,6 +126,18 @@ export const PERIODONTOGRAMA_ITEM: NavItem = {
 };
 
 /**
+ * Ortodoncia (seguimiento de tratamientos ortodóncicos). Solo visible para el
+ * sector odontología, justo después de Periodontograma: primero el mapa de
+ * dientes, luego la exploración periodontal y, a continuación, el
+ * seguimiento ortodóncico de ese mismo paciente.
+ */
+export const ORTODONCIA_ITEM: NavItem = {
+  href: "/ortodoncia",
+  label: "Ortodoncia",
+  icon: Braces,
+};
+
+/**
  * Planes de tratamiento / presupuestos. Solo visible para el sector
  * odontología, justo después de Periodontograma: primero el mapa de dientes,
  * luego la exploración periodontal y, por último, el presupuesto/plan de
@@ -222,8 +235,8 @@ export interface NavGating {
  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
- * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
- * (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
+ * además inserta Odontograma y, justo detrás, Periodontograma, Ortodoncia, Planes
+ * y Expediente (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
  * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
  * staff incluido) — es operativa de venta del día a día, como la Caja lo es
  * para el resto de sectores. Justo detrás, Sala (plano de mesas: comensales,
@@ -285,6 +298,7 @@ export function buildDashboardNavItems({
       ...withSectorLabels.slice(0, insertAt),
       ODONTOGRAMA_ITEM,
       PERIODONTOGRAMA_ITEM,
+      ORTODONCIA_ITEM,
       PLANES_ITEM,
       EXPEDIENTE_ITEM,
       ...withSectorLabels.slice(insertAt),
