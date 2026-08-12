@@ -87,14 +87,30 @@ interface PositionedAppointment {
 const GUTTER_WIDTH = 56;
 /** Ventana de fallback cuando aún no hay horario de apertura integrado (Fase 2). */
 const FALLBACK_WINDOW = { startMin: 8 * 60, endMin: 21 * 60 };
-/** Parámetros del eje elástico — idénticos a los del mockup aprobado. */
+/** Parámetros del eje elástico — idénticos a los del mockup aprobado.
+ * `TIMELINE_BASE` se usa como FALLBACK del `base` dinámico mientras no se ha
+ * medido aún el contenedor con scroll (ver `viewportHeight` más abajo). */
 const TIMELINE_BASE = 1.35;
 const TIMELINE_MIN_CARD = 74;
 const TIMELINE_EXTRA = 40;
+/** Suelo legible del `base` DINÁMICO: nunca se comprime por debajo de esto
+ * (~66px/hora) aunque el viewport sea muy bajo — el estirado elástico de
+ * `buildDayTimeline` sigue ganando para las tarjetas cortas por encima de esto. */
+const MIN_PX_PER_MIN = 1.1;
+/** Alto aprox. de la cabecera sticky (fila de profesionales) — para calcular
+ * cuánto alto queda disponible para el eje de tiempo al medir el contenedor. */
+const DAY_HEADER_PX = 52;
+/** Aire entre la cabecera y el borde inferior del contenedor con scroll. */
+const VIEWPORT_BREATHING_ROOM_PX = 12;
 /** Snap al pulsar un hueco vacío, y también al arrastrar/redimensionar citas (minutos). */
 const SLOT_SNAP_MIN = 5;
 /** Umbral de movimiento (px) antes de considerar un puntero-abajo un arrastre real y no un click. */
 const DRAG_MOVE_THRESHOLD_PX = 3;
+/** Guarda de borde (px): si una etiqueta de hora cae a menos de esto del
+ * borde superior/inferior del cuerpo, se ancla hacia dentro en vez de
+ * centrarse en la línea — evita que quede tapada por la cabecera sticky (la
+ * primera) o que se salga del cuerpo (la última). */
+const LABEL_EDGE_GUARD_PX = 8;
 
 /**
  * Tinte de fondo + borde por estado para la tarjeta, con los MISMOS tokens
@@ -394,6 +410,27 @@ export function DayGrid({
     return () => window.clearInterval(id);
   }, [timezone]);
 
+  // Alto real (px) del contenedor con scroll — con esto el eje elástico se
+  // adapta a la pantalla en vez de usar un `TIMELINE_BASE` fijo (ver
+  // `pxPerMinBase` más abajo). 0 hasta el primer `ResizeObserver`
+  // (SSR/primer pintado), momento en el que se usa el fallback fijo — nunca
+  // hay una rejilla a 0px. Los deps de loading/error/sin-profesionales hacen
+  // que el efecto se reintente cuando esos estados dejan paso a la rejilla
+  // real: en el primer render (loading) el contenedor con `ref` aún no existe.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setViewportHeight(entry.contentRect.height);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isLoading, isError, professionals.length]);
+
   const positioned = useMemo<PositionedAppointment[]>(
     () =>
       appointments.map((appointment) => {
@@ -423,16 +460,28 @@ export function DayGrid({
     [openingRanges, timelineItems],
   );
 
+  // `base` DINÁMICO del eje elástico: hasta medir el contenedor, el
+  // `TIMELINE_BASE` fijo de siempre; después, el que hace que la ventana del
+  // día llene el alto disponible (cabecera + aire descontados), sin bajar
+  // del suelo legible. El estirado elástico de `buildDayTimeline` (minCard/
+  // extra, sin tocar) sigue ganando para las tarjetas cortas por encima de este `base`.
+  const pxPerMinBase = useMemo(() => {
+    if (viewportHeight <= 0) return TIMELINE_BASE;
+    const windowMinutes = dayWindow.dayEndMin - dayWindow.dayStartMin;
+    const available = Math.max(viewportHeight - DAY_HEADER_PX - VIEWPORT_BREATHING_ROOM_PX, 0);
+    return windowMinutes > 0 ? Math.max(MIN_PX_PER_MIN, available / windowMinutes) : MIN_PX_PER_MIN;
+  }, [viewportHeight, dayWindow]);
+
   const timeline = useMemo(
     () =>
       buildDayTimeline(timelineItems, {
         dayStartMin: dayWindow.dayStartMin,
         dayEndMin: dayWindow.dayEndMin,
-        base: TIMELINE_BASE,
+        base: pxPerMinBase,
         minCard: TIMELINE_MIN_CARD,
         extra: TIMELINE_EXTRA,
       }),
-    [timelineItems, dayWindow],
+    [timelineItems, dayWindow, pxPerMinBase],
   );
 
   const byProfessional = useMemo(() => {
@@ -486,7 +535,7 @@ export function DayGrid({
       {/* Sin padding-top aquí a propósito: el gap visual bajo la cabecera se
       consigue con el margin-top del wrapper de abajo, no con padding en el
       contenedor con scroll (si no, la cabecera sticky deja un "bleed"). */}
-      <div className="h-full overflow-auto">
+      <div ref={scrollRef} className="h-full overflow-auto">
       <div className="mb-4 mt-3 min-w-[640px] rounded-xl border border-border bg-card shadow-sm">
         <div
           className="sticky top-0 z-20 grid rounded-t-xl border-b border-border bg-card shadow-md"
@@ -522,15 +571,28 @@ export function DayGrid({
 
         <div className="relative z-0 grid" style={{ gridTemplateColumns, height: timeline.total }}>
           <div className="relative" style={{ height: timeline.total }}>
-            {hourMarks.map((min) => (
-              <div
-                key={min}
-                className="pointer-events-none absolute right-2 -translate-y-1/2 bg-card px-1 text-[11px] font-medium text-muted-foreground"
-                style={{ top: timeline.yAt(min) }}
-              >
-                {minutesToLabel(min)}
-              </div>
-            ))}
+            {hourMarks.map((min) => {
+              const y = timeline.yAt(min);
+              // Ancla la etiqueta hacia DENTRO del cuerpo cerca de los
+              // bordes: centrada (-50%) en el caso normal, pero la primera
+              // (si cae junto a y=0) no debe asomar por encima —quedaría
+              // tapada por la cabecera sticky (z-20, opaca)— y la última
+              // (si cae junto al final) no debe salirse por debajo del
+              // cuerpo. La LÍNEA de hora (en cada columna) no se toca: solo
+              // cambia el punto de anclaje del texto, así siguen alineadas.
+              const nearTop = y <= LABEL_EDGE_GUARD_PX;
+              const nearBottom = y >= timeline.total - LABEL_EDGE_GUARD_PX;
+              const translateY = nearTop ? "0" : nearBottom ? "-100%" : "-50%";
+              return (
+                <div
+                  key={min}
+                  className="pointer-events-none absolute right-2 bg-card px-1 text-[11px] font-medium text-muted-foreground"
+                  style={{ top: y, transform: `translateY(${translateY})` }}
+                >
+                  {minutesToLabel(min)}
+                </div>
+              );
+            })}
           </div>
 
           {professionals.map((professional) => (

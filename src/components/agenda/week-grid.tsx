@@ -77,15 +77,30 @@ interface PositionedAppointment {
 
 /** Ancho de la columna de horas (gutter), en píxeles — igual que DayGrid. */
 const GUTTER_WIDTH = 56;
-/** Escala LINEAL: px por hora (dentro del rango 48–56 pedido) → px por minuto. */
+/** Escala LINEAL: px por hora (dentro del rango 48–56 pedido) → px por minuto.
+ * Se usa como FALLBACK mientras no se ha medido aún el contenedor con scroll
+ * (ver `viewportHeight` en `WeekGrid`) — nunca se muestra una rejilla a 0px. */
 const HOUR_PX = 52;
 const PX_PER_MIN = HOUR_PX / 60;
+/** Suelo legible de la escala DINÁMICA: nunca se comprime por debajo de esto
+ * (~42px/hora) aunque el viewport sea muy bajo. */
+const MIN_PX_PER_MIN = 0.7;
+/** Alto aprox. de la cabecera sticky (fila de días) — para calcular cuánto
+ * alto queda disponible para el eje de tiempo al medir el contenedor. */
+const WEEK_HEADER_PX = 44;
+/** Aire entre la cabecera y el borde inferior del contenedor con scroll. */
+const VIEWPORT_BREATHING_ROOM_PX = 12;
 /** Ventana de fallback cuando no hay horario de apertura (o la unión, ya acotada, colapsa). */
 const FALLBACK_WINDOW: OpeningRange = { startMin: 8 * 60, endMin: 21 * 60 };
 /** Snap al pulsar un hueco vacío, y también al arrastrar citas (minutos). */
 const SLOT_SNAP_MIN = 5;
 /** Umbral de movimiento (px) antes de considerar un puntero-abajo un arrastre real y no un click. */
 const DRAG_MOVE_THRESHOLD_PX = 3;
+/** Guarda de borde (px): si una etiqueta de hora cae a menos de esto del
+ * borde superior/inferior del cuerpo, se ancla hacia dentro en vez de
+ * centrarse en la línea — evita que quede tapada por la cabecera sticky (la
+ * primera) o que se salga del cuerpo (la última). */
+const LABEL_EDGE_GUARD_PX = 8;
 
 /** Mismo tinte por estado que `day-grid.tsx` (bg-X/10 + border-X/30 + text-X): nunca color crudo. */
 const STATUS_CARD_CLASSES: Record<AppointmentStatus, string> = {
@@ -175,9 +190,17 @@ interface WeekScale {
   totalHeight: number;
   windowStart: number;
   windowEnd: number;
+  /** Escala DINÁMICA (px por minuto) con la que se construyó este eje — para
+   * calcular alturas de bloque (duración de cita) fuera de `yAt`/`minAt`. */
+  pxPerMin: number;
 }
 
-/** Eje de tiempo LINEAL (sin estirar franjas) — la semana no necesita la elasticidad del Día. */
+/**
+ * Eje de tiempo LINEAL (sin estirar franjas) — la semana no necesita la
+ * elasticidad del Día. `pxPerMin` llega ya calculado por el llamador (ver
+ * `WeekGrid`): fijo (`PX_PER_MIN`) hasta medir el contenedor, dinámico
+ * después — para que la ventana del día llene el alto real disponible.
+ */
 function buildWeekScale(windowStart: number, windowEnd: number, pxPerMin: number): WeekScale {
   const totalHeight = Math.max((windowEnd - windowStart) * pxPerMin, 0);
   function yAt(min: number): number {
@@ -188,7 +211,7 @@ function buildWeekScale(windowStart: number, windowEnd: number, pxPerMin: number
     const clamped = Math.max(0, Math.min(totalHeight, y));
     return windowStart + clamped / pxPerMin;
   }
-  return { yAt, minAt, totalHeight, windowStart, windowEnd };
+  return { yAt, minAt, totalHeight, windowStart, windowEnd, pxPerMin };
 }
 
 interface WeekDragState {
@@ -433,6 +456,27 @@ export function WeekGrid({
     return () => window.clearInterval(id);
   }, [timezone]);
 
+  // Alto real (px) del contenedor con scroll — con esto la escala de tiempo
+  // se adapta a la pantalla en vez de usar un `PX_PER_MIN` fijo (ver
+  // `pxPerMin` más abajo). 0 hasta el primer `ResizeObserver` (SSR/primer
+  // pintado), momento en el que se usa el fallback fijo — nunca hay una
+  // rejilla a 0px. Los deps de pending/error hacen que el efecto se
+  // reintente cuando el skeleton/error deja paso a la rejilla real: en el
+  // primer render (loading) el contenedor con `ref` aún no existe.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setViewportHeight(entry.contentRect.height);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [appointmentsQuery.isPending, appointmentsQuery.isError]);
+
   const professionalIds = useMemo(
     () => new Set(professionals.map((professional) => professional.id)),
     [professionals],
@@ -480,9 +524,19 @@ export function WeekGrid({
     return map;
   }, [weekDates, openingByDate, weekWindow]);
 
+  // Escala DINÁMICA: hasta medir el contenedor, el `PX_PER_MIN` fijo de
+  // siempre; después, la que hace que la ventana del día llene el alto
+  // disponible (cabecera + aire descontados), sin bajar del suelo legible.
+  const pxPerMin = useMemo(() => {
+    if (viewportHeight <= 0) return PX_PER_MIN;
+    const windowMinutes = weekWindow.endMin - weekWindow.startMin;
+    const available = Math.max(viewportHeight - WEEK_HEADER_PX - VIEWPORT_BREATHING_ROOM_PX, 0);
+    return windowMinutes > 0 ? Math.max(MIN_PX_PER_MIN, available / windowMinutes) : MIN_PX_PER_MIN;
+  }, [viewportHeight, weekWindow]);
+
   const scale = useMemo(
-    () => buildWeekScale(weekWindow.startMin, weekWindow.endMin, PX_PER_MIN),
-    [weekWindow],
+    () => buildWeekScale(weekWindow.startMin, weekWindow.endMin, pxPerMin),
+    [weekWindow, pxPerMin],
   );
 
   const positioned = useMemo<PositionedAppointment[]>(() => {
@@ -536,7 +590,7 @@ export function WeekGrid({
       {/* Sin padding-top aquí a propósito (ver day-grid.tsx): el gap visual
       bajo la cabecera sticky se consigue con el margin-top del wrapper de
       abajo, no con padding en el contenedor con scroll. */}
-      <div className="h-full overflow-auto">
+      <div ref={scrollRef} className="h-full overflow-auto">
         <div className="mb-4 mt-3 min-w-[760px] rounded-xl border border-border bg-card shadow-sm">
           <div
             className="sticky top-0 z-20 grid rounded-t-xl border-b border-border bg-card shadow-md"
@@ -550,15 +604,28 @@ export function WeekGrid({
 
           <div className="relative z-0 grid" style={{ gridTemplateColumns, height: scale.totalHeight }}>
             <div className="relative" style={{ height: scale.totalHeight }}>
-              {hourMarks.map((min) => (
-                <div
-                  key={min}
-                  className="pointer-events-none absolute right-2 -translate-y-1/2 bg-card px-1 text-[11px] font-medium text-muted-foreground"
-                  style={{ top: scale.yAt(min) }}
-                >
-                  {minutesToLabel(min)}
-                </div>
-              ))}
+              {hourMarks.map((min) => {
+                const y = scale.yAt(min);
+                // Ancla la etiqueta hacia DENTRO del cuerpo cerca de los
+                // bordes: centrada (-50%) en el caso normal, pero la primera
+                // (si cae junto a y=0) no debe asomar por encima —quedaría
+                // tapada por la cabecera sticky (z-20, opaca)— y la última
+                // (si cae junto al final) no debe salirse por debajo del
+                // cuerpo. La LÍNEA de hora (en cada columna) no se toca: solo
+                // cambia el punto de anclaje del texto, así siguen alineadas.
+                const nearTop = y <= LABEL_EDGE_GUARD_PX;
+                const nearBottom = y >= scale.totalHeight - LABEL_EDGE_GUARD_PX;
+                const translateY = nearTop ? "0" : nearBottom ? "-100%" : "-50%";
+                return (
+                  <div
+                    key={min}
+                    className="pointer-events-none absolute right-2 bg-card px-1 text-[11px] font-medium text-muted-foreground"
+                    style={{ top: y, transform: `translateY(${translateY})` }}
+                  >
+                    {minutesToLabel(min)}
+                  </div>
+                );
+              })}
             </div>
 
             {weekDates.map((date) => (
@@ -755,7 +822,7 @@ function WeekDayColumn({
           currentDragState && currentDragState.appointment.id === appointment.id ? currentDragState : null;
         const liveStartMin = activeDrag?.liveStartMin ?? startMin;
         const cardTop = scale.yAt(liveStartMin);
-        const cardHeight = Math.max(durationMin * PX_PER_MIN - 2, 16);
+        const cardHeight = Math.max(durationMin * scale.pxPerMin - 2, 16);
         const draggable =
           canDrag && (appointment.status === "pending" || appointment.status === "confirmed");
         return (
