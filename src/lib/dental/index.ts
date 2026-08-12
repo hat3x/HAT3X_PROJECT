@@ -7,3 +7,4 @@ export * from "./tooth";
 export * from "./color";
 export * from "./catalog";
 export * from "./ortho";
+export * from "./ortho-payments";
