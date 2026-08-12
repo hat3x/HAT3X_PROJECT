@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -10,7 +10,6 @@ import {
   Pill,
   PlusCircle,
   Trash2,
-  Upload,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,20 +24,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UploadImageForm } from "@/components/dental/upload-image-form";
 import { useConsents, useCreateConsent } from "@/hooks/use-consents";
-import { usePatientImages, useUploadPatientImage } from "@/hooks/use-patient-images";
+import { usePatientImages } from "@/hooks/use-patient-images";
 import { useAddPrescriptionItem, useCreatePrescription, usePrescriptions } from "@/hooks/use-prescriptions";
 import { useProfessionals } from "@/hooks/use-professionals";
 import {
   CONSENT_TYPES,
   CONSENT_TYPE_LABELS,
-  IMAGE_MODALITIES,
-  IMAGE_MODALITY_LABELS,
   getConsentTemplate,
 } from "@/lib/dental/consents";
 import { MEDICATION_TEMPLATES, getMedicationTemplate } from "@/lib/dental/prescriptions";
 import { cn } from "@/lib/utils";
-import type { ConsentType, ImageModality } from "@/types/database";
+import type { ConsentType } from "@/types/database";
 import { ConsentList } from "./consent-list";
 import { ImageGallery } from "./image-gallery";
 import { PrescriptionList } from "./prescription-list";
@@ -312,152 +310,6 @@ function NewConsentForm({ salonId, customerId }: NewConsentFormProps): React.Rea
               <PlusCircle className="h-3.5 w-3.5" aria-hidden="true" />
             )}
             Crear consentimiento
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// UploadImageForm — construye el FormData que espera `uploadPatientImage`
-// (vía `useUploadPatientImage`), mismo patrón de manejo de archivo que
-// `SalonMarcaForm` (`ajustes/marca/salon-marca-form.tsx`), pero aquí el hook
-// recibe el FormData completo, no un `File` suelto.
-// ---------------------------------------------------------------------------
-
-interface UploadImageFormProps {
-  salonId: string;
-  customerId: string;
-}
-
-const IMAGE_ACCEPT = "image/png,image/jpeg,image/webp";
-
-function UploadImageForm({ salonId, customerId }: UploadImageFormProps): React.ReactElement {
-  const uploadMutation = useUploadPatientImage(salonId, customerId);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [modality, setModality] = useState<ImageModality>("periapical");
-  const [fdiCode, setFdiCode] = useState("");
-  const [note, setNote] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    setFile(e.target.files?.[0] ?? null);
-  }
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    if (file === null) {
-      setError("Selecciona un archivo de imagen.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.set("file", file);
-    formData.set("customerId", customerId);
-    formData.set("modality", modality);
-    const trimmedFdi = fdiCode.trim();
-    if (trimmedFdi !== "") formData.set("fdiCode", trimmedFdi);
-    const trimmedNote = note.trim();
-    if (trimmedNote !== "") formData.set("note", trimmedNote);
-
-    uploadMutation.mutate(formData, {
-      onSuccess: () => {
-        setFile(null);
-        setFdiCode("");
-        setNote("");
-        if (fileInputRef.current !== null) fileInputRef.current.value = "";
-      },
-      onError: (err: unknown) => {
-        setError(err instanceof Error ? err.message : "Error al subir la imagen.");
-      },
-    });
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Subir imagen</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-3" onSubmit={handleSubmit}>
-          <div className="space-y-1">
-            <Label htmlFor="image-file">Archivo</Label>
-            <input
-              ref={fileInputRef}
-              id="image-file"
-              type="file"
-              accept={IMAGE_ACCEPT}
-              onChange={handleFileChange}
-              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-accent-foreground hover:file:bg-accent/80"
-            />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label htmlFor="image-modality">Modalidad</Label>
-              <Select
-                value={modality}
-                onValueChange={(v) => setModality(v as ImageModality)}
-              >
-                <SelectTrigger id="image-modality">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {IMAGE_MODALITIES.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {IMAGE_MODALITY_LABELS[m]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="image-fdi">Diente (FDI, opcional)</Label>
-              <Input
-                id="image-fdi"
-                inputMode="numeric"
-                value={fdiCode}
-                onChange={(e) => setFdiCode(e.target.value)}
-                placeholder="Ej. 11"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="image-note">Nota (opcional)</Label>
-            <Input
-              id="image-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ej. control post-endodoncia"
-            />
-          </div>
-
-          {error !== null && (
-            <p className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive">
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              {error}
-            </p>
-          )}
-
-          <Button
-            type="submit"
-            size="sm"
-            disabled={uploadMutation.isPending}
-            className="gap-1.5"
-          >
-            {uploadMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            Subir imagen
           </Button>
         </form>
       </CardContent>
