@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AppointmentsView } from "@/app/(dashboard)/appointments/appointments-view";
-import { getActiveSalon } from "@/lib/salon";
+import { getActiveMembership, getActiveSalon } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -32,12 +32,15 @@ export default async function AppointmentsPage(): Promise<React.ReactElement> {
     );
   }
 
+  const membership = await getActiveMembership();
+
   return (
     <AppointmentsView
       salonId={salon.id}
       salonSlug={salon.slug}
       timezone={salon.timezone}
       sector={salon.sector}
+      role={membership?.role ?? null}
     />
   );
 }

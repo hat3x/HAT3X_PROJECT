@@ -11,6 +11,7 @@ import {
 import { RescheduleDialog } from "@/app/(dashboard)/appointments/reschedule-dialog";
 import { AgendaDayKpis } from "@/components/agenda/agenda-day-kpis";
 import { AgendaSidePanel } from "@/components/agenda/agenda-side-panel";
+import { AppointmentDrawer } from "@/components/agenda/appointment-drawer";
 import { DayGrid } from "@/components/agenda/day-grid";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,27 +23,28 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { formatLongDate, formatSlotTime } from "@/lib/booking/format";
+import { formatLongDate } from "@/lib/booking/format";
 import { localDateInZone } from "@/lib/booking/timezone";
 import {
   useAppointments,
   useDeleteAppointment,
   useProfessionals,
+  useSendAppointmentReminder,
   useUpdateAppointmentNotes,
   useUpdateAppointmentStatus,
 } from "@/hooks/use-appointments";
 import { useDayPanelRealtime } from "@/hooks/use-day-panel-realtime";
 import { useOverdueOrtho } from "@/hooks/use-ortho-payments";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
-import type { AppointmentStatus, SalonSector } from "@/types/database";
+import type { AppointmentStatus, MemberRole, SalonSector } from "@/types/database";
 
 interface AppointmentsViewProps {
   salonId: string;
   salonSlug: string;
   timezone: string;
   sector: SalonSector;
+  role: MemberRole | null;
 }
 
 function addDays(date: string, delta: number): string {
@@ -55,6 +57,7 @@ export function AppointmentsView({
   salonSlug,
   timezone,
   sector,
+  role,
 }: AppointmentsViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
@@ -76,11 +79,12 @@ export function AppointmentsView({
     open: boolean;
     appointment: AppointmentWithDetails | null;
   }>({ open: false, appointment: null });
-  const [notesState, setNotesState] = useState<{
-    open: boolean;
-    appointment: AppointmentWithDetails | null;
-    draft: string;
-  }>({ open: false, appointment: null, draft: "" });
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [reminderResult, setReminderResult] = useState<{
+    appointmentId: string;
+    message: string;
+    isError: boolean;
+  } | null>(null);
 
   const appointmentsQuery = useAppointments(salonId, date, timezone, null);
   const dayCustomerIds = Array.from(
@@ -116,9 +120,17 @@ export function AppointmentsView({
   const statusMutation = useUpdateAppointmentStatus(salonId, date, null);
   const notesMutation = useUpdateAppointmentNotes(salonId, date, null);
   const deleteMutation = useDeleteAppointment(salonId, date, null);
+  const reminderMutation = useSendAppointmentReminder();
   // Tiempo real: al crear/mover/cancelar una cita (p. ej. Sara la coge por teléfono),
   // Supabase Realtime invalida la caché y la lista se actualiza sola, sin recargar.
   const realtimeStatus = useDayPanelRealtime(salonId);
+
+  // Cita seleccionada para el drawer de detalle: se deriva de la query en
+  // lugar de guardarse aparte, así refleja al vuelo cualquier cambio de
+  // estado/notas (optimista o por Realtime) sin quedarse con una copia obsoleta.
+  const selectedAppointment = selectedAppointmentId
+    ? (appointmentsQuery.data?.find((a) => a.id === selectedAppointmentId) ?? null)
+    : null;
 
   function handleStatusChange(id: string, status: AppointmentStatus): void {
     if (status === "cancelled") {
@@ -132,19 +144,24 @@ export function AppointmentsView({
     setDeleteState({ open: true, appointment });
   }
 
-  function handleEditNotes(appointment: AppointmentWithDetails): void {
-    setNotesState({ open: true, appointment, draft: appointment.notes ?? "" });
-  }
-
-  function confirmNotes(): void {
-    if (!notesState.appointment) return;
-    notesMutation.mutate(
-      { id: notesState.appointment.id, notes: notesState.draft },
-      {
-        onSuccess: () =>
-          setNotesState({ open: false, appointment: null, draft: "" }),
+  function handleSendReminder(appointmentId: string): void {
+    setReminderResult(null);
+    reminderMutation.mutate(appointmentId, {
+      onSuccess: (result) => {
+        setReminderResult(
+          result.ok
+            ? { appointmentId, message: result.data.message, isError: false }
+            : { appointmentId, message: result.error, isError: true },
+        );
       },
-    );
+      onError: (err) => {
+        setReminderResult({
+          appointmentId,
+          message: err instanceof Error ? err.message : "Error al enviar el recordatorio",
+          isError: true,
+        });
+      },
+    });
   }
 
   function confirmCancel(): void {
@@ -297,7 +314,7 @@ export function AppointmentsView({
           isLoading={appointmentsQuery.isPending}
           isError={appointmentsQuery.isError}
           overdueByCustomer={overdueMap}
-          onSelectAppointment={handleEditNotes}
+          onSelectAppointment={(a) => setSelectedAppointmentId(a.id)}
           onSelectSlot={() => setCreateOpen(true)}
         />
         <AgendaSidePanel
@@ -423,54 +440,41 @@ export function AppointmentsView({
         />
       )}
 
-      {/* Dialog de notas de la cita — se abre al pulsar la cita */}
-      <Dialog
-        open={notesState.open}
-        onOpenChange={(open) => {
-          if (!open) setNotesState((s) => ({ ...s, open: false }));
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Notas de la cita</DialogTitle>
-            <DialogDescription>
-              {notesState.appointment
-                ? `${notesState.appointment.customer?.full_name ?? "—"} · ${
-                    notesState.appointment.service?.name ?? "—"
-                  } · ${formatSlotTime(notesState.appointment.starts_at, timezone)}`
-                : "Añade o edita la nota de esta cita."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Textarea
-              value={notesState.draft}
-              onChange={(e) =>
-                setNotesState((s) => ({ ...s, draft: e.target.value }))
-              }
-              rows={5}
-              placeholder="Tratamiento, observaciones, avisos… (p. ej. «Curetaje de los cuatro cuadrantes»)"
-              autoFocus
-            />
-            {notesMutation.isError && (
-              <p className="text-sm text-destructive">
-                {(notesMutation.error as Error).message}
-              </p>
-            )}
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setNotesState((s) => ({ ...s, open: false }))}
-                disabled={notesMutation.isPending}
-              >
-                Cancelar
-              </Button>
-              <Button onClick={confirmNotes} disabled={notesMutation.isPending}>
-                {notesMutation.isPending ? "Guardando…" : "Guardar nota"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Drawer de detalle — se abre al pulsar la cita; agrupa TODAS las
+          acciones por cita (confirmar/completar/no presentado/reprogramar/
+          recordatorio/cancelar/borrar/notas), sustituyendo el diálogo de
+          notas provisional de la Fase 2. */}
+      <AppointmentDrawer
+        appointment={selectedAppointment}
+        open={selectedAppointment !== null}
+        onClose={() => setSelectedAppointmentId(null)}
+        timezone={timezone}
+        patientHref={
+          sector === "odontologia" && selectedAppointment
+            ? `/expediente?paciente=${selectedAppointment.customer_id}`
+            : null
+        }
+        payHref={selectedAppointment ? `/tpv?appointment=${selectedAppointment.id}` : "/tpv"}
+        canDelete={role === "owner" || role === "manager"}
+        statusPending={statusMutation.isPending}
+        notesPending={notesMutation.isPending}
+        reminderPending={
+          reminderMutation.isPending && reminderMutation.variables === selectedAppointment?.id
+        }
+        reminderMessage={
+          reminderResult !== null && reminderResult.appointmentId === selectedAppointment?.id
+            ? { message: reminderResult.message, isError: reminderResult.isError }
+            : null
+        }
+        onConfirm={(id) => handleStatusChange(id, "confirmed")}
+        onComplete={(id) => handleStatusChange(id, "completed")}
+        onNoShow={(id) => handleStatusChange(id, "no_show")}
+        onReschedule={(a) => setRescheduleState({ open: true, appointment: a })}
+        onSendReminder={handleSendReminder}
+        onCancel={(a) => setCancelState({ open: true, appointmentId: a.id, reason: "" })}
+        onDelete={handleDelete}
+        onSaveNotes={(id, notes) => notesMutation.mutate({ id, notes })}
+      />
     </main>
   );
 }
