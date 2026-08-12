@@ -96,12 +96,12 @@ async function setLabDate(
 }
 
 /** Marca el pedido como recibido en la clínica. Owner/manager/staff. */
-export function markLabOrderReceived(orderId: string, input: MarkLabDateInput): Promise<ActionResult<null>> {
+export async function markLabOrderReceived(orderId: string, input: MarkLabDateInput): Promise<ActionResult<null>> {
   return setLabDate(orderId, "received_at", input);
 }
 
 /** Marca el pedido como entregado al paciente. Owner/manager/staff. */
-export function markLabOrderDelivered(orderId: string, input: MarkLabDateInput): Promise<ActionResult<null>> {
+export async function markLabOrderDelivered(orderId: string, input: MarkLabDateInput): Promise<ActionResult<null>> {
   return setLabDate(orderId, "delivered_at", input);
 }
 
