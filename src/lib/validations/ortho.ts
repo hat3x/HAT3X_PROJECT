@@ -26,6 +26,7 @@ export const orthoTreatmentSchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida").nullable().default(null),
   status: z.enum(["activo", "retencion", "finalizado", "cancelado"]).nullable().default(null),
   objectives: optionalText(4000),
+  alignerTotal: z.number().int().min(1).max(120).nullable().default(null),
 });
 
 export const orthoDataSchema = z.object({
