@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ImageOff, Loader2, Trash2 } from "lucide-react";
+import { AlertCircle, ExternalLink, FileText, ImageOff, Loader2, Trash2 } from "lucide-react";
 
 import { signImageUrls } from "@/app/(dashboard)/expediente/actions";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,11 @@ function formatDate(iso: string): string {
 /** Path que se pinta para una imagen: preferentemente la miniatura, si existe. */
 function displayPath(image: PatientImage): string {
   return image.thumbnail_path ?? image.storage_path;
+}
+
+/** Distingue los adjuntos PDF (p. ej. informes escaneados) de las imágenes reales. */
+function isPdf(image: PatientImage): boolean {
+  return image.mime === "application/pdf" || image.storage_path.toLowerCase().endsWith(".pdf");
 }
 
 export function ImageGallery({
@@ -146,7 +151,25 @@ export function ImageGallery({
             return (
               <Card key={image.id} className="overflow-hidden">
                 <div className="flex aspect-square items-center justify-center bg-muted/30">
-                  {url !== undefined ? (
+                  {isPdf(image) ? (
+                    url !== undefined ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <FileText className="h-8 w-8" aria-hidden="true" />
+                        <span className="inline-flex items-center gap-1 text-xs font-medium">
+                          Abrir PDF <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                        </span>
+                      </a>
+                    ) : urlsQuery.isLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
+                    ) : (
+                      <FileText className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                    )
+                  ) : url !== undefined ? (
                     // eslint-disable-next-line @next/next/no-img-element -- signed URL de Supabase Storage (bucket privado); next/image exigiría configurar remotePatterns dinámicos.
                     <img
                       src={url}
