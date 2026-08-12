@@ -13,6 +13,7 @@ import { AgendaDayKpis } from "@/components/agenda/agenda-day-kpis";
 import { AgendaSidePanel } from "@/components/agenda/agenda-side-panel";
 import { AppointmentDrawer } from "@/components/agenda/appointment-drawer";
 import { DayGrid } from "@/components/agenda/day-grid";
+import { WeekGrid } from "@/components/agenda/week-grid";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,6 +53,12 @@ interface AppointmentsViewProps {
 function addDays(date: string, delta: number): string {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
   return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
+}
+
+/** Lunes de la semana que contiene `dateStr` (ISO "YYYY-MM-DD"). */
+function mondayOf(dateStr: string): string {
+  const day = new Date(`${dateStr}T00:00:00Z`).getUTCDay(); // 0=Dom … 6=Sáb
+  return addDays(dateStr, -((day + 6) % 7));
 }
 
 function capitalize(text: string): string {
@@ -109,7 +116,7 @@ export function AppointmentsView({
     open: boolean;
     appointment: AppointmentWithDetails | null;
   }>({ open: false, appointment: null });
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [selectedAppt, setSelectedAppt] = useState<AppointmentWithDetails | null>(null);
   const [reminderResult, setReminderResult] = useState<{
     appointmentId: string;
     message: string;
@@ -171,6 +178,12 @@ export function AppointmentsView({
       .map((r) => ({ startMin: toMin(r.start_time), endMin: toMin(r.end_time) }));
   }, [scheduleQuery.data, date]);
 
+  // 7 fechas (lunes → domingo) de la semana visible, para la vista Semana.
+  const weekDates = useMemo(() => {
+    const monday = mondayOf(date);
+    return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+  }, [date]);
+
   // Arrastrar/redimensionar una cita en la parrilla → reprogramar (cualquier minuto).
   const rescheduleMutation = useRescheduleAppointment(salonId);
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -203,6 +216,40 @@ export function AppointmentsView({
       },
     );
   }
+  function handleMoveAppointmentWeek(
+    appointment: AppointmentWithDetails,
+    next: { date: string; startMin: number; durationMin: number },
+  ): void {
+    const hm = (min: number): string =>
+      `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+    const startsAt = zonedWallTimeToUtc(next.date, hm(next.startMin), timezone).toISOString();
+    const endsAt = zonedWallTimeToUtc(
+      next.date,
+      hm(next.startMin + next.durationMin),
+      timezone,
+    ).toISOString();
+    setMoveError(null);
+    rescheduleMutation.mutate(
+      {
+        appointmentId: appointment.id,
+        professionalId: appointment.professional_id,
+        startsAt,
+        endsAt,
+      },
+      {
+        onSuccess: (res) => {
+          if (!res.ok) {
+            setMoveError(res.error);
+            window.setTimeout(() => setMoveError(null), 4000);
+          }
+        },
+        onError: (err) => {
+          setMoveError(err instanceof Error ? err.message : "No se pudo mover la cita");
+          window.setTimeout(() => setMoveError(null), 4000);
+        },
+      },
+    );
+  }
   const reminderMutation = useSendAppointmentReminder();
   // Tiempo real: al crear/mover/cancelar una cita (p. ej. Sara la coge por teléfono),
   // Supabase Realtime invalida la caché y la lista se actualiza sola, sin recargar.
@@ -211,8 +258,11 @@ export function AppointmentsView({
   // Cita seleccionada para el drawer de detalle: se deriva de la query en
   // lugar de guardarse aparte, así refleja al vuelo cualquier cambio de
   // estado/notas (optimista o por Realtime) sin quedarse con una copia obsoleta.
-  const selectedAppointment = selectedAppointmentId
-    ? (appointmentsQuery.data?.find((a) => a.id === selectedAppointmentId) ?? null)
+  // Deriva del query del día si la cita está ahí (refleja cambios de estado al
+  // instante); si no (p. ej. seleccionada en la vista Semana, otro día), usa el
+  // objeto guardado.
+  const selectedAppointment = selectedAppt
+    ? (appointmentsQuery.data?.find((a) => a.id === selectedAppt.id) ?? selectedAppt)
     : null;
 
   function handleStatusChange(id: string, status: AppointmentStatus): void {
@@ -410,7 +460,7 @@ export function AppointmentsView({
                 isLoading={appointmentsQuery.isPending}
                 isError={appointmentsQuery.isError}
                 overdueByCustomer={overdueMap}
-                onSelectAppointment={(a) => setSelectedAppointmentId(a.id)}
+                onSelectAppointment={(a) => setSelectedAppt(a)}
                 onSelectSlot={() => setCreateOpen(true)}
                 onMoveAppointment={handleMoveAppointment}
               />
@@ -427,6 +477,22 @@ export function AppointmentsView({
               />
             </aside>
           </div>
+        </div>
+      ) : view === "semana" ? (
+        <div className="min-h-0 flex-1 px-4 pb-4 pt-3 sm:px-6">
+          <WeekGrid
+            salonId={salonId}
+            weekDates={weekDates}
+            timezone={timezone}
+            todayDate={today}
+            professionals={visibleProfessionals}
+            onSelectAppointment={(a) => setSelectedAppt(a)}
+            onSelectSlot={(d) => {
+              selectDate(d);
+              setCreateOpen(true);
+            }}
+            onMoveAppointment={handleMoveAppointmentWeek}
+          />
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
@@ -561,7 +627,7 @@ export function AppointmentsView({
       <AppointmentDrawer
         appointment={selectedAppointment}
         open={selectedAppointment !== null}
-        onClose={() => setSelectedAppointmentId(null)}
+        onClose={() => setSelectedAppt(null)}
         timezone={timezone}
         patientHref={
           sector === "odontologia" && selectedAppointment
