@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDuration, formatPrice, formatSlotTime } from "@/lib/booking/format";
-import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
+import { localDateInZone } from "@/lib/booking/timezone";
 import type { PublicSlot } from "@/lib/booking/types";
 import {
   useAvailabilityDaySlots,
@@ -34,13 +34,6 @@ interface AppointmentFormProps {
   timezone: string;
   onSuccess: () => void;
   onCancel: () => void;
-  /** Profesional a preseleccionar (p. ej. al venir de un hueco vacío de la agenda). Solo
-   *  se aplica en cuanto la lista de elegibles del servicio elegido lo incluya. */
-  initialProfessionalId?: string;
-  /** Fecha `YYYY-MM-DD` a preseleccionar. */
-  initialDate?: string;
-  /** Hora `HH:MM` a preseleccionar como "hora libre" (cualquier minuto). */
-  initialTime?: string;
 }
 
 interface ContactState {
@@ -52,60 +45,20 @@ interface ContactState {
 
 const EMPTY_CONTACT: ContactState = { fullName: "", phone: "", email: "", notes: "" };
 
-/**
- * Construye un hueco sintético para reservar a una hora libre (cualquier minuto, no solo
- * los pasos de la rejilla). Solo válido con hora `HH:MM` bien formada, fecha, profesional
- * concreto y servicio (para la duración) — si falta algo, devuelve `null`.
- */
-function buildFreeMinuteSlot(params: {
-  date: string;
-  freeTime: string;
-  timezone: string;
-  concreteProfessionalId: string | null;
-  durationMinutes: number | undefined;
-}): PublicSlot | null {
-  const { date, freeTime, timezone, concreteProfessionalId, durationMinutes } = params;
-  if (!/^\d{2}:\d{2}$/.test(freeTime)) return null;
-  if (!date || !concreteProfessionalId || durationMinutes === undefined) return null;
-
-  const startsAt = zonedWallTimeToUtc(date, freeTime, timezone);
-  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
-
-  return {
-    startsAt: startsAt.toISOString(),
-    endsAt: endsAt.toISOString(),
-    professionalId: concreteProfessionalId,
-  };
-}
-
 export function AppointmentForm({
   salonId,
   salonSlug,
   timezone,
   onSuccess,
   onCancel,
-  initialProfessionalId,
-  initialDate,
-  initialTime,
 }: AppointmentFormProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
   const [serviceId, setServiceId] = useState<string>("");
   const [professionalId, setProfessionalId] = useState<string>("any");
-  const [date, setDate] = useState<string>(initialDate ?? today);
+  const [date, setDate] = useState<string>(today);
   const [selectedSlot, setSelectedSlot] = useState<PublicSlot | null>(null);
   const [contact, setContact] = useState<ContactState>(EMPTY_CONTACT);
-
-  // Profesional pendiente de aplicar (prefill): la lista de elegibles depende del
-  // servicio, así que hasta que no se elige uno no sabemos si es válido. Se limpia en
-  // cuanto se aplica, para no pisar un cambio manual posterior del usuario.
-  const [pendingProfessionalId, setPendingProfessionalId] = useState<string | null>(
-    initialProfessionalId ?? null,
-  );
-
-  // Hora "libre": permite reservar a cualquier minuto, no solo los pasos de la rejilla.
-  // No vacía ⇒ manda sobre `selectedSlot` (ver efecto más abajo); vacía ⇒ manda la rejilla.
-  const [freeTime, setFreeTime] = useState<string>(initialTime ?? "");
 
   // Buscador de cliente existente (por nombre o teléfono). Si se selecciona uno,
   // la cita se crea sobre ese cliente; si no, se crea/reutiliza por los datos manuales.
@@ -152,38 +105,6 @@ export function AppointmentForm({
   }, [serviceId, professionalsQuery.data, serviceProfMap.data]);
 
   const selectedService = servicesQuery.data?.find((s) => s.id === serviceId);
-
-  // Prefill de profesional: en cuanto la lista de elegibles (depende del servicio) incluya
-  // al pendiente, se aplica y se limpia. Antes de elegir servicio la lista está vacía, así
-  // que esto queda a la espera sin más.
-  useEffect(() => {
-    if (!pendingProfessionalId) return;
-    if (eligibleProfessionals.some((p) => p.id === pendingProfessionalId)) {
-      setProfessionalId(pendingProfessionalId);
-      setPendingProfessionalId(null);
-    }
-  }, [eligibleProfessionals, pendingProfessionalId]);
-
-  // Profesional concreto para la hora libre: el elegido, o el único elegible cuando el
-  // select está en "cualquiera" (así no obliga a elegir si solo hay uno posible).
-  const concreteProfessionalId =
-    professionalId !== "any" ? professionalId : (eligibleProfessionals[0]?.id ?? null);
-
-  // Mientras `freeTime` tenga valor, es DUEÑO de `selectedSlot`: en cada cambio relevante
-  // recalcula el hueco sintético (o lo deja en `null` si aún falta algo). Vacío ⇒ no toca
-  // nada, y manda lo último que haya marcado la rejilla `DaySlots`.
-  useEffect(() => {
-    if (freeTime === "") return;
-    setSelectedSlot(
-      buildFreeMinuteSlot({
-        date,
-        freeTime,
-        timezone,
-        concreteProfessionalId,
-        durationMinutes: selectedService?.duration_minutes,
-      }),
-    );
-  }, [freeTime, date, professionalId, serviceId, eligibleProfessionals, selectedService]);
 
   function handleServiceChange(id: string): void {
     setServiceId(id);
@@ -307,38 +228,8 @@ export function AppointmentForm({
               timeZone={timezone}
               selected={selectedSlot}
               anyProfessional={professionalId === "any"}
-              onSelect={(slot) => {
-                // La rejilla retoma el mando: la hora libre deja de mandar sobre `selectedSlot`.
-                setFreeTime("");
-                setSelectedSlot(slot);
-              }}
+              onSelect={(slot) => setSelectedSlot(slot)}
             />
-          )}
-
-          {/* …o a una hora exacta que no esté en la rejilla (cualquier minuto). Necesita un
-              profesional concreto: con "cualquiera" y más de un elegible no hay a quién
-              asignar la cita, así que se deshabilita con una pista. */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <Label
-              htmlFor="form-free-time"
-              className="text-xs font-normal text-muted-foreground"
-            >
-              …o a una hora exacta (cualquier minuto)
-            </Label>
-            <Input
-              id="form-free-time"
-              type="time"
-              step={60}
-              value={freeTime}
-              onChange={(e) => setFreeTime(e.target.value)}
-              disabled={professionalId === "any" && eligibleProfessionals.length !== 1}
-              className="w-36"
-            />
-          </div>
-          {professionalId === "any" && eligibleProfessionals.length !== 1 && (
-            <p className="text-xs text-muted-foreground">
-              Elige un profesional para fijar una hora libre.
-            </p>
           )}
         </div>
       )}
