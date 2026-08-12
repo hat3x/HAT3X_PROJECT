@@ -203,6 +203,12 @@ export type ImageModality =
  */
 export type PrescriptionStatus = "draft" | "issued" | "revoked";
 
+/** Estado del plan de pago de ortodoncia (espejo del enum public.ortho_plan_status). */
+export type OrthoPlanStatus = "activo" | "completado" | "cancelado";
+
+/** Estado de una cuota del plan de pago de ortodoncia (espejo del enum public.ortho_installment_status). */
+export type OrthoInstallmentStatus = "pendiente" | "pagada";
+
 export interface Database {
   public: {
     Tables: {
@@ -3225,6 +3231,126 @@ export interface Database {
         };
         Relationships: [];
       };
+      // Ortodoncia — plan de pago (Fase 2 económico). Presupuesto cerrado a
+      // plazos con calendario de cuotas (ortho_installment). Solo un plan
+      // "activo" por paciente (índice único parcial). Creación atómica vía
+      // RPC create_ortho_payment_plan. Ver migración
+      // 20260811130000_ortho_payments.sql.
+      ortho_payment_plan: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          total_cents: number;
+          down_payment_cents: number;
+          installment_count: number;
+          day_of_month: number;
+          start_date: string;
+          currency: string;
+          status: OrthoPlanStatus;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          total_cents: number;
+          down_payment_cents?: number;
+          installment_count: number;
+          day_of_month: number;
+          start_date: string;
+          currency?: string;
+          status?: OrthoPlanStatus;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          total_cents?: number;
+          down_payment_cents?: number;
+          installment_count?: number;
+          day_of_month?: number;
+          start_date?: string;
+          currency?: string;
+          status?: OrthoPlanStatus;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ortho_payment_plan_customer_fk";
+            columns: ["customer_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_records";
+            referencedColumns: ["customer_id", "salon_id"];
+          },
+        ];
+      };
+      // Ortodoncia — cuotas del plan de pago (1:N desde ortho_payment_plan vía
+      // plan_id+salon_id). `seq` es el nº de cuota (1..installment_count).
+      // Ver migración 20260811130000_ortho_payments.sql.
+      ortho_installment: {
+        Row: {
+          id: string;
+          salon_id: string;
+          plan_id: string;
+          customer_id: string;
+          seq: number;
+          due_date: string;
+          amount_cents: number;
+          status: OrthoInstallmentStatus;
+          paid_at: string | null;
+          paid_method: string | null;
+          paid_amount_cents: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          plan_id: string;
+          customer_id: string;
+          seq: number;
+          due_date: string;
+          amount_cents: number;
+          status?: OrthoInstallmentStatus;
+          paid_at?: string | null;
+          paid_method?: string | null;
+          paid_amount_cents?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          plan_id?: string;
+          customer_id?: string;
+          seq?: number;
+          due_date?: string;
+          amount_cents?: number;
+          status?: OrthoInstallmentStatus;
+          paid_at?: string | null;
+          paid_method?: string | null;
+          paid_amount_cents?: number | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ortho_installment_plan_fk";
+            columns: ["plan_id", "salon_id"];
+            isOneToOne: false;
+            referencedRelation: "ortho_payment_plan";
+            referencedColumns: ["id", "salon_id"];
+          },
+        ];
+      };
       // Planes de tratamiento — fases (1:N desde treatment_plan vía
       // plan_id+salon_id). Sin updated_at (solo created_at). Ver migración
       // 20260801100000_treatment_plans.sql.
@@ -3945,6 +4071,28 @@ export interface Database {
           total_cents: number;
         }[];
       };
+
+      /**
+       * Creación atómica del plan de pago de ortodoncia + sus cuotas
+       * (migración `20260811130000_ortho_payments`). SECURITY DEFINER, gate
+       * owner/manager. `p_installments` es un array de {seq, dueDate,
+       * amountCents} calculado en la app. Devuelve el id del plan creado.
+       */
+      create_ortho_payment_plan: {
+        Args: {
+          p_salon_id: string;
+          p_customer_id: string;
+          p_total_cents: number;
+          p_down_payment_cents: number;
+          p_installment_count: number;
+          p_day_of_month: number;
+          p_start_date: string;
+          p_currency: string;
+          p_notes: string | null;
+          p_installments: Json;
+        };
+        Returns: string;
+      };
     };
     Enums: {
       member_role: MemberRole;
@@ -4052,6 +4200,11 @@ export type PerioSiteInsert = TablesInsert<"perio_site">;
 // clinical_records.data.ortho (JSONB); esta tabla registra una entrada por
 // visita.
 export type OrthoVisit = Tables<"ortho_visit">;
+
+// Ortodoncia — plan de pago (Fase 2 económico) — cabecera (ortho_payment_plan)
+// y cuotas (ortho_installment). Creación atómica vía RPC create_ortho_payment_plan.
+export type OrthoPaymentPlan = Tables<"ortho_payment_plan">;
+export type OrthoInstallment = Tables<"ortho_installment">;
 
 // Mutuas y seguros (odontología) — aseguradoras (insurer), póliza del paciente
 // (customer_insurance) y baremo por servicio (insurer_service_price).
