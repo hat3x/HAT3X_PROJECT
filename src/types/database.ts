@@ -3389,6 +3389,54 @@ export interface Database {
           },
         ];
       };
+      // Ortodoncia — pedidos a laboratorio (Fase 4). Estado (enviado/recibido/
+      // entregado) derivado en la app de sent_at/received_at/delivered_at.
+      // Ver migración 20260811140000_lab_order.sql.
+      lab_order: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          kind: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
+          lab_name: string | null;
+          sent_at: string;
+          received_at: string | null;
+          delivered_at: string | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          kind: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
+          lab_name?: string | null;
+          sent_at: string;
+          received_at?: string | null;
+          delivered_at?: string | null;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          kind?: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
+          lab_name?: string | null;
+          sent_at?: string;
+          received_at?: string | null;
+          delivered_at?: string | null;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       // Planes de tratamiento — fases (1:N desde treatment_plan vía
       // plan_id+salon_id). Sin updated_at (solo created_at). Ver migración
       // 20260801100000_treatment_plans.sql.
@@ -4244,6 +4292,7 @@ export type OrthoVisit = Tables<"ortho_visit">;
 // y cuotas (ortho_installment). Creación atómica vía RPC create_ortho_payment_plan.
 export type OrthoPaymentPlan = Tables<"ortho_payment_plan">;
 export type OrthoInstallment = Tables<"ortho_installment">;
+export type LabOrder = Tables<"lab_order">;
 
 // Mutuas y seguros (odontología) — aseguradoras (insurer), póliza del paciente
 // (customer_insurance) y baremo por servicio (insurer_service_price).
