@@ -227,7 +227,7 @@ export function AppointmentsView({
           vista, buscador y "Nueva cita". Sustituye las tres filas previas
           (cabecera, conmutador, nav. de fecha) — así solo la parrilla hace
           scroll por debajo (ver DayGrid: h-full en vez de max-h). */}
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-4 py-2.5 sm:px-6">
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center gap-1 rounded-full border bg-card p-1 shadow-sm">
             <Button
@@ -271,7 +271,7 @@ export function AppointmentsView({
         <div className="flex-1" />
 
         {realtimeStatus === "connected" && (
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="hidden shrink-0 items-center gap-1.5 text-xs font-medium text-emerald-600 xl:inline-flex dark:text-emerald-400">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -280,7 +280,7 @@ export function AppointmentsView({
           </span>
         )}
 
-        <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-1">
+        <div className="inline-flex shrink-0 items-center gap-0.5 rounded-lg bg-muted p-1">
           {(
             [
               ["dia", "Día"],
@@ -305,7 +305,7 @@ export function AppointmentsView({
           ))}
         </div>
 
-        <div className="relative hidden sm:block">
+        <div className="relative hidden min-w-0 shrink lg:block">
           <label htmlFor="agenda-patient-search" className="sr-only">
             Buscar paciente
           </label>
@@ -318,12 +318,12 @@ export function AppointmentsView({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Buscar paciente…"
-            className="h-9 w-40 rounded-lg bg-muted/40 pl-8 text-sm lg:w-56"
+            className="h-9 w-full min-w-0 rounded-lg bg-muted/40 pl-8 text-sm lg:w-44 xl:w-56"
           />
         </div>
 
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <Button onClick={() => setCreateOpen(true)} className="shadow-brand">
+          <Button onClick={() => setCreateOpen(true)} className="shrink-0 whitespace-nowrap shadow-brand">
             <Plus className="mr-2 h-4 w-4" />
             Nueva cita
           </Button>
