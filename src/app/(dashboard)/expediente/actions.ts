@@ -51,11 +51,11 @@ const DELETE_ROLES: readonly MemberRole[] = ["owner", "manager"];
 const PATIENT_MEDIA_BUCKET = "patient-media";
 
 /** MIME de imagen admitidos al subir (radiografías/fotos exportadas como imagen). */
-const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"] as const;
 type AllowedImageMime = (typeof ALLOWED_IMAGE_MIME_TYPES)[number];
 
 /** Tamaño máximo de una imagen subida. */
-const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MiB
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024; // 25 MiB
 
 /** Segundos de validez de una signed URL de `patient-media`. */
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -298,6 +298,8 @@ function imageExtensionForMime(mime: AllowedImageMime): string {
       return "jpg";
     case "image/webp":
       return "webp";
+    case "application/pdf":
+      return "pdf";
   }
 }
 
@@ -328,18 +330,18 @@ export async function uploadPatientImage(formData: FormData): Promise<ActionResu
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "Selecciona un archivo de imagen." };
+    return { ok: false, error: "Selecciona un archivo." };
   }
 
   const contentType = (file.type ?? "").trim().toLowerCase();
   if (!isAllowedImageMime(contentType)) {
     return {
       ok: false,
-      error: `Formato de imagen no admitido. Usa: ${ALLOWED_IMAGE_MIME_TYPES.join(", ")}.`,
+      error: `Formato no admitido. Usa: ${ALLOWED_IMAGE_MIME_TYPES.join(", ")}.`,
     };
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    return { ok: false, error: "La imagen supera el tamaño máximo de 15 MiB." };
+    return { ok: false, error: "El archivo supera el tamaño máximo de 25 MiB." };
   }
 
   const customerId = readOptionalString(formData, "customerId");

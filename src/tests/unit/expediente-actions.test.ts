@@ -454,7 +454,37 @@ describe("uploadPatientImage", () => {
     expect(options.contentType).toBe("image/png");
   });
 
-  it("MIME no admitido ⇒ { ok:false } sin llamar a Storage ni a la BD", async () => {
+  it("sube un PDF a patient-media y crea la fila de metadatos", async () => {
+    salon("odontologia");
+    membership("staff");
+
+    const uploadMock = vi.fn(async () => ({ error: null }));
+    storageFromMock.mockReturnValue({ upload: uploadMock });
+
+    const inserted = imageRow({ mime: "application/pdf", storage_path: `${SALON_ID}/${CUSTOMER_ID}/report.pdf` });
+    fromMock.mockImplementation((table: string) => {
+      if (table === "patient_images") return chain({ data: inserted, error: null });
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    const formData = new FormData();
+    formData.set("file", new File([new Uint8Array(100)], "report.pdf", { type: "application/pdf" }));
+    formData.set("customerId", CUSTOMER_ID);
+    formData.set("modality", "periapical");
+
+    const result = await uploadPatientImage(formData);
+
+    expect(result).toEqual({ ok: true, data: inserted });
+    expect(storageFromMock).toHaveBeenCalledWith("patient-media");
+    expect(uploadMock).toHaveBeenCalledTimes(1);
+    const call = uploadMock.mock.calls[0] as unknown as [string, unknown, Record<string, unknown>];
+    const [path, , options] = call;
+    expect(path.startsWith(`${SALON_ID}/${CUSTOMER_ID}/`)).toBe(true);
+    expect(path.endsWith(".pdf")).toBe(true);
+    expect(options.contentType).toBe("application/pdf");
+  });
+
+  it("MIME no admitido (image/gif) ⇒ { ok:false } sin llamar a Storage ni a la BD", async () => {
     salon("odontologia");
     membership("staff");
 
