@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { ConsentList } from "@/components/dental/consent-list";
 import { OrthoImagingCard } from "@/components/dental/ortho-imaging-card";
+import { OrthoLabCard } from "@/components/dental/ortho-lab-card";
 import { OrthoPaymentPlanCard } from "@/components/dental/ortho-payment-plan-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,7 @@ import {
   type OrthoTreatment,
   type OrthoVisitActions,
 } from "@/lib/dental/ortho";
+import { computeAlignerProgress } from "@/lib/dental/lab-orders";
 import type { OrthoVisitInput } from "@/lib/validations/ortho";
 import type { OrthoVisit } from "@/types/database";
 
@@ -81,6 +83,7 @@ const ORTHO_TABS = [
   { id: "consentimiento", label: "Consentimiento" },
   { id: "pago", label: "Plan de pago" },
   { id: "radiografias", label: "Radiografías" },
+  { id: "laboratorio", label: "Laboratorio" },
 ] as const;
 
 export function OrtodonciaView({
@@ -279,6 +282,53 @@ export function OrtodonciaView({
                   }
                 />
               </div>
+              {treatment.applianceType === "alineadores" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="alignerTotal">Nº total de alineadores</Label>
+                  <Input
+                    id="alignerTotal"
+                    type="number"
+                    min={1}
+                    value={treatment.alignerTotal ?? ""}
+                    onChange={(e) =>
+                      setTreatment((t) => ({ ...t, alignerTotal: numberOrNull(e.target.value) }))
+                    }
+                  />
+                </div>
+              )}
+              {treatment.applianceType === "alineadores" &&
+                treatment.alignerTotal !== null &&
+                (() => {
+                  const progress = computeAlignerProgress(
+                    treatment.alignerTotal,
+                    (visitsQuery.data ?? []).map(
+                      (v) =>
+                        (v.actions as Partial<OrthoVisitActions> | null)?.alignerDelivered ??
+                        null,
+                    ),
+                  );
+                  const pct =
+                    progress.total > 0
+                      ? Math.min(100, (progress.delivered / progress.total) * 100)
+                      : 0;
+                  return (
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Alineadores entregados</Label>
+                        <span className="text-sm tabular-nums text-muted-foreground">
+                          {progress.delivered} de {progress.total} · {progress.pending}{" "}
+                          pendientes
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-[width] duration-300"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
             </CardContent>
           </Card>
 
@@ -331,6 +381,8 @@ export function OrtodonciaView({
       {tab === "radiografias" && (
         <OrthoImagingCard salonId={salonId} customerId={customerId} />
       )}
+
+      {tab === "laboratorio" && <OrthoLabCard salonId={salonId} customerId={customerId} />}
     </div>
   );
 }
