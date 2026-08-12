@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 
 import { ConsentList } from "@/components/dental/consent-list";
+import { OrthoImagingCard } from "@/components/dental/ortho-imaging-card";
 import { OrthoPaymentPlanCard } from "@/components/dental/ortho-payment-plan-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PillTabs } from "@/components/ui/pill-tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useConsents, useCreateConsent } from "@/hooks/use-consents";
 import {
@@ -73,6 +75,14 @@ function numberOrNull(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+const ORTHO_TABS = [
+  { id: "ficha", label: "Ficha y tratamiento" },
+  { id: "seguimiento", label: "Seguimiento" },
+  { id: "consentimiento", label: "Consentimiento" },
+  { id: "pago", label: "Plan de pago" },
+  { id: "radiografias", label: "Radiografías" },
+] as const;
+
 export function OrtodonciaView({
   salonId,
   customerId,
@@ -87,6 +97,7 @@ export function OrtodonciaView({
 
   const [ficha, setFicha] = useState<OrthoFicha>(EMPTY_ORTHO_FICHA);
   const [treatment, setTreatment] = useState<OrthoTreatment>(EMPTY_ORTHO_TREATMENT);
+  const [tab, setTab] = useState<string>("ficha");
 
   useEffect(() => {
     if (dataQuery.data) {
@@ -101,209 +112,225 @@ export function OrtodonciaView({
 
   return (
     <div className="space-y-6">
-      {/* Ficha ortodóncica */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ficha ortodóncica</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="malocclusion">Maloclusión</Label>
-            <EnumSelect
-              id="malocclusion"
-              value={ficha.malocclusionClass}
-              labels={MALOCCLUSION_CLASS_LABELS}
-              onChange={(v) => setFicha((f) => ({ ...f, malocclusionClass: v }))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="crossbite">Mordida cruzada</Label>
-            <EnumSelect
-              id="crossbite"
-              value={ficha.crossbite}
-              labels={CROSSBITE_LABELS}
-              onChange={(v) => setFicha((f) => ({ ...f, crossbite: v }))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="crowdingUpper">Apiñamiento superior</Label>
-            <EnumSelect
-              id="crowdingUpper"
-              value={ficha.crowdingUpper}
-              labels={CROWDING_LEVEL_LABELS}
-              onChange={(v) => setFicha((f) => ({ ...f, crowdingUpper: v }))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="crowdingLower">Apiñamiento inferior</Label>
-            <EnumSelect
-              id="crowdingLower"
-              value={ficha.crowdingLower}
-              labels={CROWDING_LEVEL_LABELS}
-              onChange={(v) => setFicha((f) => ({ ...f, crowdingLower: v }))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="overjet">Resalte (mm)</Label>
-            <Input
-              id="overjet"
-              type="number"
-              value={ficha.overjetMm ?? ""}
-              onChange={(e) =>
-                setFicha((f) => ({ ...f, overjetMm: numberOrNull(e.target.value) }))
-              }
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="overbite">Sobremordida (mm)</Label>
-            <Input
-              id="overbite"
-              type="number"
-              value={ficha.overbiteMm ?? ""}
-              onChange={(e) =>
-                setFicha((f) => ({ ...f, overbiteMm: numberOrNull(e.target.value) }))
-              }
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={ficha.diastema}
-              onChange={(e) => setFicha((f) => ({ ...f, diastema: e.target.checked }))}
-            />
-            Diastemas
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={ficha.openBite}
-              onChange={(e) => setFicha((f) => ({ ...f, openBite: e.target.checked }))}
-            />
-            Mordida abierta
-          </label>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="diagnosisNotes">Notas de diagnóstico</Label>
-            <Textarea
-              id="diagnosisNotes"
-              value={ficha.diagnosisNotes ?? ""}
-              onChange={(e) =>
-                setFicha((f) => ({ ...f, diagnosisNotes: e.target.value || null }))
-              }
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Tratamiento */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Tratamiento</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="appliance">Aparatología</Label>
-            <EnumSelect
-              id="appliance"
-              value={treatment.applianceType}
-              labels={APPLIANCE_TYPE_LABELS}
-              onChange={(v) => setTreatment((t) => ({ ...t, applianceType: v }))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="arch">Arcada</Label>
-            <EnumSelect
-              id="arch"
-              value={treatment.arch}
-              labels={ORTHO_ARCH_LABELS}
-              onChange={(v) => setTreatment((t) => ({ ...t, arch: v }))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="months">Duración estimada (meses)</Label>
-            <Input
-              id="months"
-              type="number"
-              value={treatment.estimatedMonths ?? ""}
-              onChange={(e) =>
-                setTreatment((t) => ({ ...t, estimatedMonths: numberOrNull(e.target.value) }))
-              }
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="startDate">Fecha de inicio</Label>
-            <Input
-              id="startDate"
-              type="date"
-              value={treatment.startDate ?? ""}
-              onChange={(e) =>
-                setTreatment((t) => ({ ...t, startDate: e.target.value || null }))
-              }
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="status">Estado</Label>
-            <EnumSelect
-              id="status"
-              value={treatment.status}
-              labels={ORTHO_STATUS_LABELS}
-              onChange={(v) => setTreatment((t) => ({ ...t, status: v }))}
-            />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="objectives">Objetivos</Label>
-            <Textarea
-              id="objectives"
-              value={treatment.objectives ?? ""}
-              onChange={(e) =>
-                setTreatment((t) => ({ ...t, objectives: e.target.value || null }))
-              }
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center gap-3">
-        <Button onClick={handleSaveData} disabled={saveData.isPending}>
-          {saveData.isPending ? "Guardando…" : "Guardar ficha y tratamiento"}
-        </Button>
-        {saveData.isError && (
-          <span className="text-sm text-destructive">
-            {(saveData.error as Error).message}
-          </span>
-        )}
-      </div>
-
-      {/* Timeline de visitas */}
-      <OrthoVisitsCard
-        visits={visitsQuery.data ?? []}
-        onAdd={(input) => addVisit.mutate(input)}
-        onDelete={(id) => deleteVisit.mutate(id)}
-        adding={addVisit.isPending}
+      <PillTabs
+        tabs={ORTHO_TABS}
+        active={tab}
+        onChange={setTab}
+        ariaLabel="Secciones de ortodoncia"
       />
 
-      {/* Consentimiento (reutiliza el flujo existente) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Consentimiento de ortodoncia</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button
-            variant="outline"
-            onClick={() => createConsent.mutate({ customerId, type: "ortodoncia" })}
-            disabled={createConsent.isPending}
-          >
-            {createConsent.isPending ? "Creando…" : "Crear consentimiento de ortodoncia"}
-          </Button>
-          <ConsentList
-            salonId={salonId}
-            customerId={customerId}
-            consents={consentsQuery.data ?? []}
-          />
-        </CardContent>
-      </Card>
+      {tab === "ficha" && (
+        <div className="space-y-6">
+          {/* Ficha ortodóncica */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Ficha ortodóncica</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="malocclusion">Maloclusión</Label>
+                <EnumSelect
+                  id="malocclusion"
+                  value={ficha.malocclusionClass}
+                  labels={MALOCCLUSION_CLASS_LABELS}
+                  onChange={(v) => setFicha((f) => ({ ...f, malocclusionClass: v }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="crossbite">Mordida cruzada</Label>
+                <EnumSelect
+                  id="crossbite"
+                  value={ficha.crossbite}
+                  labels={CROSSBITE_LABELS}
+                  onChange={(v) => setFicha((f) => ({ ...f, crossbite: v }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="crowdingUpper">Apiñamiento superior</Label>
+                <EnumSelect
+                  id="crowdingUpper"
+                  value={ficha.crowdingUpper}
+                  labels={CROWDING_LEVEL_LABELS}
+                  onChange={(v) => setFicha((f) => ({ ...f, crowdingUpper: v }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="crowdingLower">Apiñamiento inferior</Label>
+                <EnumSelect
+                  id="crowdingLower"
+                  value={ficha.crowdingLower}
+                  labels={CROWDING_LEVEL_LABELS}
+                  onChange={(v) => setFicha((f) => ({ ...f, crowdingLower: v }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="overjet">Resalte (mm)</Label>
+                <Input
+                  id="overjet"
+                  type="number"
+                  value={ficha.overjetMm ?? ""}
+                  onChange={(e) =>
+                    setFicha((f) => ({ ...f, overjetMm: numberOrNull(e.target.value) }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="overbite">Sobremordida (mm)</Label>
+                <Input
+                  id="overbite"
+                  type="number"
+                  value={ficha.overbiteMm ?? ""}
+                  onChange={(e) =>
+                    setFicha((f) => ({ ...f, overbiteMm: numberOrNull(e.target.value) }))
+                  }
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={ficha.diastema}
+                  onChange={(e) => setFicha((f) => ({ ...f, diastema: e.target.checked }))}
+                />
+                Diastemas
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={ficha.openBite}
+                  onChange={(e) => setFicha((f) => ({ ...f, openBite: e.target.checked }))}
+                />
+                Mordida abierta
+              </label>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="diagnosisNotes">Notas de diagnóstico</Label>
+                <Textarea
+                  id="diagnosisNotes"
+                  value={ficha.diagnosisNotes ?? ""}
+                  onChange={(e) =>
+                    setFicha((f) => ({ ...f, diagnosisNotes: e.target.value || null }))
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Plan de pago */}
-      <OrthoPaymentPlanCard salonId={salonId} customerId={customerId} />
+          {/* Tratamiento */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Tratamiento</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="appliance">Aparatología</Label>
+                <EnumSelect
+                  id="appliance"
+                  value={treatment.applianceType}
+                  labels={APPLIANCE_TYPE_LABELS}
+                  onChange={(v) => setTreatment((t) => ({ ...t, applianceType: v }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="arch">Arcada</Label>
+                <EnumSelect
+                  id="arch"
+                  value={treatment.arch}
+                  labels={ORTHO_ARCH_LABELS}
+                  onChange={(v) => setTreatment((t) => ({ ...t, arch: v }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="months">Duración estimada (meses)</Label>
+                <Input
+                  id="months"
+                  type="number"
+                  value={treatment.estimatedMonths ?? ""}
+                  onChange={(e) =>
+                    setTreatment((t) => ({ ...t, estimatedMonths: numberOrNull(e.target.value) }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="startDate">Fecha de inicio</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={treatment.startDate ?? ""}
+                  onChange={(e) =>
+                    setTreatment((t) => ({ ...t, startDate: e.target.value || null }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="status">Estado</Label>
+                <EnumSelect
+                  id="status"
+                  value={treatment.status}
+                  labels={ORTHO_STATUS_LABELS}
+                  onChange={(v) => setTreatment((t) => ({ ...t, status: v }))}
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="objectives">Objetivos</Label>
+                <Textarea
+                  id="objectives"
+                  value={treatment.objectives ?? ""}
+                  onChange={(e) =>
+                    setTreatment((t) => ({ ...t, objectives: e.target.value || null }))
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={handleSaveData} disabled={saveData.isPending}>
+              {saveData.isPending ? "Guardando…" : "Guardar ficha y tratamiento"}
+            </Button>
+            {saveData.isError && (
+              <span className="text-sm text-destructive">
+                {(saveData.error as Error).message}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "seguimiento" && (
+        <OrthoVisitsCard
+          visits={visitsQuery.data ?? []}
+          onAdd={(input) => addVisit.mutate(input)}
+          onDelete={(id) => deleteVisit.mutate(id)}
+          adding={addVisit.isPending}
+        />
+      )}
+
+      {tab === "consentimiento" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Consentimiento de ortodoncia</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button
+              variant="outline"
+              onClick={() => createConsent.mutate({ customerId, type: "ortodoncia" })}
+              disabled={createConsent.isPending}
+            >
+              {createConsent.isPending ? "Creando…" : "Crear consentimiento de ortodoncia"}
+            </Button>
+            <ConsentList
+              salonId={salonId}
+              customerId={customerId}
+              consents={consentsQuery.data ?? []}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === "pago" && <OrthoPaymentPlanCard salonId={salonId} customerId={customerId} />}
+
+      {tab === "radiografias" && (
+        <OrthoImagingCard salonId={salonId} customerId={customerId} />
+      )}
     </div>
   );
 }
