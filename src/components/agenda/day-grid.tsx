@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { AlertCircle, AlertTriangle, CalendarDays, StickyNote, Users } from "lucide-react";
 
 import { AppointmentStatusBadge } from "@/components/appointments/appointment-status";
@@ -30,12 +30,29 @@ import type { AppointmentStatus } from "@/types/database";
  * Puramente presentacional: no importa `@/lib/salon` (RSC boundary) ni
  * llama a hooks de datos — recibe todo por props y delega la selección de
  * cita/hueco al padre (`onSelectAppointment` / `onSelectSlot`).
+ *
+ * Fase 4 — arrastrar y redimensionar: las tarjetas `pending`/`confirmed`
+ * aceptan un gesto de puntero (mover el cuerpo, o redimensionar desde el
+ * grip inferior) que snapea a 5 min contra el mismo eje elástico y permite
+ * cruzar de columna (profesional). Sigue siendo "tonto": solo reporta el
+ * gesto vía `onMoveAppointment`; quien lo reciba decide si lo persiste. Sin
+ * ese callback, las tarjetas no son arrastrables (fallback: solo click).
  */
 
 interface DayGridProfessional {
   id: string;
   full_name: string;
   color: string | null;
+}
+
+/** Gesto de arrastre soportado por una tarjeta: mover el cuerpo o redimensionar desde el grip inferior. */
+type AppointmentDragMode = "move" | "resize";
+
+/** Resultado de un gesto de arrastre/redimensión, ya snapeado a 5 min y acotado a la ventana del día. */
+interface AppointmentDragCommit {
+  startMin: number;
+  durationMin: number;
+  professionalId: string;
 }
 
 interface DayGridProps {
@@ -49,6 +66,13 @@ interface DayGridProps {
   overdueByCustomer?: Record<string, number>;
   onSelectAppointment: (appointment: AppointmentWithDetails) => void;
   onSelectSlot: (professionalId: string, startMin: number) => void;
+  /**
+   * Fase 4 — reporta el resultado de un gesto de arrastre/redimensión (mover
+   * o cambiar de duración). El componente no persiste nada: solo emite el
+   * gesto ya snapeado/acotado y delega la decisión al padre. Si se omite,
+   * las tarjetas no son arrastrables (fallback: solo click, como hoy).
+   */
+  onMoveAppointment?: (appointment: AppointmentWithDetails, next: AppointmentDragCommit) => void;
 }
 
 interface PositionedAppointment {
@@ -65,8 +89,10 @@ const FALLBACK_WINDOW = { startMin: 8 * 60, endMin: 21 * 60 };
 const TIMELINE_BASE = 1.35;
 const TIMELINE_MIN_CARD = 74;
 const TIMELINE_EXTRA = 40;
-/** Snap al pulsar un hueco vacío (minutos). */
+/** Snap al pulsar un hueco vacío, y también al arrastrar/redimensionar citas (minutos). */
 const SLOT_SNAP_MIN = 5;
+/** Umbral de movimiento (px) antes de considerar un puntero-abajo un arrastre real y no un click. */
+const DRAG_MOVE_THRESHOLD_PX = 3;
 
 /**
  * Tinte de fondo + borde por estado para la tarjeta, con los MISMOS tokens
@@ -87,6 +113,259 @@ function minutesToLabel(min: number): string {
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
+interface AppointmentDragState {
+  appointment: AppointmentWithDetails;
+  mode: AppointmentDragMode;
+  originProfessionalId: string;
+  origStartMin: number;
+  origDurationMin: number;
+  liveStartMin: number;
+  liveDurationMin: number;
+  liveProfessionalId: string;
+  translateX: number;
+}
+
+interface AppointmentDragTooltip {
+  x: number;
+  y: number;
+  label: string;
+}
+
+interface BeginDragParams {
+  appointment: AppointmentWithDetails;
+  mode: AppointmentDragMode;
+  professionalId: string;
+  startMin: number;
+  durationMin: number;
+}
+
+interface UseAppointmentDragOptions {
+  timeline: DayTimeline;
+  dayStartMin: number;
+  dayEndMin: number;
+  professionals: DayGridProfessional[];
+  onMoveAppointment?: (appointment: AppointmentWithDetails, next: AppointmentDragCommit) => void;
+}
+
+interface UseAppointmentDragResult {
+  dragState: AppointmentDragState | null;
+  tooltip: AppointmentDragTooltip | null;
+  beginDrag: (event: ReactPointerEvent<HTMLButtonElement>, params: BeginDragParams) => void;
+  /** Lee (y limpia) si el último gesto fue un arrastre real, para que el `onClick` nativo lo ignore. */
+  consumeSuppressedClick: () => boolean;
+}
+
+/**
+ * Gestiona el gesto de arrastrar/redimensionar citas con Pointer Events.
+ * Vive fuera de `DayGrid` para no saturar el componente: no conoce el
+ * layout, solo minutos, píxeles (vía `timeline`) y elementos marcados con
+ * `[data-professional-id]`. El movimiento/soltura se escucha en `window`
+ * (más robusto que depender solo del elemento capturado — p. ej. si el
+ * puntero sale del documento) y las actualizaciones en vuelo se acumulan en
+ * un ref, volcándose a estado de React como mucho una vez por frame (rAF)
+ * para no saturar el render con ratones de alta frecuencia de sondeo.
+ */
+function useAppointmentDrag({
+  timeline,
+  dayStartMin,
+  dayEndMin,
+  professionals,
+  onMoveAppointment,
+}: UseAppointmentDragOptions): UseAppointmentDragResult {
+  const [dragState, setDragState] = useState<AppointmentDragState | null>(null);
+  const [tooltip, setTooltip] = useState<AppointmentDragTooltip | null>(null);
+
+  const stateRef = useRef<AppointmentDragState | null>(null);
+  const movedRef = useRef(false);
+  const tooltipRef = useRef<AppointmentDragTooltip | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const suppressClickRef = useRef(false);
+  const originColumnLeftRef = useRef<number | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Si el componente se desmonta a media faena (p. ej. cambio de día durante
+  // el arrastre), retira los listeners de `window` para no dejarlos huérfanos.
+  useEffect(() => () => cleanupRef.current?.(), []);
+
+  function flush(): void {
+    rafRef.current = null;
+    setDragState(stateRef.current);
+    setTooltip(tooltipRef.current);
+  }
+
+  function scheduleFlush(): void {
+    if (rafRef.current === null) {
+      rafRef.current = window.requestAnimationFrame(flush);
+    }
+  }
+
+  function endDrag(commit: boolean): void {
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+    if (rafRef.current !== null) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    document.body.style.userSelect = "";
+    const finalState = stateRef.current;
+    const moved = movedRef.current;
+    stateRef.current = null;
+    tooltipRef.current = null;
+    movedRef.current = false;
+    setDragState(null);
+    setTooltip(null);
+    if (commit && finalState && moved) {
+      suppressClickRef.current = true;
+      onMoveAppointment?.(finalState.appointment, {
+        startMin: finalState.liveStartMin,
+        durationMin: finalState.liveDurationMin,
+        professionalId: finalState.liveProfessionalId,
+      });
+    }
+  }
+
+  function beginDrag(event: ReactPointerEvent<HTMLButtonElement>, params: BeginDragParams): void {
+    if (event.button !== 0 || stateRef.current) return;
+    const { appointment, mode, professionalId, startMin, durationMin } = params;
+
+    const originColumn = event.currentTarget.closest<HTMLElement>("[data-professional-id]");
+    originColumnLeftRef.current = originColumn ? originColumn.getBoundingClientRect().left : null;
+
+    const startClientX = event.clientX;
+    const startClientY = event.clientY;
+    const originY = timeline.yAt(startMin);
+
+    const initial: AppointmentDragState = {
+      appointment,
+      mode,
+      originProfessionalId: professionalId,
+      origStartMin: startMin,
+      origDurationMin: durationMin,
+      liveStartMin: startMin,
+      liveDurationMin: durationMin,
+      liveProfessionalId: professionalId,
+      translateX: 0,
+    };
+    stateRef.current = initial;
+    movedRef.current = false;
+    setDragState(initial);
+    document.body.style.userSelect = "none";
+
+    const target = event.currentTarget;
+    const pointerId = event.pointerId;
+    // jsdom (entorno de test) no implementa la captura de puntero — se
+    // comprueba el método antes de llamarlo (mismo motivo que table-node.tsx).
+    if (typeof target.setPointerCapture === "function") {
+      target.setPointerCapture(pointerId);
+    }
+
+    function handleMove(moveEvent: PointerEvent): void {
+      const current = stateRef.current;
+      if (!current) return;
+      const dx = moveEvent.clientX - startClientX;
+      const dy = moveEvent.clientY - startClientY;
+      if (Math.abs(dx) > DRAG_MOVE_THRESHOLD_PX || Math.abs(dy) > DRAG_MOVE_THRESHOLD_PX) {
+        movedRef.current = true;
+      }
+
+      let next: AppointmentDragState;
+      if (current.mode === "resize") {
+        const rawEndMin = timeline.minAt(
+          timeline.yAt(current.origStartMin + current.origDurationMin) + dy,
+        );
+        const snappedEnd = snapMinutes(rawEndMin, SLOT_SNAP_MIN);
+        const clampedEnd = Math.max(
+          current.origStartMin + SLOT_SNAP_MIN,
+          Math.min(dayEndMin, snappedEnd),
+        );
+        next = {
+          ...current,
+          liveStartMin: current.origStartMin,
+          liveDurationMin: clampedEnd - current.origStartMin,
+          liveProfessionalId: current.originProfessionalId,
+          translateX: 0,
+        };
+      } else {
+        const rawStartMin = timeline.minAt(originY + dy);
+        const snappedStart = snapMinutes(rawStartMin, SLOT_SNAP_MIN);
+        const clampedStart = Math.max(
+          dayStartMin,
+          Math.min(dayEndMin - current.origDurationMin, snappedStart),
+        );
+        const targetColumn = document
+          .elementFromPoint(moveEvent.clientX, moveEvent.clientY)
+          ?.closest<HTMLElement>("[data-professional-id]");
+        const targetProfessionalId =
+          targetColumn?.getAttribute("data-professional-id") ?? current.liveProfessionalId;
+        const originLeft = originColumnLeftRef.current;
+        const translateX =
+          targetColumn && originLeft !== null
+            ? targetColumn.getBoundingClientRect().left - originLeft
+            : 0;
+        next = {
+          ...current,
+          liveStartMin: clampedStart,
+          liveDurationMin: current.origDurationMin,
+          liveProfessionalId: targetProfessionalId,
+          translateX,
+        };
+      }
+      stateRef.current = next;
+
+      const label =
+        next.mode === "resize"
+          ? `${next.liveDurationMin} min`
+          : `${minutesToLabel(next.liveStartMin)}–${minutesToLabel(next.liveStartMin + next.liveDurationMin)}`;
+      const professionalName =
+        next.mode === "move" && next.liveProfessionalId !== next.originProfessionalId
+          ? professionals.find((professional) => professional.id === next.liveProfessionalId)
+              ?.full_name
+          : undefined;
+      tooltipRef.current = {
+        x: moveEvent.clientX,
+        y: moveEvent.clientY,
+        label: professionalName ? `${label} · ${professionalName}` : label,
+      };
+      scheduleFlush();
+    }
+
+    function handleUp(): void {
+      endDrag(true);
+    }
+
+    function handleCancel(): void {
+      endDrag(false);
+    }
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleCancel);
+    cleanupRef.current = () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleCancel);
+      try {
+        if (typeof target.releasePointerCapture === "function") {
+          target.releasePointerCapture(pointerId);
+        }
+      } catch {
+        // El navegador ya pudo liberar la captura implícitamente al recibir
+        // pointerup/pointercancel; liberar una captura ya perdida no es un error real.
+      }
+    };
+  }
+
+  function consumeSuppressedClick(): boolean {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return true;
+    }
+    return false;
+  }
+
+  return { dragState, tooltip, beginDrag, consumeSuppressedClick };
+}
+
 export function DayGrid({
   appointments,
   professionals,
@@ -97,6 +376,7 @@ export function DayGrid({
   overdueByCustomer,
   onSelectAppointment,
   onSelectSlot,
+  onMoveAppointment,
 }: DayGridProps): React.ReactElement {
   const [nowMin, setNowMin] = useState<number>(() =>
     agendaLocalMinutes(new Date().toISOString(), timezone),
@@ -172,6 +452,18 @@ export function DayGrid({
     return marks;
   }, [dayWindow]);
 
+  // Fase 4: hook de arrastre/redimensión. Se llama SIEMPRE (antes de los
+  // `return` condicionales de abajo) para respetar las reglas de hooks —
+  // aunque no haya nada que arrastrar todavía (loading/error/sin citas).
+  const drag = useAppointmentDrag({
+    timeline,
+    dayStartMin: dayWindow.dayStartMin,
+    dayEndMin: dayWindow.dayEndMin,
+    professionals,
+    onMoveAppointment,
+  });
+  const canDrag = onMoveAppointment !== undefined;
+
   if (isLoading) {
     return <DayGridSkeleton columns={Math.max(professionals.length, 3)} />;
   }
@@ -187,10 +479,11 @@ export function DayGrid({
     (isToday ?? true) && nowMin >= dayWindow.dayStartMin && nowMin <= dayWindow.dayEndMin;
 
   return (
-    // Sin padding-top aquí a propósito: el gap visual bajo la cabecera se
-    // consigue con el margin-top del wrapper de abajo, no con padding en el
-    // contenedor con scroll (si no, la cabecera sticky deja un "bleed").
-    <div className="h-full overflow-auto">
+    <>
+      {/* Sin padding-top aquí a propósito: el gap visual bajo la cabecera se
+      consigue con el margin-top del wrapper de abajo, no con padding en el
+      contenedor con scroll (si no, la cabecera sticky deja un "bleed"). */}
+      <div className="h-full overflow-auto">
       <div className="mb-4 mt-3 min-w-[640px] rounded-xl border border-border bg-card shadow-sm">
         <div
           className="sticky top-0 z-20 grid rounded-t-xl border-b border-border bg-card shadow-md"
@@ -249,6 +542,8 @@ export function DayGrid({
               overdueByCustomer={overdueByCustomer}
               onSelectAppointment={onSelectAppointment}
               onSelectSlot={onSelectSlot}
+              drag={drag}
+              canDrag={canDrag}
             />
           ))}
 
@@ -273,7 +568,18 @@ export function DayGrid({
           ) : null}
         </div>
       </div>
-    </div>
+      </div>
+
+      {drag.tooltip ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md bg-foreground px-2.5 py-1 text-xs font-semibold tabular-nums text-background shadow-lg"
+          style={{ left: drag.tooltip.x + 16, top: drag.tooltip.y - 34 }}
+        >
+          {drag.tooltip.label}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -352,6 +658,10 @@ interface ProfessionalColumnProps {
   overdueByCustomer?: Record<string, number>;
   onSelectAppointment: (appointment: AppointmentWithDetails) => void;
   onSelectSlot: (professionalId: string, startMin: number) => void;
+  /** Fase 4: estado/handlers de arrastre compartidos por toda la parrilla (una sola instancia por `DayGrid`). */
+  drag: UseAppointmentDragResult;
+  /** `true` si el padre pasó `onMoveAppointment` — controla si esta columna ofrece tarjetas arrastrables. */
+  canDrag: boolean;
 }
 
 function ProfessionalColumn({
@@ -364,9 +674,12 @@ function ProfessionalColumn({
   overdueByCustomer,
   onSelectAppointment,
   onSelectSlot,
+  drag,
+  canDrag,
 }: ProfessionalColumnProps): React.ReactElement {
   return (
     <div
+      data-professional-id={professional.id}
       className="relative cursor-pointer border-r border-border transition-colors hover:bg-muted/30 last:border-r-0"
       style={{ height: timeline.total }}
       onClick={(event) => {
@@ -405,10 +718,21 @@ function ProfessionalColumn({
       })}
 
       {items.map(({ appointment, startMin, durationMin }) => {
-        const cardTop = timeline.yAt(startMin);
-        const cardBottom = timeline.yAt(startMin + durationMin);
+        // Si ESTA tarjeta es la que se está arrastrando, sus coordenadas en
+        // vivo (`activeDrag`) pisan a las de los datos hasta que se suelte.
+        const currentDragState = drag.dragState;
+        const activeDrag =
+          currentDragState && currentDragState.appointment.id === appointment.id
+            ? currentDragState
+            : null;
+        const liveStartMin = activeDrag?.liveStartMin ?? startMin;
+        const liveDurationMin = activeDrag?.liveDurationMin ?? durationMin;
+        const cardTop = timeline.yAt(liveStartMin);
+        const cardBottom = timeline.yAt(liveStartMin + liveDurationMin);
         const cardHeight = Math.max(cardBottom - cardTop - 4, 32);
         const overdueCount = overdueByCustomer?.[appointment.customer_id] ?? 0;
+        const draggable =
+          canDrag && (appointment.status === "pending" || appointment.status === "confirmed");
         return (
           <AppointmentCard
             key={appointment.id}
@@ -417,8 +741,24 @@ function ProfessionalColumn({
             timezone={timezone}
             top={cardTop}
             height={cardHeight}
+            translateX={activeDrag?.translateX ?? 0}
             overdueCount={overdueCount}
+            draggable={draggable}
+            isDragging={activeDrag !== null}
             onSelect={onSelectAppointment}
+            consumeSuppressedClick={drag.consumeSuppressedClick}
+            onDragPointerDown={
+              draggable
+                ? (event, mode) =>
+                    drag.beginDrag(event, {
+                      appointment,
+                      mode,
+                      professionalId: professional.id,
+                      startMin,
+                      durationMin,
+                    })
+                : undefined
+            }
           />
         );
       })}
@@ -432,8 +772,17 @@ interface AppointmentCardProps {
   timezone: string;
   top: number;
   height: number;
+  /** Desplazamiento horizontal en vivo (px) mientras se arrastra a otra columna/profesional. */
+  translateX: number;
   overdueCount: number;
+  /** `pending`/`confirmed` + el padre pasó `onMoveAppointment` (Fase 4). */
+  draggable: boolean;
+  /** Esta tarjeta concreta es la que se está arrastrando ahora mismo. */
+  isDragging: boolean;
   onSelect: (appointment: AppointmentWithDetails) => void;
+  /** Ausente cuando `draggable` es `false` — sin él, la tarjeta es solo-click (como antes de Fase 4). */
+  onDragPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>, mode: AppointmentDragMode) => void;
+  consumeSuppressedClick: () => boolean;
 }
 
 function AppointmentCard({
@@ -442,8 +791,13 @@ function AppointmentCard({
   timezone,
   top,
   height,
+  translateX,
   overdueCount,
+  draggable,
+  isDragging,
   onSelect,
+  onDragPointerDown,
+  consumeSuppressedClick,
 }: AppointmentCardProps): React.ReactElement {
   const isCancelled = appointment.status === "cancelled";
   const startLabel = formatSlotTime(appointment.starts_at, timezone);
@@ -454,19 +808,33 @@ function AppointmentCard({
       : formatPrice(appointment.price_cents, appointment.currency);
   const hasNote = Boolean(appointment.notes);
 
+  function handlePointerDown(event: ReactPointerEvent<HTMLButtonElement>): void {
+    if (!onDragPointerDown) return;
+    const isGrip = event.target instanceof Element && event.target.closest("[data-grip]") !== null;
+    onDragPointerDown(event, isGrip ? "resize" : "move");
+  }
+
   return (
     <button
       type="button"
+      onPointerDown={draggable ? handlePointerDown : undefined}
       onClick={(event) => {
         event.stopPropagation();
+        if (consumeSuppressedClick()) return;
         onSelect(appointment);
       }}
       className={cn(
         "absolute inset-x-1.5 z-[3] flex flex-col overflow-hidden rounded-lg border py-1.5 pl-3 pr-2 text-left shadow-xs transition-shadow duration-150 hover:z-10 hover:shadow-md focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
         STATUS_CARD_CLASSES[appointment.status],
         isCancelled && "line-through",
+        draggable ? "group cursor-grab touch-none select-none" : "cursor-default",
+        isDragging && "z-30 cursor-grabbing shadow-md transition-none",
       )}
-      style={{ top, height }}
+      style={{
+        top,
+        height,
+        transform: translateX !== 0 ? `translateX(${translateX}px)` : undefined,
+      }}
     >
       <span
         className="absolute inset-y-0 left-0 w-[3px]"
@@ -496,6 +864,15 @@ function AppointmentCard({
         <span className="mt-1 flex items-start gap-1 text-[11px] leading-snug opacity-90">
           <StickyNote className="mt-0.5 h-2.5 w-2.5 shrink-0 opacity-70" aria-hidden="true" />
           <span className="line-clamp-2">{appointment.notes}</span>
+        </span>
+      ) : null}
+      {draggable ? (
+        <span
+          data-grip=""
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 flex h-2.5 cursor-ns-resize items-center justify-center opacity-0 group-hover:opacity-100"
+        >
+          <span className="h-[3px] w-6 rounded-full bg-current opacity-60" />
         </span>
       ) : null}
     </button>
