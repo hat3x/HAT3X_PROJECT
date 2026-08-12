@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 
 import { AppointmentForm } from "@/app/(dashboard)/appointments/appointment-form";
 import {
@@ -24,7 +24,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { formatLongDate } from "@/lib/booking/format";
 import { localDateInZone } from "@/lib/booking/timezone";
 import {
   useAppointments,
@@ -52,6 +51,33 @@ function addDays(date: string, delta: number): string {
   return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
 }
 
+function capitalize(text: string): string {
+  return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * Fecha `YYYY-MM-DD` → las dos líneas de la barra superior (mockup
+ * `.curdate`): grande = "Martes 12" (día de la semana + número), pequeña =
+ * "Agosto 2026" (mes + año). Cada parte se pide por separado a
+ * `Intl.DateTimeFormat` para no depender de los conectores del formato largo
+ * (p. ej. "de") que varían según el locale.
+ */
+function formatTopBarDate(date: string, timeZone: string): { big: string; small: string } {
+  const [year, month, day] = date.split("-").map(Number) as [number, number, number];
+  // Mediodía UTC evita que el desfase de zona cambie el día mostrado.
+  const instant = new Date(Date.UTC(year, month - 1, day, 12));
+  const weekday = new Intl.DateTimeFormat("es-ES", { timeZone, weekday: "long" }).format(instant);
+  const dayNumber = new Intl.DateTimeFormat("es-ES", { timeZone, day: "numeric" }).format(instant);
+  const monthName = new Intl.DateTimeFormat("es-ES", { timeZone, month: "long" }).format(instant);
+  const yearNumber = new Intl.DateTimeFormat("es-ES", { timeZone, year: "numeric" }).format(
+    instant,
+  );
+  return {
+    big: `${capitalize(weekday)} ${dayNumber}`,
+    small: `${capitalize(monthName)} ${yearNumber}`,
+  };
+}
+
 export function AppointmentsView({
   salonId,
   salonSlug,
@@ -65,6 +91,7 @@ export function AppointmentsView({
   const [view, setView] = useState<"dia" | CalendarMode>("dia");
   const [hiddenProfIds, setHiddenProfIds] = useState<Set<string>>(new Set());
   const [monthCursor, setMonthCursor] = useState<string>(() => date.slice(0, 7));
+  const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [cancelState, setCancelState] = useState<{
     open: boolean;
@@ -87,6 +114,13 @@ export function AppointmentsView({
   } | null>(null);
 
   const appointmentsQuery = useAppointments(salonId, date, timezone, null);
+  // Filtro de la barra superior (buscador "Buscar paciente…"): se aplica solo
+  // a lo que se ve en la vista Día (KPIs + parrilla), no a la consulta en sí.
+  const dayAppointments = (appointmentsQuery.data ?? []).filter(
+    (a) =>
+      search.trim() === "" ||
+      (a.customer?.full_name ?? "").toLowerCase().includes(search.trim().toLowerCase()),
+  );
   const dayCustomerIds = Array.from(
     new Set(
       (appointmentsQuery.data ?? [])
@@ -184,25 +218,110 @@ export function AppointmentsView({
     });
   }
 
+  const topBarDate = formatTopBarDate(date, timezone);
+
   return (
-    <main className="w-full px-4 py-5 sm:px-6 lg:px-8">
-      {/* Header */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
-        <div className="space-y-0.5">
-          <h1 className="text-2xl font-bold tracking-tight">Citas</h1>
-          <p className="flex items-center gap-2 text-muted-foreground">
-            Agenda del salón
-            {realtimeStatus === "connected" && (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                En directo
-              </span>
-            )}
-          </p>
+    <main className="flex h-[100dvh] flex-col overflow-hidden">
+      {/* Barra superior única (mockup docs/superpowers/reference/2026-08-12-agenda-mockup.html
+          → .top): navegación de fecha, indicador "en directo", conmutador de
+          vista, buscador y "Nueva cita". Sustituye las tres filas previas
+          (cabecera, conmutador, nav. de fecha) — así solo la parrilla hace
+          scroll por debajo (ver DayGrid: h-full en vez de max-h). */}
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-3">
+          <div className="inline-flex items-center gap-1 rounded-full border bg-card p-1 shadow-sm">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => setDate(addDays(date, -1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="sr-only">Día anterior</span>
+            </Button>
+            <Button
+              variant={date === today ? "default" : "ghost"}
+              size="sm"
+              className="h-8 rounded-full px-4"
+              onClick={() => setDate(today)}
+            >
+              Hoy
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => setDate(addDays(date, 1))}
+            >
+              <ChevronRight className="h-4 w-4" />
+              <span className="sr-only">Día siguiente</span>
+            </Button>
+          </div>
+
+          <div className="leading-tight">
+            <div className="text-base font-bold capitalize tracking-tight text-foreground">
+              {topBarDate.big}
+            </div>
+            <div className="text-xs font-medium capitalize text-muted-foreground">
+              {topBarDate.small}
+            </div>
+          </div>
         </div>
+
+        <div className="flex-1" />
+
+        {realtimeStatus === "connected" && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            En directo
+          </span>
+        )}
+
+        <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-1">
+          {(
+            [
+              ["dia", "Día"],
+              ["semana", "Semana"],
+              ["mes", "Mes"],
+              ["ano", "Año"],
+            ] as const
+          ).map(([value, labelText]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setView(value)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-200 ease-apple-out",
+                view === value
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {labelText}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative hidden sm:block">
+          <label htmlFor="agenda-patient-search" className="sr-only">
+            Buscar paciente
+          </label>
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            id="agenda-patient-search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar paciente…"
+            className="h-9 w-40 rounded-lg bg-muted/40 pl-8 text-sm lg:w-56"
+          />
+        </div>
+
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <Button onClick={() => setCreateOpen(true)} className="shadow-brand">
             <Plus className="mr-2 h-4 w-4" />
@@ -226,108 +345,52 @@ export function AppointmentsView({
         </Dialog>
       </div>
 
-      {/* Conmutador de vista: día · semana · mes · año */}
-      <div className="mb-3 flex flex-wrap gap-2 animate-fade-in">
-        {(
-          [
-            ["dia", "Día"],
-            ["semana", "Semana"],
-            ["mes", "Mes"],
-            ["ano", "Año"],
-          ] as const
-        ).map(([value, labelText]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setView(value)}
-            className={cn(
-              "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 ease-apple-out",
-              view === value
-                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-accent-foreground",
-            )}
-          >
-            {labelText}
-          </button>
-        ))}
-      </div>
-
-      {view !== "dia" ? (
-        <CalendarView
-          salonId={salonId}
-          timezone={timezone}
-          mode={view}
-          date={date}
-          onDateChange={setDate}
-          onPickDay={(d) => {
-            setDate(d);
-            setView("dia");
-          }}
-        />
-      ) : null}
-
-      {/* Contenido de la vista DÍA: navegación de fecha + KPIs + parrilla + panel */}
-      {view === "dia" && (
-        <>
-      <div className="mb-5 flex flex-wrap items-center gap-3 animate-fade-in">
-        <div className="inline-flex items-center gap-1 rounded-full border bg-card p-1 shadow-sm">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full"
-            onClick={() => setDate(addDays(date, -1))}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            <span className="sr-only">Día anterior</span>
-          </Button>
-          <Button
-            variant={date === today ? "default" : "ghost"}
-            size="sm"
-            className="h-8 rounded-full px-4"
-            onClick={() => setDate(today)}
-          >
-            Hoy
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full"
-            onClick={() => setDate(addDays(date, 1))}
-          >
-            <ChevronRight className="h-4 w-4" />
-            <span className="sr-only">Día siguiente</span>
-          </Button>
+      {view === "dia" ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 px-4 pt-3 sm:px-6">
+            <AgendaDayKpis appointments={dayAppointments} />
+          </div>
+          <div className="flex min-h-0 flex-1 gap-4 px-4 pb-4 pt-3 sm:px-6">
+            <div className="min-w-0 flex-1">
+              <DayGrid
+                appointments={dayAppointments}
+                professionals={visibleProfessionals}
+                timezone={timezone}
+                isToday={date === today}
+                isLoading={appointmentsQuery.isPending}
+                isError={appointmentsQuery.isError}
+                overdueByCustomer={overdueMap}
+                onSelectAppointment={(a) => setSelectedAppointmentId(a.id)}
+                onSelectSlot={() => setCreateOpen(true)}
+              />
+            </div>
+            <aside className="hidden w-[236px] shrink-0 overflow-y-auto lg:block">
+              <AgendaSidePanel
+                month={monthCursor}
+                selectedDate={date}
+                professionals={allProfessionals}
+                activeProfessionalIds={activeProfessionalIds}
+                onToggleProfessional={toggleProfessional}
+                onSelectDate={selectDate}
+                onChangeMonth={changeMonth}
+              />
+            </aside>
+          </div>
         </div>
-        <span className="text-sm font-medium capitalize text-foreground/80">
-          {formatLongDate(date, timezone)}
-        </span>
-      </div>
-
-      <AgendaDayKpis appointments={appointmentsQuery.data ?? []} />
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_236px]">
-        <DayGrid
-          appointments={appointmentsQuery.data ?? []}
-          professionals={visibleProfessionals}
-          timezone={timezone}
-          isToday={date === today}
-          isLoading={appointmentsQuery.isPending}
-          isError={appointmentsQuery.isError}
-          overdueByCustomer={overdueMap}
-          onSelectAppointment={(a) => setSelectedAppointmentId(a.id)}
-          onSelectSlot={() => setCreateOpen(true)}
-        />
-        <AgendaSidePanel
-          month={monthCursor}
-          selectedDate={date}
-          professionals={allProfessionals}
-          activeProfessionalIds={activeProfessionalIds}
-          onToggleProfessional={toggleProfessional}
-          onSelectDate={selectDate}
-          onChangeMonth={changeMonth}
-        />
-      </div>
-        </>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+          <CalendarView
+            salonId={salonId}
+            timezone={timezone}
+            mode={view}
+            date={date}
+            onDateChange={setDate}
+            onPickDay={(d) => {
+              setDate(d);
+              setView("dia");
+            }}
+          />
+        </div>
       )}
 
       {/* Dialog de cancelación */}
