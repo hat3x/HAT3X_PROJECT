@@ -185,11 +185,11 @@ export function AppointmentsView({
   }
 
   return (
-    <main className="container max-w-7xl py-10 sm:py-12">
+    <main className="w-full px-4 py-5 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Citas</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
+        <div className="space-y-0.5">
+          <h1 className="text-2xl font-bold tracking-tight">Citas</h1>
           <p className="flex items-center gap-2 text-muted-foreground">
             Agenda del salón
             {realtimeStatus === "connected" && (
@@ -227,7 +227,7 @@ export function AppointmentsView({
       </div>
 
       {/* Conmutador de vista: día · semana · mes · año */}
-      <div className="mb-5 flex flex-wrap gap-2 animate-fade-in">
+      <div className="mb-3 flex flex-wrap gap-2 animate-fade-in">
         {(
           [
             ["dia", "Día"],

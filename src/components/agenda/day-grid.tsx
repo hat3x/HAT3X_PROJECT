@@ -190,7 +190,7 @@ export function DayGrid({
     // Sin padding-top aquí a propósito: el gap visual bajo la cabecera se
     // consigue con el margin-top del wrapper de abajo, no con padding en el
     // contenedor con scroll (si no, la cabecera sticky deja un "bleed").
-    <div className="max-h-[calc(100vh_-_280px)] overflow-auto">
+    <div className="max-h-[calc(100dvh_-_215px)] overflow-auto">
       <div className="mb-4 mt-3 min-w-[640px] rounded-xl border border-border bg-card shadow-sm">
         <div
           className="sticky top-0 z-20 grid rounded-t-xl border-b border-border bg-card shadow-md"
@@ -282,7 +282,7 @@ function DayGridSkeleton({ columns }: { columns: number }): React.ReactElement {
   const gridTemplateColumns = `${GUTTER_WIDTH}px repeat(${columns}, minmax(148px, 1fr))`;
 
   return (
-    <div className="max-h-[calc(100vh_-_280px)] overflow-hidden">
+    <div className="max-h-[calc(100dvh_-_215px)] overflow-hidden">
       <div className="mb-4 mt-3 min-w-[640px] rounded-xl border border-border bg-card shadow-sm">
         <div className="grid rounded-t-xl border-b border-border" style={{ gridTemplateColumns }}>
           <div aria-hidden="true" />
