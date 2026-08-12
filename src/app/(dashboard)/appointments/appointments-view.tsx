@@ -221,7 +221,7 @@ export function AppointmentsView({
   const topBarDate = formatTopBarDate(date, timezone);
 
   return (
-    <main className="flex h-[100dvh] flex-col overflow-hidden">
+    <main className="flex h-[calc(100dvh-4rem)] flex-col overflow-hidden lg:h-[100dvh]">
       {/* Barra superior única (mockup docs/superpowers/reference/2026-08-12-agenda-mockup.html
           → .top): navegación de fecha, indicador "en directo", conmutador de
           vista, buscador y "Nueva cita". Sustituye las tres filas previas
