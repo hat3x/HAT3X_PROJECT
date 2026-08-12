@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -133,15 +133,19 @@ export function OrthoPaymentPlanCard({
           <ActivePlan
             plan={planQuery.data.plan}
             installments={planQuery.data.installments}
+            // `mutateAsync` (no `mutate`): cada acción resuelve/rechaza su propia
+            // promesa, así `ActivePlan` puede enganchar éxito/error POR LLAMADA
+            // (cerrar diálogo, mostrar error) en vez de depender del estado
+            // compartido de la mutación (que persiste entre filas/aperturas) o
+            // del siguiente refetch. Ver fix round 1 en task-7-report.md.
             onPay={(installmentId, method) =>
-              payMut.mutate({ installmentId, input: { method } })
+              payMut.mutateAsync({ installmentId, input: { method } })
             }
-            onUnpay={(id) => unpayMut.mutate(id)}
-            onCancel={(planId) => cancelMut.mutate(planId)}
+            onUnpay={(id) => unpayMut.mutateAsync(id)}
+            onCancel={(planId) => cancelMut.mutateAsync(planId)}
             payPending={payMut.isPending}
             unpayPending={unpayMut.isPending}
             cancelPending={cancelMut.isPending}
-            payError={payMut.isError ? (payMut.error as Error).message : null}
           />
         ) : (
           <NewPlanForm
@@ -230,6 +234,7 @@ function NewPlanForm({
       downPaymentCents > totalCents ||
       !Number.isInteger(installmentCount) ||
       installmentCount < 1 ||
+      installmentCount > 120 ||
       !Number.isInteger(dayOfMonth) ||
       dayOfMonth < 1 ||
       dayOfMonth > 31 ||
@@ -259,6 +264,9 @@ function NewPlanForm({
     if (downPaymentCents > totalCents) return "La entrada no puede superar el total.";
     if (!Number.isInteger(installmentCount) || installmentCount < 1) {
       return "Indica un número de cuotas válido (mínimo 1).";
+    }
+    if (installmentCount > 120) {
+      return "Máximo 120 cuotas.";
     }
     if (totalCents - downPaymentCents < installmentCount) {
       return "El importe a financiar es menor que el número de cuotas: sube el total, baja la entrada o reduce las cuotas.";
@@ -299,6 +307,7 @@ function NewPlanForm({
             id="ortho-count"
             type="number"
             min={1}
+            max={120}
             inputMode="numeric"
             value={count}
             onChange={(e) => setCount(e.target.value)}
@@ -451,17 +460,20 @@ function ActivePlan({
   payPending,
   unpayPending,
   cancelPending,
-  payError,
 }: {
   plan: OrthoPaymentPlan;
   installments: readonly OrthoInstallment[];
-  onPay: (installmentId: string, method: OrthoPaymentMethod) => void;
-  onUnpay: (installmentId: string) => void;
-  onCancel: (planId: string) => void;
+  // `Promise<unknown>` (no `void`): cada acción resuelve/rechaza para poder
+  // enganchar éxito (cerrar diálogo) y error (mostrarlo) POR LLAMADA, en vez de
+  // leer el estado compartido de la mutación (persiste entre filas/aperturas)
+  // o esperar al siguiente refetch. Mismo espíritu que `ConsentList`, que
+  // resetea su error local antes de cada `.mutate()` y lo fija en `onError`.
+  onPay: (installmentId: string, method: OrthoPaymentMethod) => Promise<unknown>;
+  onUnpay: (installmentId: string) => Promise<unknown>;
+  onCancel: (planId: string) => Promise<unknown>;
   payPending: boolean;
   unpayPending: boolean;
   cancelPending: boolean;
-  payError: string | null;
 }): React.ReactElement {
   const today = todayIso();
   const balance = useMemo(
@@ -478,23 +490,53 @@ function ActivePlan({
     [installments, today],
   );
 
+  // Cobrar: diálogo con su propio error, reseteado cada vez que se abre para
+  // una cuota (evita mostrar el error de un cobro anterior al reabrir).
   const [payTarget, setPayTarget] = useState<OrthoInstallment | null>(null);
   const [payMethod, setPayMethod] = useState<OrthoPaymentMethod>("efectivo");
-  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [payDialogError, setPayDialogError] = useState<string | null>(null);
 
-  // Cierra el diálogo de cobro en cuanto la cuota objetivo pasa a "pagada" en
-  // los datos frescos (tras invalidar la query). Si el cobro falla, la cuota
-  // sigue "pendiente" y el diálogo permanece abierto mostrando `payError`.
-  useEffect(() => {
-    if (payTarget !== null) {
-      const updated = installments.find((i) => i.id === payTarget.id);
-      if (updated !== undefined && updated.status === "pagada") {
-        setPayTarget(null);
-      }
-    }
-    // Solo debe reaccionar a datos nuevos de cuotas, no a cambios de `payTarget`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [installments]);
+  // Deshacer: sin diálogo (acción directa), error propio mostrado arriba de la tabla.
+  const [unpayError, setUnpayError] = useState<string | null>(null);
+
+  // Cancelar plan: diálogo con su propio error, reseteado al abrir.
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  function openPayDialog(installment: OrthoInstallment): void {
+    setPayMethod("efectivo");
+    setPayDialogError(null);
+    setPayTarget(installment);
+  }
+
+  function handleConfirmPay(): void {
+    if (payTarget === null) return;
+    setPayDialogError(null);
+    onPay(payTarget.id, payMethod)
+      .then(() => setPayTarget(null))
+      .catch((err: unknown) => {
+        setPayDialogError(err instanceof Error ? err.message : "No se pudo cobrar la cuota.");
+      });
+  }
+
+  function handleUnpay(installmentId: string): void {
+    setUnpayError(null);
+    onUnpay(installmentId).catch((err: unknown) => {
+      setUnpayError(err instanceof Error ? err.message : "No se pudo deshacer el cobro.");
+    });
+  }
+
+  function openCancelDialog(): void {
+    setCancelError(null);
+    setConfirmCancel(true);
+  }
+
+  function handleConfirmCancel(): void {
+    setCancelError(null);
+    onCancel(plan.id).catch((err: unknown) => {
+      setCancelError(err instanceof Error ? err.message : "No se pudo cancelar el plan.");
+    });
+  }
 
   return (
     <div className="space-y-5">
@@ -520,13 +562,13 @@ function ActivePlan({
 
       <PaymentProgress paidCents={balance.paidCents} totalCents={plan.total_cents} />
 
-      {payError !== null && (
+      {unpayError !== null && (
         <p
           role="alert"
           className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
         >
           <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          {payError}
+          {unpayError}
         </p>
       )}
 
@@ -574,7 +616,7 @@ function ActivePlan({
                         variant="ghost"
                         className="gap-1.5 text-muted-foreground hover:text-foreground"
                         disabled={unpayPending}
-                        onClick={() => onUnpay(i.id)}
+                        onClick={() => handleUnpay(i.id)}
                       >
                         {unpayPending ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -588,10 +630,7 @@ function ActivePlan({
                         type="button"
                         size="sm"
                         disabled={payPending}
-                        onClick={() => {
-                          setPayMethod("efectivo");
-                          setPayTarget(i);
-                        }}
+                        onClick={() => openPayDialog(i)}
                       >
                         Cobrar
                       </Button>
@@ -614,7 +653,7 @@ function ActivePlan({
           size="sm"
           className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
           disabled={cancelPending}
-          onClick={() => setConfirmCancel(true)}
+          onClick={openCancelDialog}
         >
           <Ban className="h-3.5 w-3.5" aria-hidden="true" />
           Cancelar plan
@@ -664,13 +703,13 @@ function ActivePlan({
                 </Select>
               </div>
 
-              {payError !== null && (
+              {payDialogError !== null && (
                 <p
                   role="alert"
                   className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
                 >
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  {payError}
+                  {payDialogError}
                 </p>
               )}
             </>
@@ -689,7 +728,7 @@ function ActivePlan({
               type="button"
               className="gap-1.5"
               disabled={payPending || payTarget === null}
-              onClick={() => payTarget !== null && onPay(payTarget.id, payMethod)}
+              onClick={handleConfirmPay}
             >
               {payPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -718,6 +757,17 @@ function ActivePlan({
               aquí una vez cancelado.
             </DialogDescription>
           </DialogHeader>
+
+          {cancelError !== null && (
+            <p
+              role="alert"
+              className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {cancelError}
+            </p>
+          )}
+
           <DialogFooter>
             <Button
               type="button"
@@ -732,7 +782,7 @@ function ActivePlan({
               variant="destructive"
               className="gap-1.5"
               disabled={cancelPending}
-              onClick={() => onCancel(plan.id)}
+              onClick={handleConfirmCancel}
             >
               {cancelPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
