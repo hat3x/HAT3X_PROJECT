@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { ConsentList } from "@/components/dental/consent-list";
+import { OrthoPaymentPlanCard } from "@/components/dental/ortho-payment-plan-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -300,6 +301,9 @@ export function OrtodonciaView({
           />
         </CardContent>
       </Card>
+
+      {/* Plan de pago */}
+      <OrthoPaymentPlanCard salonId={salonId} customerId={customerId} />
     </div>
   );
 }
