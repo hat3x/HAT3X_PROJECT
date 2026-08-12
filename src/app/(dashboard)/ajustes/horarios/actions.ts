@@ -6,8 +6,10 @@ import { getActiveMembership } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 import {
   exceptionSchema,
+  salonWeeklyScheduleSchema,
   weeklyScheduleSchema,
   type ExceptionInput,
+  type SalonWeeklyScheduleInput,
   type WeeklyScheduleInput,
 } from "@/lib/validations/schedule";
 import type { ScheduleException, TablesInsert } from "@/types/database";
@@ -140,6 +142,73 @@ export async function saveWeeklySchedule(
       // Restaura el horario anterior para no dejarlo vacío tras el borrado.
       if (previous.length > 0) {
         await supabase.from("professional_schedules").insert(previous);
+      }
+      return { ok: false, error: insertError.message };
+    }
+  }
+
+  revalidatePath("/ajustes/horarios");
+  return { ok: true, data: null };
+}
+
+/**
+ * Reemplaza el HORARIO DE APERTURA de la clínica/salón completo.
+ *
+ * Igual que `saveWeeklySchedule` pero a nivel de salón (sin profesional): el editor
+ * envía todos los tramos de la semana y se aplica «borrar e insertar» sobre
+ * `salon_opening_hours`. Si la inserción falla se restaura la instantánea previa.
+ * Este horario lo intersecta el motor de disponibilidad con el de cada profesional.
+ */
+export async function saveSalonSchedule(
+  input: SalonWeeklyScheduleInput,
+): Promise<ActionResult<null>> {
+  const parsed = salonWeeklyScheduleSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: firstIssue(parsed.error) };
+  }
+
+  const auth = await requireManagerSalonId();
+  if (!auth.ok) {
+    return { ok: false, error: auth.error };
+  }
+
+  const supabase = createClient();
+
+  // Instantánea para restaurar si falla la inserción (sin transacción disponible).
+  const { data: previous, error: snapshotError } = await supabase
+    .from("salon_opening_hours")
+    .select("*")
+    .eq("salon_id", auth.salonId);
+  if (snapshotError !== null) {
+    return { ok: false, error: snapshotError.message };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("salon_opening_hours")
+    .delete()
+    .eq("salon_id", auth.salonId);
+  if (deleteError !== null) {
+    return { ok: false, error: deleteError.message };
+  }
+
+  if (parsed.data.slots.length > 0) {
+    const rows: TablesInsert<"salon_opening_hours">[] = parsed.data.slots.map(
+      (slot) => ({
+        salon_id: auth.salonId,
+        weekday: slot.weekday,
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+      }),
+    );
+
+    const { error: insertError } = await supabase
+      .from("salon_opening_hours")
+      .insert(rows);
+
+    if (insertError !== null) {
+      // Restaura el horario anterior para no dejarlo vacío tras el borrado.
+      if (previous.length > 0) {
+        await supabase.from("salon_opening_hours").insert(previous);
       }
       return { ok: false, error: insertError.message };
     }

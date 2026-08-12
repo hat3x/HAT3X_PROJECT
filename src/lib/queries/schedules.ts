@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/client";
-import type { ProfessionalSchedule, ScheduleException } from "@/types/database";
+import type {
+  ProfessionalSchedule,
+  SalonOpeningHour,
+  ScheduleException,
+} from "@/types/database";
 
 /**
  * Fábrica de claves de caché para TanStack Query.
@@ -17,7 +21,32 @@ export const scheduleKeys = {
       ...scheduleKeys.professional(salonId, professionalId),
       "exceptions",
     ] as const,
+  /** Horario de apertura de la clínica (a nivel de salón). */
+  salon: (salonId: string) =>
+    [...scheduleKeys.all(salonId), "salon-opening-hours"] as const,
 };
+
+/**
+ * Horario de apertura de la clínica/salón, ordenado por día y hora de inicio.
+ * Horas tal cual las guarda Postgres (`HH:MM:SS`); la UI las normaliza a `HH:MM`.
+ */
+export async function fetchSalonSchedule(
+  salonId: string,
+): Promise<SalonOpeningHour[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("salon_opening_hours")
+    .select("*")
+    .eq("salon_id", salonId)
+    .order("weekday", { ascending: true })
+    .order("start_time", { ascending: true });
+
+  if (error !== null) {
+    throw new Error(error.message);
+  }
+  return data;
+}
 
 /**
  * Tramos del horario semanal de un profesional, ordenados por día y hora de

@@ -18,6 +18,119 @@ const MONDAY_SCHEDULE: ScheduleSlot[] = [
   { weekday: 1, start_time: "09:00:00", end_time: "17:00:00" },
 ];
 
+// Medianoche del día de prueba → todos los huecos quedan en el futuro.
+const MIDNIGHT = new Date("2025-06-09T00:00:00.000Z");
+
+describe("salonSchedules (horario de clínica intersectado)", () => {
+  it("undefined → NO intersecta: disponibilidad igual a la del profesional", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: MONDAY_SCHEDULE, // 09–17
+      salonSchedules: undefined,
+      busy: [],
+      slotIntervalMinutes: 60,
+      now: MIDNIGHT,
+    });
+    expect(slots.length).toBe(8); // 09..16
+  });
+
+  it("intersecta profesional 09–17 con clínica 10–14 → solo 10–14", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: MONDAY_SCHEDULE, // 09–17
+      salonSchedules: [{ weekday: 1, start_time: "10:00:00", end_time: "14:00:00" }],
+      busy: [],
+      slotIntervalMinutes: 60,
+      now: MIDNIGHT,
+    });
+    expect(slots.length).toBe(4); // 10, 11, 12, 13
+    expect(new Date(slots[0]!.startsAt).getUTCHours()).toBe(8); // 10:00 Madrid = 08:00 UTC
+    expect(new Date(slots[slots.length - 1]!.startsAt).getUTCHours()).toBe(11); // 13:00 Madrid
+  });
+
+  it("clínica cerrada ese día (array sin tramos para el weekday) → sin huecos", () => {
+    const slots = generateSlots({
+      date: DATE, // lunes (weekday 1)
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: MONDAY_SCHEDULE,
+      salonSchedules: [{ weekday: 2, start_time: "10:00:00", end_time: "14:00:00" }], // solo martes
+      busy: [],
+      slotIntervalMinutes: 60,
+      now: MIDNIGHT,
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it("array vacío (clínica sin horario ese día) → sin huecos", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: MONDAY_SCHEDULE,
+      salonSchedules: [],
+      busy: [],
+      slotIntervalMinutes: 60,
+      now: MIDNIGHT,
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it("horario partido: profesional 09–20 ∩ clínica [10–14, 17–20] → dos tramos", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: [{ weekday: 1, start_time: "09:00:00", end_time: "20:00:00" }],
+      salonSchedules: [
+        { weekday: 1, start_time: "10:00:00", end_time: "14:00:00" },
+        { weekday: 1, start_time: "17:00:00", end_time: "20:00:00" },
+      ],
+      busy: [],
+      slotIntervalMinutes: 60,
+      now: MIDNIGHT,
+    });
+    // 10,11,12,13 (mañana) + 17,18,19 (tarde) = 7
+    expect(slots.length).toBe(7);
+    const horasMadrid = slots.map((s) => (new Date(s.startsAt).getUTCHours() + 2) % 24);
+    expect(horasMadrid).toEqual([10, 11, 12, 13, 17, 18, 19]);
+  });
+
+  it("clínica cierra a las 14 → no ofrece las 18 aunque el profesional trabaje (regla Biodental)", () => {
+    const slots = generateSlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 30,
+      schedules: [{ weekday: 1, start_time: "10:00:00", end_time: "20:00:00" }], // profesional todo el día
+      salonSchedules: [{ weekday: 1, start_time: "10:00:00", end_time: "14:00:00" }], // clínica 10–14
+      busy: [],
+      slotIntervalMinutes: 30,
+      now: MIDNIGHT,
+    });
+    const horasMadrid = slots.map((s) => (new Date(s.startsAt).getUTCHours() + 2) % 24);
+    expect(horasMadrid.some((h) => h >= 14)).toBe(false); // nada a partir de las 14
+    expect(horasMadrid).toContain(13); // 13:00 sí (termina 13:30)
+  });
+
+  it("generateDaySlots también respeta el horario de clínica (día cerrado → vacío)", () => {
+    const day = generateDaySlots({
+      date: DATE,
+      timeZone: TZ,
+      serviceDurationMinutes: 60,
+      schedules: MONDAY_SCHEDULE,
+      salonSchedules: [],
+      busy: [],
+      slotIntervalMinutes: 60,
+      now: MIDNIGHT,
+    });
+    expect(day).toEqual([]);
+  });
+});
+
 describe("generateSlots", () => {
   it("returns empty array when serviceDurationMinutes <= 0", () => {
     expect(

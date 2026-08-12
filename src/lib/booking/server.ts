@@ -297,7 +297,7 @@ async function loadProfessionalDayInputs(
     blocksQuery = blocksQuery.neq("appointment_id", excludeAppointmentId);
   }
 
-  const [schedulesRes, exceptionRes, blocksRes] = await Promise.all([
+  const [schedulesRes, exceptionRes, blocksRes, salonHoursRes] = await Promise.all([
     admin
       .from("professional_schedules")
       .select("weekday, start_time, end_time")
@@ -311,11 +311,24 @@ async function loadProfessionalDayInputs(
       .eq("exception_date", date)
       .maybeSingle(),
     blocksQuery,
+    // Horario de apertura de la clínica (a nivel de salón). Se INTERSECTA con el
+    // horario del profesional en el motor. Ver `salonSchedules` más abajo.
+    admin
+      .from("salon_opening_hours")
+      .select("weekday, start_time, end_time")
+      .eq("salon_id", salon.id),
   ]);
 
   if (schedulesRes.error || blocksRes.error) {
     throw new BookingError(500, "Error al cargar la disponibilidad.");
   }
+
+  // Horario de clínica: FALLA EN ABIERTO. Si la consulta falla (p. ej. la tabla aún
+  // no existe en un despliegue en curso) o el salón no tiene horario de clínica
+  // configurado (0 filas), se pasa `undefined` → el motor ignora la intersección y
+  // usa solo el horario del profesional (comportamiento previo, sin romper nada).
+  const salonRows = salonHoursRes.error ? [] : salonHoursRes.data ?? [];
+  const salonSchedules = salonRows.length > 0 ? salonRows : undefined;
 
   const busy: BusyInterval[] = (blocksRes.data ?? []).map((b) =>
     parseTstzRange(b.occupied_range),
@@ -332,6 +345,7 @@ async function loadProfessionalDayInputs(
     serviceDurationMinutes: blockingMin,
     appointmentDurationMinutes: totalMin,
     schedules: schedulesRes.data ?? [],
+    salonSchedules,
     exception: exceptionRes.data ?? null,
     busy,
     slotIntervalMinutes: salon.slotIntervalMinutes,
@@ -531,6 +545,29 @@ export async function getDayAvailability(
   const admin = createAdminClient();
   const salon = await loadSalon(admin, slug);
   return dayAvailabilityForSalonConfig(admin, salon, serviceId, date, professionalId);
+}
+
+/**
+ * Horario de apertura del salón (tabla `salon_opening_hours`), acotado por `salonId`.
+ * Lo consume el endpoint de recepción para que la recepcionista de voz anuncie el
+ * horario REAL del negocio sin hardcodearlo en su prompt: así, cuando el propietario
+ * cambia el horario en el panel, la recepcionista lo refleja sola. Devuelve los tramos
+ * crudos (`HH:MM:SS`), ordenados por día y hora; `[]` si el salón no tiene horario.
+ */
+export async function getOpeningHoursForSalon(
+  salonId: string,
+): Promise<Array<{ weekday: number; start_time: string; end_time: string }>> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("salon_opening_hours")
+    .select("weekday, start_time, end_time")
+    .eq("salon_id", salonId)
+    .order("weekday", { ascending: true })
+    .order("start_time", { ascending: true });
+  if (error) {
+    throw new BookingError(500, "Error al cargar el horario de la clínica.");
+  }
+  return data ?? [];
 }
 
 /**

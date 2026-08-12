@@ -1803,6 +1803,44 @@ export interface Database {
           },
         ];
       };
+      salon_opening_hours: {
+        Row: {
+          id: string;
+          salon_id: string;
+          weekday: number;
+          start_time: string;
+          end_time: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          weekday: number;
+          start_time: string;
+          end_time: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          weekday?: number;
+          start_time?: string;
+          end_time?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "salon_opening_hours_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       schedule_exceptions: {
         Row: {
           id: string;
@@ -4146,6 +4184,7 @@ export type Product = Tables<"products">;
 export type Appointment = Tables<"appointments">;
 export type Visit = Tables<"visits">;
 export type ProfessionalSchedule = Tables<"professional_schedules">;
+export type SalonOpeningHour = Tables<"salon_opening_hours">;
 export type ScheduleException = Tables<"schedule_exceptions">;
 export type AppointmentHistoryEntry = Tables<"appointment_history">;
 export type CustomerHistoryEntry = Tables<"customer_history">;

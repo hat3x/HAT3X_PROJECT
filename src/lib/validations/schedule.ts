@@ -99,6 +99,50 @@ export const weeklyScheduleSchema = z
 /** Valores de entrada del horario semanal (lo que envía el formulario). */
 export type WeeklyScheduleInput = z.input<typeof weeklyScheduleSchema>;
 
+/**
+ * Horario de apertura de la CLÍNICA/salón (a nivel de salón, sin profesional).
+ * Mismo modelo de tramos por día que el horario del profesional, pero se guarda en
+ * `salon_opening_hours` y el motor de disponibilidad lo intersecta con el horario
+ * de cada profesional. Se valida como unidad porque el guardado reemplaza todos
+ * los tramos del salón a la vez. Comprueba `end_time > start_time` (heredado) y que
+ * los tramos de un mismo día no se solapen.
+ */
+export const salonWeeklyScheduleSchema = z
+  .object({
+    slots: z.array(scheduleSlotSchema),
+  })
+  .superRefine((value, ctx) => {
+    const byWeekday = new Map<
+      number,
+      { index: number; start: string; end: string }[]
+    >();
+    value.slots.forEach((slot, index) => {
+      const current = byWeekday.get(slot.weekday) ?? [];
+      current.push({ index, start: slot.start_time, end: slot.end_time });
+      byWeekday.set(slot.weekday, current);
+    });
+
+    for (const daySlots of byWeekday.values()) {
+      const ordered = [...daySlots].sort((a, b) =>
+        a.start.localeCompare(b.start),
+      );
+      for (let i = 1; i < ordered.length; i += 1) {
+        const previous = ordered[i - 1]!;
+        const currentSlot = ordered[i]!;
+        if (currentSlot.start < previous.end) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Los tramos de un mismo día no pueden solaparse",
+            path: ["slots", currentSlot.index, "start_time"],
+          });
+        }
+      }
+    }
+  });
+
+/** Valores de entrada del horario de la clínica (lo que envía el formulario). */
+export type SalonWeeklyScheduleInput = z.input<typeof salonWeeklyScheduleSchema>;
+
 /** Hora opcional que normaliza cadena vacía a `undefined`. */
 const optionalTime = z
   .string()

@@ -48,6 +48,18 @@ export interface GenerateSlotsInput {
   appointmentDurationMinutes?: number;
   /** Horario recurrente del profesional (puede tener varios tramos/día). */
   schedules: ScheduleSlot[];
+  /**
+   * Horario de apertura de la CLÍNICA/salón (recurrente, hora local del salón).
+   * Cuando se pasa, los tramos del profesional se INTERSECTAN con el horario del
+   * salón: solo hay hueco si la clínica está abierta Y el profesional trabaja.
+   *
+   * Semántica de opcionalidad (retrocompatibilidad):
+   * · `undefined` → el salón no usa horario de clínica; se ignora por completo y
+   *   la disponibilidad es la del profesional (comportamiento previo).
+   * · array (aunque esté vacío) → el salón SÍ define horario de clínica; un día sin
+   *   tramos de salón significa CLÍNICA CERRADA ese día (no hay huecos).
+   */
+  salonSchedules?: ScheduleSlot[];
   /** Excepción de ese día, si existe. */
   exception?: ExceptionSlot | null;
   /** Bloques ocupados del profesional ese día (UTC). Fuente: appointment_blocks. */
@@ -116,31 +128,71 @@ function minutesToTime(total: number): string {
  * FUENTE ÚNICA de los tramos: la comparten `generateSlots` y `generateDaySlots`,
  * de modo que ambos parten exactamente de la misma jornada.
  */
+/**
+ * Intersección de dos conjuntos de rangos `[start, end)` (minutos). Como cada
+ * lado no tiene solapes internos, las piezas resultantes tampoco solapan entre sí.
+ * Devuelve solo los solapes con duración positiva, ordenados por inicio.
+ */
+function intersectRanges(
+  a: Array<{ start: number; end: number }>,
+  b: Array<{ start: number; end: number }>,
+): Array<{ start: number; end: number }> {
+  const out: Array<{ start: number; end: number }> = [];
+  for (const r1 of a) {
+    for (const r2 of b) {
+      const start = Math.max(r1.start, r2.start);
+      const end = Math.min(r1.end, r2.end);
+      if (end > start) out.push({ start, end });
+    }
+  }
+  return out.sort((x, y) => x.start - y.start);
+}
+
 function resolveWorkingRanges(
   date: string,
   schedules: ScheduleSlot[],
   exception: ExceptionSlot | null,
+  salonSchedules?: ScheduleSlot[],
 ): Array<{ start: number; end: number }> {
+  const weekday = weekdayOfLocalDate(date);
+
+  // Tramos del PROFESIONAL: la excepción del día tiene prioridad sobre el horario
+  // recurrente.
+  let professionalRanges: Array<{ start: number; end: number }>;
   if (exception) {
-    if (!exception.is_available || !exception.start_time || !exception.end_time) {
-      return []; // Día no laborable.
-    }
-    return [
-      {
-        start: timeToMinutes(exception.start_time),
-        end: timeToMinutes(exception.end_time),
-      },
-    ];
+    professionalRanges =
+      !exception.is_available || !exception.start_time || !exception.end_time
+        ? [] // Día no laborable para el profesional.
+        : [
+            {
+              start: timeToMinutes(exception.start_time),
+              end: timeToMinutes(exception.end_time),
+            },
+          ];
+  } else {
+    professionalRanges = schedules
+      .filter((s) => s.weekday === weekday)
+      .map((s) => ({
+        start: timeToMinutes(s.start_time),
+        end: timeToMinutes(s.end_time),
+      }))
+      .sort((a, b) => a.start - b.start);
   }
 
-  const weekday = weekdayOfLocalDate(date);
-  return schedules
+  // Sin horario de clínica configurado → disponibilidad del profesional a secas.
+  if (salonSchedules === undefined) return professionalRanges;
+
+  // Con horario de clínica: intersectar. La clínica debe estar abierta Y el
+  // profesional debe trabajar. Un día sin tramos de salón = clínica cerrada.
+  const salonRanges = salonSchedules
     .filter((s) => s.weekday === weekday)
     .map((s) => ({
       start: timeToMinutes(s.start_time),
       end: timeToMinutes(s.end_time),
     }))
     .sort((a, b) => a.start - b.start);
+
+  return intersectRanges(professionalRanges, salonRanges);
 }
 
 /**
@@ -175,6 +227,7 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
     serviceDurationMinutes,
     appointmentDurationMinutes,
     schedules,
+    salonSchedules,
     exception = null,
     busy,
     slotIntervalMinutes = 15,
@@ -188,8 +241,9 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
 
   if (serviceDurationMinutes <= 0) return [];
 
-  // 1. Determinar los tramos laborables del día (excepción tiene prioridad).
-  const workingRanges = resolveWorkingRanges(date, schedules, exception);
+  // 1. Determinar los tramos laborables del día (excepción tiene prioridad; si el
+  //    salón define horario de clínica, se intersecta con él).
+  const workingRanges = resolveWorkingRanges(date, schedules, exception, salonSchedules);
   if (workingRanges.length === 0) return [];
 
   // 2. Umbral de antelación mínima (instante UTC).
@@ -253,6 +307,7 @@ export function generateDaySlots(input: GenerateSlotsInput): DaySlot[] {
     serviceDurationMinutes,
     appointmentDurationMinutes,
     schedules,
+    salonSchedules,
     exception = null,
     busy,
     slotIntervalMinutes = 15,
@@ -264,7 +319,7 @@ export function generateDaySlots(input: GenerateSlotsInput): DaySlot[] {
 
   if (serviceDurationMinutes <= 0) return [];
 
-  const workingRanges = resolveWorkingRanges(date, schedules, exception);
+  const workingRanges = resolveWorkingRanges(date, schedules, exception, salonSchedules);
   if (workingRanges.length === 0) return [];
 
   const earliest = new Date(now.getTime() + minLeadMinutes * MINUTE_MS);

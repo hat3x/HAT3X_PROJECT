@@ -5,15 +5,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createException,
   deleteException,
+  saveSalonSchedule,
   saveWeeklySchedule,
 } from "@/app/(dashboard)/ajustes/horarios/actions";
 import {
+  fetchSalonSchedule,
   fetchScheduleExceptions,
   fetchWeeklySchedule,
   scheduleKeys,
 } from "@/lib/queries/schedules";
 import type {
   ExceptionInput,
+  SalonWeeklyScheduleInput,
   WeeklyScheduleInput,
 } from "@/lib/validations/schedule";
 import type { ScheduleException } from "@/types/database";
@@ -24,6 +27,34 @@ export function useWeeklySchedule(salonId: string, professionalId: string) {
     queryKey: scheduleKeys.weekly(salonId, professionalId),
     queryFn: () => fetchWeeklySchedule(salonId, professionalId),
     enabled: professionalId !== "",
+  });
+}
+
+/** Horario de apertura de la clínica (a nivel de salón). */
+export function useSalonSchedule(salonId: string) {
+  return useQuery({
+    queryKey: scheduleKeys.salon(salonId),
+    queryFn: () => fetchSalonSchedule(salonId),
+    enabled: salonId !== "",
+  });
+}
+
+/** Guarda (reemplaza) el horario de apertura de la clínica y refresca la caché. */
+export function useSaveSalonSchedule(salonId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SalonWeeklyScheduleInput): Promise<null> => {
+      const result = await saveSalonSchedule(input);
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: scheduleKeys.salon(salonId),
+      });
+    },
   });
 }
 
