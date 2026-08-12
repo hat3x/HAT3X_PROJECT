@@ -66,6 +66,11 @@ export function appointmentStatusAccent(status: AppointmentStatus): string {
   return STATUS_STYLES[status].accent;
 }
 
+/** Clase de color sólido del punto indicador de estado (dot). */
+export function appointmentStatusDot(status: AppointmentStatus): string {
+  return STATUS_STYLES[status].dot;
+}
+
 interface AppointmentStatusBadgeProps {
   status: AppointmentStatus;
   className?: string;

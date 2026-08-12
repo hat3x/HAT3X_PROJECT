@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { appointmentStatusDot } from "@/components/appointments/appointment-status";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -81,23 +82,6 @@ function localYmd(iso: string, tz: string): string {
 
 function label(ms: number, opts: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat("es-ES", { timeZone: "UTC", ...opts }).format(new Date(ms));
-}
-
-function statusDot(status: string): string {
-  switch (status) {
-    case "confirmed":
-      return "bg-primary";
-    case "pending":
-      return "bg-amber-500";
-    case "completed":
-      return "bg-emerald-500";
-    case "cancelled":
-      return "bg-destructive";
-    case "no_show":
-      return "bg-muted-foreground";
-    default:
-      return "bg-primary";
-  }
 }
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
@@ -287,7 +271,7 @@ function WeekGrid({
                       className="flex items-center gap-1.5 rounded-md bg-muted/60 px-1.5 py-1 text-left text-xs transition-colors hover:bg-muted"
                     >
                       <span
-                        className={cn("h-2 w-2 shrink-0 rounded-full", statusDot(a.status))}
+                        className={cn("h-2 w-2 shrink-0 rounded-full", appointmentStatusDot(a.status))}
                       />
                       <span className="shrink-0 font-medium tabular-nums">
                         {formatSlotTime(a.starts_at, timezone)}
@@ -376,7 +360,7 @@ function MonthGrid({
                       className="flex items-center gap-1 truncate text-[11px] leading-tight"
                     >
                       <span
-                        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", statusDot(a.status))}
+                        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", appointmentStatusDot(a.status))}
                       />
                       <span className="shrink-0 tabular-nums text-muted-foreground">
                         {formatSlotTime(a.starts_at, timezone)}
