@@ -5,8 +5,13 @@ export const orthoPaymentKeys = {
   all: (salonId: string) => ["ortho-payments", salonId] as const,
   plan: (salonId: string, customerId: string) =>
     [...orthoPaymentKeys.all(salonId), "plan", customerId] as const,
-  overdue: (salonId: string, customerIds: readonly string[]) =>
-    [...orthoPaymentKeys.all(salonId), "overdue", [...customerIds].sort().join(",")] as const,
+  overdue: (salonId: string, customerIds: readonly string[], todayIso: string) =>
+    [
+      ...orthoPaymentKeys.all(salonId),
+      "overdue",
+      [...customerIds].sort().join(","),
+      todayIso,
+    ] as const,
 };
 
 /** Plan de pago ACTIVO del paciente + sus cuotas (ordenadas por seq). `null` si no hay. */
@@ -41,6 +46,11 @@ export async function fetchOrthoPaymentPlan(
 /**
  * Nº de cuotas pendientes VENCIDAS por paciente, para el aviso de morosidad de la agenda.
  * `todayIso` = "YYYY-MM-DD" (zona horaria del salón, resuelta por el llamante).
+ *
+ * Solo cuentan cuotas de planes ACTIVOS: un plan cancelado no debe generar
+ * morosidad aunque conserve cuotas pendientes viejas (histórico, no se borran).
+ * Dos consultas en vez de un embed sobre la FK compuesta (plan_id, salon_id) →
+ * más robusto que depender de que PostgREST resuelva ese `!inner` correctamente.
  */
 export async function fetchOverdueOrthoCounts(
   salonId: string,
@@ -51,11 +61,23 @@ export async function fetchOverdueOrthoCounts(
   if (customerIds.length === 0) return result;
 
   const supabase = createClient();
+
+  const { data: activePlans, error: plansErr } = await supabase
+    .from("ortho_payment_plan")
+    .select("id, customer_id")
+    .eq("salon_id", salonId)
+    .in("customer_id", [...customerIds])
+    .eq("status", "activo");
+
+  if (plansErr !== null) throw new Error(plansErr.message);
+  const activePlanIds = (activePlans ?? []).map((p) => p.id);
+  if (activePlanIds.length === 0) return result;
+
   const { data, error } = await supabase
     .from("ortho_installment")
     .select("customer_id")
     .eq("salon_id", salonId)
-    .in("customer_id", [...customerIds])
+    .in("plan_id", activePlanIds)
     .eq("status", "pendiente")
     .lt("due_date", todayIso);
 

@@ -78,4 +78,21 @@ describe("createOrthoPaymentPlan", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/ya tiene un plan/i);
   });
+
+  it("traduce el 23505 de carrera (índice único parcial) al mismo mensaje claro", async () => {
+    getActiveSalonMock.mockResolvedValue({ id: "s1", sector: "odontologia" });
+    getActiveMembershipMock.mockResolvedValue({ role: "owner" });
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "ortho_payment_plan_one_active"',
+      },
+    });
+    const res = await createOrthoPaymentPlan("c1", {
+      totalCents: 300000, downPaymentCents: 60000, installmentCount: 24, dayOfMonth: 5, startDate: "2026-08-20",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/ya tiene un plan/i);
+  });
 });

@@ -106,7 +106,7 @@ export function AppointmentsView({
         .filter((v): v is string => v !== null),
     ),
   );
-  const overdueQuery = useOverdueOrtho(salonId, dayCustomerIds, date, sector === "odontologia");
+  const overdueQuery = useOverdueOrtho(salonId, dayCustomerIds, today, sector === "odontologia");
   const overdueMap = overdueQuery.data ?? {};
   const professionalsQuery = useProfessionals(salonId);
   const statusMutation = useUpdateAppointmentStatus(salonId, date, filterProfessionalId);

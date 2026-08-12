@@ -71,7 +71,15 @@ export async function createOrthoPaymentPlan(
   });
 
   if (error !== null) {
-    if (error.message.includes("PLAN_EXISTS")) {
+    // La RPC comprueba "¿ya hay plan activo?" antes de insertar (PLAN_EXISTS),
+    // pero dos creaciones concurrentes pueden pasar ambas esa comprobación y
+    // chocar después contra el índice único parcial `ortho_payment_plan_one_active`
+    // (SQLSTATE 23505; el mensaje de Postgres es el nombre del índice, no "PLAN_EXISTS").
+    if (
+      error.code === "23505" ||
+      error.message.includes("PLAN_EXISTS") ||
+      error.message.includes("ortho_payment_plan_one_active")
+    ) {
       return { ok: false, error: "Este paciente ya tiene un plan de pago activo" };
     }
     return { ok: false, error: error.message };

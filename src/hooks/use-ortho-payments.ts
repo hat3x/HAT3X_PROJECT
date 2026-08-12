@@ -30,7 +30,7 @@ export function useOverdueOrtho(
   enabled: boolean,
 ) {
   return useQuery({
-    queryKey: orthoPaymentKeys.overdue(salonId, customerIds),
+    queryKey: orthoPaymentKeys.overdue(salonId, customerIds, todayIso),
     queryFn: () => fetchOverdueOrthoCounts(salonId, customerIds, todayIso),
     enabled: enabled && customerIds.length > 0,
   });
