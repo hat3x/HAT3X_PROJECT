@@ -1,21 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
-import {
-  CalendarRange,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Euro,
-  MessageCircle,
-  Phone,
-  Plus,
-  Scissors,
-  StickyNote,
-  Trash2,
-  User,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { AppointmentForm } from "@/app/(dashboard)/appointments/appointment-form";
 import {
@@ -23,10 +9,9 @@ import {
   type CalendarMode,
 } from "@/app/(dashboard)/appointments/calendar-view";
 import { RescheduleDialog } from "@/app/(dashboard)/appointments/reschedule-dialog";
-import {
-  AppointmentStatusBadge,
-  appointmentStatusAccent,
-} from "@/components/appointments/appointment-status";
+import { AgendaDayKpis } from "@/components/agenda/agenda-day-kpis";
+import { AgendaSidePanel } from "@/components/agenda/agenda-side-panel";
+import { DayGrid } from "@/components/agenda/day-grid";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,15 +23,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatLongDate, formatPrice, formatSlotTime } from "@/lib/booking/format";
+import { formatLongDate, formatSlotTime } from "@/lib/booking/format";
 import { localDateInZone } from "@/lib/booking/timezone";
 import {
   useAppointments,
   useDeleteAppointment,
   useProfessionals,
-  useSendAppointmentReminder,
   useUpdateAppointmentNotes,
   useUpdateAppointmentStatus,
 } from "@/hooks/use-appointments";
@@ -77,7 +60,8 @@ export function AppointmentsView({
 
   const [date, setDate] = useState<string>(today);
   const [view, setView] = useState<"dia" | CalendarMode>("dia");
-  const [filterProfessionalId, setFilterProfessionalId] = useState<string | null>(null);
+  const [hiddenProfIds, setHiddenProfIds] = useState<Set<string>>(new Set());
+  const [monthCursor, setMonthCursor] = useState<string>(() => date.slice(0, 7));
   const [createOpen, setCreateOpen] = useState(false);
   const [cancelState, setCancelState] = useState<{
     open: boolean;
@@ -98,7 +82,7 @@ export function AppointmentsView({
     draft: string;
   }>({ open: false, appointment: null, draft: "" });
 
-  const appointmentsQuery = useAppointments(salonId, date, timezone, filterProfessionalId);
+  const appointmentsQuery = useAppointments(salonId, date, timezone, null);
   const dayCustomerIds = Array.from(
     new Set(
       (appointmentsQuery.data ?? [])
@@ -109,18 +93,32 @@ export function AppointmentsView({
   const overdueQuery = useOverdueOrtho(salonId, dayCustomerIds, today, sector === "odontologia");
   const overdueMap = overdueQuery.data ?? {};
   const professionalsQuery = useProfessionals(salonId);
-  const statusMutation = useUpdateAppointmentStatus(salonId, date, filterProfessionalId);
-  const notesMutation = useUpdateAppointmentNotes(salonId, date, filterProfessionalId);
-  const deleteMutation = useDeleteAppointment(salonId, date, filterProfessionalId);
+  const allProfessionals = professionalsQuery.data ?? [];
+  const visibleProfessionals = allProfessionals.filter((p) => !hiddenProfIds.has(p.id));
+  const activeProfessionalIds = new Set(visibleProfessionals.map((p) => p.id));
+  function toggleProfessional(id: string): void {
+    setHiddenProfIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function selectDate(d: string): void {
+    setDate(d);
+    setMonthCursor(d.slice(0, 7));
+  }
+  function changeMonth(delta: number): void {
+    const [y, m] = monthCursor.split("-").map((x) => Number.parseInt(x, 10));
+    const base = new Date(Date.UTC(y ?? 2026, (m ?? 1) - 1 + delta, 1));
+    setMonthCursor(`${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  const statusMutation = useUpdateAppointmentStatus(salonId, date, null);
+  const notesMutation = useUpdateAppointmentNotes(salonId, date, null);
+  const deleteMutation = useDeleteAppointment(salonId, date, null);
   // Tiempo real: al crear/mover/cancelar una cita (p. ej. Sara la coge por teléfono),
   // Supabase Realtime invalida la caché y la lista se actualiza sola, sin recargar.
   const realtimeStatus = useDayPanelRealtime(salonId);
-  const reminderMutation = useSendAppointmentReminder();
-  const [reminderResult, setReminderResult] = useState<{
-    appointmentId: string;
-    message: string;
-    isError: boolean;
-  } | null>(null);
 
   function handleStatusChange(id: string, status: AppointmentStatus): void {
     if (status === "cancelled") {
@@ -149,26 +147,6 @@ export function AppointmentsView({
     );
   }
 
-  function handleSendReminder(appointmentId: string): void {
-    setReminderResult(null);
-    reminderMutation.mutate(appointmentId, {
-      onSuccess: (result) => {
-        setReminderResult(
-          result.ok
-            ? { appointmentId, message: result.data.message, isError: false }
-            : { appointmentId, message: result.error, isError: true },
-        );
-      },
-      onError: (err) => {
-        setReminderResult({
-          appointmentId,
-          message: err instanceof Error ? err.message : "Error al enviar el recordatorio",
-          isError: true,
-        });
-      },
-    });
-  }
-
   function confirmCancel(): void {
     statusMutation.mutate(
       {
@@ -190,7 +168,7 @@ export function AppointmentsView({
   }
 
   return (
-    <main className="container max-w-4xl py-10 sm:py-12">
+    <main className="container max-w-7xl py-10 sm:py-12">
       {/* Header */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
         <div className="space-y-1">
@@ -271,7 +249,7 @@ export function AppointmentsView({
         />
       ) : null}
 
-      {/* Contenido de la vista DÍA: navegación de fecha + filtro + lista */}
+      {/* Contenido de la vista DÍA: navegación de fecha + KPIs + parrilla + panel */}
       {view === "dia" && (
         <>
       <div className="mb-5 flex flex-wrap items-center gap-3 animate-fade-in">
@@ -308,103 +286,30 @@ export function AppointmentsView({
         </span>
       </div>
 
-      {/* Filtro por profesional */}
-      {professionalsQuery.data && professionalsQuery.data.length > 1 && (
-        <div className="mb-7 flex flex-wrap gap-2 animate-fade-in">
-          <button
-            type="button"
-            onClick={() => setFilterProfessionalId(null)}
-            className={cn(
-              "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 ease-apple-out",
-              filterProfessionalId === null
-                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-accent-foreground",
-            )}
-          >
-            Todos
-          </button>
-          {professionalsQuery.data.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setFilterProfessionalId(p.id)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 ease-apple-out",
-                filterProfessionalId === p.id
-                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                  : "border-border text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-accent-foreground",
-              )}
-            >
-              {p.color && (
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full ring-1 ring-inset ring-black/10"
-                  style={{ backgroundColor: p.color }}
-                />
-              )}
-              {p.full_name}
-            </button>
-          ))}
-        </div>
-      )}
+      <AgendaDayKpis appointments={appointmentsQuery.data ?? []} />
 
-      {/* Lista de citas */}
-      {appointmentsQuery.isPending && (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
-          ))}
-        </div>
-      )}
-
-      {appointmentsQuery.isError && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          {(appointmentsQuery.error as Error).message}
-        </div>
-      )}
-
-      {appointmentsQuery.isSuccess && appointmentsQuery.data.length === 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-muted/30 px-6 py-16 text-center animate-fade-up">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <CalendarRange className="h-6 w-6" />
-          </span>
-          <p className="text-sm font-medium text-foreground">Sin citas este día</p>
-          <p className="max-w-xs text-sm text-muted-foreground">
-            No hay citas programadas. Crea una nueva o cambia de fecha.
-          </p>
-        </div>
-      )}
-
-      {appointmentsQuery.isSuccess && appointmentsQuery.data.length > 0 && (
-        <div className="space-y-3">
-          {appointmentsQuery.data.map((appt, i) => (
-            <div
-              key={appt.id}
-              className="animate-fade-up"
-              style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}
-            >
-              <AppointmentCard
-                appointment={appt}
-                timezone={timezone}
-                overdueCount={overdueMap[appt.customer_id ?? ""] ?? 0}
-                onStatusChange={handleStatusChange}
-                onReschedule={(a) =>
-                  setRescheduleState({ open: true, appointment: a })
-                }
-                onDelete={handleDelete}
-                onEditNotes={handleEditNotes}
-                mutating={statusMutation.isPending}
-                onSendReminder={handleSendReminder}
-                reminderPending={
-                  reminderMutation.isPending && reminderMutation.variables === appt.id
-                }
-                reminderResult={
-                  reminderResult?.appointmentId === appt.id ? reminderResult : null
-                }
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_236px]">
+        <DayGrid
+          appointments={appointmentsQuery.data ?? []}
+          professionals={visibleProfessionals}
+          timezone={timezone}
+          isToday={date === today}
+          isLoading={appointmentsQuery.isPending}
+          isError={appointmentsQuery.isError}
+          overdueByCustomer={overdueMap}
+          onSelectAppointment={handleEditNotes}
+          onSelectSlot={() => setCreateOpen(true)}
+        />
+        <AgendaSidePanel
+          month={monthCursor}
+          selectedDate={date}
+          professionals={allProfessionals}
+          activeProfessionalIds={activeProfessionalIds}
+          onToggleProfessional={toggleProfessional}
+          onSelectDate={selectDate}
+          onChangeMonth={changeMonth}
+        />
+      </div>
         </>
       )}
 
@@ -567,236 +472,5 @@ export function AppointmentsView({
         </DialogContent>
       </Dialog>
     </main>
-  );
-}
-
-// --- Tarjeta individual de cita -----------------------------------------------
-
-interface AppointmentCardProps {
-  appointment: AppointmentWithDetails;
-  timezone: string;
-  overdueCount: number;
-  onStatusChange: (id: string, status: AppointmentStatus) => void;
-  onReschedule: (appointment: AppointmentWithDetails) => void;
-  onDelete: (appointment: AppointmentWithDetails) => void;
-  onEditNotes: (appointment: AppointmentWithDetails) => void;
-  mutating: boolean;
-  onSendReminder: (id: string) => void;
-  reminderPending: boolean;
-  reminderResult: { message: string; isError: boolean } | null;
-}
-
-function AppointmentCard({
-  appointment: appt,
-  timezone,
-  overdueCount,
-  onStatusChange,
-  onReschedule,
-  onDelete,
-  onEditNotes,
-  mutating,
-  onSendReminder,
-  reminderPending,
-  reminderResult,
-}: AppointmentCardProps): React.ReactElement {
-  const isPending = appt.status === "pending";
-  const isConfirmed = appt.status === "confirmed";
-  const isActive = isPending || isConfirmed;
-  const isCompleted = appt.status === "completed";
-  const isMuted = appt.status === "cancelled" || appt.status === "no_show";
-
-  return (
-    <article
-      className={cn(
-        "group relative overflow-hidden rounded-xl border bg-card shadow-sm transition-all duration-200 ease-apple-out",
-        isActive && "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md",
-        isMuted && "opacity-70",
-      )}
-    >
-      {/* Franja de acento por estado */}
-      <span
-        aria-hidden
-        className={cn(
-          "absolute inset-y-0 left-0 w-1",
-          appointmentStatusAccent(appt.status),
-        )}
-      />
-
-      <div className="flex flex-col gap-4 py-4 pl-6 pr-4 sm:flex-row sm:items-start sm:justify-between">
-        {/* Zona clicable: pulsar la cita abre el editor de notas. */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => onEditNotes(appt)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onEditNotes(appt);
-            }
-          }}
-          aria-label={`Editar notas de la cita de ${appt.customer?.full_name ?? "cliente"}`}
-          className="-m-1.5 min-w-0 cursor-pointer space-y-2 rounded-lg p-1.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="flex items-center gap-1.5 text-sm font-semibold tabular-nums">
-              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              {formatSlotTime(appt.starts_at, timezone)}
-              <span className="text-muted-foreground">–</span>
-              {formatSlotTime(appt.ends_at, timezone)}
-            </span>
-            <AppointmentStatusBadge status={appt.status} />
-          </div>
-
-          <p className="flex items-center gap-2 text-base font-semibold tracking-tight">
-            <Scissors className="h-4 w-4 shrink-0 text-primary/70" />
-            {appt.service?.name ?? "—"}
-          </p>
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <User className="h-3.5 w-3.5" />
-              {appt.customer?.full_name ?? "—"}
-            </span>
-            {appt.customer?.phone && (
-              <span className="flex items-center gap-1.5 tabular-nums">
-                <Phone className="h-3.5 w-3.5" />
-                {appt.customer.phone}
-              </span>
-            )}
-            {overdueCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-                ⚠ {overdueCount} cuota{overdueCount === 1 ? "" : "s"} vencida
-                {overdueCount === 1 ? "" : "s"}
-              </span>
-            )}
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            {appt.professional?.full_name ?? "—"}
-            <span className="mx-1.5 text-muted-foreground/50">·</span>
-            <span className="font-medium text-foreground/70 tabular-nums">
-              {formatPrice(appt.price_cents, appt.currency)}
-            </span>
-          </p>
-
-          {appt.notes && appt.notes.trim() !== "" ? (
-            <p className="flex items-start gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-foreground/80">
-              <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="whitespace-pre-wrap">{appt.notes}</span>
-            </p>
-          ) : (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100">
-              <StickyNote className="h-3.5 w-3.5 shrink-0" />
-              Añadir nota
-            </p>
-          )}
-
-          {appt.status === "cancelled" && appt.cancelled_reason && (
-            <p className="text-xs italic text-muted-foreground">
-              Motivo: {appt.cancelled_reason}
-            </p>
-          )}
-
-          {reminderResult && (
-            <p
-              className={cn(
-                "text-xs",
-                reminderResult.isError ? "text-destructive" : "text-muted-foreground",
-              )}
-            >
-              {reminderResult.message}
-            </p>
-          )}
-        </div>
-
-        {isActive && (
-          <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={reminderPending || mutating}
-              onClick={() => onSendReminder(appt.id)}
-            >
-              <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
-              {reminderPending ? "Enviando…" : "Enviar recordatorio"}
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/tpv?appointment=${appt.id}`}>
-                <Euro className="mr-1.5 h-3.5 w-3.5" />
-                Cobrar
-              </Link>
-            </Button>
-            {isPending && (
-              <Button
-                size="sm"
-                disabled={mutating}
-                onClick={() => onStatusChange(appt.id, "confirmed")}
-              >
-                Confirmar
-              </Button>
-            )}
-            {isConfirmed && (
-              <Button
-                size="sm"
-                disabled={mutating}
-                onClick={() => onStatusChange(appt.id, "completed")}
-              >
-                Completar
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={mutating}
-              onClick={() => onReschedule(appt)}
-            >
-              Reprogramar
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={mutating}
-              onClick={() => onStatusChange(appt.id, "no_show")}
-            >
-              No presentado
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={mutating}
-              onClick={() => onStatusChange(appt.id, "cancelled")}
-            >
-              Cancelar
-            </Button>
-          </div>
-        )}
-
-        {isCompleted && (
-          <div className="flex sm:flex-col sm:items-stretch">
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/tpv?appointment=${appt.id}`}>
-                <Euro className="mr-1.5 h-3.5 w-3.5" />
-                Cobrar
-              </Link>
-            </Button>
-          </div>
-        )}
-
-        {appt.status === "cancelled" && (
-          <div className="flex sm:flex-col sm:items-stretch">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => onDelete(appt)}
-            >
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-              Borrar
-            </Button>
-          </div>
-        )}
-      </div>
-    </article>
   );
 }

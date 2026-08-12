@@ -42,6 +42,8 @@ interface DayGridProps {
   appointments: AppointmentWithDetails[];
   professionals: DayGridProfessional[];
   timezone: string;
+  /** Si es `false`, oculta la línea de "ahora" (se usa al ver días distintos a hoy). Por defecto `true`. */
+  isToday?: boolean;
   isLoading: boolean;
   isError: boolean;
   overdueByCustomer?: Record<string, number>;
@@ -89,6 +91,7 @@ export function DayGrid({
   appointments,
   professionals,
   timezone,
+  isToday,
   isLoading,
   isError,
   overdueByCustomer,
@@ -180,7 +183,8 @@ export function DayGrid({
   }
 
   const gridTemplateColumns = `${GUTTER_WIDTH}px repeat(${professionals.length}, minmax(148px, 1fr))`;
-  const showNowLine = nowMin >= dayWindow.dayStartMin && nowMin <= dayWindow.dayEndMin;
+  const showNowLine =
+    (isToday ?? true) && nowMin >= dayWindow.dayStartMin && nowMin <= dayWindow.dayEndMin;
 
   return (
     // Sin padding-top aquí a propósito: el gap visual bajo la cabecera se
