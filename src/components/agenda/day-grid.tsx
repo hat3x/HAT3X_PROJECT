@@ -59,6 +59,8 @@ interface DayGridProps {
   appointments: AppointmentWithDetails[];
   professionals: DayGridProfessional[];
   timezone: string;
+  /** Rangos de apertura de la clínica para el día (para pintar las franjas "Cerrado"). */
+  openingRanges?: OpeningRange[];
   /** Si es `false`, oculta la línea de "ahora" (se usa al ver días distintos a hoy). Por defecto `true`. */
   isToday?: boolean;
   isLoading: boolean;
@@ -370,6 +372,7 @@ export function DayGrid({
   appointments,
   professionals,
   timezone,
+  openingRanges,
   isToday,
   isLoading,
   isError,
@@ -416,8 +419,8 @@ export function DayGrid({
   );
 
   const dayWindow = useMemo(
-    () => computeDayWindow([], timelineItems, FALLBACK_WINDOW),
-    [timelineItems],
+    () => computeDayWindow(openingRanges ?? [], timelineItems, FALLBACK_WINDOW),
+    [openingRanges, timelineItems],
   );
 
   const timeline = useMemo(
@@ -549,11 +552,13 @@ export function DayGrid({
 
           {showNowLine ? (
             <div
-              aria-hidden="true"
               className="pointer-events-none absolute right-0 z-10 h-0.5 bg-destructive"
               style={{ top: timeline.yAt(nowMin), left: GUTTER_WIDTH }}
             >
               <span className="absolute -left-[5px] -top-[4px] h-2.5 w-2.5 rounded-full bg-destructive" />
+              <span className="absolute -top-2.5 left-1 rounded-full bg-destructive px-1.5 py-px text-[10px] font-semibold leading-none text-destructive-foreground">
+                ahora
+              </span>
             </div>
           ) : null}
 

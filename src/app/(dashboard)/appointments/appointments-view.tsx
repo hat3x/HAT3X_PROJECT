@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 
 import { AppointmentForm } from "@/app/(dashboard)/appointments/appointment-form";
@@ -24,17 +24,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { localDateInZone } from "@/lib/booking/timezone";
+import { localDateInZone, weekdayOfLocalDate, zonedWallTimeToUtc } from "@/lib/booking/timezone";
 import {
   useAppointments,
   useDeleteAppointment,
   useProfessionals,
+  useRescheduleAppointment,
   useSendAppointmentReminder,
   useUpdateAppointmentNotes,
   useUpdateAppointmentStatus,
 } from "@/hooks/use-appointments";
+import { useSalonSchedule } from "@/hooks/use-schedules";
 import { useDayPanelRealtime } from "@/hooks/use-day-panel-realtime";
 import { useOverdueOrtho } from "@/hooks/use-ortho-payments";
+import type { OpeningRange } from "@/lib/agenda/day-model";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
 import type { AppointmentStatus, MemberRole, SalonSector } from "@/types/database";
 
@@ -154,6 +157,52 @@ export function AppointmentsView({
   const statusMutation = useUpdateAppointmentStatus(salonId, date, null);
   const notesMutation = useUpdateAppointmentNotes(salonId, date, null);
   const deleteMutation = useDeleteAppointment(salonId, date, null);
+
+  // Horarios de apertura de la clínica → franjas "Cerrado" en la parrilla del día.
+  const scheduleQuery = useSalonSchedule(salonId);
+  const openingRanges = useMemo<OpeningRange[]>(() => {
+    const weekday = weekdayOfLocalDate(date);
+    const toMin = (t: string): number => {
+      const parts = t.split(":");
+      return Number(parts[0] ?? 0) * 60 + Number(parts[1] ?? 0);
+    };
+    return (scheduleQuery.data ?? [])
+      .filter((r) => r.weekday === weekday)
+      .map((r) => ({ startMin: toMin(r.start_time), endMin: toMin(r.end_time) }));
+  }, [scheduleQuery.data, date]);
+
+  // Arrastrar/redimensionar una cita en la parrilla → reprogramar (cualquier minuto).
+  const rescheduleMutation = useRescheduleAppointment(salonId);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  function handleMoveAppointment(
+    appointment: AppointmentWithDetails,
+    next: { startMin: number; durationMin: number; professionalId: string },
+  ): void {
+    const hm = (min: number): string =>
+      `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+    const startsAt = zonedWallTimeToUtc(date, hm(next.startMin), timezone).toISOString();
+    const endsAt = zonedWallTimeToUtc(
+      date,
+      hm(next.startMin + next.durationMin),
+      timezone,
+    ).toISOString();
+    setMoveError(null);
+    rescheduleMutation.mutate(
+      { appointmentId: appointment.id, professionalId: next.professionalId, startsAt, endsAt },
+      {
+        onSuccess: (res) => {
+          if (!res.ok) {
+            setMoveError(res.error);
+            window.setTimeout(() => setMoveError(null), 4000);
+          }
+        },
+        onError: (err) => {
+          setMoveError(err instanceof Error ? err.message : "No se pudo mover la cita");
+          window.setTimeout(() => setMoveError(null), 4000);
+        },
+      },
+    );
+  }
   const reminderMutation = useSendAppointmentReminder();
   // Tiempo real: al crear/mover/cancelar una cita (p. ej. Sara la coge por teléfono),
   // Supabase Realtime invalida la caché y la lista se actualiza sola, sin recargar.
@@ -356,12 +405,14 @@ export function AppointmentsView({
                 appointments={dayAppointments}
                 professionals={visibleProfessionals}
                 timezone={timezone}
+                openingRanges={openingRanges}
                 isToday={date === today}
                 isLoading={appointmentsQuery.isPending}
                 isError={appointmentsQuery.isError}
                 overdueByCustomer={overdueMap}
                 onSelectAppointment={(a) => setSelectedAppointmentId(a.id)}
                 onSelectSlot={() => setCreateOpen(true)}
+                onMoveAppointment={handleMoveAppointment}
               />
             </div>
             <aside className="hidden w-[236px] shrink-0 overflow-y-auto lg:block">
@@ -538,6 +589,15 @@ export function AppointmentsView({
         onDelete={handleDelete}
         onSaveNotes={(id, notes) => notesMutation.mutate({ id, notes })}
       />
+
+      {moveError !== null ? (
+        <div
+          role="alert"
+          className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground shadow-lg"
+        >
+          {moveError}
+        </div>
+      ) : null}
     </main>
   );
 }
