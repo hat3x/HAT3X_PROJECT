@@ -215,7 +215,10 @@ export function OrthoLabCard({ salonId, customerId }: OrthoLabCardProps): React.
                 order={o}
                 onMarkReceived={() => handleMarkReceived(o.id)}
                 onMarkDelivered={() => handleMarkDelivered(o.id)}
-                onDelete={() => setDeleteTarget(o)}
+                onDelete={() => {
+                  setActionError(null);
+                  setDeleteTarget(o);
+                }}
                 receivingPending={markReceived.isPending}
                 deliveringPending={markDelivered.isPending}
               />
