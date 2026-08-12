@@ -67,6 +67,31 @@ export async function updateAppointmentStatus(
 }
 
 /**
+ * Actualiza las notas de una cita del salón activo. Permite añadir, editar o
+ * vaciar la nota (cadena en blanco → null). Acotado por `salon_id`. No cambia el
+ * estado ni ningún otro campo de la cita.
+ */
+export async function updateAppointmentNotes(
+  appointmentId: string,
+  notes: string,
+): Promise<ActionResult<null>> {
+  const salonId = await getActiveSalonId();
+  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ notes: notes.trim() || null })
+    .eq("id", appointmentId)
+    .eq("salon_id", salonId);
+
+  if (error !== null) return { ok: false, error: error.message };
+
+  revalidatePath("/appointments");
+  return { ok: true, data: null };
+}
+
+/**
  * BORRA (hard delete) una cita del salón activo. Irreversible: a diferencia de
  * cancelar —que conserva el registro en estado 'cancelled'—, elimina la fila.
  * Requiere rol de manager (política RLS `managers_delete_appointments`); los

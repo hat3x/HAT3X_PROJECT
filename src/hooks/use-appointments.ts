@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   updateAppointmentStatus,
+  updateAppointmentNotes,
   createAppointment,
   rescheduleAppointment,
   deleteAppointment,
@@ -176,6 +177,30 @@ export function useUpdateAppointmentStatus(
       status: AppointmentStatus;
       reason?: string;
     }) => updateAppointmentStatus(id, status, reason),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: appointmentKeys.list(salonId, date, professionalId),
+      });
+    },
+  });
+}
+
+/**
+ * Actualiza las NOTAS de una cita e invalida la lista del día. La mutación LANZA
+ * si la action devuelve `{ ok: false }`, para que la UI lo muestre vía `isError`.
+ */
+export function useUpdateAppointmentNotes(
+  salonId: string,
+  date: string,
+  professionalId: string | null,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
+      const res = await updateAppointmentNotes(id, notes);
+      if (!res.ok) throw new Error(res.error);
+      return res.data;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: appointmentKeys.list(salonId, date, professionalId),
