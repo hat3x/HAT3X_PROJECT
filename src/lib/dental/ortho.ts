@@ -31,6 +31,7 @@ export interface OrthoTreatment {
   startDate: string | null; // ISO "YYYY-MM-DD"
   status: OrthoStatus | null;
   objectives: string | null;
+  alignerTotal: number | null;
 }
 
 export interface OrthoData {
@@ -67,6 +68,7 @@ export const EMPTY_ORTHO_TREATMENT: OrthoTreatment = {
   startDate: null,
   status: null,
   objectives: null,
+  alignerTotal: null,
 };
 
 export const MALOCCLUSION_CLASS_LABELS: Record<MalocclusionClass, string> = {

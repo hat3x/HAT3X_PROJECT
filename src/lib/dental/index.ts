@@ -8,3 +8,4 @@ export * from "./color";
 export * from "./catalog";
 export * from "./ortho";
 export * from "./ortho-payments";
+export * from "./lab-orders";
