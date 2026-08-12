@@ -37,6 +37,7 @@ export default async function AppointmentsPage(): Promise<React.ReactElement> {
       salonId={salon.id}
       salonSlug={salon.slug}
       timezone={salon.timezone}
+      sector={salon.sector}
     />
   );
 }

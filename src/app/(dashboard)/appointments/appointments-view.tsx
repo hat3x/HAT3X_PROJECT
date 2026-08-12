@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatLongDate, formatPrice, formatSlotTime } from "@/lib/booking/format";
@@ -46,16 +47,19 @@ import {
   useDeleteAppointment,
   useProfessionals,
   useSendAppointmentReminder,
+  useUpdateAppointmentNotes,
   useUpdateAppointmentStatus,
 } from "@/hooks/use-appointments";
 import { useDayPanelRealtime } from "@/hooks/use-day-panel-realtime";
+import { useOverdueOrtho } from "@/hooks/use-ortho-payments";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
-import type { AppointmentStatus } from "@/types/database";
+import type { AppointmentStatus, SalonSector } from "@/types/database";
 
 interface AppointmentsViewProps {
   salonId: string;
   salonSlug: string;
   timezone: string;
+  sector: SalonSector;
 }
 
 function addDays(date: string, delta: number): string {
@@ -67,6 +71,7 @@ export function AppointmentsView({
   salonId,
   salonSlug,
   timezone,
+  sector,
 }: AppointmentsViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
@@ -87,10 +92,25 @@ export function AppointmentsView({
     open: boolean;
     appointment: AppointmentWithDetails | null;
   }>({ open: false, appointment: null });
+  const [notesState, setNotesState] = useState<{
+    open: boolean;
+    appointment: AppointmentWithDetails | null;
+    draft: string;
+  }>({ open: false, appointment: null, draft: "" });
 
   const appointmentsQuery = useAppointments(salonId, date, timezone, filterProfessionalId);
+  const dayCustomerIds = Array.from(
+    new Set(
+      (appointmentsQuery.data ?? [])
+        .map((a) => a.customer_id)
+        .filter((v): v is string => v !== null),
+    ),
+  );
+  const overdueQuery = useOverdueOrtho(salonId, dayCustomerIds, date, sector === "odontologia");
+  const overdueMap = overdueQuery.data ?? {};
   const professionalsQuery = useProfessionals(salonId);
   const statusMutation = useUpdateAppointmentStatus(salonId, date, filterProfessionalId);
+  const notesMutation = useUpdateAppointmentNotes(salonId, date, filterProfessionalId);
   const deleteMutation = useDeleteAppointment(salonId, date, filterProfessionalId);
   // Tiempo real: al crear/mover/cancelar una cita (p. ej. Sara la coge por teléfono),
   // Supabase Realtime invalida la caché y la lista se actualiza sola, sin recargar.
@@ -112,6 +132,21 @@ export function AppointmentsView({
 
   function handleDelete(appointment: AppointmentWithDetails): void {
     setDeleteState({ open: true, appointment });
+  }
+
+  function handleEditNotes(appointment: AppointmentWithDetails): void {
+    setNotesState({ open: true, appointment, draft: appointment.notes ?? "" });
+  }
+
+  function confirmNotes(): void {
+    if (!notesState.appointment) return;
+    notesMutation.mutate(
+      { id: notesState.appointment.id, notes: notesState.draft },
+      {
+        onSuccess: () =>
+          setNotesState({ open: false, appointment: null, draft: "" }),
+      },
+    );
   }
 
   function handleSendReminder(appointmentId: string): void {
@@ -350,11 +385,13 @@ export function AppointmentsView({
               <AppointmentCard
                 appointment={appt}
                 timezone={timezone}
+                overdueCount={overdueMap[appt.customer_id ?? ""] ?? 0}
                 onStatusChange={handleStatusChange}
                 onReschedule={(a) =>
                   setRescheduleState({ open: true, appointment: a })
                 }
                 onDelete={handleDelete}
+                onEditNotes={handleEditNotes}
                 mutating={statusMutation.isPending}
                 onSendReminder={handleSendReminder}
                 reminderPending={
@@ -480,6 +517,55 @@ export function AppointmentsView({
           onClose={() => setRescheduleState((s) => ({ ...s, open: false }))}
         />
       )}
+
+      {/* Dialog de notas de la cita — se abre al pulsar la cita */}
+      <Dialog
+        open={notesState.open}
+        onOpenChange={(open) => {
+          if (!open) setNotesState((s) => ({ ...s, open: false }));
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notas de la cita</DialogTitle>
+            <DialogDescription>
+              {notesState.appointment
+                ? `${notesState.appointment.customer?.full_name ?? "—"} · ${
+                    notesState.appointment.service?.name ?? "—"
+                  } · ${formatSlotTime(notesState.appointment.starts_at, timezone)}`
+                : "Añade o edita la nota de esta cita."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              value={notesState.draft}
+              onChange={(e) =>
+                setNotesState((s) => ({ ...s, draft: e.target.value }))
+              }
+              rows={5}
+              placeholder="Tratamiento, observaciones, avisos… (p. ej. «Curetaje de los cuatro cuadrantes»)"
+              autoFocus
+            />
+            {notesMutation.isError && (
+              <p className="text-sm text-destructive">
+                {(notesMutation.error as Error).message}
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setNotesState((s) => ({ ...s, open: false }))}
+                disabled={notesMutation.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={confirmNotes} disabled={notesMutation.isPending}>
+                {notesMutation.isPending ? "Guardando…" : "Guardar nota"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }
@@ -489,9 +575,11 @@ export function AppointmentsView({
 interface AppointmentCardProps {
   appointment: AppointmentWithDetails;
   timezone: string;
+  overdueCount: number;
   onStatusChange: (id: string, status: AppointmentStatus) => void;
   onReschedule: (appointment: AppointmentWithDetails) => void;
   onDelete: (appointment: AppointmentWithDetails) => void;
+  onEditNotes: (appointment: AppointmentWithDetails) => void;
   mutating: boolean;
   onSendReminder: (id: string) => void;
   reminderPending: boolean;
@@ -501,9 +589,11 @@ interface AppointmentCardProps {
 function AppointmentCard({
   appointment: appt,
   timezone,
+  overdueCount,
   onStatusChange,
   onReschedule,
   onDelete,
+  onEditNotes,
   mutating,
   onSendReminder,
   reminderPending,
@@ -533,7 +623,20 @@ function AppointmentCard({
       />
 
       <div className="flex flex-col gap-4 py-4 pl-6 pr-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-2">
+        {/* Zona clicable: pulsar la cita abre el editor de notas. */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onEditNotes(appt)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onEditNotes(appt);
+            }
+          }}
+          aria-label={`Editar notas de la cita de ${appt.customer?.full_name ?? "cliente"}`}
+          className="-m-1.5 min-w-0 cursor-pointer space-y-2 rounded-lg p-1.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="flex items-center gap-1.5 text-sm font-semibold tabular-nums">
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
@@ -560,6 +663,12 @@ function AppointmentCard({
                 {appt.customer.phone}
               </span>
             )}
+            {overdueCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+                ⚠ {overdueCount} cuota{overdueCount === 1 ? "" : "s"} vencida
+                {overdueCount === 1 ? "" : "s"}
+              </span>
+            )}
           </div>
 
           <p className="text-xs text-muted-foreground">
@@ -570,10 +679,15 @@ function AppointmentCard({
             </span>
           </p>
 
-          {appt.notes && appt.notes.trim() !== "" && (
+          {appt.notes && appt.notes.trim() !== "" ? (
             <p className="flex items-start gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-foreground/80">
               <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="whitespace-pre-wrap">{appt.notes}</span>
+            </p>
+          ) : (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100">
+              <StickyNote className="h-3.5 w-3.5 shrink-0" />
+              Añadir nota
             </p>
           )}
 
