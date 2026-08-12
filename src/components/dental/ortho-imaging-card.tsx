@@ -1,0 +1,116 @@
+"use client";
+
+import { AlertCircle, ScanLine } from "lucide-react";
+
+import { ImageGallery } from "@/components/dental/image-gallery";
+import { UploadImageForm } from "@/components/dental/upload-image-form";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { usePatientImages } from "@/hooks/use-patient-images";
+
+// ---------------------------------------------------------------------------
+// OrthoImagingCard — subsección "Radiografías e imágenes" de ortodoncia.
+// Componente CLIENTE (no importa de "@/lib/salon"; recibe `salonId` por prop,
+// resuelto en el page servidor). Mismo lenguaje visual que las otras cards de
+// `OrtodonciaView` (p. ej. `OrthoPaymentPlanCard`): icono en círculo + título
+// + descripción en el header, y estados excluyentes en el content (loading /
+// error con reintento / listo) para la galería. El formulario de subida se
+// reutiliza tal cual (Task 3) con `defaultModality="cefalometrica"` para
+// preseleccionar la modalidad típica de ortodoncia sin bloquear el resto.
+// ---------------------------------------------------------------------------
+
+export interface OrthoImagingCardProps {
+  salonId: string;
+  customerId: string;
+}
+
+export function OrthoImagingCard({
+  salonId,
+  customerId,
+}: OrthoImagingCardProps): React.ReactElement {
+  const imagesQuery = usePatientImages(salonId, customerId);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-3 space-y-0">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <ScanLine className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />
+        </span>
+        <div>
+          <CardTitle className="text-xl">Radiografías e imágenes</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Cefalometrías, panorámicas y fotografías clínicas del tratamiento.
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <UploadImageForm
+          salonId={salonId}
+          customerId={customerId}
+          defaultModality="cefalometrica"
+        />
+
+        {imagesQuery.isPending ? (
+          <ImagingSkeleton />
+        ) : imagesQuery.isError ? (
+          <ImagingError
+            message={
+              imagesQuery.error instanceof Error
+                ? imagesQuery.error.message
+                : "No se pudieron cargar las imágenes."
+            }
+            onRetry={() => void imagesQuery.refetch()}
+          />
+        ) : (
+          <ImageGallery
+            salonId={salonId}
+            customerId={customerId}
+            images={imagesQuery.data ?? []}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- Loading / error ---------------------------------------------------------
+
+/** Rejilla de placeholders con la misma proporción que las miniaturas reales de `ImageGallery`. */
+function ImagingSkeleton(): React.ReactElement {
+  return (
+    <div aria-busy="true" aria-live="polite" className="space-y-3">
+      <span className="sr-only">Cargando imágenes…</span>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="aspect-square w-full rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** `role="alert"` para que el error se anuncie a lectores de pantalla; incluye reintento. */
+function ImagingError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}): React.ReactElement {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-destructive/30 bg-destructive/5 px-4 py-10 text-center"
+    >
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+        <AlertCircle className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <p className="text-sm font-medium text-foreground">No se pudieron cargar las imágenes</p>
+      <p className="max-w-[32ch] text-xs text-muted-foreground">{message}</p>
+      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+        Reintentar
+      </Button>
+    </div>
+  );
+}
