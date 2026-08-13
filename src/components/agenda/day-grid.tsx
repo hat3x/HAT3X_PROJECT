@@ -102,6 +102,10 @@ const MIN_PX_PER_MIN = 1.1;
 const DAY_HEADER_PX = 52;
 /** Aire entre la cabecera y el borde inferior del contenedor con scroll. */
 const VIEWPORT_BREATHING_ROOM_PX = 12;
+/** Aire ENTRE la cabecera sticky y la primera línea de hora, para que las
+ * 10:00 (línea + etiqueta) no queden pegadas a los nombres. Se descuenta del
+ * alto disponible al calcular la escala para no generar scroll fantasma. */
+const TIMELINE_TOP_PAD_PX = 16;
 /** Snap al pulsar un hueco vacío, y también al arrastrar/redimensionar citas (minutos). */
 const SLOT_SNAP_MIN = 5;
 /** Umbral de movimiento (px) antes de considerar un puntero-abajo un arrastre real y no un click. */
@@ -468,7 +472,10 @@ export function DayGrid({
   const pxPerMinBase = useMemo(() => {
     if (viewportHeight <= 0) return TIMELINE_BASE;
     const windowMinutes = dayWindow.dayEndMin - dayWindow.dayStartMin;
-    const available = Math.max(viewportHeight - DAY_HEADER_PX - VIEWPORT_BREATHING_ROOM_PX, 0);
+    const available = Math.max(
+      viewportHeight - DAY_HEADER_PX - VIEWPORT_BREATHING_ROOM_PX - TIMELINE_TOP_PAD_PX,
+      0,
+    );
     return windowMinutes > 0 ? Math.max(MIN_PX_PER_MIN, available / windowMinutes) : MIN_PX_PER_MIN;
   }, [viewportHeight, dayWindow]);
 
@@ -569,7 +576,10 @@ export function DayGrid({
           })}
         </div>
 
-        <div className="relative z-0 grid" style={{ gridTemplateColumns, height: timeline.total }}>
+        <div
+          className="relative z-0 grid"
+          style={{ gridTemplateColumns, height: timeline.total, marginTop: TIMELINE_TOP_PAD_PX }}
+        >
           <div className="relative" style={{ height: timeline.total }}>
             {hourMarks.map((min) => {
               const y = timeline.yAt(min);

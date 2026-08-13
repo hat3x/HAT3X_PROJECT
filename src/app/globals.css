@@ -172,6 +172,33 @@
     color-scheme: dark;
   }
 
+  /* Scrollbars finas e integradas con el fondo (thumb "flotante" gracias al
+   * borde transparente + background-clip), en lugar de la barra nativa gruesa.
+   * Coherentes en toda la app y en claro/oscuro vía tokens del tema. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   body {
     @apply bg-background text-foreground;
     /* Renderizado tipográfico nítido estilo Apple */

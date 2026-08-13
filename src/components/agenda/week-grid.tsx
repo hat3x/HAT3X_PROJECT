@@ -98,6 +98,9 @@ const MIN_PX_PER_MIN = 0.9;
 const WEEK_HEADER_PX = 44;
 /** Aire entre la cabecera y el borde inferior del contenedor con scroll. */
 const VIEWPORT_BREATHING_ROOM_PX = 12;
+/** Aire ENTRE la cabecera sticky (días) y la primera línea de hora, para que
+ * no quede pegada. Se descuenta del alto disponible al calcular la escala. */
+const TIMELINE_TOP_PAD_PX = 16;
 /** Ventana de fallback cuando no hay horario de apertura ni citas. */
 const FALLBACK_WINDOW: OpeningRange = { startMin: 8 * 60, endMin: 21 * 60 };
 /** Snap al pulsar un hueco vacío, y también al arrastrar citas (minutos). */
@@ -563,7 +566,10 @@ export function WeekGrid({
   const pxPerMinBase = useMemo(() => {
     if (viewportHeight <= 0) return TIMELINE_BASE;
     const windowMinutes = weekWindow.endMin - weekWindow.startMin;
-    const available = Math.max(viewportHeight - WEEK_HEADER_PX - VIEWPORT_BREATHING_ROOM_PX, 0);
+    const available = Math.max(
+      viewportHeight - WEEK_HEADER_PX - VIEWPORT_BREATHING_ROOM_PX - TIMELINE_TOP_PAD_PX,
+      0,
+    );
     return windowMinutes > 0 ? Math.max(MIN_PX_PER_MIN, available / windowMinutes) : MIN_PX_PER_MIN;
   }, [viewportHeight, weekWindow]);
 
@@ -623,7 +629,10 @@ export function WeekGrid({
             ))}
           </div>
 
-          <div className="relative z-0 grid" style={{ gridTemplateColumns, height: timeline.total }}>
+          <div
+            className="relative z-0 grid"
+            style={{ gridTemplateColumns, height: timeline.total, marginTop: TIMELINE_TOP_PAD_PX }}
+          >
             <div className="relative" style={{ height: timeline.total }}>
               {hourMarks.map((min) => {
                 const y = timeline.yAt(min);
