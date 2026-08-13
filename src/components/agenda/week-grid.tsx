@@ -7,11 +7,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAppointmentsRange } from "@/hooks/use-appointments";
 import { useSalonSchedule } from "@/hooks/use-schedules";
 import { agendaLocalMinutes } from "@/lib/agenda/day-model";
-import { snapMinutes } from "@/lib/agenda/timeline";
+import { layoutLanes } from "@/lib/agenda/lanes";
+import { buildDayTimeline, snapMinutes } from "@/lib/agenda/timeline";
 import { formatSlotTime } from "@/lib/booking/format";
 import { localDateInZone, weekdayOfLocalDate } from "@/lib/booking/timezone";
 import { cn } from "@/lib/utils";
 import type { OpeningRange } from "@/lib/agenda/day-model";
+import type { DayTimeline, TimelineItem } from "@/lib/agenda/timeline";
 import type { AppointmentWithDetails } from "@/lib/queries/appointments";
 import type { AppointmentStatus } from "@/types/database";
 
@@ -19,29 +21,35 @@ import type { AppointmentStatus } from "@/types/database";
  * WeekGrid — parrilla horaria de la semana (7 columnas de día × eje de horas).
  *
  * Porta la vista "Semana" del mockup aprobado
- * (docs/superpowers/reference/2026-08-12-agenda-mockup.html → `renderWeek` +
- * `bindWeekDrag`) a Tailwind + tokens de Kairos. A diferencia de `DayGrid`
- * (columnas = profesionales, eje ELÁSTICO), aquí las columnas son los 7 días
- * de la semana y el eje de tiempo es LINEAL (`PX_PER_MIN` fijo): no hace
- * falta estirar franjas porque cada bloque ya es compacto (hora + nombre,
- * sin servicio ni notas — igual que `.week .appt` en el mockup).
+ * (docs/superpowers/reference/2026-08-12-agenda-mockup.html) a Tailwind +
+ * tokens de Kairos, con dos mejoras clave sobre el mockup para que las
+ * tarjetas NO se corten nunca con datos reales (donde una columna de día
+ * mezcla a TODOS los profesionales):
  *
- * Reutiliza de `day-grid.tsx`: la cabecera STICKY + OPACA con z-index alto,
- * el cuerpo con su propio contexto de apilado (z-index 0), el truco de NO
- * padding-top en el contenedor con scroll (usa margin-top en su lugar), y
- * el mismo tinte por estado (`STATUS_CARD_CLASSES`).
+ *  1. **Eje ELÁSTICO compartido** (`buildDayTimeline`, el mismo que la vista
+ *     Día): la franja horaria se estira lo justo para que ninguna tarjeta
+ *     quede por debajo de su altura mínima legible (hora + nombre). El eje se
+ *     construye con las citas de TODA la semana, así las horas siguen
+ *     alineadas entre las 7 columnas. `base` se adapta al alto real (llena la
+ *     pantalla cuando el día es corto; hace scroll cuando no cabe).
+ *  2. **Carriles por día** (`layoutLanes`): las citas que se solapan (p. ej.
+ *     dos profesionales a la misma hora) se reparten lado a lado en vez de
+ *     pisarse — cada una ocupa `1/lanes` del ancho de la columna.
  *
- * A diferencia de `DayGrid` (puramente presentacional, recibe todo por
- * props), este componente SÍ llama a sus propios hooks de datos
- * (`useAppointmentsRange`, `useSalonSchedule`) — ambos "use client" sobre
- * `@/lib/supabase/client`, así que no cruza el límite RSC (nunca importa de
- * `@/lib/salon`).
+ * Reutiliza de `day-grid.tsx`: la cabecera STICKY + OPACA con z-index alto, el
+ * cuerpo con su propio contexto de apilado (z-index 0), el truco de NO
+ * padding-top en el contenedor con scroll (usa margin-top en su lugar), el
+ * eje elástico y el mismo tinte por estado (`STATUS_CARD_CLASSES`).
  *
- * Arrastre (mover, sin redimensionar — la semana no tiene grip): vertical
- * cambia la hora (snap 5 min contra el eje lineal, acotado a la ventana),
- * horizontal cruza de columna/día (se detecta la columna bajo el puntero vía
- * `data-week-date` + `document.elementFromPoint`, igual que `DayGrid` hace
- * con `data-professional-id`). Solo tarjetas `pending`/`confirmed`, y solo si
+ * A diferencia de `DayGrid` (puramente presentacional), este componente SÍ
+ * llama a sus propios hooks de datos (`useAppointmentsRange`,
+ * `useSalonSchedule`) — ambos "use client" sobre `@/lib/supabase/client`, así
+ * que no cruza el límite RSC (nunca importa de `@/lib/salon`).
+ *
+ * Arrastre (mover, sin redimensionar): vertical cambia la hora (snap 5 min
+ * contra el eje elástico, acotado a la ventana), horizontal cruza de
+ * columna/día (columna bajo el puntero vía `data-week-date` +
+ * `document.elementFromPoint`). Solo tarjetas `pending`/`confirmed`, y solo si
  * el padre pasa `onMoveAppointment`.
  */
 
@@ -77,20 +85,20 @@ interface PositionedAppointment {
 
 /** Ancho de la columna de horas (gutter), en píxeles — igual que DayGrid. */
 const GUTTER_WIDTH = 56;
-/** Escala LINEAL: px por hora (dentro del rango 48–56 pedido) → px por minuto.
- * Se usa como FALLBACK mientras no se ha medido aún el contenedor con scroll
- * (ver `viewportHeight` en `WeekGrid`) — nunca se muestra una rejilla a 0px. */
-const HOUR_PX = 52;
-const PX_PER_MIN = HOUR_PX / 60;
-/** Suelo legible de la escala DINÁMICA: nunca se comprime por debajo de esto
- * (~42px/hora) aunque el viewport sea muy bajo. */
-const MIN_PX_PER_MIN = 0.7;
+/** Parámetros del eje elástico de la Semana. Tarjetas compactas (solo hora +
+ * nombre), así que `MIN_CARD` es menor que el de la vista Día. `TIMELINE_BASE`
+ * es el fallback del `base` dinámico hasta medir el contenedor con scroll. */
+const TIMELINE_BASE = 1.1;
+const TIMELINE_MIN_CARD = 36;
+/** Suelo del `base` DINÁMICO: nunca se comprime por debajo de esto aunque el
+ * viewport sea muy bajo (el estirado elástico sigue ganando para las cortas). */
+const MIN_PX_PER_MIN = 0.9;
 /** Alto aprox. de la cabecera sticky (fila de días) — para calcular cuánto
  * alto queda disponible para el eje de tiempo al medir el contenedor. */
 const WEEK_HEADER_PX = 44;
 /** Aire entre la cabecera y el borde inferior del contenedor con scroll. */
 const VIEWPORT_BREATHING_ROOM_PX = 12;
-/** Ventana de fallback cuando no hay horario de apertura (o la unión, ya acotada, colapsa). */
+/** Ventana de fallback cuando no hay horario de apertura ni citas. */
 const FALLBACK_WINDOW: OpeningRange = { startMin: 8 * 60, endMin: 21 * 60 };
 /** Snap al pulsar un hueco vacío, y también al arrastrar citas (minutos). */
 const SLOT_SNAP_MIN = 5;
@@ -101,6 +109,10 @@ const DRAG_MOVE_THRESHOLD_PX = 3;
  * centrarse en la línea — evita que quede tapada por la cabecera sticky (la
  * primera) o que se salga del cuerpo (la última). */
 const LABEL_EDGE_GUARD_PX = 8;
+/** Hueco vertical (px) que se resta a la tarjeta para que no toque la siguiente. */
+const CARD_GAP_PX = 2;
+/** Hueco horizontal (px) entre carriles y en los bordes de cada columna. */
+const LANE_GAP_PX = 3;
 
 /** Mismo tinte por estado que `day-grid.tsx` (bg-X/10 + border-X/30 + text-X): nunca color crudo. */
 const STATUS_CARD_CLASSES: Record<AppointmentStatus, string> = {
@@ -110,10 +122,6 @@ const STATUS_CARD_CLASSES: Record<AppointmentStatus, string> = {
   cancelled: "border-destructive/25 bg-destructive/8 text-destructive",
   no_show: "border-border bg-muted text-muted-foreground",
 };
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
 
 /** Fecha local `YYYY-MM-DD` + delta de días → fecha local `YYYY-MM-DD`. */
 function addLocalDays(date: string, delta: number): string {
@@ -130,8 +138,11 @@ function toMinutes(time: string): number {
 }
 
 function minutesToLabel(min: number): string {
-  const hours = Math.floor(min / 60);
-  const mins = min % 60;
+  // Normaliza a [0, 1440) para que una cita que cruce medianoche no produzca
+  // etiquetas inválidas ("24:00", "25:00") en las marcas de hora o el tooltip.
+  const norm = ((Math.round(min) % 1440) + 1440) % 1440;
+  const hours = Math.floor(norm / 60);
+  const mins = norm % 60;
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
@@ -182,38 +193,6 @@ function closedBandsForDay(
   return bands;
 }
 
-interface WeekScale {
-  /** Píxel del eje para un minuto dado (clampa a [windowStart, windowEnd]). */
-  yAt(min: number): number;
-  /** Minuto del eje para un píxel dado (inversa de `yAt`, clampa a [0, totalHeight]). */
-  minAt(y: number): number;
-  totalHeight: number;
-  windowStart: number;
-  windowEnd: number;
-  /** Escala DINÁMICA (px por minuto) con la que se construyó este eje — para
-   * calcular alturas de bloque (duración de cita) fuera de `yAt`/`minAt`. */
-  pxPerMin: number;
-}
-
-/**
- * Eje de tiempo LINEAL (sin estirar franjas) — la semana no necesita la
- * elasticidad del Día. `pxPerMin` llega ya calculado por el llamador (ver
- * `WeekGrid`): fijo (`PX_PER_MIN`) hasta medir el contenedor, dinámico
- * después — para que la ventana del día llene el alto real disponible.
- */
-function buildWeekScale(windowStart: number, windowEnd: number, pxPerMin: number): WeekScale {
-  const totalHeight = Math.max((windowEnd - windowStart) * pxPerMin, 0);
-  function yAt(min: number): number {
-    const clamped = Math.max(windowStart, Math.min(windowEnd, min));
-    return (clamped - windowStart) * pxPerMin;
-  }
-  function minAt(y: number): number {
-    const clamped = Math.max(0, Math.min(totalHeight, y));
-    return windowStart + clamped / pxPerMin;
-  }
-  return { yAt, minAt, totalHeight, windowStart, windowEnd, pxPerMin };
-}
-
 interface WeekDragState {
   appointment: AppointmentWithDetails;
   durationMin: number;
@@ -237,7 +216,9 @@ interface BeginWeekDragParams {
 }
 
 interface UseWeekAppointmentDragOptions {
-  scale: WeekScale;
+  timeline: DayTimeline;
+  windowStart: number;
+  windowEnd: number;
   timezone: string;
   onMoveAppointment?: (
     appointment: AppointmentWithDetails,
@@ -258,9 +239,12 @@ interface UseWeekAppointmentDragResult {
  * Events. Calcada de `useAppointmentDrag` en `day-grid.tsx` (mismo patrón de
  * refs + rAF + limpieza en `window`), pero simplificada a un único modo
  * "mover" (sin redimensionar) y con día+hora en vez de profesional+hora.
+ * Trabaja contra el eje elástico (`timeline`), igual que la vista Día.
  */
 function useWeekAppointmentDrag({
-  scale,
+  timeline,
+  windowStart,
+  windowEnd,
   timezone,
   onMoveAppointment,
 }: UseWeekAppointmentDragOptions): UseWeekAppointmentDragResult {
@@ -325,7 +309,7 @@ function useWeekAppointmentDrag({
 
     const startClientX = event.clientX;
     const startClientY = event.clientY;
-    const originY = scale.yAt(startMin);
+    const originY = timeline.yAt(startMin);
 
     const initial: WeekDragState = {
       appointment,
@@ -356,11 +340,11 @@ function useWeekAppointmentDrag({
         movedRef.current = true;
       }
 
-      const rawStartMin = scale.minAt(originY + dy);
+      const rawStartMin = timeline.minAt(originY + dy);
       const snappedStart = snapMinutes(rawStartMin, SLOT_SNAP_MIN);
       const clampedStart = Math.max(
-        scale.windowStart,
-        Math.min(scale.windowEnd - current.durationMin, snappedStart),
+        windowStart,
+        Math.min(windowEnd - current.durationMin, snappedStart),
       );
 
       const targetColumn = document
@@ -457,12 +441,11 @@ export function WeekGrid({
   }, [timezone]);
 
   // Alto real (px) del contenedor con scroll — con esto la escala de tiempo
-  // se adapta a la pantalla en vez de usar un `PX_PER_MIN` fijo (ver
-  // `pxPerMin` más abajo). 0 hasta el primer `ResizeObserver` (SSR/primer
+  // se adapta a la pantalla en vez de usar un `TIMELINE_BASE` fijo (ver
+  // `pxPerMinBase` más abajo). 0 hasta el primer `ResizeObserver` (SSR/primer
   // pintado), momento en el que se usa el fallback fijo — nunca hay una
-  // rejilla a 0px. Los deps de pending/error hacen que el efecto se
-  // reintente cuando el skeleton/error deja paso a la rejilla real: en el
-  // primer render (loading) el contenedor con `ref` aún no existe.
+  // rejilla a 0px. Los deps de pending/error hacen que el efecto se reintente
+  // cuando el skeleton/error deja paso a la rejilla real.
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewportHeight, setViewportHeight] = useState(0);
 
@@ -504,41 +487,6 @@ export function WeekGrid({
     return map;
   }, [weekDates, openingByWeekday]);
 
-  // Ventana visible = unión de los rangos de apertura de la semana, acotada
-  // (clamp) al fallback 08:00–21:00; si no hay ningún rango, usa el fallback entero.
-  const weekWindow = useMemo<OpeningRange>(() => {
-    const allRanges = weekDates.flatMap((date) => openingByDate.get(date) ?? []);
-    if (allRanges.length === 0) return FALLBACK_WINDOW;
-    const rawStart = Math.min(...allRanges.map((range) => range.startMin));
-    const rawEnd = Math.max(...allRanges.map((range) => range.endMin));
-    const startMin = clamp(rawStart, FALLBACK_WINDOW.startMin, FALLBACK_WINDOW.endMin);
-    const endMin = clamp(rawEnd, FALLBACK_WINDOW.startMin, FALLBACK_WINDOW.endMin);
-    return endMin > startMin ? { startMin, endMin } : FALLBACK_WINDOW;
-  }, [weekDates, openingByDate]);
-
-  const closedByDate = useMemo(() => {
-    const map = new Map<string, OpeningRange[]>();
-    for (const date of weekDates) {
-      map.set(date, closedBandsForDay(openingByDate.get(date) ?? [], weekWindow));
-    }
-    return map;
-  }, [weekDates, openingByDate, weekWindow]);
-
-  // Escala DINÁMICA: hasta medir el contenedor, el `PX_PER_MIN` fijo de
-  // siempre; después, la que hace que la ventana del día llene el alto
-  // disponible (cabecera + aire descontados), sin bajar del suelo legible.
-  const pxPerMin = useMemo(() => {
-    if (viewportHeight <= 0) return PX_PER_MIN;
-    const windowMinutes = weekWindow.endMin - weekWindow.startMin;
-    const available = Math.max(viewportHeight - WEEK_HEADER_PX - VIEWPORT_BREATHING_ROOM_PX, 0);
-    return windowMinutes > 0 ? Math.max(MIN_PX_PER_MIN, available / windowMinutes) : MIN_PX_PER_MIN;
-  }, [viewportHeight, weekWindow]);
-
-  const scale = useMemo(
-    () => buildWeekScale(weekWindow.startMin, weekWindow.endMin, pxPerMin),
-    [weekWindow, pxPerMin],
-  );
-
   const positioned = useMemo<PositionedAppointment[]>(() => {
     const rows: PositionedAppointment[] = [];
     for (const appointment of appointmentsQuery.data ?? []) {
@@ -554,6 +502,44 @@ export function WeekGrid({
     return rows;
   }, [appointmentsQuery.data, professionalIds, timezone, weekDateSet]);
 
+  // Ventana visible = horario real de apertura de la semana (mismo criterio que
+  // la vista Día: se respeta el horario tal cual, sin acotarlo a un rango fijo)
+  // o el fallback 08–21 si aún no hay horario; SIEMPRE ampliada para incluir
+  // cualquier cita que caiga fuera (nunca se recorta una cita) y redondeada a la
+  // hora para etiquetas limpias.
+  const weekWindow = useMemo<OpeningRange>(() => {
+    const allRanges = weekDates.flatMap((date) => openingByDate.get(date) ?? []);
+    let startMin =
+      allRanges.length > 0
+        ? Math.min(...allRanges.map((range) => range.startMin))
+        : FALLBACK_WINDOW.startMin;
+    let endMin =
+      allRanges.length > 0
+        ? Math.max(...allRanges.map((range) => range.endMin))
+        : FALLBACK_WINDOW.endMin;
+    for (const item of positioned) {
+      startMin = Math.min(startMin, item.startMin);
+      endMin = Math.max(endMin, item.startMin + item.durationMin);
+    }
+    startMin = Math.floor(startMin / 60) * 60;
+    endMin = Math.ceil(endMin / 60) * 60;
+    return endMin > startMin ? { startMin, endMin } : FALLBACK_WINDOW;
+  }, [weekDates, openingByDate, positioned]);
+
+  // No se pintan franjas "Cerrado" hasta que el horario ha cargado: si no,
+  // mientras `useSalonSchedule` está pendiente `openingByDate` es todo [] y los
+  // 7 días aparecerían como una única banda "Cerrado" a pantalla completa (la
+  // vista Día no hace eso). Se distingue "sin datos aún" de "día cerrado".
+  const scheduleReady = scheduleQuery.isSuccess;
+  const closedByDate = useMemo(() => {
+    const map = new Map<string, OpeningRange[]>();
+    if (!scheduleReady) return map;
+    for (const date of weekDates) {
+      map.set(date, closedBandsForDay(openingByDate.get(date) ?? [], weekWindow));
+    }
+    return map;
+  }, [weekDates, openingByDate, weekWindow, scheduleReady]);
+
   const byDate = useMemo(() => {
     const map = new Map<string, PositionedAppointment[]>();
     for (const item of positioned) {
@@ -564,6 +550,35 @@ export function WeekGrid({
     return map;
   }, [positioned]);
 
+  // Ítems del eje elástico: TODAS las citas de la semana (para que el estiraje
+  // de cualquier día mantenga las horas alineadas entre las 7 columnas).
+  const timelineItems = useMemo<TimelineItem[]>(
+    () => positioned.map((item) => ({ startMin: item.startMin, durationMin: item.durationMin })),
+    [positioned],
+  );
+
+  // `base` DINÁMICO: hasta medir el contenedor, el `TIMELINE_BASE` fijo;
+  // después, el que hace que la ventana llene el alto disponible, sin bajar del
+  // suelo legible. El estiraje elástico sigue ganando para las tarjetas cortas.
+  const pxPerMinBase = useMemo(() => {
+    if (viewportHeight <= 0) return TIMELINE_BASE;
+    const windowMinutes = weekWindow.endMin - weekWindow.startMin;
+    const available = Math.max(viewportHeight - WEEK_HEADER_PX - VIEWPORT_BREATHING_ROOM_PX, 0);
+    return windowMinutes > 0 ? Math.max(MIN_PX_PER_MIN, available / windowMinutes) : MIN_PX_PER_MIN;
+  }, [viewportHeight, weekWindow]);
+
+  const timeline = useMemo(
+    () =>
+      buildDayTimeline(timelineItems, {
+        dayStartMin: weekWindow.startMin,
+        dayEndMin: weekWindow.endMin,
+        base: pxPerMinBase,
+        minCard: TIMELINE_MIN_CARD,
+        extra: 0,
+      }),
+    [timelineItems, weekWindow, pxPerMinBase],
+  );
+
   const hourMarks = useMemo(() => {
     const marks: number[] = [];
     const first = Math.ceil(weekWindow.startMin / 60) * 60;
@@ -573,7 +588,13 @@ export function WeekGrid({
 
   // Hook de arrastre. Se llama SIEMPRE (antes de los `return` condicionales
   // de abajo) para respetar las reglas de hooks — igual que en DayGrid.
-  const drag = useWeekAppointmentDrag({ scale, timezone, onMoveAppointment });
+  const drag = useWeekAppointmentDrag({
+    timeline,
+    windowStart: weekWindow.startMin,
+    windowEnd: weekWindow.endMin,
+    timezone,
+    onMoveAppointment,
+  });
   const canDrag = onMoveAppointment !== undefined;
 
   if (appointmentsQuery.isPending) {
@@ -602,10 +623,10 @@ export function WeekGrid({
             ))}
           </div>
 
-          <div className="relative z-0 grid" style={{ gridTemplateColumns, height: scale.totalHeight }}>
-            <div className="relative" style={{ height: scale.totalHeight }}>
+          <div className="relative z-0 grid" style={{ gridTemplateColumns, height: timeline.total }}>
+            <div className="relative" style={{ height: timeline.total }}>
               {hourMarks.map((min) => {
-                const y = scale.yAt(min);
+                const y = timeline.yAt(min);
                 // Ancla la etiqueta hacia DENTRO del cuerpo cerca de los
                 // bordes: centrada (-50%) en el caso normal, pero la primera
                 // (si cae junto a y=0) no debe asomar por encima —quedaría
@@ -614,7 +635,7 @@ export function WeekGrid({
                 // cuerpo. La LÍNEA de hora (en cada columna) no se toca: solo
                 // cambia el punto de anclaje del texto, así siguen alineadas.
                 const nearTop = y <= LABEL_EDGE_GUARD_PX;
-                const nearBottom = y >= scale.totalHeight - LABEL_EDGE_GUARD_PX;
+                const nearBottom = y >= timeline.total - LABEL_EDGE_GUARD_PX;
                 const translateY = nearTop ? "0" : nearBottom ? "-100%" : "-50%";
                 return (
                   <div
@@ -635,7 +656,9 @@ export function WeekGrid({
                 timezone={timezone}
                 isToday={date === todayDate}
                 items={byDate.get(date) ?? []}
-                scale={scale}
+                timeline={timeline}
+                windowStart={weekWindow.startMin}
+                windowEnd={weekWindow.endMin}
                 hourMarks={hourMarks}
                 closedRanges={closedByDate.get(date) ?? []}
                 nowMin={nowMin}
@@ -748,7 +771,9 @@ interface WeekDayColumnProps {
   timezone: string;
   isToday: boolean;
   items: PositionedAppointment[];
-  scale: WeekScale;
+  timeline: DayTimeline;
+  windowStart: number;
+  windowEnd: number;
   hourMarks: number[];
   closedRanges: OpeningRange[];
   nowMin: number;
@@ -765,7 +790,9 @@ function WeekDayColumn({
   timezone,
   isToday,
   items,
-  scale,
+  timeline,
+  windowStart,
+  windowEnd,
   hourMarks,
   closedRanges,
   nowMin,
@@ -774,30 +801,41 @@ function WeekDayColumn({
   drag,
   canDrag,
 }: WeekDayColumnProps): React.ReactElement {
-  const showNowLine = isToday && nowMin >= scale.windowStart && nowMin <= scale.windowEnd;
+  const showNowLine = isToday && nowMin >= windowStart && nowMin <= windowEnd;
+
+  // Reparto en carriles de las citas solapadas de ESTE día (paralelo a `items`).
+  // Memoizado sobre `items` (referencia estable de `byDate`) para no recalcular
+  // el reparto en cada frame de arrastre (el rAF re-renderiza toda la parrilla).
+  const placements = useMemo(
+    () =>
+      layoutLanes(
+        items.map((item) => ({ startMin: item.startMin, endMin: item.startMin + item.durationMin })),
+      ),
+    [items],
+  );
 
   return (
     <div
       data-week-date={date}
       className="relative cursor-pointer border-r border-border transition-colors hover:bg-muted/30 last:border-r-0"
-      style={{ height: scale.totalHeight }}
+      style={{ height: timeline.total }}
       onClick={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         const y = event.clientY - rect.top;
-        onSelectSlot(date, snapMinutes(scale.minAt(y), SLOT_SNAP_MIN));
+        onSelectSlot(date, snapMinutes(timeline.minAt(y), SLOT_SNAP_MIN));
       }}
     >
       {hourMarks.map((min) => (
         <div
           key={min}
           className="pointer-events-none absolute inset-x-0 border-t border-border"
-          style={{ top: scale.yAt(min) }}
+          style={{ top: timeline.yAt(min) }}
         />
       ))}
 
       {closedRanges.map((range) => {
-        const bandTop = scale.yAt(range.startMin);
-        const bandHeight = scale.yAt(range.endMin) - bandTop;
+        const bandTop = timeline.yAt(range.startMin);
+        const bandHeight = timeline.yAt(range.endMin) - bandTop;
         return (
           <div
             key={`${range.startMin}-${range.endMin}`}
@@ -816,13 +854,14 @@ function WeekDayColumn({
         );
       })}
 
-      {items.map(({ appointment, startMin, durationMin }) => {
+      {items.map(({ appointment, startMin, durationMin }, index) => {
+        const placement = placements[index] ?? { lane: 0, lanes: 1 };
         const currentDragState = drag.dragState;
         const activeDrag =
           currentDragState && currentDragState.appointment.id === appointment.id ? currentDragState : null;
         const liveStartMin = activeDrag?.liveStartMin ?? startMin;
-        const cardTop = scale.yAt(liveStartMin);
-        const cardHeight = Math.max(durationMin * scale.pxPerMin - 2, 16);
+        const cardTop = timeline.yAt(liveStartMin);
+        const cardHeight = Math.max(timeline.yAt(liveStartMin + durationMin) - cardTop - CARD_GAP_PX, 28);
         const draggable =
           canDrag && (appointment.status === "pending" || appointment.status === "confirmed");
         return (
@@ -832,6 +871,8 @@ function WeekDayColumn({
             timezone={timezone}
             top={cardTop}
             height={cardHeight}
+            lane={placement.lane}
+            laneCount={placement.lanes}
             translateX={activeDrag?.translateX ?? 0}
             draggable={draggable}
             isDragging={activeDrag !== null}
@@ -849,7 +890,7 @@ function WeekDayColumn({
       {showNowLine ? (
         <div
           className="pointer-events-none absolute inset-x-0 z-10 h-0.5 bg-destructive"
-          style={{ top: scale.yAt(nowMin) }}
+          style={{ top: timeline.yAt(nowMin) }}
         >
           <span
             className="absolute -left-[3px] -top-[3px] h-[7px] w-[7px] rounded-full bg-destructive"
@@ -866,6 +907,9 @@ interface WeekAppointmentCardProps {
   timezone: string;
   top: number;
   height: number;
+  /** Índice de carril y nº total de carriles del grupo de solape (ver `layoutLanes`). */
+  lane: number;
+  laneCount: number;
   /** Desplazamiento horizontal en vivo (px) mientras se arrastra a otra columna/día. */
   translateX: number;
   /** `pending`/`confirmed` + el padre pasó `onMoveAppointment`. */
@@ -883,6 +927,8 @@ function WeekAppointmentCard({
   timezone,
   top,
   height,
+  lane,
+  laneCount,
   translateX,
   draggable,
   isDragging,
@@ -893,6 +939,16 @@ function WeekAppointmentCard({
   const isCancelled = appointment.status === "cancelled";
   const startLabel = formatSlotTime(appointment.starts_at, timezone);
   const firstName = (appointment.customer?.full_name ?? "Cliente").split(" ")[0] ?? "Cliente";
+
+  // Ancho/posición horizontal según el carril: 1/laneCount del ancho de la
+  // columna, con un pequeño hueco a ambos lados y entre carriles.
+  const laneWidthPct = 100 / laneCount;
+  const leftPct = lane * laneWidthPct;
+  // Con 3+ citas simultáneas el carril es demasiado estrecho para "hora +
+  // nombre": se prioriza el NOMBRE (más el acento de color del profesional,
+  // que ya identifica la cita) y se omite la hora, que se ve en el detalle al
+  // pulsar. Así el texto que queda es legible en vez de recortarse todo.
+  const showTime = laneCount < 3;
 
   function handlePointerDown(event: ReactPointerEvent<HTMLButtonElement>): void {
     onDragPointerDown?.(event);
@@ -908,7 +964,7 @@ function WeekAppointmentCard({
         onSelect(appointment);
       }}
       className={cn(
-        "absolute inset-x-1 z-[3] flex flex-col overflow-hidden rounded-md border px-1.5 py-0.5 text-left shadow-xs transition-shadow duration-150 hover:z-10 hover:shadow-md focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        "absolute z-[3] flex flex-col overflow-hidden rounded-md border px-1.5 py-0.5 text-left shadow-xs transition-shadow duration-150 hover:z-10 hover:shadow-md focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
         STATUS_CARD_CLASSES[appointment.status],
         isCancelled && "line-through",
         draggable ? "cursor-grab touch-none select-none" : "cursor-default",
@@ -917,6 +973,8 @@ function WeekAppointmentCard({
       style={{
         top,
         height,
+        left: `calc(${leftPct}% + ${LANE_GAP_PX}px)`,
+        width: `calc(${laneWidthPct}% - ${LANE_GAP_PX * 2}px)`,
         transform: translateX !== 0 ? `translateX(${translateX}px)` : undefined,
       }}
     >
@@ -925,9 +983,11 @@ function WeekAppointmentCard({
         style={{ backgroundColor: appointment.professional?.color ?? "hsl(var(--muted-foreground))" }}
         aria-hidden="true"
       />
-      <span className="truncate pl-1 text-[10px] font-semibold leading-none tabular-nums opacity-85">
-        {startLabel}
-      </span>
+      {showTime ? (
+        <span className="truncate pl-1 text-[10px] font-semibold leading-none tabular-nums opacity-85">
+          {startLabel}
+        </span>
+      ) : null}
       <span className="truncate pl-1 text-[11px] font-semibold leading-tight">{firstName}</span>
     </button>
   );
