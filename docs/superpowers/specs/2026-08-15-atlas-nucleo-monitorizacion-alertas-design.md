@@ -335,12 +335,17 @@ Todas las tablas con RLS activada. Las políticas se apoyan en `permisos`:
 - `credenciales`, `credencial_usos`, `perfiles.es_propietario`: solo propietario.
 
 **Cómo se ocultan los importes, en concreto.** RLS filtra filas, no columnas, y en Supabase
-todos los usuarios comparten el rol `authenticated`, así que un `GRANT` por columna no
-distingue entre ellos. El mecanismo es una **vista `contratos_visibles` con
-`security_invoker = true`** que devuelve `NULL` en `cuota_mensual` cuando quien consulta no es
-propietario. La tabla `contratos` queda accesible solo al propietario; **toda la aplicación lee
-de la vista**, nunca de la tabla. Así el editor no recibe el importe: no es que no se le pinte,
-es que no le llega.
+todos los usuarios comparten el rol `authenticated`, así que un `GRANT` por columna tampoco
+distingue entre ellos. El mecanismo es una **vista `contratos_visibles` con privilegios del
+definidor** que aplica ella misma las dos reglas: qué filas se ven (`atlas_ve_proyecto`) y qué
+columnas se anulan (`cuota_mensual` y `notas` salen `NULL` si quien consulta no es
+propietario). Sobre la tabla `contratos` se **revoca la lectura** al rol `authenticated`; las
+escrituras siguen yendo a la tabla y la política las limita al propietario. **Toda la
+aplicación lee de la vista, nunca de la tabla.** Así el editor no recibe el importe: no es que
+no se le pinte, es que no le llega.
+
+> Una vista `security_invoker` **no** sirve aquí, aunque a primera vista lo parezca: heredaría
+> el veto de lectura de la tabla y el editor no vería ni siquiera las filas sin importe.
 
 **Salvedad explícita:** el motor de vigilancia se ejecuta con `service_role`, que **omite RLS por
 diseño**. En esa ruta el aislamiento lo garantiza el código, no la base de datos. Es el mismo
