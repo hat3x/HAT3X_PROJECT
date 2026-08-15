@@ -844,10 +844,68 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      contratos_visibles: {
+        Row: {
+          addons: string[] | null
+          alta: string | null
+          baja: string | null
+          cliente_id: string | null
+          creado_en: string | null
+          cuota_mensual: number | null
+          estado: string | null
+          id: string | null
+          moneda: string | null
+          notas: string | null
+          proyecto_id: string | null
+        }
+        Insert: {
+          addons?: string[] | null
+          alta?: string | null
+          baja?: string | null
+          cliente_id?: string | null
+          creado_en?: string | null
+          cuota_mensual?: never
+          estado?: string | null
+          id?: string | null
+          moneda?: string | null
+          notas?: never
+          proyecto_id?: string | null
+        }
+        Update: {
+          addons?: string[] | null
+          alta?: string | null
+          baja?: string | null
+          cliente_id?: string | null
+          creado_en?: string | null
+          cuota_mensual?: never
+          estado?: string | null
+          id?: string | null
+          moneda?: string | null
+          notas?: never
+          proyecto_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contratos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contratos_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      [_ in never]: never
+      atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
+      atlas_es_propietario: { Args: never; Returns: boolean }
+      atlas_ve_proyecto: { Args: { p: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
