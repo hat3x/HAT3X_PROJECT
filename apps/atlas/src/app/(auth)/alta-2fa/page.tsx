@@ -55,13 +55,16 @@ export default function Alta2FA() {
           obligatorio y no se puede desactivar. Escanea el código con tu app de
           autenticación.
         </p>
-        {/* El QR llega como data URI desde Supabase: no hay petición externa. */}
+        {/* Supabase devuelve el QR como SVG EN CRUDO (`<?xml version="1.0"?>…`),
+            no como data URI: pasarlo tal cual al src no pinta nada. Se envuelve
+            con encodeURIComponent en lugar de usar dangerouslySetInnerHTML,
+            para no inyectar markup de una respuesta en el DOM. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {qr && (
           <img
-            src={qr}
+            src={`data:image/svg+xml;utf8,${encodeURIComponent(qr)}`}
             alt="Código QR para la app de autenticación"
-            className="mx-auto rounded-lg bg-white p-2"
+            className="mx-auto block h-48 w-48 rounded-lg bg-white p-2"
           />
         )}
         <form onSubmit={confirmar} className="space-y-3">
