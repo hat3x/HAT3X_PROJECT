@@ -47,14 +47,20 @@ export default async function DashboardLayout({
       <SalonBrandStyle branding={branding} sector={sector} />
       <SalonFeaturesProvider flags={featureFlags}>
         <SectorProvider sector={sector}>
-          <div {...{ [BRAND_SCOPE_ATTR]: "" }} className="flex min-h-screen flex-col lg:flex-row">
+          <div
+            {...{ [BRAND_SCOPE_ATTR]: "" }}
+            className="relative isolate flex min-h-screen flex-col lg:flex-row"
+          >
+            {/* Aurora: glows suaves (derivados de la marca) detrás de la chrome
+                glass. El contenido va por encima (z-10). */}
+            <div className="kairos-aurora" aria-hidden="true" />
             <AppSidebar
               brandName={salon?.name ?? null}
               logoUrl={buildLogoSrc(branding)}
               role={membership?.role ?? null}
               showSettings={showSettings}
             />
-            <main className="min-w-0 flex-1">{children}</main>
+            <main className="relative z-10 min-w-0 flex-1">{children}</main>
           </div>
         </SectorProvider>
       </SalonFeaturesProvider>

@@ -11,39 +11,48 @@
  * (citas, clientes, ocupación) NO depende de `pos` y permanece visible. Es gating de
  * PRESENTACIÓN: el gate de datos vive en el servidor de cada dominio.
  */
+import type { ComponentType, SVGProps } from "react";
 import {
-  Activity,
   Armchair,
   BarChart3,
   BellRing,
-  Braces,
   CalendarClock,
   CalendarDays,
   ChefHat,
-  ClipboardList,
   Clock,
   ConciergeBell,
   FileText,
-  FolderOpen,
   LayoutDashboard,
   Package,
   Settings,
   ShoppingBag,
-  Stethoscope,
   UtensilsCrossed,
   Users,
   Wallet,
-  type LucideIcon,
 } from "lucide-react";
 
+import {
+  BracesIcon,
+  DentalRecordIcon,
+  PerioIcon,
+  ToothIcon,
+  TreatmentPlanIcon,
+} from "@/components/brand/dental-icons";
 import { SECTOR_REGISTRY } from "@/lib/sector/registry";
 import type { SalonSector } from "@/types/database";
+
+/**
+ * Componente de icono de una sección. Acepta tanto los iconos de Lucide como
+ * los SVG dentales a medida (`@/components/brand/dental-icons`): ambos aceptan
+ * `className`/`aria-hidden` (SVGProps).
+ */
+export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
 /** Una sección navegable del panel: destino, etiqueta e icono. */
 export interface NavItem {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: NavIcon;
 }
 
 /**
@@ -111,7 +120,7 @@ export const SETTINGS_ITEM: NavItem = {
 export const ODONTOGRAMA_ITEM: NavItem = {
   href: "/odontograma",
   label: "Odontograma",
-  icon: Stethoscope,
+  icon: ToothIcon,
 };
 
 /**
@@ -122,7 +131,7 @@ export const ODONTOGRAMA_ITEM: NavItem = {
 export const PERIODONTOGRAMA_ITEM: NavItem = {
   href: "/periodontograma",
   label: "Periodontograma",
-  icon: Activity,
+  icon: PerioIcon,
 };
 
 /**
@@ -134,7 +143,7 @@ export const PERIODONTOGRAMA_ITEM: NavItem = {
 export const ORTODONCIA_ITEM: NavItem = {
   href: "/ortodoncia",
   label: "Ortodoncia",
-  icon: Braces,
+  icon: BracesIcon,
 };
 
 /**
@@ -146,7 +155,7 @@ export const ORTODONCIA_ITEM: NavItem = {
 export const PLANES_ITEM: NavItem = {
   href: "/planes",
   label: "Planes",
-  icon: ClipboardList,
+  icon: TreatmentPlanIcon,
 };
 
 /**
@@ -159,7 +168,7 @@ export const PLANES_ITEM: NavItem = {
 export const EXPEDIENTE_ITEM: NavItem = {
   href: "/expediente",
   label: "Expediente",
-  icon: FolderOpen,
+  icon: DentalRecordIcon,
 };
 
 /**

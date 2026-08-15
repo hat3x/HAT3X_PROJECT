@@ -88,6 +88,17 @@
     /* Realce de foco/marca */
     --shadow-focus: 0 0 0 3px hsl(var(--ring) / 0.35);
     --shadow-brand: 0 8px 24px -6px hsl(var(--primary) / 0.35);
+
+    /* ---- Liquid Glass (cristal) + Aurora — capa premium estilo Atlas ----
+       El cristal es translúcido; la variante DENSA se opaca para datos con
+       letra pequeña. La aurora deriva de --brand, así el white-label del
+       tenant tiñe también el ambiente automáticamente. */
+    --glass-bg: hsl(0 0% 100% / 0.62);
+    --glass-bg-dense: hsl(40 40% 99.5% / 0.86);
+    --glass-border: hsl(0 0% 100% / 0.9);
+    --glass-shadow: 0 8px 30px -6px hsl(var(--shadow-color) / 0.16);
+    --aurora-1: hsl(var(--brand) / 0.22);
+    --aurora-2: hsl(var(--brand) / 0.10);
   }
 
   .dark {
@@ -155,6 +166,14 @@
     --shadow-2xl: 0 40px 80px -20px hsl(var(--shadow-color) / 0.7);
     --shadow-focus: 0 0 0 3px hsl(var(--ring) / 0.4);
     --shadow-brand: 0 8px 24px -6px hsl(var(--primary) / 0.45);
+
+    /* ---- Liquid Glass + Aurora (oscuro): cristal más tenue, aurora más viva ---- */
+    --glass-bg: hsl(0 0% 100% / 0.06);
+    --glass-bg-dense: hsl(var(--card) / 0.9);
+    --glass-border: hsl(0 0% 100% / 0.12);
+    --glass-shadow: 0 10px 34px -6px hsl(0 0% 0% / 0.5);
+    --aurora-1: hsl(var(--brand) / 0.4);
+    --aurora-2: hsl(var(--brand) / 0.22);
   }
 }
 
@@ -232,5 +251,50 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+@layer components {
+  /* Liquid Glass: superficie translúcida con blur + saturación (chrome flotante:
+     rail, barras, drawers, tarjetas). NO usar sobre datos densos con letra
+     pequeña — para eso, añadir `.cristal-densa` (se opaca). */
+  .cristal {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+  .cristal-densa {
+    background: var(--glass-bg-dense);
+  }
+
+  /* Aurora: dos glows difuminados (derivados de --brand) detrás del contenido.
+     Se coloca en un contenedor `relative`; el contenido va por encima. */
+  .kairos-aurora {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .kairos-aurora::before,
+  .kairos-aurora::after {
+    content: "";
+    position: absolute;
+    width: 70vw;
+    height: 70vw;
+    border-radius: 9999px;
+    filter: blur(80px);
+  }
+  .kairos-aurora::before {
+    top: -24vw;
+    left: -14vw;
+    background: radial-gradient(circle at center, var(--aurora-1), transparent 68%);
+  }
+  .kairos-aurora::after {
+    bottom: -26vw;
+    right: -16vw;
+    background: radial-gradient(circle at center, var(--aurora-2), transparent 66%);
   }
 }
