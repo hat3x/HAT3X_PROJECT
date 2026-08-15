@@ -3,6 +3,10 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
+  // El tsconfig usa `jsx: "preserve"` porque lo transforma Next. Vitest necesita
+  // el runtime automático de JSX para compilar los tests de componente; sin
+  // esto fallan con «React is not defined». Solo afecta a los tests.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "jsdom",
     globals: true,
