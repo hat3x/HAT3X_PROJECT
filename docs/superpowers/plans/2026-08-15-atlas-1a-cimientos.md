@@ -2227,3 +2227,382 @@ git commit -m "feat(atlas): clientes de Supabase y capa de consultas tipada"
 ```
 
 ---
+
+## Tarea 9: Autenticación con segundo factor obligatorio
+
+Atlas custodia las llaves de todos los clientes de HAT3X: **entrar solo con contraseña no es una opción**. El segundo factor no es opcional ni configurable, es la puerta.
+
+La decisión de a dónde mandar a cada visitante se extrae a una **función pura** para poder probar los ocho casos sin montar un navegador.
+
+**Ficheros:**
+- Crear: `apps/atlas/src/lib/auth/guardia.ts`
+- Crear: `apps/atlas/src/middleware.ts`
+- Crear: `apps/atlas/src/app/(auth)/login/page.tsx`, `apps/atlas/src/app/(auth)/alta-2fa/page.tsx`, `apps/atlas/src/app/(auth)/verificar/page.tsx`
+- Test: `apps/atlas/src/tests/auth/guardia.test.ts`
+
+**Interfaces:**
+- Consume: `clienteServidor` (Tarea 8).
+- Produce:
+  - `type Aal = "aal1" | "aal2"`
+  - `type EstadoSesion = { haySesion: boolean; nivelActual: Aal | null; nivelExigido: Aal | null }`
+  - `function decidirRuta(estado: EstadoSesion, rutaActual: string): string | null` — devuelve la ruta a la que redirigir, o `null` si puede seguir.
+  - `const RUTAS_ABIERTAS: readonly string[]`
+
+- [ ] **Paso 1: escribir el test que falla**
+
+```ts
+// src/tests/auth/guardia.test.ts
+import { describe, it, expect } from "vitest";
+import { decidirRuta, type EstadoSesion } from "@/lib/auth/guardia";
+
+const sinSesion: EstadoSesion =
+  { haySesion: false, nivelActual: null, nivelExigido: null };
+// Ha entrado con contraseña y NO tiene segundo factor dado de alta.
+const sinFactor: EstadoSesion =
+  { haySesion: true, nivelActual: "aal1", nivelExigido: "aal1" };
+// Tiene factor dado de alta pero aún no ha metido el código de esta sesión.
+const factorPendiente: EstadoSesion =
+  { haySesion: true, nivelActual: "aal1", nivelExigido: "aal2" };
+const dentro: EstadoSesion =
+  { haySesion: true, nivelActual: "aal2", nivelExigido: "aal2" };
+
+describe("guardia de acceso", () => {
+  it("sin sesión manda al login", () => {
+    expect(decidirRuta(sinSesion, "/clientes")).toBe("/login");
+  });
+
+  it("sin sesión deja pasar al propio login", () => {
+    expect(decidirRuta(sinSesion, "/login")).toBeNull();
+  });
+
+  it("con contraseña pero sin segundo factor obliga a darlo de alta", () => {
+    expect(decidirRuta(sinFactor, "/clientes")).toBe("/alta-2fa");
+  });
+
+  it("no rebota en bucle dentro de la propia alta de segundo factor", () => {
+    expect(decidirRuta(sinFactor, "/alta-2fa")).toBeNull();
+  });
+
+  it("con factor dado de alta pero sin verificar esta sesión, pide el código", () => {
+    expect(decidirRuta(factorPendiente, "/clientes")).toBe("/verificar");
+  });
+
+  it("no rebota en bucle dentro de la propia verificación", () => {
+    expect(decidirRuta(factorPendiente, "/verificar")).toBeNull();
+  });
+
+  it("ya verificado pasa a cualquier sitio", () => {
+    expect(decidirRuta(dentro, "/clientes")).toBeNull();
+    expect(decidirRuta(dentro, "/ajustes/credenciales")).toBeNull();
+  });
+
+  it("ya verificado no se queda en las pantallas de entrada", () => {
+    expect(decidirRuta(dentro, "/login")).toBe("/");
+    expect(decidirRuta(dentro, "/verificar")).toBe("/");
+    expect(decidirRuta(dentro, "/alta-2fa")).toBe("/");
+  });
+
+  it("quien no ha verificado NO llega a las credenciales aunque escriba la URL", () => {
+    expect(decidirRuta(sinFactor, "/ajustes/credenciales")).toBe("/alta-2fa");
+    expect(decidirRuta(factorPendiente, "/ajustes/credenciales")).toBe("/verificar");
+  });
+});
+```
+
+- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+
+Ejecuta: `npx vitest run src/tests/auth/guardia.test.ts`
+Esperado: FALLA con «Failed to resolve import "@/lib/auth/guardia"».
+
+- [ ] **Paso 3: implementar la lógica pura**
+
+```ts
+// src/lib/auth/guardia.ts
+//
+// Decide a dónde mandar a cada visitante. Función pura: sin red, sin cookies,
+// sin `Date.now()`. El middleware solo recoge el estado y aplica lo que diga.
+
+export type Aal = "aal1" | "aal2";
+
+export type EstadoSesion = {
+  haySesion: boolean;
+  /** Nivel alcanzado en esta sesión. */
+  nivelActual: Aal | null;
+  /** Nivel que la cuenta exige. Es 'aal2' cuando hay un factor dado de alta. */
+  nivelExigido: Aal | null;
+};
+
+export const RUTAS_ABIERTAS = ["/login", "/alta-2fa", "/verificar"] as const;
+
+export function decidirRuta(
+  estado: EstadoSesion,
+  rutaActual: string
+): string | null {
+  const { haySesion, nivelActual, nivelExigido } = estado;
+
+  if (!haySesion) {
+    return rutaActual === "/login" ? null : "/login";
+  }
+
+  // Segundo factor obligatorio: sin factor dado de alta no se entra a nada.
+  if (nivelExigido === "aal1" && nivelActual === "aal1") {
+    return rutaActual === "/alta-2fa" ? null : "/alta-2fa";
+  }
+
+  // Tiene factor, pero esta sesión aún no lo ha superado.
+  if (nivelExigido === "aal2" && nivelActual === "aal1") {
+    return rutaActual === "/verificar" ? null : "/verificar";
+  }
+
+  // Dentro del todo: las pantallas de entrada ya no tienen sentido.
+  if ((RUTAS_ABIERTAS as readonly string[]).includes(rutaActual)) return "/";
+  return null;
+}
+```
+
+- [ ] **Paso 4: ejecutar y comprobar que pasa**
+
+Ejecuta: `npx vitest run src/tests/auth/guardia.test.ts`
+Esperado: PASA, 9 tests.
+
+- [ ] **Paso 5: escribir el middleware que la aplica**
+
+```ts
+// src/middleware.ts
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+import { decidirRuta, type Aal } from "@/lib/auth/guardia";
+
+export async function middleware(peticion: NextRequest) {
+  let respuesta = NextResponse.next({ request: peticion });
+
+  const sb = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => peticion.cookies.getAll(),
+        setAll: (galletas) => {
+          galletas.forEach(({ name, value }) => peticion.cookies.set(name, value));
+          respuesta = NextResponse.next({ request: peticion });
+          galletas.forEach(({ name, value, options }) =>
+            respuesta.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { data: niveles } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+
+  const destino = decidirRuta(
+    {
+      haySesion: user !== null,
+      nivelActual: (niveles?.currentLevel ?? null) as Aal | null,
+      nivelExigido: (niveles?.nextLevel ?? null) as Aal | null,
+    },
+    peticion.nextUrl.pathname
+  );
+
+  if (destino) {
+    const url = peticion.nextUrl.clone();
+    url.pathname = destino;
+    return NextResponse.redirect(url);
+  }
+  return respuesta;
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.json|.*\\.png$).*)"],
+};
+```
+
+- [ ] **Paso 6: pantalla de entrada**
+
+```tsx
+// src/app/(auth)/login/page.tsx
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { clienteNavegador } from "@/lib/supabase/navegador";
+
+export default function Login() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [clave, setClave] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  async function entrar(e: React.FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    const { error } = await clienteNavegador().auth.signInWithPassword({
+      email, password: clave,
+    });
+    setEnviando(false);
+    if (error) { setError("Email o contraseña incorrectos."); return; }
+    router.refresh();
+  }
+
+  return (
+    <main className="min-h-dvh grid place-items-center p-6">
+      <form onSubmit={entrar} className="cristal w-full max-w-sm p-6 space-y-4">
+        <h1 className="text-xl font-semibold tracking-tight">Atlas</h1>
+        <label className="block text-sm">
+          Email
+          <input type="email" required value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 w-full rounded-lg border px-3 py-2 bg-transparent" />
+        </label>
+        <label className="block text-sm">
+          Contraseña
+          <input type="password" required value={clave}
+            onChange={(e) => setClave(e.target.value)}
+            className="mt-1 w-full rounded-lg border px-3 py-2 bg-transparent" />
+        </label>
+        {error && <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>{error}</p>}
+        <button type="submit" disabled={enviando}
+          className="w-full rounded-lg px-3 py-2 font-medium disabled:opacity-50"
+          style={{ background: "var(--estado-ok)", color: "#04210c" }}>
+          {enviando ? "Entrando…" : "Entrar"}
+        </button>
+      </form>
+    </main>
+  );
+}
+```
+
+- [ ] **Paso 7: alta del segundo factor**
+
+```tsx
+// src/app/(auth)/alta-2fa/page.tsx
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { clienteNavegador } from "@/lib/supabase/navegador";
+
+export default function Alta2FA() {
+  const router = useRouter();
+  const sb = clienteNavegador();
+  const [qr, setQr] = useState<string | null>(null);
+  const [factorId, setFactorId] = useState<string | null>(null);
+  const [codigo, setCodigo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Atlas" })
+      .then(({ data, error }) => {
+        if (error) { setError(error.message); return; }
+        setQr(data.totp.qr_code);
+        setFactorId(data.id);
+      });
+    // Se enrola una sola vez al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function confirmar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!factorId) return;
+    setError(null);
+    const { data: reto, error: e1 } = await sb.auth.mfa.challenge({ factorId });
+    if (e1) { setError(e1.message); return; }
+    const { error: e2 } = await sb.auth.mfa.verify({
+      factorId, challengeId: reto.id, code: codigo,
+    });
+    if (e2) { setError("El código no es válido. Prueba con el siguiente."); return; }
+    router.refresh();
+  }
+
+  return (
+    <main className="min-h-dvh grid place-items-center p-6">
+      <div className="cristal w-full max-w-sm p-6 space-y-4">
+        <h1 className="text-lg font-semibold">Activa el segundo factor</h1>
+        <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>
+          Atlas guarda las claves de todos los clientes. El segundo factor es
+          obligatorio y no se puede desactivar. Escanea el código con tu app de
+          autenticación.
+        </p>
+        {/* El QR llega como data URI desde Supabase, no hay petición externa. */}
+        {qr && <img src={qr} alt="Código QR para la app de autenticación"
+                    className="mx-auto rounded-lg bg-white p-2" />}
+        <form onSubmit={confirmar} className="space-y-3">
+          <label className="block text-sm">
+            Código de 6 dígitos
+            <input inputMode="numeric" pattern="[0-9]{6}" required value={codigo}
+              onChange={(e) => setCodigo(e.target.value)}
+              className="mt-1 w-full rounded-lg border px-3 py-2 bg-transparent tracking-[0.4em] text-center" />
+          </label>
+          {error && <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>{error}</p>}
+          <button type="submit" className="w-full rounded-lg px-3 py-2 font-medium"
+            style={{ background: "var(--estado-ok)", color: "#04210c" }}>
+            Confirmar
+          </button>
+        </form>
+      </div>
+    </main>
+  );
+}
+```
+
+- [ ] **Paso 8: verificación en cada sesión**
+
+```tsx
+// src/app/(auth)/verificar/page.tsx
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { clienteNavegador } from "@/lib/supabase/navegador";
+
+export default function Verificar() {
+  const router = useRouter();
+  const [codigo, setCodigo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function comprobar(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const sb = clienteNavegador();
+    const { data: factores, error: e0 } = await sb.auth.mfa.listFactors();
+    if (e0) { setError(e0.message); return; }
+    const totp = factores.totp[0];
+    if (!totp) { setError("No hay ningún segundo factor dado de alta."); return; }
+
+    const { data: reto, error: e1 } = await sb.auth.mfa.challenge({ factorId: totp.id });
+    if (e1) { setError(e1.message); return; }
+    const { error: e2 } = await sb.auth.mfa.verify({
+      factorId: totp.id, challengeId: reto.id, code: codigo,
+    });
+    if (e2) { setError("El código no es válido. Prueba con el siguiente."); return; }
+    router.refresh();
+  }
+
+  return (
+    <main className="min-h-dvh grid place-items-center p-6">
+      <form onSubmit={comprobar} className="cristal w-full max-w-sm p-6 space-y-4">
+        <h1 className="text-lg font-semibold">Código de verificación</h1>
+        <input inputMode="numeric" pattern="[0-9]{6}" required autoFocus value={codigo}
+          onChange={(e) => setCodigo(e.target.value)}
+          aria-label="Código de 6 dígitos"
+          className="w-full rounded-lg border px-3 py-2 bg-transparent tracking-[0.4em] text-center" />
+        {error && <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>{error}</p>}
+        <button type="submit" className="w-full rounded-lg px-3 py-2 font-medium"
+          style={{ background: "var(--estado-ok)", color: "#04210c" }}>
+          Entrar
+        </button>
+      </form>
+    </main>
+  );
+}
+```
+
+- [ ] **Paso 9: comprobar que compila y commit**
+
+```bash
+npm run typecheck && npm run build
+git add src/lib/auth src/middleware.ts "src/app/(auth)" src/tests/auth
+git commit -m "feat(atlas): acceso con segundo factor obligatorio"
+```
+
+---
