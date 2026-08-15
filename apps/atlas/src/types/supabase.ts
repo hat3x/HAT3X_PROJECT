@@ -180,6 +180,92 @@ export type Database = {
           },
         ]
       }
+      credencial_usos: {
+        Row: {
+          contexto: string | null
+          credencial_id: string
+          id: number
+          usada_en: string
+          usuario_id: string | null
+        }
+        Insert: {
+          contexto?: string | null
+          credencial_id: string
+          id?: number
+          usada_en?: string
+          usuario_id?: string | null
+        }
+        Update: {
+          contexto?: string | null
+          credencial_id?: string
+          id?: number
+          usada_en?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credencial_usos_credencial_id_fkey"
+            columns: ["credencial_id"]
+            isOneToOne: false
+            referencedRelation: "credenciales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credencial_usos_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credenciales: {
+        Row: {
+          creado_en: string
+          etiqueta: string
+          id: string
+          iv: string
+          prefijo: string | null
+          proveedor: string
+          proyecto_id: string | null
+          rotada_en: string | null
+          secreto_cifrado: string
+          tag: string
+        }
+        Insert: {
+          creado_en?: string
+          etiqueta: string
+          id?: string
+          iv: string
+          prefijo?: string | null
+          proveedor: string
+          proyecto_id?: string | null
+          rotada_en?: string | null
+          secreto_cifrado: string
+          tag: string
+        }
+        Update: {
+          creado_en?: string
+          etiqueta?: string
+          id?: string
+          iv?: string
+          prefijo?: string | null
+          proveedor?: string
+          proyecto_id?: string | null
+          rotada_en?: string | null
+          secreto_cifrado?: string
+          tag?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credenciales_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       enlaces: {
         Row: {
           etiqueta: string
@@ -211,6 +297,110 @@ export type Database = {
             columns: ["proyecto_id"]
             isOneToOne: false
             referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notas: {
+        Row: {
+          autor_id: string | null
+          contenido: string
+          creado_en: string
+          entidad_id: string
+          entidad_tipo: string
+          id: string
+        }
+        Insert: {
+          autor_id?: string | null
+          contenido: string
+          creado_en?: string
+          entidad_id: string
+          entidad_tipo: string
+          id?: string
+        }
+        Update: {
+          autor_id?: string | null
+          contenido?: string
+          creado_en?: string
+          entidad_id?: string
+          entidad_tipo?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notas_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      perfiles: {
+        Row: {
+          avatar_url: string | null
+          creado_en: string
+          es_propietario: boolean
+          id: string
+          nombre: string | null
+          paleta: string
+          tema: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          creado_en?: string
+          es_propietario?: boolean
+          id: string
+          nombre?: string | null
+          paleta?: string
+          tema?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          creado_en?: string
+          es_propietario?: boolean
+          id?: string
+          nombre?: string | null
+          paleta?: string
+          tema?: string
+        }
+        Relationships: []
+      }
+      permisos: {
+        Row: {
+          creado_en: string
+          id: string
+          proyecto_id: string
+          rol: string
+          usuario_id: string
+        }
+        Insert: {
+          creado_en?: string
+          id?: string
+          proyecto_id: string
+          rol: string
+          usuario_id: string
+        }
+        Update: {
+          creado_en?: string
+          id?: string
+          proyecto_id?: string
+          rol?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "permisos_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "permisos_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
             referencedColumns: ["id"]
           },
         ]
