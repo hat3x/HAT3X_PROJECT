@@ -34,6 +34,169 @@ export type Database = {
   }
   public: {
     Tables: {
+      check_agregados: {
+        Row: {
+          bucket: string
+          check_id: string
+          granularidad: string
+          latencia_p50: number | null
+          latencia_p95: number | null
+          ok: number
+          total: number
+        }
+        Insert: {
+          bucket: string
+          check_id: string
+          granularidad: string
+          latencia_p50?: number | null
+          latencia_p95?: number | null
+          ok: number
+          total: number
+        }
+        Update: {
+          bucket?: string
+          check_id?: string
+          granularidad?: string
+          latencia_p50?: number | null
+          latencia_p95?: number | null
+          ok?: number
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_agregados_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "checks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_resultados: {
+        Row: {
+          check_id: string
+          error: string | null
+          id: number
+          latencia_ms: number | null
+          ok: boolean
+          status_code: number | null
+          ts: string
+        }
+        Insert: {
+          check_id: string
+          error?: string | null
+          id?: number
+          latencia_ms?: number | null
+          ok: boolean
+          status_code?: number | null
+          ts?: string
+        }
+        Update: {
+          check_id?: string
+          error?: string | null
+          id?: number
+          latencia_ms?: number | null
+          ok?: boolean
+          status_code?: number | null
+          ts?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_resultados_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "checks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checks: {
+        Row: {
+          activo: boolean
+          cabeceras: Json | null
+          creado_en: string
+          credencial_id: string | null
+          cuerpo: string | null
+          espera_status: number[]
+          espera_texto: string | null
+          estado: string
+          fallos_consecutivos: number
+          id: string
+          intervalo_s: number
+          metodo: string
+          notifica: boolean
+          proximo_check_en: string
+          servicio_id: string
+          timeout_ms: number
+          tipo: string
+          ultimo_check_en: string | null
+          umbral_fallos: number
+          umbral_latencia_ms: number | null
+          url: string | null
+        }
+        Insert: {
+          activo?: boolean
+          cabeceras?: Json | null
+          creado_en?: string
+          credencial_id?: string | null
+          cuerpo?: string | null
+          espera_status?: number[]
+          espera_texto?: string | null
+          estado?: string
+          fallos_consecutivos?: number
+          id?: string
+          intervalo_s?: number
+          metodo?: string
+          notifica?: boolean
+          proximo_check_en?: string
+          servicio_id: string
+          timeout_ms?: number
+          tipo: string
+          ultimo_check_en?: string | null
+          umbral_fallos?: number
+          umbral_latencia_ms?: number | null
+          url?: string | null
+        }
+        Update: {
+          activo?: boolean
+          cabeceras?: Json | null
+          creado_en?: string
+          credencial_id?: string | null
+          cuerpo?: string | null
+          espera_status?: number[]
+          espera_texto?: string | null
+          estado?: string
+          fallos_consecutivos?: number
+          id?: string
+          intervalo_s?: number
+          metodo?: string
+          notifica?: boolean
+          proximo_check_en?: string
+          servicio_id?: string
+          timeout_ms?: number
+          tipo?: string
+          ultimo_check_en?: string | null
+          umbral_fallos?: number
+          umbral_latencia_ms?: number | null
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checks_credencial_id_fkey"
+            columns: ["credencial_id"]
+            isOneToOne: false
+            referencedRelation: "credenciales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checks_servicio_id_fkey"
+            columns: ["servicio_id"]
+            isOneToOne: false
+            referencedRelation: "servicios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clientes: {
         Row: {
           actualizado_en: string
@@ -301,6 +464,60 @@ export type Database = {
           },
         ]
       }
+      incidencias: {
+        Row: {
+          abierta_en: string
+          causa: string | null
+          cerrada_en: string | null
+          check_id: string
+          id: string
+          notificada_en: string | null
+          servicio_id: string
+          severidad: string
+          silenciada_hasta: string | null
+          ultimo_error: string | null
+        }
+        Insert: {
+          abierta_en?: string
+          causa?: string | null
+          cerrada_en?: string | null
+          check_id: string
+          id?: string
+          notificada_en?: string | null
+          servicio_id: string
+          severidad: string
+          silenciada_hasta?: string | null
+          ultimo_error?: string | null
+        }
+        Update: {
+          abierta_en?: string
+          causa?: string | null
+          cerrada_en?: string | null
+          check_id?: string
+          id?: string
+          notificada_en?: string | null
+          servicio_id?: string
+          severidad?: string
+          silenciada_hasta?: string | null
+          ultimo_error?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incidencias_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "checks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "incidencias_servicio_id_fkey"
+            columns: ["servicio_id"]
+            isOneToOne: false
+            referencedRelation: "servicios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notas: {
         Row: {
           autor_id: string | null
@@ -330,6 +547,51 @@ export type Database = {
           {
             foreignKeyName: "notas_autor_id_fkey"
             columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notificaciones: {
+        Row: {
+          canal: string
+          enviada_en: string
+          error: string | null
+          id: number
+          incidencia_id: string | null
+          ok: boolean
+          usuario_id: string
+        }
+        Insert: {
+          canal: string
+          enviada_en?: string
+          error?: string | null
+          id?: number
+          incidencia_id?: string | null
+          ok: boolean
+          usuario_id: string
+        }
+        Update: {
+          canal?: string
+          enviada_en?: string
+          error?: string | null
+          id?: number
+          incidencia_id?: string | null
+          ok?: boolean
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificaciones_incidencia_id_fkey"
+            columns: ["incidencia_id"]
+            isOneToOne: false
+            referencedRelation: "incidencias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificaciones_usuario_id_fkey"
+            columns: ["usuario_id"]
             isOneToOne: false
             referencedRelation: "perfiles"
             referencedColumns: ["id"]
@@ -452,6 +714,133 @@ export type Database = {
           tipo?: string
         }
         Relationships: []
+      }
+      servicios: {
+        Row: {
+          activo: boolean
+          cliente_id: string | null
+          creado_en: string
+          id: string
+          nombre: string
+          orden: number
+          proveedor: string | null
+          proyecto_id: string
+          tipo: string
+        }
+        Insert: {
+          activo?: boolean
+          cliente_id?: string | null
+          creado_en?: string
+          id?: string
+          nombre: string
+          orden?: number
+          proveedor?: string | null
+          proyecto_id: string
+          tipo: string
+        }
+        Update: {
+          activo?: boolean
+          cliente_id?: string | null
+          creado_en?: string
+          id?: string
+          nombre?: string
+          orden?: number
+          proveedor?: string | null
+          proyecto_id?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servicios_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "servicios_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suscripciones_push: {
+        Row: {
+          auth: string
+          creada_en: string
+          dispositivo: string | null
+          endpoint: string
+          id: string
+          p256dh: string
+          ultima_ok_en: string | null
+          usuario_id: string
+        }
+        Insert: {
+          auth: string
+          creada_en?: string
+          dispositivo?: string | null
+          endpoint: string
+          id?: string
+          p256dh: string
+          ultima_ok_en?: string | null
+          usuario_id: string
+        }
+        Update: {
+          auth?: string
+          creada_en?: string
+          dispositivo?: string | null
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          ultima_ok_en?: string | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suscripciones_push_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ventanas_mantenimiento: {
+        Row: {
+          creado_en: string
+          desde: string
+          hasta: string
+          id: string
+          motivo: string | null
+          proyecto_id: string
+        }
+        Insert: {
+          creado_en?: string
+          desde: string
+          hasta: string
+          id?: string
+          motivo?: string | null
+          proyecto_id: string
+        }
+        Update: {
+          creado_en?: string
+          desde?: string
+          hasta?: string
+          id?: string
+          motivo?: string | null
+          proyecto_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ventanas_mantenimiento_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
