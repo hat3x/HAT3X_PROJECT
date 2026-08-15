@@ -46,6 +46,15 @@ to authenticated;
 grant select on check_resultados, check_agregados, notificaciones to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
 
+-- El rol `service_role` tampoco recibe permisos solo. Lo necesitan el motor de
+-- vigilancia del plan 1B (escribe check_resultados, checks e incidencias), los
+-- scripts de migración de datos y el alta de usuarios desde la Admin API.
+-- Omite RLS por definición, pero eso NO le da permiso sobre la tabla.
+grant usage on schema public to service_role;
+grant all privileges on all tables    in schema public to service_role;
+grant all privileges on all sequences in schema public to service_role;
+grant all privileges on all functions in schema public to service_role;
+
 -- ---------- activar RLS en todo ----------
 alter table clientes               enable row level security;
 alter table contactos              enable row level security;
