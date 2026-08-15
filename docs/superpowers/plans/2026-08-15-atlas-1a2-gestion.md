@@ -847,3 +847,793 @@ git commit -m "feat(atlas): clientes — listado, ficha y alta"
 ```
 
 ---
+
+## Tarea 12: Proyectos — listado y ficha
+
+**Ficheros:**
+- Crear: `apps/atlas/src/app/proyectos/page.tsx`, `apps/atlas/src/app/proyectos/[slug]/page.tsx`
+- Crear: `apps/atlas/src/components/proyectos/TarjetaProyecto.tsx`, `apps/atlas/src/components/proyectos/Portada.tsx`
+- Modificar: `apps/atlas/src/lib/db/proyectos.ts` (añadir `obtenerProyecto`)
+- Test: `apps/atlas/src/tests/componentes/portada.test.tsx`, `apps/atlas/src/tests/db/proyecto-ficha.test.ts`
+
+**Interfaces:**
+- Consume: `listarProyectos`, `ProyectoResumen`, `obtenerPerfil`, `Distintivo`.
+- Produce:
+  - `type ServicioResumen = { id: string; nombre: string; tipo: string; proveedor: string | null; clienteNombre: string | null; activo: boolean }`
+  - `type ProyectoFicha = ProyectoResumen & { descripcion: string | null; stack: string[]; repoUrl: string | null; servicios: ServicioResumen[]; enlaces: { id: string; etiqueta: string; url: string }[]; contratos: { id: string; clienteNombre: string; cuotaMensual: number | null; alta: string; estado: string }[] }`
+  - `async function obtenerProyecto(sb: Sb, slug: string): Promise<ProyectoFicha | null>`
+  - componente `<Portada portadaUrl={string|null} gradiente={string|null} nombre={string} className?={string} />`
+  - componente `<TarjetaProyecto proyecto={ProyectoResumen} />`
+
+- [ ] **Paso 1: escribir el test que falla (la portada)**
+
+```tsx
+// src/tests/componentes/portada.test.tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { Portada } from "@/components/proyectos/Portada";
+
+describe("portada de proyecto", () => {
+  it("usa la imagen cuando la hay, con texto alternativo", () => {
+    render(<Portada portadaUrl="/p/kairos.png" gradiente={null} nombre="Kairos" />);
+    const img = screen.getByRole("img", { name: "Kairos" });
+    expect(img).toHaveAttribute("src", "/p/kairos.png");
+  });
+
+  it("cae al gradiente del proyecto cuando no hay imagen", () => {
+    const { container } = render(
+      <Portada portadaUrl={null} gradiente="linear-gradient(135deg,#0071e3,#5ac8fa)" nombre="Kairos" />
+    );
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(container.firstElementChild).toHaveStyle({
+      background: "linear-gradient(135deg,#0071e3,#5ac8fa)",
+    });
+  });
+
+  it("sin imagen ni gradiente cae a las auroras, nunca a un hueco gris", () => {
+    const { container } = render(<Portada portadaUrl={null} gradiente={null} nombre="X" />);
+    expect(container.firstElementChild).toHaveStyle({
+      background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))",
+    });
+  });
+});
+```
+
+- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+
+Ejecuta: `npx vitest run src/tests/componentes/portada.test.tsx`
+Esperado: FALLA con «Failed to resolve import "@/components/proyectos/Portada"».
+
+- [ ] **Paso 3: implementar la portada**
+
+```tsx
+// src/components/proyectos/Portada.tsx
+import { cn } from "@/lib/utils";
+
+const AURORAS = "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))";
+
+/**
+ * Cada proyecto tiene su imagen. Si no la tiene, su gradiente. Si tampoco,
+ * las auroras de la paleta activa. Nunca un hueco gris: la rejilla de proyectos
+ * es lo primero que se ve al entrar y un hueco la estropea entera.
+ */
+export function Portada({
+  portadaUrl, gradiente, nombre, className,
+}: {
+  portadaUrl: string | null;
+  gradiente: string | null;
+  nombre: string;
+  className?: string;
+}) {
+  if (portadaUrl) {
+    return (
+      // Portadas subidas por el propietario: sin optimizador, para no atarnos
+      // a configurar dominios remotos en next.config.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={portadaUrl} alt={nombre}
+        className={cn("h-full w-full object-cover", className)} />
+    );
+  }
+  return (
+    <div aria-hidden="true"
+      className={cn("h-full w-full", className)}
+      style={{ background: gradiente ?? AURORAS }} />
+  );
+}
+```
+
+- [ ] **Paso 4: ejecutar y comprobar que pasa**
+
+Ejecuta: `npx vitest run src/tests/componentes/portada.test.tsx`
+Esperado: PASA, 3 tests.
+
+- [ ] **Paso 5: escribir el test de la ficha de proyecto**
+
+```ts
+// src/tests/db/proyecto-ficha.test.ts
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { createClient } from "@supabase/supabase-js";
+import { Client } from "pg";
+import { obtenerProyecto } from "@/lib/db/proyectos";
+import type { Database } from "@/types/supabase";
+
+const URL_API = "http://127.0.0.1:54321";
+const ANON =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+
+let pg: Client;
+let idUsuario = "";
+let sb: ReturnType<typeof createClient<Database>>;
+
+beforeAll(async () => {
+  pg = new Client({ connectionString: URL_PG });
+  await pg.connect();
+
+  const { rows } = await pg.query(
+    `INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+                             email_confirmed_at)
+     VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000000',
+             'authenticated','authenticated','proy@atlas.test',
+             crypt('contrasena-de-prueba', gen_salt('bf')), now()) RETURNING id`
+  );
+  idUsuario = rows[0].id as string;
+  await pg.query(
+    `INSERT INTO perfiles (id, es_propietario) VALUES ($1, true)`, [idUsuario]
+  );
+
+  const { rows: [p] } = await pg.query(
+    `INSERT INTO proyectos (nombre, slug, tipo, estado, stack, repo_url)
+     VALUES ('Recepcionista Sara','recep-sara','voz','produccion',
+             ARRAY['Retell','n8n','Twilio'],'https://github.com/ejemplo/sara')
+     RETURNING id`
+  );
+  const { rows: [c] } = await pg.query(
+    `INSERT INTO clientes (nombre, slug) VALUES ('Dental Ficha','dental-ficha')
+     RETURNING id`
+  );
+  await pg.query(
+    `INSERT INTO contratos (cliente_id, proyecto_id, cuota_mensual, alta)
+     VALUES ($1,$2,290.00,'2026-05-01')`, [c.id, p.id]
+  );
+  await pg.query(
+    `INSERT INTO servicios (proyecto_id, cliente_id, nombre, tipo, proveedor, orden)
+     VALUES ($1,$2,'n8n 02-crear-cita','workflow','n8n',1)`, [p.id, c.id]
+  );
+  await pg.query(
+    `INSERT INTO servicios (proyecto_id, nombre, tipo, proveedor, orden)
+     VALUES ($1,'Agente Retell','agente-voz','retell',0)`, [p.id]
+  );
+  await pg.query(
+    `INSERT INTO enlaces (proyecto_id, etiqueta, url) VALUES ($1,'n8n','https://n8n.ejemplo.test')`,
+    [p.id]
+  );
+
+  sb = createClient<Database>(URL_API, ANON);
+  const { error } = await sb.auth.signInWithPassword({
+    email: "proy@atlas.test", password: "contrasena-de-prueba",
+  });
+  if (error) throw error;
+});
+
+afterAll(async () => {
+  await pg.query(`DELETE FROM clientes  WHERE slug = 'dental-ficha'`);
+  await pg.query(`DELETE FROM proyectos WHERE slug = 'recep-sara'`);
+  await pg.query(`DELETE FROM auth.users WHERE id = $1`, [idUsuario]);
+  await pg.end();
+});
+
+describe("ficha de proyecto", () => {
+  it("trae stack, repositorio y enlaces", async () => {
+    const p = await obtenerProyecto(sb, "recep-sara");
+    expect(p).not.toBeNull();
+    expect(p!.stack).toEqual(["Retell", "n8n", "Twilio"]);
+    expect(p!.repoUrl).toBe("https://github.com/ejemplo/sara");
+    expect(p!.enlaces.map((e) => e.etiqueta)).toEqual(["n8n"]);
+  });
+
+  it("ordena los servicios y resuelve a qué cliente pertenece cada uno", async () => {
+    const p = await obtenerProyecto(sb, "recep-sara");
+    expect(p!.servicios.map((s) => s.nombre))
+      .toEqual(["Agente Retell", "n8n 02-crear-cita"]);
+    // El servicio sin cliente es del proyecto; el otro es atribuible a Dental Ficha.
+    expect(p!.servicios[0]!.clienteNombre).toBeNull();
+    expect(p!.servicios[1]!.clienteNombre).toBe("Dental Ficha");
+  });
+
+  it("trae los contratos con el nombre del cliente", async () => {
+    const p = await obtenerProyecto(sb, "recep-sara");
+    expect(p!.contratos).toHaveLength(1);
+    expect(p!.contratos[0]!.clienteNombre).toBe("Dental Ficha");
+    expect(p!.contratos[0]!.cuotaMensual).toBe(290);
+    expect(p!.contratos[0]!.alta).toBe("2026-05-01");
+  });
+
+  it("devuelve null cuando el slug no existe", async () => {
+    expect(await obtenerProyecto(sb, "no-existe-jamas")).toBeNull();
+  });
+});
+```
+
+- [ ] **Paso 6: ejecutarlo y comprobar que falla**
+
+Ejecuta: `npx vitest run src/tests/db/proyecto-ficha.test.ts`
+Esperado: FALLA con «obtenerProyecto is not a function».
+
+- [ ] **Paso 7: añadir `obtenerProyecto` a `src/lib/db/proyectos.ts`**
+
+Añade al final del fichero existente:
+
+```ts
+export type ServicioResumen = {
+  id: string;
+  nombre: string;
+  tipo: string;
+  proveedor: string | null;
+  clienteNombre: string | null;
+  activo: boolean;
+};
+
+export type ContratoDeProyecto = {
+  id: string;
+  clienteNombre: string;
+  cuotaMensual: number | null;
+  alta: string;      // ISO AAAA-MM-DD
+  estado: string;
+};
+
+export type ProyectoFicha = ProyectoResumen & {
+  descripcion: string | null;
+  stack: string[];
+  repoUrl: string | null;
+  servicios: ServicioResumen[];
+  enlaces: { id: string; etiqueta: string; url: string }[];
+  contratos: ContratoDeProyecto[];
+};
+
+export async function obtenerProyecto(
+  sb: Sb,
+  slug: string
+): Promise<ProyectoFicha | null> {
+  const { data: p, error } = await sb
+    .from("proyectos")
+    .select("id, nombre, slug, tipo, estado, portada_url, gradiente, descripcion, stack, repo_url")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) throw error;
+  if (!p) return null;
+
+  const [servicios, enlaces, contratos] = await Promise.all([
+    sb.from("servicios")
+      .select("id, nombre, tipo, proveedor, activo, orden, clientes(nombre)")
+      .eq("proyecto_id", p.id)
+      .order("orden"),
+    sb.from("enlaces")
+      .select("id, etiqueta, url, orden")
+      .eq("proyecto_id", p.id)
+      .order("orden"),
+    sb.from("contratos_visibles")
+      .select("id, cuota_mensual, alta, estado, clientes(nombre)")
+      .eq("proyecto_id", p.id)
+      .order("alta"),
+  ]);
+  if (servicios.error) throw servicios.error;
+  if (enlaces.error) throw enlaces.error;
+  if (contratos.error) throw contratos.error;
+
+  return {
+    id: p.id,
+    nombre: p.nombre,
+    slug: p.slug,
+    tipo: p.tipo,
+    estado: p.estado,
+    portadaUrl: p.portada_url,
+    gradiente: p.gradiente,
+    descripcion: p.descripcion,
+    stack: p.stack,
+    repoUrl: p.repo_url,
+    numClientes: new Set(
+      (contratos.data ?? [])
+        .filter((ct) => ct.estado === "activo")
+        .map((ct) => ct.clientes?.nombre)
+    ).size,
+    servicios: (servicios.data ?? []).map((s) => ({
+      id: s.id,
+      nombre: s.nombre,
+      tipo: s.tipo,
+      proveedor: s.proveedor,
+      activo: s.activo,
+      clienteNombre: s.clientes?.nombre ?? null,
+    })),
+    enlaces: (enlaces.data ?? []).map((e) => ({
+      id: e.id, etiqueta: e.etiqueta, url: e.url,
+    })),
+    contratos: (contratos.data ?? []).map((ct) => ({
+      id: ct.id,
+      clienteNombre: ct.clientes?.nombre ?? "—",
+      cuotaMensual: ct.cuota_mensual,
+      alta: ct.alta,
+      estado: ct.estado,
+    })),
+  };
+}
+```
+
+- [ ] **Paso 8: ejecutar y comprobar que pasa**
+
+Ejecuta: `npx vitest run src/tests/db/proyecto-ficha.test.ts`
+Esperado: PASA, 4 tests.
+
+- [ ] **Paso 9: la tarjeta y el listado**
+
+```tsx
+// src/components/proyectos/TarjetaProyecto.tsx
+import Link from "next/link";
+import type { ProyectoResumen } from "@/lib/db/proyectos";
+import { Portada } from "./Portada";
+import { Distintivo, type EstadoVisual } from "@/components/ui/Distintivo";
+
+const ESTADO: Record<string, { visual: EstadoVisual; texto: string }> = {
+  produccion:    { visual: "ok",          texto: "En producción" },
+  mantenimiento: { visual: "ok",          texto: "Mantenimiento" },
+  desarrollo:    { visual: "desconocido", texto: "En desarrollo" },
+  pausado:       { visual: "aviso",       texto: "Pausado" },
+  retirado:      { visual: "desconocido", texto: "Retirado" },
+};
+
+export function TarjetaProyecto({ proyecto }: { proyecto: ProyectoResumen }) {
+  const estado = ESTADO[proyecto.estado]
+    ?? { visual: "desconocido" as const, texto: proyecto.estado };
+  const clientes = proyecto.numClientes === 1
+    ? "1 cliente" : `${proyecto.numClientes} clientes`;
+
+  return (
+    <Link href={`/proyectos/${proyecto.slug}`}
+      className="cristal block overflow-hidden transition-transform hover:scale-[1.01]">
+      <div className="relative h-28">
+        <Portada portadaUrl={proyecto.portadaUrl} gradiente={proyecto.gradiente}
+          nombre={proyecto.nombre} />
+        <div className="absolute right-2 top-2">
+          <Distintivo estado={estado.visual} texto={estado.texto} />
+        </div>
+      </div>
+      <div className="p-3">
+        <h3 className="truncate font-semibold tracking-tight">{proyecto.nombre}</h3>
+        <p className="truncate text-sm" style={{ color: "var(--texto-tenue)" }}>
+          {proyecto.tipo} · {clientes}
+        </p>
+      </div>
+    </Link>
+  );
+}
+```
+
+```tsx
+// src/app/proyectos/page.tsx
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { listarProyectos } from "@/lib/db/proyectos";
+import { TarjetaProyecto } from "@/components/proyectos/TarjetaProyecto";
+
+export default async function PaginaProyectos() {
+  const sb = await clienteServidor();
+  const proyectos = await listarProyectos(sb);
+
+  return (
+    <section className="space-y-4">
+      <h1 className="text-2xl font-semibold tracking-tight">Proyectos</h1>
+      {proyectos.length === 0 ? (
+        <div className="cristal p-8 text-center">
+          <p className="font-medium">Todavía no hay ningún proyecto.</p>
+          <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+            Trae los que ya tienes con el script de migración (Tarea 17).
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {proyectos.map((p) => <TarjetaProyecto key={p.id} proyecto={p} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+```
+
+- [ ] **Paso 10: la ficha de proyecto**
+
+```tsx
+// src/app/proyectos/[slug]/page.tsx
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "@/lib/db/perfil";
+import { obtenerProyecto } from "@/lib/db/proyectos";
+import { Portada } from "@/components/proyectos/Portada";
+import { Distintivo } from "@/components/ui/Distintivo";
+
+const EUROS = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+
+export default async function FichaProyecto({
+  params,
+}: { params: { slug: string } }) {
+  const sb = await clienteServidor();
+  const [perfil, proyecto] = await Promise.all([
+    obtenerPerfil(sb),
+    obtenerProyecto(sb, params.slug),
+  ]);
+  if (!proyecto) notFound();
+  const verImportes = perfil?.esPropietario ?? false;
+
+  return (
+    <article className="space-y-4">
+      <header className="cristal overflow-hidden">
+        <div className="h-32">
+          <Portada portadaUrl={proyecto.portadaUrl} gradiente={proyecto.gradiente}
+            nombre={proyecto.nombre} />
+        </div>
+        <div className="flex flex-wrap items-end justify-between gap-3 p-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{proyecto.nombre}</h1>
+            <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>
+              {proyecto.tipo}{proyecto.stack.length > 0 && ` · ${proyecto.stack.join(" · ")}`}
+            </p>
+          </div>
+          <Distintivo
+            estado={proyecto.estado === "produccion" ? "ok" : "desconocido"}
+            texto={proyecto.estado === "produccion" ? "En producción" : proyecto.estado} />
+        </div>
+      </header>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+        <section className="cristal p-4">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider"
+            style={{ color: "var(--texto-tenue)" }}>
+            Servicios ({proyecto.servicios.length})
+          </h2>
+          {proyecto.servicios.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>
+              Ningún servicio dado de alta todavía. Sin servicios no hay nada que vigilar.
+            </p>
+          ) : (
+            <ul className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
+              {proyecto.servicios.map((s) => (
+                <li key={s.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+                  {/* El estado real llegará con el motor de vigilancia (plan 1B).
+                      Hasta entonces todos los servicios están «sin datos». */}
+                  <Distintivo estado="desconocido" texto="Sin datos" />
+                  <span className="font-medium">{s.nombre}</span>
+                  <span style={{ color: "var(--texto-tenue)" }}>{s.tipo}</span>
+                  {s.clienteNombre && (
+                    <span className="cristal-denso ml-auto rounded-full px-2 py-0.5 text-[11px]">
+                      {s.clienteNombre}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <aside className="space-y-4">
+          <section className="cristal p-4">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "var(--texto-tenue)" }}>
+              Quién lo tiene contratado
+            </h2>
+            {proyecto.contratos.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>Nadie todavía.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {proyecto.contratos.map((ct) => (
+                  <li key={ct.id} className="flex items-center justify-between gap-2">
+                    <span>{ct.clienteNombre}</span>
+                    {verImportes && ct.cuotaMensual !== null && (
+                      <span className="font-semibold tabular-nums">
+                        {EUROS.format(ct.cuotaMensual)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {(proyecto.enlaces.length > 0 || proyecto.repoUrl) && (
+            <section className="cristal p-4">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider"
+                style={{ color: "var(--texto-tenue)" }}>
+                Ir a
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {proyecto.repoUrl && (
+                  <Link href={proyecto.repoUrl} target="_blank" rel="noreferrer"
+                    className="cristal-denso rounded-lg px-2.5 py-1 text-xs">
+                    Repositorio
+                  </Link>
+                )}
+                {proyecto.enlaces.map((e) => (
+                  <Link key={e.id} href={e.url} target="_blank" rel="noreferrer"
+                    className="cristal-denso rounded-lg px-2.5 py-1 text-xs">
+                    {e.etiqueta}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+        </aside>
+      </div>
+    </article>
+  );
+}
+```
+
+- [ ] **Paso 11: ejecutar todo, comprobar el build y commit**
+
+```bash
+npm test && npm run typecheck && npm run build
+git add src/app/proyectos src/components/proyectos src/lib/db/proyectos.ts src/tests
+git commit -m "feat(atlas): proyectos — listado, ficha, portadas y servicios"
+```
+
+---
+
+## Tarea 13: Alta de contratos y servicios
+
+**Ficheros:**
+- Crear: `apps/atlas/src/lib/db/acciones-proyecto.ts`
+- Crear: `apps/atlas/src/components/proyectos/FormServicio.tsx`
+- Test: `apps/atlas/src/tests/db/acciones-proyecto.test.ts`
+
+**Interfaces:**
+- Consume: `clienteServidor`, `obtenerPerfil`, `Resultado` (Tarea 11).
+- Produce:
+  - `type EntradaContrato = { clienteId: string; proyectoId: string; cuotaMensual: number | null; addons: string[]; alta: string; baja: string | null; estado: string }`
+  - `type EntradaServicio = { proyectoId: string; clienteId: string | null; nombre: string; tipo: string; proveedor: string | null }`
+  - `async function validarContrato(entrada: EntradaContrato): Promise<{ ok: true } | { ok: false; error: string }>`
+  - `async function validarServicio(entrada: EntradaServicio): Promise<{ ok: true } | { ok: false; error: string }>`
+  - `async function guardarContrato(entrada: EntradaContrato): Promise<{ ok: true } | { ok: false; error: string }>`
+  - `async function guardarServicio(entrada: EntradaServicio, slugProyecto: string): Promise<{ ok: true } | { ok: false; error: string }>`
+
+- [ ] **Paso 1: escribir el test que falla**
+
+```ts
+// src/tests/db/acciones-proyecto.test.ts
+import { describe, it, expect } from "vitest";
+import { validarContrato, validarServicio } from "@/lib/db/acciones-proyecto";
+
+const contratoBase = {
+  clienteId: "11111111-1111-1111-1111-111111111111",
+  proyectoId: "22222222-2222-2222-2222-222222222222",
+  cuotaMensual: 290,
+  addons: ["recepcionista-ia"],
+  alta: "2026-05-01",
+  baja: null,
+  estado: "activo",
+};
+
+const servicioBase = {
+  proyectoId: "22222222-2222-2222-2222-222222222222",
+  clienteId: null,
+  nombre: "Agente Retell",
+  tipo: "agente-voz",
+  proveedor: "retell",
+};
+
+describe("validación de contrato", () => {
+  it("acepta un contrato correcto", async () => {
+    expect((await validarContrato(contratoBase)).ok).toBe(true);
+  });
+
+  it("acepta cuota nula: hay proyectos sin cargo", async () => {
+    expect((await validarContrato({ ...contratoBase, cuotaMensual: null })).ok).toBe(true);
+  });
+
+  it("rechaza una cuota negativa", async () => {
+    const r = await validarContrato({ ...contratoBase, cuotaMensual: -10 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/cuota/i);
+  });
+
+  it("exige formato ISO AAAA-MM-DD en las fechas", async () => {
+    for (const alta of ["01/05/2026", "2026-5-1", "hoy", "2026-13-01"]) {
+      const r = await validarContrato({ ...contratoBase, alta });
+      expect(r.ok, `debería rechazar «${alta}»`).toBe(false);
+    }
+  });
+
+  it("rechaza una baja anterior al alta", async () => {
+    const r = await validarContrato({ ...contratoBase, baja: "2026-04-01" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/baja/i);
+  });
+
+  it("acepta una baja igual al alta", async () => {
+    expect((await validarContrato({ ...contratoBase, baja: "2026-05-01" })).ok).toBe(true);
+  });
+});
+
+describe("validación de servicio", () => {
+  it("acepta un servicio sin cliente: es del proyecto", async () => {
+    expect((await validarServicio(servicioBase)).ok).toBe(true);
+  });
+
+  it("rechaza el nombre vacío", async () => {
+    const r = await validarServicio({ ...servicioBase, nombre: "   " });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/nombre/i);
+  });
+
+  it("rechaza un tipo que no exista en el esquema", async () => {
+    const r = await validarServicio({ ...servicioBase, tipo: "inventado" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/tipo/i);
+  });
+
+  it("acepta los diez tipos del esquema", async () => {
+    const tipos = ["web","api","webhook","workflow","agente-voz","telefonia",
+                   "base-datos","cron","dominio","otro"];
+    for (const tipo of tipos) {
+      expect((await validarServicio({ ...servicioBase, tipo })).ok, tipo).toBe(true);
+    }
+  });
+});
+```
+
+- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+
+Ejecuta: `npx vitest run src/tests/db/acciones-proyecto.test.ts`
+Esperado: FALLA con «Failed to resolve import "@/lib/db/acciones-proyecto"».
+
+- [ ] **Paso 3: implementar**
+
+```ts
+// src/lib/db/acciones-proyecto.ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "./perfil";
+
+export type Ok = { ok: true } | { ok: false; error: string };
+
+export type EntradaContrato = {
+  clienteId: string;
+  proyectoId: string;
+  cuotaMensual: number | null;
+  addons: string[];
+  alta: string;         // ISO AAAA-MM-DD
+  baja: string | null;  // ISO AAAA-MM-DD
+  estado: string;
+};
+
+export type EntradaServicio = {
+  proyectoId: string;
+  clienteId: string | null;
+  nombre: string;
+  tipo: string;
+  proveedor: string | null;
+};
+
+const TIPOS_SERVICIO = [
+  "web", "api", "webhook", "workflow", "agente-voz",
+  "telefonia", "base-datos", "cron", "dominio", "otro",
+] as const;
+
+const ESTADOS_CONTRATO = ["activo", "pausado", "finalizado"] as const;
+
+/**
+ * Comprueba que la cadena es una fecha ISO AAAA-MM-DD *real*: el patrón por sí
+ * solo aceptaría 2026-13-01 o 2026-02-31.
+ */
+function esFechaISO(valor: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const fecha = new Date(`${valor}T00:00:00Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
+}
+
+export async function validarContrato(entrada: EntradaContrato): Promise<Ok> {
+  if (entrada.cuotaMensual !== null && entrada.cuotaMensual < 0) {
+    return { ok: false, error: "La cuota no puede ser negativa." };
+  }
+  if (!esFechaISO(entrada.alta)) {
+    return { ok: false, error: "La fecha de alta debe tener el formato AAAA-MM-DD." };
+  }
+  if (entrada.baja !== null) {
+    if (!esFechaISO(entrada.baja)) {
+      return { ok: false, error: "La fecha de baja debe tener el formato AAAA-MM-DD." };
+    }
+    if (entrada.baja < entrada.alta) {
+      return { ok: false, error: "La fecha de baja no puede ser anterior a la de alta." };
+    }
+  }
+  if (!(ESTADOS_CONTRATO as readonly string[]).includes(entrada.estado)) {
+    return { ok: false, error: `El estado «${entrada.estado}» no existe.` };
+  }
+  return { ok: true };
+}
+
+export async function validarServicio(entrada: EntradaServicio): Promise<Ok> {
+  if (entrada.nombre.trim().length === 0) {
+    return { ok: false, error: "El nombre del servicio no puede estar vacío." };
+  }
+  if (!(TIPOS_SERVICIO as readonly string[]).includes(entrada.tipo)) {
+    return {
+      ok: false,
+      error: `El tipo «${entrada.tipo}» no existe. Admitidos: ${TIPOS_SERVICIO.join(", ")}.`,
+    };
+  }
+  return { ok: true };
+}
+
+export async function guardarContrato(entrada: EntradaContrato): Promise<Ok> {
+  const valido = await validarContrato(entrada);
+  if (!valido.ok) return valido;
+
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) {
+    return { ok: false, error: "Solo el propietario puede gestionar contratos." };
+  }
+
+  const { error } = await sb.from("contratos").insert({
+    cliente_id: entrada.clienteId,
+    proyecto_id: entrada.proyectoId,
+    cuota_mensual: entrada.cuotaMensual,
+    addons: entrada.addons,
+    alta: entrada.alta,
+    baja: entrada.baja,
+    estado: entrada.estado,
+  });
+  if (error) {
+    return error.code === "23505"
+      ? { ok: false, error: "Ya existe un contrato de ese cliente y proyecto con esa fecha de alta." }
+      : { ok: false, error: error.message };
+  }
+
+  revalidatePath("/clientes");
+  revalidatePath("/proyectos");
+  return { ok: true };
+}
+
+export async function guardarServicio(
+  entrada: EntradaServicio,
+  slugProyecto: string
+): Promise<Ok> {
+  const valido = await validarServicio(entrada);
+  if (!valido.ok) return valido;
+
+  const sb = await clienteServidor();
+  // Aquí NO se exige ser propietario: un editor gestiona los servicios de sus
+  // proyectos. Quien decide es la política RLS `servicios_escribir`, que ya
+  // comprueba `atlas_edita_proyecto`.
+  const { error } = await sb.from("servicios").insert({
+    proyecto_id: entrada.proyectoId,
+    cliente_id: entrada.clienteId,
+    nombre: entrada.nombre.trim(),
+    tipo: entrada.tipo,
+    proveedor: entrada.proveedor,
+  });
+  if (error) {
+    return error.code === "42501"
+      ? { ok: false, error: "No tienes permiso para editar este proyecto." }
+      : { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/proyectos/${slugProyecto}`);
+  return { ok: true };
+}
+```
+
+- [ ] **Paso 4: ejecutar y comprobar que pasa**
+
+Ejecuta: `npx vitest run src/tests/db/acciones-proyecto.test.ts`
+Esperado: PASA, 10 tests.
+
+- [ ] **Paso 5: comprobar el build y commit**
+
+```bash
+npm test && npm run typecheck && npm run build
+git add src/lib/db/acciones-proyecto.ts src/tests/db/acciones-proyecto.test.ts
+git commit -m "feat(atlas): alta de contratos y servicios con validacion"
+```
+
+---
