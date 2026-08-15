@@ -1,5 +1,7 @@
 node_modules/
 .next/
+# Caché apartada al depurar: sigue siendo generada, nunca se versiona.
+.next-roto-*/
 out/
 build/
 coverage/

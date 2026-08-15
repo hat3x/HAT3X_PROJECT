@@ -1,27 +1,49 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import { clienteNavegador } from "@/lib/supabase/navegador";
 
 export default function Alta2FA() {
   const router = useRouter();
-  const [qr, setQr] = useState<string | null>(null);
+  const [uri, setUri] = useState<string | null>(null);
   const [factorId, setFactorId] = useState<string | null>(null);
   const [codigo, setCodigo] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // React en desarrollo monta los efectos DOS veces (StrictMode). Sin esta
+  // guarda, el segundo enroll choca con el nombre ya usado y responde 422
+  // («Unexpected failure»), pisando el QR que sí había traído el primero.
+  const enrolando = useRef(false);
 
   useEffect(() => {
-    clienteNavegador()
-      .auth.mfa.enroll({ factorType: "totp", friendlyName: "Atlas" })
-      .then(({ data, error }) => {
-        if (error) {
-          setError(error.message);
-          return;
+    if (enrolando.current) return;
+    enrolando.current = true;
+
+    (async () => {
+      const sb = clienteNavegador();
+
+      // Un intento anterior a medias deja un factor sin verificar que bloquea
+      // el siguiente enroll. Se limpian antes de empezar.
+      const { data: factores } = await sb.auth.mfa.listFactors();
+      for (const f of factores?.all ?? []) {
+        if (f.status === "unverified") {
+          await sb.auth.mfa.unenroll({ factorId: f.id });
         }
-        setQr(data.totp.qr_code);
-        setFactorId(data.id);
+      }
+
+      const { data, error } = await sb.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: "Atlas",
       });
-    // Se enrola una sola vez al montar.
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      // Se usa `uri` (unos 100 caracteres) y NO `qr_code`: ese SVG mide más de
+      // 300.000 caracteres y como data URI el navegador no lo pinta.
+      setUri(data.totp.uri);
+      setFactorId(data.id);
+    })();
   }, []);
 
   async function confirmar(e: React.FormEvent) {
@@ -55,18 +77,19 @@ export default function Alta2FA() {
           obligatorio y no se puede desactivar. Escanea el código con tu app de
           autenticación.
         </p>
-        {/* Supabase devuelve el QR como SVG EN CRUDO (`<?xml version="1.0"?>…`),
-            no como data URI: pasarlo tal cual al src no pinta nada. Se envuelve
-            con encodeURIComponent en lugar de usar dangerouslySetInnerHTML,
-            para no inyectar markup de una respuesta en el DOM. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {qr && (
-          <img
-            src={`data:image/svg+xml;utf8,${encodeURIComponent(qr)}`}
-            alt="Código QR para la app de autenticación"
-            className="mx-auto block h-48 w-48 rounded-lg bg-white p-2"
-          />
+
+        {uri ? (
+          <div className="mx-auto w-fit rounded-lg bg-white p-3">
+            <QRCodeSVG value={uri} size={192} level="M" />
+          </div>
+        ) : (
+          !error && (
+            <p className="text-center text-sm" style={{ color: "var(--texto-tenue)" }}>
+              Generando el código…
+            </p>
+          )
         )}
+
         <form onSubmit={confirmar} className="space-y-3">
           <label className="block text-sm">
             Código de 6 dígitos
@@ -86,7 +109,8 @@ export default function Alta2FA() {
           )}
           <button
             type="submit"
-            className="w-full rounded-lg px-3 py-2 font-medium"
+            disabled={!factorId}
+            className="w-full rounded-lg px-3 py-2 font-medium disabled:opacity-50"
             style={{ background: "var(--estado-ok)", color: "#04210c" }}
           >
             Confirmar
