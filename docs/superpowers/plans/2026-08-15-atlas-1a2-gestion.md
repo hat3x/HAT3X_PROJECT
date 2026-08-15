@@ -1637,3 +1637,1360 @@ git commit -m "feat(atlas): alta de contratos y servicios con validacion"
 ```
 
 ---
+
+## Tarea 14: Ajustes — el llavero
+
+La pantalla más peligrosa de Atlas. **Un secreto entra una vez y nunca vuelve a salir.**
+
+**Ficheros:**
+- Crear: `apps/atlas/src/lib/db/credenciales.ts`
+- Crear: `apps/atlas/src/app/ajustes/credenciales/page.tsx`
+- Crear: `apps/atlas/src/components/ajustes/FormCredencial.tsx`
+- Test: `apps/atlas/src/tests/db/credenciales.test.ts`
+
+**Interfaces:**
+- Consume: `cifrar`, `descifrar`, `enmascarar`, `clienteServidor`, `obtenerPerfil`.
+- Produce:
+  - `type CredencialResumen = { id: string; proveedor: string; etiqueta: string; prefijo: string | null; proyectoId: string | null; creadoEn: string; rotadaEn: string | null }`
+  - `async function listarCredenciales(sb: Sb): Promise<CredencialResumen[]>`
+  - `async function guardarCredencial(entrada: { proveedor: string; etiqueta: string; secreto: string; proyectoId: string | null }): Promise<Ok>`
+  - `async function rotarCredencial(id: string, secretoNuevo: string): Promise<Ok>`
+  - `async function usarCredencial(sb: Sb, id: string, contexto: string): Promise<string>` — **solo servidor**, descifra y registra el uso
+
+- [ ] **Paso 1: escribir el test que falla**
+
+```ts
+// src/tests/db/credenciales.test.ts
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { Client } from "pg";
+import { cifrar, descifrar, enmascarar } from "@/lib/cripto/cifrado";
+
+const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+const CLAVE = Buffer.from("clave-de-32-bytes-para-pruebas!!").toString("base64");
+let pg: Client;
+
+beforeAll(async () => {
+  pg = new Client({ connectionString: URL_PG });
+  await pg.connect();
+});
+afterAll(async () => {
+  await pg.query(`DELETE FROM credenciales WHERE etiqueta LIKE 'PRUEBA %'`);
+  await pg.end();
+});
+
+describe("ciclo de vida de una credencial", () => {
+  it("guarda cifrado y recupera el original", async () => {
+    const secreto = "sk_live_abc123def456";
+    const s = await cifrar(secreto, CLAVE);
+
+    const { rows: [fila] } = await pg.query(
+      `INSERT INTO credenciales (proveedor, etiqueta, secreto_cifrado, iv, tag, prefijo)
+       VALUES ('retell','PRUEBA A',$1,$2,$3,$4)
+       RETURNING id, secreto_cifrado, iv, tag, prefijo`,
+      [Buffer.from(s.cifrado), Buffer.from(s.iv), Buffer.from(s.tag), enmascarar(secreto)]
+    );
+
+    // Lo guardado NO se parece al secreto por ningún lado.
+    expect(fila.secreto_cifrado.toString("utf8")).not.toContain("sk_live");
+    expect(fila.prefijo).toBe("sk_live_••••f456");
+
+    const recuperado = await descifrar(
+      {
+        cifrado: new Uint8Array(fila.secreto_cifrado),
+        iv: new Uint8Array(fila.iv),
+        tag: new Uint8Array(fila.tag),
+      },
+      CLAVE
+    );
+    expect(recuperado).toBe(secreto);
+  });
+
+  it("rotar sustituye el secreto y deja constancia de cuándo", async () => {
+    const primero = await cifrar("sk_live_0000aaaa", CLAVE);
+    const { rows: [fila] } = await pg.query(
+      `INSERT INTO credenciales (proveedor, etiqueta, secreto_cifrado, iv, tag, prefijo)
+       VALUES ('n8n','PRUEBA B',$1,$2,$3,'sk_live_••••aaaa') RETURNING id, rotada_en`,
+      [Buffer.from(primero.cifrado), Buffer.from(primero.iv), Buffer.from(primero.tag)]
+    );
+    expect(fila.rotada_en).toBeNull();
+
+    const segundo = await cifrar("sk_live_1111bbbb", CLAVE);
+    await pg.query(
+      `UPDATE credenciales SET secreto_cifrado=$1, iv=$2, tag=$3, prefijo=$4,
+                               rotada_en = now()
+       WHERE id = $5`,
+      [Buffer.from(segundo.cifrado), Buffer.from(segundo.iv), Buffer.from(segundo.tag),
+       "sk_live_••••bbbb", fila.id]
+    );
+
+    const { rows: [tras] } = await pg.query(
+      `SELECT secreto_cifrado, iv, tag, prefijo, rotada_en FROM credenciales WHERE id=$1`,
+      [fila.id]
+    );
+    expect(tras.rotada_en).not.toBeNull();
+    expect(tras.prefijo).toBe("sk_live_••••bbbb");
+    expect(
+      await descifrar(
+        { cifrado: new Uint8Array(tras.secreto_cifrado), iv: new Uint8Array(tras.iv),
+          tag: new Uint8Array(tras.tag) },
+        CLAVE
+      )
+    ).toBe("sk_live_1111bbbb");
+  });
+
+  it("cada uso queda registrado con su contexto", async () => {
+    const s = await cifrar("sk_live_2222cccc", CLAVE);
+    const { rows: [fila] } = await pg.query(
+      `INSERT INTO credenciales (proveedor, etiqueta, secreto_cifrado, iv, tag)
+       VALUES ('twilio','PRUEBA C',$1,$2,$3) RETURNING id`,
+      [Buffer.from(s.cifrado), Buffer.from(s.iv), Buffer.from(s.tag)]
+    );
+    await pg.query(
+      `INSERT INTO credencial_usos (credencial_id, contexto) VALUES ($1,'check http')`,
+      [fila.id]
+    );
+    const { rows } = await pg.query(
+      `SELECT contexto FROM credencial_usos WHERE credencial_id=$1`, [fila.id]
+    );
+    expect(rows.map((r) => r.contexto)).toEqual(["check http"]);
+  });
+
+  it("borrar la credencial arrastra su historial de usos", async () => {
+    const s = await cifrar("sk_live_3333dddd", CLAVE);
+    const { rows: [fila] } = await pg.query(
+      `INSERT INTO credenciales (proveedor, etiqueta, secreto_cifrado, iv, tag)
+       VALUES ('vercel','PRUEBA D',$1,$2,$3) RETURNING id`,
+      [Buffer.from(s.cifrado), Buffer.from(s.iv), Buffer.from(s.tag)]
+    );
+    await pg.query(`INSERT INTO credencial_usos (credencial_id) VALUES ($1)`, [fila.id]);
+    await pg.query(`DELETE FROM credenciales WHERE id=$1`, [fila.id]);
+    const { rows } = await pg.query(
+      `SELECT count(*)::int AS n FROM credencial_usos WHERE credencial_id=$1`, [fila.id]
+    );
+    expect(rows[0].n).toBe(0);
+  });
+});
+```
+
+- [ ] **Paso 2: ejecutarlo y comprobar que falla o pasa**
+
+Ejecuta: `npx vitest run src/tests/db/credenciales.test.ts`
+Esperado: PASA — este test valida el **contrato** entre el cifrado (Tarea 6) y el esquema (Tarea 4), ambos ya existentes. Si falla, hay una incompatibilidad real entre `Uint8Array` y `bytea` que debe resolverse antes de seguir.
+
+- [ ] **Paso 3: implementar la capa de credenciales**
+
+```ts
+// src/lib/db/credenciales.ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "./perfil";
+import { cifrar, descifrar, enmascarar } from "@/lib/cripto/cifrado";
+import type { Sb } from "./clientes";
+
+export type Ok = { ok: true } | { ok: false; error: string };
+
+export type CredencialResumen = {
+  id: string;
+  proveedor: string;
+  etiqueta: string;
+  prefijo: string | null;
+  proyectoId: string | null;
+  creadoEn: string;          // ISO 8601
+  rotadaEn: string | null;   // ISO 8601
+};
+
+function claveMaestra(): string {
+  const clave = process.env.ATLAS_MASTER_KEY;
+  if (!clave) {
+    throw new Error(
+      "Falta ATLAS_MASTER_KEY. Sin ella el llavero no se puede abrir ni cerrar."
+    );
+  }
+  return clave;
+}
+
+/** Nunca devuelve secretos: solo el prefijo enmascarado. */
+export async function listarCredenciales(sb: Sb): Promise<CredencialResumen[]> {
+  const { data, error } = await sb
+    .from("credenciales")
+    .select("id, proveedor, etiqueta, prefijo, proyecto_id, creado_en, rotada_en")
+    .order("proveedor");
+  if (error) throw error;
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    proveedor: c.proveedor,
+    etiqueta: c.etiqueta,
+    prefijo: c.prefijo,
+    proyectoId: c.proyecto_id,
+    creadoEn: c.creado_en,
+    rotadaEn: c.rotada_en,
+  }));
+}
+
+export async function guardarCredencial(entrada: {
+  proveedor: string;
+  etiqueta: string;
+  secreto: string;
+  proyectoId: string | null;
+}): Promise<Ok> {
+  if (entrada.secreto.trim().length < 8) {
+    return { ok: false, error: "El secreto parece demasiado corto. Revísalo." };
+  }
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) {
+    return { ok: false, error: "Solo el propietario gestiona el llavero." };
+  }
+
+  const s = await cifrar(entrada.secreto, claveMaestra());
+  const { error } = await sb.from("credenciales").insert({
+    proveedor: entrada.proveedor,
+    etiqueta: entrada.etiqueta,
+    proyecto_id: entrada.proyectoId,
+    secreto_cifrado: s.cifrado,
+    iv: s.iv,
+    tag: s.tag,
+    prefijo: enmascarar(entrada.secreto),
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/ajustes/credenciales");
+  return { ok: true };
+}
+
+export async function rotarCredencial(id: string, secretoNuevo: string): Promise<Ok> {
+  if (secretoNuevo.trim().length < 8) {
+    return { ok: false, error: "El secreto parece demasiado corto. Revísalo." };
+  }
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) {
+    return { ok: false, error: "Solo el propietario gestiona el llavero." };
+  }
+
+  const s = await cifrar(secretoNuevo, claveMaestra());
+  const { error } = await sb
+    .from("credenciales")
+    .update({
+      secreto_cifrado: s.cifrado,
+      iv: s.iv,
+      tag: s.tag,
+      prefijo: enmascarar(secretoNuevo),
+      rotada_en: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/ajustes/credenciales");
+  return { ok: true };
+}
+
+/**
+ * Descifra una credencial para usarla. **SOLO servidor.** El valor devuelto no
+ * puede acabar en una prop, en una respuesta de API ni en un log. Cada llamada
+ * deja rastro en `credencial_usos`.
+ */
+export async function usarCredencial(
+  sb: Sb,
+  id: string,
+  contexto: string
+): Promise<string> {
+  const { data, error } = await sb
+    .from("credenciales")
+    .select("secreto_cifrado, iv, tag")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+
+  await sb.from("credencial_usos").insert({ credencial_id: id, contexto });
+
+  return descifrar(
+    {
+      cifrado: new Uint8Array(data.secreto_cifrado),
+      iv: new Uint8Array(data.iv),
+      tag: new Uint8Array(data.tag),
+    },
+    claveMaestra()
+  );
+}
+```
+
+- [ ] **Paso 4: la pantalla**
+
+```tsx
+// src/app/ajustes/credenciales/page.tsx
+import { notFound } from "next/navigation";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "@/lib/db/perfil";
+import { listarCredenciales } from "@/lib/db/credenciales";
+
+const FECHA = new Intl.DateTimeFormat("es-ES", {
+  day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Madrid",
+});
+
+export default async function PaginaCredenciales() {
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  // Doble puerta: RLS ya devolvería lista vacía, pero un 404 es más honesto
+  // que una pantalla vacía que parece rota.
+  if (!perfil?.esPropietario) notFound();
+
+  const credenciales = await listarCredenciales(sb);
+
+  return (
+    <section className="space-y-4">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Llavero</h1>
+        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+          Las claves entran una vez y no se vuelven a mostrar. Si pierdes una,
+          se rota: no se recupera.
+        </p>
+      </header>
+
+      <div className="cristal cristal-denso overflow-hidden">
+        {credenciales.length === 0 ? (
+          <p className="p-8 text-center text-sm" style={{ color: "var(--texto-tenue)" }}>
+            El llavero está vacío.
+          </p>
+        ) : (
+          <ul className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
+            {credenciales.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+                <span className="w-24 font-medium">{c.proveedor}</span>
+                <span className="flex-1">{c.etiqueta}</span>
+                <code className="rounded px-2 py-0.5 text-xs"
+                  style={{ background: "var(--cristal-fondo)" }}>
+                  {c.prefijo ?? "••••"}
+                </code>
+                <span className="text-xs" style={{ color: "var(--texto-tenue)" }}>
+                  {c.rotadaEn
+                    ? `rotada ${FECHA.format(new Date(c.rotadaEn))}`
+                    : `alta ${FECHA.format(new Date(c.creadoEn))}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+```
+
+- [ ] **Paso 5: comprobar que ningún secreto viaja al navegador**
+
+Ejecuta: `grep -rn "descifrar\|usarCredencial" src/components src/app | grep -v "^src/app/ajustes" || echo "limpio"`
+Esperado: `limpio`. Ni un componente ni una página fuera de servidor invoca el descifrado.
+
+- [ ] **Paso 6: build y commit**
+
+```bash
+npm test && npm run typecheck && npm run build
+git add src/lib/db/credenciales.ts src/app/ajustes src/tests/db/credenciales.test.ts
+git commit -m "feat(atlas): llavero — alta, rotacion y auditoria de uso"
+```
+
+---
+
+## Tarea 15: Ajustes — usuarios y permisos
+
+**Ficheros:**
+- Crear: `apps/atlas/src/lib/db/usuarios.ts`
+- Crear: `apps/atlas/src/app/ajustes/usuarios/page.tsx`
+- Test: `apps/atlas/src/tests/db/usuarios.test.ts`
+
+**Interfaces:**
+- Consume: `clienteServidor`, `obtenerPerfil`, `Ok`.
+- Produce:
+  - `type UsuarioConPermisos = { id: string; nombre: string | null; esPropietario: boolean; permisos: { proyectoId: string; proyectoNombre: string; rol: "editor" | "lector" }[] }`
+  - `async function listarUsuarios(sb: Sb): Promise<UsuarioConPermisos[]>`
+  - `async function asignarPermiso(usuarioId: string, proyectoId: string, rol: "editor" | "lector"): Promise<Ok>`
+  - `async function retirarPermiso(usuarioId: string, proyectoId: string): Promise<Ok>`
+
+- [ ] **Paso 1: escribir el test que falla**
+
+```ts
+// src/tests/db/usuarios.test.ts
+import { describe, it, expect } from "vitest";
+import { validarRol } from "@/lib/db/usuarios";
+
+describe("validación de rol", () => {
+  it("acepta editor y lector", async () => {
+    expect((await validarRol("editor")).ok).toBe(true);
+    expect((await validarRol("lector")).ok).toBe(true);
+  });
+
+  it("rechaza «propietario»: no es un permiso por proyecto", async () => {
+    const r = await validarRol("propietario");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/propietario/i);
+  });
+
+  it("rechaza cualquier otra cosa", async () => {
+    for (const rol of ["admin", "root", "", "Editor"]) {
+      expect((await validarRol(rol)).ok, `debería rechazar «${rol}»`).toBe(false);
+    }
+  });
+});
+```
+
+- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+
+Ejecuta: `npx vitest run src/tests/db/usuarios.test.ts`
+Esperado: FALLA con «Failed to resolve import "@/lib/db/usuarios"».
+
+- [ ] **Paso 3: implementar**
+
+```ts
+// src/lib/db/usuarios.ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "./perfil";
+import type { Sb } from "./clientes";
+
+export type Ok = { ok: true } | { ok: false; error: string };
+export type Rol = "editor" | "lector";
+
+export type UsuarioConPermisos = {
+  id: string;
+  nombre: string | null;
+  esPropietario: boolean;
+  permisos: { proyectoId: string; proyectoNombre: string; rol: Rol }[];
+};
+
+export async function validarRol(rol: string): Promise<Ok> {
+  if (rol === "propietario") {
+    return {
+      ok: false,
+      error:
+        "«Propietario» no es un permiso por proyecto: es una condición de la " +
+        "persona y se marca en su perfil.",
+    };
+  }
+  if (rol !== "editor" && rol !== "lector") {
+    return { ok: false, error: `El rol «${rol}» no existe. Admitidos: editor, lector.` };
+  }
+  return { ok: true };
+}
+
+export async function listarUsuarios(sb: Sb): Promise<UsuarioConPermisos[]> {
+  const { data, error } = await sb
+    .from("perfiles")
+    .select("id, nombre, es_propietario, permisos(proyecto_id, rol, proyectos(nombre))")
+    .order("nombre");
+  if (error) throw error;
+
+  return (data ?? []).map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    esPropietario: p.es_propietario,
+    permisos: (p.permisos ?? []).map((q) => ({
+      proyectoId: q.proyecto_id,
+      proyectoNombre: q.proyectos?.nombre ?? "—",
+      rol: q.rol as Rol,
+    })),
+  }));
+}
+
+export async function asignarPermiso(
+  usuarioId: string,
+  proyectoId: string,
+  rol: string
+): Promise<Ok> {
+  const valido = await validarRol(rol);
+  if (!valido.ok) return valido;
+
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) {
+    return { ok: false, error: "Solo el propietario reparte permisos." };
+  }
+
+  // upsert sobre (usuario_id, proyecto_id): cambiar de rol es reasignar, no
+  // acumular. La restricción única del esquema lo garantiza.
+  const { error } = await sb
+    .from("permisos")
+    .upsert({ usuario_id: usuarioId, proyecto_id: proyectoId, rol },
+            { onConflict: "usuario_id,proyecto_id" });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/ajustes/usuarios");
+  return { ok: true };
+}
+
+export async function retirarPermiso(
+  usuarioId: string,
+  proyectoId: string
+): Promise<Ok> {
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) {
+    return { ok: false, error: "Solo el propietario reparte permisos." };
+  }
+  const { error } = await sb
+    .from("permisos")
+    .delete()
+    .eq("usuario_id", usuarioId)
+    .eq("proyecto_id", proyectoId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/ajustes/usuarios");
+  return { ok: true };
+}
+```
+
+- [ ] **Paso 4: ejecutar y comprobar que pasa**
+
+Ejecuta: `npx vitest run src/tests/db/usuarios.test.ts`
+Esperado: PASA, 3 tests.
+
+- [ ] **Paso 5: la pantalla**
+
+```tsx
+// src/app/ajustes/usuarios/page.tsx
+import { notFound } from "next/navigation";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "@/lib/db/perfil";
+import { listarUsuarios } from "@/lib/db/usuarios";
+
+export default async function PaginaUsuarios() {
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) notFound();
+
+  const usuarios = await listarUsuarios(sb);
+
+  return (
+    <section className="space-y-4">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Usuarios y permisos</h1>
+        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+          Los permisos son por proyecto. Los importes solo los ve el propietario,
+          sea cual sea el permiso.
+        </p>
+      </header>
+
+      <ul className="space-y-3">
+        {usuarios.map((u) => (
+          <li key={u.id} className="cristal cristal-denso p-4">
+            <div className="flex items-center gap-3">
+              <span className="font-medium">{u.nombre ?? "(sin nombre)"}</span>
+              {u.esPropietario && (
+                <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    color: "var(--estado-ok)",
+                    background: "color-mix(in srgb, var(--estado-ok) 16%, transparent)",
+                  }}>
+                  Propietario · acceso total
+                </span>
+              )}
+            </div>
+            {!u.esPropietario && (
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {u.permisos.length === 0 ? (
+                  <li className="text-sm" style={{ color: "var(--texto-tenue)" }}>
+                    Sin acceso a ningún proyecto.
+                  </li>
+                ) : (
+                  u.permisos.map((q) => (
+                    <li key={q.proyectoId}
+                      className="rounded-full px-2.5 py-0.5 text-xs"
+                      style={{ background: "var(--cristal-fondo)" }}>
+                      {q.proyectoNombre} · {q.rol}
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+```
+
+- [ ] **Paso 6: build y commit**
+
+```bash
+npm test && npm run typecheck && npm run build
+git add src/lib/db/usuarios.ts src/app/ajustes/usuarios src/tests/db/usuarios.test.ts
+git commit -m "feat(atlas): usuarios y permisos por proyecto"
+```
+
+---
+
+## Tarea 16: Ajustes — apariencia
+
+**Ficheros:**
+- Crear: `apps/atlas/src/lib/db/apariencia.ts`
+- Crear: `apps/atlas/src/app/ajustes/apariencia/page.tsx`
+- Crear: `apps/atlas/src/components/ajustes/SelectorApariencia.tsx`
+- Test: `apps/atlas/src/tests/db/apariencia.test.ts`, `apps/atlas/src/tests/componentes/selector-apariencia.test.tsx`
+
+**Interfaces:**
+- Consume: `PALETAS`, `Tema`, `Paleta`, `esPaletaCalida`, `obtenerPerfil`.
+- Produce:
+  - `async function validarApariencia(tema: string, paleta: string): Promise<Ok>`
+  - `async function guardarApariencia(tema: string, paleta: string): Promise<Ok>`
+  - componente `<SelectorApariencia temaActual={Tema} paletaActual={Paleta} />`
+
+- [ ] **Paso 1: escribir los tests que fallan**
+
+```ts
+// src/tests/db/apariencia.test.ts
+import { describe, it, expect } from "vitest";
+import { validarApariencia } from "@/lib/db/apariencia";
+import { PALETAS } from "@/lib/tema/tokens";
+
+describe("validación de apariencia", () => {
+  it("acepta las diez combinaciones de tema y paleta", async () => {
+    for (const tema of ["claro", "oscuro"]) {
+      for (const paleta of PALETAS) {
+        expect((await validarApariencia(tema, paleta)).ok, `${tema}/${paleta}`).toBe(true);
+      }
+    }
+  });
+
+  it("rechaza un tema que no exista", async () => {
+    const r = await validarApariencia("sepia", "zafiro");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/tema/i);
+  });
+
+  it("rechaza una paleta que no exista", async () => {
+    const r = await validarApariencia("oscuro", "fucsia");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/paleta/i);
+  });
+});
+```
+
+```tsx
+// src/tests/componentes/selector-apariencia.test.tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { SelectorApariencia } from "@/components/ajustes/SelectorApariencia";
+
+describe("selector de apariencia", () => {
+  it("ofrece las cinco paletas", () => {
+    render(<SelectorApariencia temaActual="oscuro" paletaActual="zafiro" />);
+    for (const nombre of ["Zafiro", "Nebulosa", "Océano", "Grafito", "Crepúsculo"]) {
+      expect(screen.getByRole("radio", { name: new RegExp(nombre) })).toBeInTheDocument();
+    }
+  });
+
+  it("marca como seleccionada la paleta activa", () => {
+    render(<SelectorApariencia temaActual="oscuro" paletaActual="oceano" />);
+    expect(screen.getByRole("radio", { name: /Océano/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Zafiro/ })).not.toBeChecked();
+  });
+
+  it("avisa de que las paletas cálidas compiten con las alertas", () => {
+    render(<SelectorApariencia temaActual="oscuro" paletaActual="crepusculo" />);
+    expect(screen.getByText(/compensa el contraste/i)).toBeInTheDocument();
+  });
+
+  it("no muestra el aviso con una paleta fría", () => {
+    render(<SelectorApariencia temaActual="oscuro" paletaActual="zafiro" />);
+    expect(screen.queryByText(/compensa el contraste/i)).not.toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Paso 2: ejecutarlos y comprobar que fallan**
+
+Ejecuta: `npx vitest run src/tests/db/apariencia.test.ts src/tests/componentes/selector-apariencia.test.tsx`
+Esperado: FALLAN, ambos por módulo no resuelto.
+
+- [ ] **Paso 3: implementar la acción**
+
+```ts
+// src/lib/db/apariencia.ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { PALETAS } from "@/lib/tema/tokens";
+
+export type Ok = { ok: true } | { ok: false; error: string };
+
+const TEMAS = ["claro", "oscuro"] as const;
+
+export async function validarApariencia(tema: string, paleta: string): Promise<Ok> {
+  if (!(TEMAS as readonly string[]).includes(tema)) {
+    return { ok: false, error: `El tema «${tema}» no existe.` };
+  }
+  if (!(PALETAS as readonly string[]).includes(paleta)) {
+    return { ok: false, error: `La paleta «${paleta}» no existe.` };
+  }
+  return { ok: true };
+}
+
+export async function guardarApariencia(tema: string, paleta: string): Promise<Ok> {
+  const valido = await validarApariencia(tema, paleta);
+  if (!valido.ok) return valido;
+
+  const sb = await clienteServidor();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return { ok: false, error: "No hay sesión." };
+
+  // Cada cual manda sobre su propio aspecto: la política `perfiles_propio` lo
+  // permite sin necesidad de ser propietario.
+  const { error } = await sb
+    .from("perfiles")
+    .update({ tema, paleta })
+    .eq("id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  // El tema lo aplica el layout raíz, así que hay que revalidarlo entero.
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+```
+
+- [ ] **Paso 4: implementar el selector**
+
+```tsx
+// src/components/ajustes/SelectorApariencia.tsx
+"use client";
+import { useState, useTransition } from "react";
+import { guardarApariencia } from "@/lib/db/apariencia";
+import { esPaletaCalida, type Tema, type Paleta } from "@/lib/tema/tokens";
+
+const NOMBRES: Record<Paleta, string> = {
+  zafiro: "Zafiro",
+  nebulosa: "Nebulosa",
+  oceano: "Océano",
+  grafito: "Grafito",
+  crepusculo: "Crepúsculo",
+};
+
+// Muestras solo para la vista previa del selector. Los valores que manda son
+// los tokens CSS; esto es una miniatura, no la fuente de la verdad.
+const MUESTRA: Record<Paleta, [string, string]> = {
+  zafiro:     ["#0071e3", "#00c7be"],
+  nebulosa:   ["#5e5ce6", "#bf5af2"],
+  oceano:     ["#0aa2c0", "#1d3f6e"],
+  grafito:    ["#3a4a63", "#788496"],
+  crepusculo: ["#ff9f0a", "#ff375f"],
+};
+
+export function SelectorApariencia({
+  temaActual, paletaActual,
+}: { temaActual: Tema; paletaActual: Paleta }) {
+  const [tema, setTema] = useState<Tema>(temaActual);
+  const [paleta, setPaleta] = useState<Paleta>(paletaActual);
+  const [error, setError] = useState<string | null>(null);
+  const [pendiente, empezar] = useTransition();
+
+  function aplicar(nuevoTema: Tema, nuevaPaleta: Paleta) {
+    setTema(nuevoTema);
+    setPaleta(nuevaPaleta);
+    setError(null);
+    empezar(async () => {
+      const r = await guardarApariencia(nuevoTema, nuevaPaleta);
+      if (!r.ok) setError(r.error);
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <fieldset>
+        <legend className="mb-2 text-xs font-semibold uppercase tracking-wider"
+          style={{ color: "var(--texto-tenue)" }}>Tema</legend>
+        <div className="flex gap-2">
+          {(["claro", "oscuro"] as const).map((t) => (
+            <label key={t} className="cristal cursor-pointer px-4 py-2 text-sm capitalize">
+              <input type="radio" name="tema" value={t} className="sr-only"
+                checked={tema === t} onChange={() => aplicar(t, paleta)} />
+              <span className={tema === t ? "font-semibold" : "opacity-60"}>{t}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend className="mb-2 text-xs font-semibold uppercase tracking-wider"
+          style={{ color: "var(--texto-tenue)" }}>Paleta</legend>
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {(Object.keys(NOMBRES) as Paleta[]).map((p) => {
+            const [a, b] = MUESTRA[p];
+            return (
+              <label key={p} className="cristal cursor-pointer overflow-hidden">
+                <input type="radio" name="paleta" value={p} className="sr-only"
+                  checked={paleta === p} onChange={() => aplicar(tema, p)} />
+                <div className="h-12"
+                  style={{ background: `linear-gradient(135deg, ${a}, ${b})` }} />
+                <span className={`block px-3 py-2 text-sm ${paleta === p ? "font-semibold" : "opacity-70"}`}>
+                  {NOMBRES[p]}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {esPaletaCalida(paleta) && (
+        <p className="cristal p-3 text-sm" style={{ color: "var(--texto-tenue)" }}>
+          Esta paleta es cálida y su fondo compite con los colores de alerta.
+          Atlas <strong>compensa el contraste</strong> de los distintivos de estado
+          automáticamente, pero si vas a dejar la pantalla puesta todo el día, una
+          paleta fría hace que el rojo destaque más.
+        </p>
+      )}
+
+      {pendiente && <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>Guardando…</p>}
+      {error && <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>{error}</p>}
+    </div>
+  );
+}
+```
+
+- [ ] **Paso 5: la pantalla**
+
+```tsx
+// src/app/ajustes/apariencia/page.tsx
+import { redirect } from "next/navigation";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "@/lib/db/perfil";
+import { SelectorApariencia } from "@/components/ajustes/SelectorApariencia";
+
+export default async function PaginaApariencia() {
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil) redirect("/login");
+
+  return (
+    <section className="space-y-4">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Apariencia</h1>
+        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+          Tu elección solo te afecta a ti. Los colores de estado —verde, ámbar,
+          rojo— no cambian con la paleta: son significado, no decoración.
+        </p>
+      </header>
+      <SelectorApariencia temaActual={perfil.tema} paletaActual={perfil.paleta} />
+    </section>
+  );
+}
+```
+
+- [ ] **Paso 6: ejecutar, comprobar el build y commit**
+
+```bash
+npm test && npm run typecheck && npm run build
+git add src/lib/db/apariencia.ts src/app/ajustes/apariencia src/components/ajustes src/tests
+git commit -m "feat(atlas): apariencia — 2 temas x 5 paletas por usuario"
+```
+
+---
+
+## Tarea 17: Migración de los datos que ya existen
+
+Trae a Atlas lo que hoy vive repartido entre el esquema de la Oficina Virtual y `memoria/clientes.md`. **Idempotente**: relanzarlo no duplica nada. **Con informe**: al terminar dice qué trajo, qué descartó y por qué.
+
+**No toca `apps/command`.** La Oficina sigue funcionando contra su base actual.
+
+**Ficheros:**
+- Crear: `apps/atlas/scripts/migrar/traer.ts`, `apps/atlas/scripts/migrar/mapeo.ts`, `apps/atlas/scripts/tsconfig.json`
+- Test: `apps/atlas/src/tests/migrar/mapeo.test.ts`
+
+**Interfaces:**
+- Consume: nada de la aplicación. Habla con las dos bases por `pg` y `@supabase/supabase-js` con `service_role`.
+- Produce:
+  - `type FilaClienteVieja = { id: string; name: string | null; sector: string | null; status: string | null }`
+  - `type FilaProyectoVieja = { id: string; client_id: string | null; name: string; status: string; pm_vertical: string | null; budget: string | null; start_date: string | null; end_date: string | null }`
+  - `function aSlug(texto: string): string`
+  - `function mapearCliente(fila: FilaClienteVieja): { nombre: string; slug: string; sector: string | null; estado: string } | null`
+  - `function mapearProyecto(fila: FilaProyectoVieja): { nombre: string; slug: string; tipo: string; estado: string } | null`
+  - `function mapearContrato(fila: FilaProyectoVieja): { cuotaMensual: number | null; alta: string; baja: string | null; estado: string } | null`
+
+- [ ] **Paso 1: escribir el test que falla**
+
+```ts
+// src/tests/migrar/mapeo.test.ts
+import { describe, it, expect } from "vitest";
+import { aSlug, mapearCliente, mapearProyecto, mapearContrato } from "../../../scripts/migrar/mapeo";
+
+describe("slug", () => {
+  it("baja a minúsculas y sustituye espacios por guiones", () => {
+    expect(aSlug("Dental Demo")).toBe("dental-demo");
+  });
+  it("quita acentos y eñes", () => {
+    expect(aSlug("Clínica Odontología")).toBe("clinica-odontologia");
+    expect(aSlug("Peluquería Ñandú")).toBe("peluqueria-nandu");
+  });
+  it("colapsa signos y guiones repetidos", () => {
+    expect(aSlug("100  Montaditos!! (Móstoles)")).toBe("100-montaditos-mostoles");
+  });
+  it("no deja guiones al principio ni al final", () => {
+    expect(aSlug("  —Hola—  ")).toBe("hola");
+  });
+});
+
+describe("mapeo de cliente", () => {
+  it("traduce el estado antiguo al nuevo", () => {
+    expect(mapearCliente({ id: "1", name: "Demo", sector: "Dental", status: "active" }))
+      .toEqual({ nombre: "Demo", slug: "demo", sector: "Dental", estado: "activo" });
+  });
+  it("un estado desconocido cae a «potencial», no revienta", () => {
+    const r = mapearCliente({ id: "1", name: "Demo", sector: null, status: "raro" });
+    expect(r?.estado).toBe("potencial");
+  });
+  it("descarta la fila sin nombre: un cliente sin nombre no es un cliente", () => {
+    expect(mapearCliente({ id: "1", name: null, sector: null, status: "active" })).toBeNull();
+    expect(mapearCliente({ id: "1", name: "   ", sector: null, status: "active" })).toBeNull();
+  });
+});
+
+describe("mapeo de proyecto", () => {
+  it("traduce la vertical antigua al tipo nuevo", () => {
+    const casos: Array<[string, string]> = [
+      ["voz", "voz"],
+      ["chatbots", "chatbot"],
+      ["webs-apps", "web-app"],
+      ["automatizaciones", "automatizacion"],
+      ["operaciones", "interno"],
+    ];
+    for (const [vertical, tipo] of casos) {
+      const r = mapearProyecto({
+        id: "1", client_id: null, name: "P", status: "active",
+        pm_vertical: vertical, budget: null, start_date: null, end_date: null,
+      });
+      expect(r?.tipo, vertical).toBe(tipo);
+    }
+  });
+
+  it("sin vertical cae a «interno»", () => {
+    const r = mapearProyecto({
+      id: "1", client_id: null, name: "P", status: "active",
+      pm_vertical: null, budget: null, start_date: null, end_date: null,
+    });
+    expect(r?.tipo).toBe("interno");
+  });
+
+  it("traduce los seis estados antiguos", () => {
+    const casos: Array<[string, string]> = [
+      ["proposal", "desarrollo"], ["active", "produccion"],
+      ["delivered", "mantenimiento"], ["invoiced", "mantenimiento"],
+      ["paid", "mantenimiento"], ["cancelled", "retirado"],
+    ];
+    for (const [viejo, nuevo] of casos) {
+      const r = mapearProyecto({
+        id: "1", client_id: null, name: "P", status: viejo,
+        pm_vertical: null, budget: null, start_date: null, end_date: null,
+      });
+      expect(r?.estado, viejo).toBe(nuevo);
+    }
+  });
+});
+
+describe("mapeo de contrato", () => {
+  it("convierte presupuesto y fechas", () => {
+    expect(mapearContrato({
+      id: "1", client_id: "c", name: "P", status: "active", pm_vertical: "voz",
+      budget: "290.00", start_date: "2026-05-01", end_date: null,
+    })).toEqual({
+      cuotaMensual: 290, alta: "2026-05-01", baja: null, estado: "activo",
+    });
+  });
+
+  it("sin fecha de inicio no hay contrato: el alta es obligatoria", () => {
+    expect(mapearContrato({
+      id: "1", client_id: "c", name: "P", status: "active", pm_vertical: null,
+      budget: "290.00", start_date: null, end_date: null,
+    })).toBeNull();
+  });
+
+  it("un proyecto cancelado da un contrato finalizado", () => {
+    const r = mapearContrato({
+      id: "1", client_id: "c", name: "P", status: "cancelled", pm_vertical: null,
+      budget: null, start_date: "2026-01-01", end_date: "2026-03-01",
+    });
+    expect(r).toEqual({
+      cuotaMensual: null, alta: "2026-01-01", baja: "2026-03-01", estado: "finalizado",
+    });
+  });
+
+  it("descarta una baja anterior al alta en vez de romper la restricción", () => {
+    const r = mapearContrato({
+      id: "1", client_id: "c", name: "P", status: "active", pm_vertical: null,
+      budget: null, start_date: "2026-05-01", end_date: "2026-01-01",
+    });
+    expect(r?.baja).toBeNull();
+  });
+});
+```
+
+- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+
+Ejecuta: `npx vitest run src/tests/migrar/mapeo.test.ts`
+Esperado: FALLA con «Failed to resolve import "../../../scripts/migrar/mapeo"».
+
+- [ ] **Paso 3: implementar el mapeo (lógica pura)**
+
+```ts
+// scripts/migrar/mapeo.ts
+//
+// Traducción entre el esquema antiguo (Oficina Virtual) y el de Atlas.
+// Lógica pura: sin red, sin base de datos, sin `Date.now()`.
+
+export type FilaClienteVieja = {
+  id: string;
+  name: string | null;
+  sector: string | null;
+  status: string | null;
+};
+
+export type FilaProyectoVieja = {
+  id: string;
+  client_id: string | null;
+  name: string;
+  status: string;
+  pm_vertical: string | null;
+  budget: string | null;      // numeric llega como string desde pg
+  start_date: string | null;  // ISO AAAA-MM-DD
+  end_date: string | null;
+};
+
+export function aSlug(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")   // fuera acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")       // todo lo que no sea letra o número → guion
+    .replace(/^-+|-+$/g, "");          // sin guiones sueltos en los extremos
+}
+
+const ESTADO_CLIENTE: Record<string, string> = {
+  active: "activo",
+  lead: "potencial",
+  paused: "pausado",
+  closed: "cerrado",
+};
+
+export function mapearCliente(fila: FilaClienteVieja) {
+  const nombre = (fila.name ?? "").trim();
+  if (nombre.length === 0) return null;   // un cliente sin nombre no es un cliente
+  return {
+    nombre,
+    slug: aSlug(nombre),
+    sector: fila.sector,
+    estado: ESTADO_CLIENTE[fila.status ?? ""] ?? "potencial",
+  };
+}
+
+const TIPO_POR_VERTICAL: Record<string, string> = {
+  voz: "voz",
+  chatbots: "chatbot",
+  "webs-apps": "web-app",
+  automatizaciones: "automatizacion",
+  operaciones: "interno",
+};
+
+const ESTADO_PROYECTO: Record<string, string> = {
+  proposal: "desarrollo",
+  active: "produccion",
+  delivered: "mantenimiento",
+  invoiced: "mantenimiento",
+  paid: "mantenimiento",
+  cancelled: "retirado",
+};
+
+export function mapearProyecto(fila: FilaProyectoVieja) {
+  const nombre = fila.name.trim();
+  if (nombre.length === 0) return null;
+  return {
+    nombre,
+    slug: aSlug(nombre),
+    tipo: TIPO_POR_VERTICAL[fila.pm_vertical ?? ""] ?? "interno",
+    estado: ESTADO_PROYECTO[fila.status] ?? "desarrollo",
+  };
+}
+
+export function mapearContrato(fila: FilaProyectoVieja) {
+  // Sin fecha de alta no hay contrato: `contratos.alta` es NOT NULL y forma
+  // parte de la clave única. Inventar una fecha sería peor que no traerlo.
+  if (!fila.start_date) return null;
+
+  const alta = fila.start_date;
+  // La restricción `baja >= alta` del esquema rechazaría estos casos; se
+  // descartan aquí para que el informe pueda contarlos en vez de reventar.
+  const baja = fila.end_date && fila.end_date >= alta ? fila.end_date : null;
+
+  return {
+    cuotaMensual: fila.budget === null ? null : Number(fila.budget),
+    alta,
+    baja,
+    estado: fila.status === "cancelled" ? "finalizado" : "activo",
+  };
+}
+```
+
+- [ ] **Paso 4: ejecutar y comprobar que pasa**
+
+Ejecuta: `npx vitest run src/tests/migrar/mapeo.test.ts`
+Esperado: PASA, 14 tests.
+
+- [ ] **Paso 5: escribir el script que trae los datos**
+
+```ts
+// scripts/migrar/traer.ts
+//
+// Uso:
+//   ATLAS_URL=... ATLAS_SERVICE_KEY=... ORIGEN_PG=... npx tsx scripts/migrar/traer.ts
+//   ... --ensayo     ← lee y calcula, no escribe nada
+//
+// Idempotente: se apoya en `slug`, que es único, con upsert. Relanzarlo no
+// duplica; actualiza.
+
+import { Client } from "pg";
+import { createClient } from "@supabase/supabase-js";
+import {
+  mapearCliente, mapearProyecto, mapearContrato,
+  type FilaClienteVieja, type FilaProyectoVieja,
+} from "./mapeo";
+
+const ENSAYO = process.argv.includes("--ensayo");
+
+type Informe = {
+  clientesTraidos: number;
+  clientesDescartados: { id: string; motivo: string }[];
+  proyectosTraidos: number;
+  proyectosDescartados: { id: string; motivo: string }[];
+  contratosTraidos: number;
+  contratosDescartados: { id: string; motivo: string }[];
+};
+
+async function main(): Promise<void> {
+  const origen = new Client({ connectionString: requerido("ORIGEN_PG") });
+  await origen.connect();
+
+  const atlas = createClient(requerido("ATLAS_URL"), requerido("ATLAS_SERVICE_KEY"), {
+    auth: { persistSession: false },
+  });
+
+  const informe: Informe = {
+    clientesTraidos: 0, clientesDescartados: [],
+    proyectosTraidos: 0, proyectosDescartados: [],
+    contratosTraidos: 0, contratosDescartados: [],
+  };
+
+  // --- clientes ---
+  const { rows: clientesViejos } = await origen.query<FilaClienteVieja>(
+    `SELECT id, name, sector, status FROM hat3x_clients`
+  );
+  const idClientePorViejo = new Map<string, string>();
+
+  for (const fila of clientesViejos) {
+    const nuevo = mapearCliente(fila);
+    if (!nuevo) {
+      informe.clientesDescartados.push({ id: fila.id, motivo: "sin nombre" });
+      continue;
+    }
+    if (ENSAYO) { informe.clientesTraidos++; continue; }
+
+    const { data, error } = await atlas
+      .from("clientes")
+      .upsert(nuevo, { onConflict: "slug" })
+      .select("id")
+      .single();
+    if (error) {
+      informe.clientesDescartados.push({ id: fila.id, motivo: error.message });
+      continue;
+    }
+    idClientePorViejo.set(fila.id, data.id);
+    informe.clientesTraidos++;
+  }
+
+  // --- proyectos y sus contratos ---
+  const { rows: proyectosViejos } = await origen.query<FilaProyectoVieja>(
+    `SELECT id, client_id, name, status, pm_vertical, budget::text AS budget,
+            start_date::text AS start_date, end_date::text AS end_date
+     FROM hat3x_projects`
+  );
+
+  for (const fila of proyectosViejos) {
+    const nuevo = mapearProyecto(fila);
+    if (!nuevo) {
+      informe.proyectosDescartados.push({ id: fila.id, motivo: "sin nombre" });
+      continue;
+    }
+    if (ENSAYO) {
+      informe.proyectosTraidos++;
+      if (mapearContrato(fila) && fila.client_id) informe.contratosTraidos++;
+      continue;
+    }
+
+    const { data, error } = await atlas
+      .from("proyectos")
+      .upsert(nuevo, { onConflict: "slug" })
+      .select("id")
+      .single();
+    if (error) {
+      informe.proyectosDescartados.push({ id: fila.id, motivo: error.message });
+      continue;
+    }
+    informe.proyectosTraidos++;
+
+    // Aquí es donde se deshace el `client_id` 1-a-N del esquema viejo y se
+    // convierte en la relación N-a-N a través de `contratos`.
+    const contrato = mapearContrato(fila);
+    if (!contrato) {
+      informe.contratosDescartados.push({ id: fila.id, motivo: "sin fecha de alta" });
+      continue;
+    }
+    const idCliente = fila.client_id ? idClientePorViejo.get(fila.client_id) : undefined;
+    if (!idCliente) {
+      informe.contratosDescartados.push({ id: fila.id, motivo: "sin cliente asociado" });
+      continue;
+    }
+
+    const { error: errC } = await atlas.from("contratos").upsert(
+      {
+        cliente_id: idCliente,
+        proyecto_id: data.id,
+        cuota_mensual: contrato.cuotaMensual,
+        alta: contrato.alta,
+        baja: contrato.baja,
+        estado: contrato.estado,
+      },
+      { onConflict: "cliente_id,proyecto_id,alta" }
+    );
+    if (errC) {
+      informe.contratosDescartados.push({ id: fila.id, motivo: errC.message });
+      continue;
+    }
+    informe.contratosTraidos++;
+  }
+
+  await origen.end();
+  imprimir(informe);
+}
+
+function requerido(nombre: string): string {
+  const valor = process.env[nombre];
+  if (!valor) throw new Error(`Falta la variable de entorno ${nombre}.`);
+  return valor;
+}
+
+function imprimir(i: Informe): void {
+  const linea = (t: string) => process.stdout.write(`${t}\n`);
+  linea(ENSAYO ? "\n=== ENSAYO — no se ha escrito nada ===" : "\n=== MIGRACIÓN COMPLETADA ===");
+  linea(`Clientes traídos:  ${i.clientesTraidos}`);
+  linea(`Proyectos traídos: ${i.proyectosTraidos}`);
+  linea(`Contratos creados: ${i.contratosTraidos}`);
+
+  const descartes = [
+    ["Clientes", i.clientesDescartados],
+    ["Proyectos", i.proyectosDescartados],
+    ["Contratos", i.contratosDescartados],
+  ] as const;
+
+  for (const [titulo, lista] of descartes) {
+    if (lista.length === 0) continue;
+    linea(`\n${titulo} descartados (${lista.length}):`);
+    for (const d of lista) linea(`  · ${d.id} — ${d.motivo}`);
+  }
+  linea("");
+  linea("Lo que NO se ha traído, a propósito: las tablas financieras");
+  linea("(hat3x_transactions, hat3x_project_revenue, hat3x_project_costs,");
+  linea("hat3x_recurring_expenses, hat3x_monthly_finance_snapshots). Su destino");
+  linea("es el bloque 2; se quedan intactas donde están.");
+  linea("");
+  linea("`memoria/clientes.md` se pasa a mano: son 6-7 clientes en markdown");
+  linea("escrito por humanos, y un parser cuesta más que copiarlo.");
+}
+
+main().catch((e: unknown) => {
+  process.stderr.write(`\nLa migración ha fallado: ${String(e)}\n`);
+  process.exitCode = 1;
+});
+```
+
+- [ ] **Paso 6: `scripts/tsconfig.json`**
+
+```json
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "noEmit": true, "module": "esnext", "moduleResolution": "bundler" },
+  "include": ["**/*.ts"]
+}
+```
+
+Y añade a `package.json`:
+
+```json
+"typecheck:scripts": "tsc -p scripts/tsconfig.json --noEmit",
+"migrar:ensayo": "tsx scripts/migrar/traer.ts --ensayo",
+"migrar": "tsx scripts/migrar/traer.ts"
+```
+
+- [ ] **Paso 7: ensayo obligatorio antes de escribir nada**
+
+Ejecuta: `npm run migrar:ensayo`
+Esperado: imprime cuántos clientes, proyectos y contratos traería, y qué descartaría con su motivo. **Lee el informe entero antes de lanzar la migración de verdad.** Si algo se descarta y no deberías perderlo, se arregla el mapeo, no los datos.
+
+- [ ] **Paso 8: comprobar el build y commit**
+
+```bash
+npm test && npm run typecheck && npm run typecheck:scripts && npm run build
+git add scripts src/tests/migrar package.json
+git commit -m "feat(atlas): migracion idempotente de clientes, proyectos y contratos"
+```
+
+---
+
+## Verificación de salida del plan 1A-2
+
+- [ ] **1. Toda la batería en verde**
+
+Ejecuta: `npx supabase db reset && npm test`
+Esperado: PASA. A los 42 tests del plan 1A se suman 49: distintivo (3), perfil (2), tarjeta de cliente (5), validación de cliente (5), portada (3), ficha de proyecto (4), acciones de proyecto (10), credenciales (4), roles (3), apariencia (3), selector (4), mapeo de migración (14) — **91 en total**.
+
+- [ ] **2. Cobertura por encima del umbral**
+
+Ejecuta: `npm run test:coverage`
+Esperado: `src/lib/**` por encima del 80 % de líneas y funciones.
+
+- [ ] **3. El build pasa**
+
+Ejecuta: `npm run typecheck && npm run typecheck:scripts && npm run build`
+Esperado: los tres sin errores.
+
+- [ ] **4. Los tres límites que no se cruzan**
+
+```bash
+grep -rn "lib/db\|lib/cripto" src/components | grep -l "use client" && echo "VIOLACIÓN" || echo "limpio"
+grep -rn "from(\"contratos\")" src/app src/components && echo "VIOLACIÓN: leer contratos directamente" || echo "limpio"
+grep -rn ": any\|<any>\|as any" src/lib scripts && echo "HAY ANY" || echo "limpio"
+```
+Esperado: `limpio` las tres veces.
+
+- [ ] **5. Comprobaciones manuales**
+
+Con `npm run dev` y un usuario propietario:
+- La barra lateral marca la entrada activa al navegar.
+- Cambiar de paleta en Ajustes → Apariencia repinta la aplicación entera al momento, y al recargar sigue puesta.
+- Con Crepúsculo seleccionada aparece el aviso de contraste, y **el distintivo rojo sigue destacando** sobre el fondo cálido.
+- Un usuario editor (no propietario) ve `—` donde el propietario ve `290 €`, y recibe 404 en `/ajustes/credenciales`.
+- Una credencial recién guardada muestra solo su prefijo enmascarado, y el secreto completo no aparece **en ningún sitio** del HTML servido (compruébalo con «ver código fuente», no solo mirando la pantalla).
+
+---
+
+## Autorrevisión del plan
+
+**Cobertura del spec.** Este documento implementa §8.1 (navegación), §8.3 (ficha de proyecto, sin la pestaña de incidencias, que necesita el motor del plan 1B), §8.4 (ficha de cliente), §8.5 parcialmente (Ajustes: credenciales, usuarios y apariencia; el historial de alertas llega en 1C), §8.6 completo (sistema visual) y §10 completo (migración). Quedan fuera y con destino declarado: §8.2 (las tres vistas del Resumen → plan 1C, porque sin datos de vigilancia no hay nada que mostrar), §8.7 (PWA → plan 1C, va con el push), §6 y §7 completos (planes 1B y 1C).
+
+**Placeholders.** Ninguno. Cada paso lleva el código o el comando exacto.
+
+**Consistencia de tipos.** `Ok` se define por separado en `acciones-proyecto.ts`, `credenciales.ts`, `usuarios.ts` y `apariencia.ts` con **forma idéntica** (`{ ok: true } | { ok: false; error: string }`); `acciones-clientes.ts` usa `Resultado`, que añade `slug` al caso correcto porque la navegación posterior lo necesita. `Sb` viene siempre de `@/lib/db/clientes`, que a su vez la reexporta de `@/lib/supabase/servidor`. `EstadoVisual` se define en `Distintivo.tsx` y la consumen `TarjetaCliente` y `TarjetaProyecto`. `Tema` y `Paleta` vienen siempre de `@/lib/tema/tokens`, y sus valores coinciden con la restricción `check` de `perfiles` y con los selectores `[data-paleta="…"]` del CSS.
+
+**Dependencias entre tareas.** 10 → 11 → 12 → 13; 10 → 14, 15, 16; 17 es independiente de las de interfaz pero necesita el esquema del plan 1A. La Tarea 10 va primero porque todas las pantallas viven dentro de su marco.
+
+**Una decisión que conviene revisar al ejecutar.** La Tarea 13 permite a un **editor** dar de alta servicios, y deja que sea la política RLS `servicios_escribir` quien decida, mientras que las demás acciones comprueban `esPropietario` en el código. Es deliberado —un editor gestiona los servicios de sus proyectos, que es justo para lo que existe ese rol—, pero es la única acción del plan con esa asimetría. Si al usarlo resulta que no quieres que un colaborador toque servicios, se cierra añadiendo la comprobación explícita, igual que en las demás.
