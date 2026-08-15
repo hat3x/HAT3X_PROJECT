@@ -26,6 +26,17 @@ Además, propias de este plan:
 - **Un secreto descifrado nunca llega al navegador.** En pantalla solo aparece `enmascarar(...)`.
 - Toda escritura pasa por una acción de servidor que **vuelve a comprobar el permiso**. RLS es la red de seguridad, no la única defensa.
 
+## Lecciones de la ejecución del plan 1A
+
+Estas seis cosas se descubrieron **ejecutando** el plan anterior. Van aquí porque volverán a morder en este.
+
+1. **`GRANT` y RLS son cosas distintas.** RLS filtra *filas*; antes hace falta permiso sobre la *tabla*. Las tablas creadas por migraciones propias **no lo reciben solas**. Si añades una tabla en este plan, concédele permisos en su migración, o el síntoma será `permission denied for table …`, que no apunta a la causa.
+2. **Una política RLS no puede leer una tabla revocada.** `clientes_ver` consultaba `contratos` y reventaba. La solución es una función `SECURITY DEFINER` — así nació `atlas_ve_cliente()`. Mismo patrón si escribes políticas nuevas.
+3. **`INSERT` en `auth.users` NO crea un usuario que pueda iniciar sesión.** Deja el registro sin su fila en `auth.identities` y GoTrue falla con «Database error querying schema». **Los usuarios que vayan a autenticarse se crean con `admin.auth.admin.createUser({ email, password, email_confirm: true })`** usando la `service_role` local. Para tests que solo necesitan la fila (esquema, RLS), el `INSERT` directo sigue valiendo.
+4. **Los ficheros de test comparten la base local.** `fileParallelism: false` ya está puesto en `vitest.config.mts`. Además, **ningún aserto debe suponer una base vacía**: filtra siempre por las entidades que crea el propio test.
+5. **`createClient` hereda sesión por `localStorage`, que en jsdom es compartido.** Un cliente pensado como anónimo recogerá la sesión de otro test sin que se note. Para crear uno realmente sin sesión hacen falta `persistSession: false`, `autoRefreshToken: false` y un `storageKey` propio.
+6. **El entorno real difiere del plan en tres puntos ya corregidos:** Tailwind fijado a `^3.4` (la v4 cambia la sintaxis), `vitest.config.mts` en lugar de `.ts` (`vite-tsconfig-paths` v5 es ESM-only) y `Uint8Array<ArrayBuffer>` en el llavero (TS 5.9 hizo el tipo genérico).
+
 ## Interfaces heredadas del plan 1A
 
 Estas ya existen. No se reimplementan.
@@ -186,27 +197,38 @@ import type { Database } from "@/types/supabase";
 const URL_API = "http://127.0.0.1:54321";
 const ANON =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+const SERVICE =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
 const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
 let pg: Client;
 let id = "";
 let sb: ReturnType<typeof createClient<Database>>;
+let admin: ReturnType<typeof createClient<Database>>;
 
 beforeAll(async () => {
   pg = new Client({ connectionString: URL_PG });
   await pg.connect();
-  const { rows } = await pg.query(
-    `INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
-                             email_confirmed_at)
-     VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000000',
-             'authenticated','authenticated','perfil@atlas.test',
-             crypt('contrasena-de-prueba', gen_salt('bf')), now()) RETURNING id`
-  );
-  id = rows[0].id as string;
+
+  // Con la Admin API, NO con INSERT en auth.users: la inserción directa deja el
+  // registro sin su fila en auth.identities y GoTrue falla al iniciar sesión
+  // con «Database error querying schema». Ver «Lecciones», punto 3.
+  admin = createClient<Database>(URL_API, SERVICE, {
+    auth: { persistSession: false },
+  });
+  const creado = await admin.auth.admin.createUser({
+    email: "perfil@atlas.test",
+    password: "contrasena-de-prueba",
+    email_confirm: true,
+  });
+  if (creado.error) throw creado.error;
+  id = creado.data.user.id;
+
   await pg.query(
     `INSERT INTO perfiles (id, nombre, es_propietario, tema, paleta)
      VALUES ($1,'Jose',true,'claro','oceano')`, [id]
   );
+
   sb = createClient<Database>(URL_API, ANON);
   const { error } = await sb.auth.signInWithPassword({
     email: "perfil@atlas.test", password: "contrasena-de-prueba",
@@ -215,7 +237,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await pg.query(`DELETE FROM auth.users WHERE id = $1`, [id]);
+  if (id) await admin.auth.admin.deleteUser(id);
   await pg.end();
 });
 
@@ -228,7 +250,16 @@ describe("perfil", () => {
   });
 
   it("devuelve null sin sesión", async () => {
-    const anonimo = createClient<Database>(URL_API, ANON);
+    // persistSession y storageKey propios son imprescindibles: por defecto el
+    // cliente lee la sesión de localStorage, que en jsdom es compartido, y este
+    // heredaría la de `sb` sin que se note. Ver «Lecciones», punto 5.
+    const anonimo = createClient<Database>(URL_API, ANON, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        storageKey: "atlas-test-perfil-sin-sesion",
+      },
+    });
     expect(await obtenerPerfil(anonimo)).toBeNull();
   });
 });

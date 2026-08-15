@@ -21,6 +21,12 @@ Aplican las mismas de los planes 1A y 1A-2. Las propias de este:
 - **El histórico nunca miente.** Lo que se silencia es el aviso, no el registro: un fallo dentro de una ventana de mantenimiento se guarda igual en `check_resultados`.
 - **La Edge Function corre sobre Deno**, no Node. Nada de `node:crypto`; las variables de entorno se leen con `Deno.env.get`, y los imports son por URL o por JSR.
 
+Y tres lecciones de la ejecución del plan 1A, que vuelven a aplicar aquí:
+
+- **Toda tabla nueva necesita su `GRANT` explícito** para el rol `authenticated`, en la misma migración que la crea. RLS filtra *filas*; antes hace falta permiso sobre la *tabla*, y las tablas de migraciones propias no lo reciben solas. El síntoma de olvidarlo es `permission denied for table …`, que no apunta a la causa.
+- **Una política RLS no puede leer una tabla cuya lectura esté revocada** — como `contratos`. Si necesitas consultarla desde una política, hazlo a través de una función `SECURITY DEFINER`, como `atlas_ve_cliente()`.
+- **Los tests de este plan comparten la base local con los de 1A y 1A-2.** `fileParallelism: false` ya está puesto en `vitest.config.mts`; además, ningún aserto debe suponer una base vacía: filtra siempre por las entidades que crea el propio test.
+
 ## Interfaces heredadas
 
 Del esquema (plan 1A, Tarea 5): `servicios`, `checks`, `check_resultados`, `check_agregados`, `incidencias`, `ventanas_mantenimiento`.
