@@ -20,6 +20,17 @@ language sql stable security definer set search_path = public as $$
                  where usuario_id = auth.uid() and proyecto_id = p and rol = 'editor')
 $$;
 
+-- Un cliente se ve si alguno de sus contratos apunta a un proyecto visible.
+-- TIENE que ser SECURITY DEFINER: consulta `contratos`, cuya lectura está
+-- revocada para el rol `authenticated`. Una política que leyera esa tabla
+-- directamente fallaría con «permission denied for table contratos».
+create or replace function atlas_ve_cliente(c uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select atlas_es_propietario()
+      or exists (select 1 from contratos ct
+                 where ct.cliente_id = c and atlas_ve_proyecto(ct.proyecto_id))
+$$;
+
 -- ---------- permisos de tabla ----------
 -- RLS filtra FILAS, pero antes hace falta permiso sobre la TABLA. Las tablas
 -- creadas por migraciones propias no lo reciben solas: hay que concederlo.
@@ -107,16 +118,12 @@ create policy ventanas_escribir on ventanas_mantenimiento for all to authenticat
 
 -- ---------- clientes: se ven a través de sus contratos ----------
 create policy clientes_ver on clientes for select to authenticated
-  using (
-    atlas_es_propietario()
-    or exists (select 1 from contratos ct
-               where ct.cliente_id = clientes.id and atlas_ve_proyecto(ct.proyecto_id))
-  );
+  using (atlas_ve_cliente(id));
 create policy clientes_escribir on clientes for all to authenticated
   using (atlas_es_propietario()) with check (atlas_es_propietario());
 
 create policy contactos_ver on contactos for select to authenticated
-  using (exists (select 1 from clientes c where c.id = cliente_id));
+  using (atlas_ve_cliente(cliente_id));
 create policy contactos_escribir on contactos for all to authenticated
   using (atlas_es_propietario()) with check (atlas_es_propietario());
 
@@ -175,8 +182,7 @@ create policy usos_propietario on credencial_usos for all to authenticated
 create policy notas_ver on notas for select to authenticated
   using (
     (entidad_tipo = 'proyecto' and atlas_ve_proyecto(entidad_id))
-    or (entidad_tipo = 'cliente'
-        and exists (select 1 from clientes c where c.id = entidad_id))
+    or (entidad_tipo = 'cliente' and atlas_ve_cliente(entidad_id))
   );
 create policy notas_escribir on notas for insert to authenticated
   with check (

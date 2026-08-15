@@ -8,6 +8,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/tests/setup.ts"],
     include: ["src/tests/**/*.test.{ts,tsx}"],
+    // Los tests de esquema y de datos comparten la misma base local. En
+    // paralelo se pisan entre ficheros: uno ve las filas que otro está
+    // creando. En secuencia son deterministas.
+    fileParallelism: false,
     coverage: {
       provider: "v8",
       include: ["src/lib/**"],

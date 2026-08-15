@@ -125,9 +125,12 @@ describe("RLS", () => {
   });
 
   it("el propietario SÍ ve el importe", async () => {
+    // Filtrado por el cliente de ESTE test: la base la comparten varios
+    // ficheros y un aserto que suponga la base vacía es frágil por definición.
     const importes = await como(idJose, async () => {
       const { rows } = await db.query(
-        `SELECT cuota_mensual::text FROM contratos_visibles ORDER BY cuota_mensual`
+        `SELECT cuota_mensual::text FROM contratos_visibles
+         WHERE cliente_id = $1 ORDER BY cuota_mensual`, [cliente]
       );
       return rows.map((r) => r.cuota_mensual as string);
     });
