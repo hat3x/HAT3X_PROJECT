@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { FolderOpen, Info } from "lucide-react";
+import { Info } from "lucide-react";
+
+import { DentalRecordIcon } from "@/components/brand/dental-icons";
 
 import { ExpedienteWorkspace } from "@/components/dental/expediente-workspace";
 import { PatientSelector } from "@/components/dental/patient-selector";
@@ -42,7 +44,7 @@ export default async function ExpedientePage({
           aria-hidden="true"
           className="grid h-10 w-10 place-items-center rounded-xl border border-primary/15 bg-accent text-primary"
         >
-          <FolderOpen className="h-5 w-5" />
+          <DentalRecordIcon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Expediente clínico</h1>

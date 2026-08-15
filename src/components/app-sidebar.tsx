@@ -16,25 +16,6 @@ import type { MemberRole } from "@/types/database";
 /** Clave de localStorage para recordar si el rail está plegado entre sesiones. */
 const COLLAPSE_STORAGE_KEY = "kairos:nav-collapsed";
 
-/** Secciones de gestión (owner/manager) → grupo final, separado por un divisor. */
-const MANAGEMENT_HREFS = new Set(["/analitica", "/facturacion", "/arqueo", "/ajustes"]);
-/** Secciones clínicas (odontología) → grupo propio, separado por un divisor. */
-const CLINICAL_HREFS = new Set([
-  "/odontograma",
-  "/periodontograma",
-  "/ortodoncia",
-  "/planes",
-  "/expediente",
-]);
-
-type NavGroup = "operativa" | "clinica" | "gestion";
-
-function groupOf(href: string): NavGroup {
-  if (MANAGEMENT_HREFS.has(href)) return "gestion";
-  if (CLINICAL_HREFS.has(href)) return "clinica";
-  return "operativa";
-}
-
 /**
  * Determina si un enlace está activo respecto a la ruta actual.
  * Coincidencia exacta o de sub-ruta (`/customers/123` activa `/customers`).
@@ -237,39 +218,21 @@ export function AppSidebar({
             className="absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-accent-foreground"
           />
         ) : null}
-        <Icon className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
+        <Icon className="h-6 w-6 shrink-0" aria-hidden="true" />
         <span className={cn(compact && "sr-only")}>{item.label}</span>
       </Link>
     );
   };
 
-  /** Lista de nav COMPLETA en orden natural, con un divisor al cambiar de grupo. */
-  const navList = (compact: boolean): React.ReactElement => {
-    const rendered: React.ReactElement[] = [];
-    let prevGroup: NavGroup | null = null;
-    for (const item of items) {
-      const group = groupOf(item.href);
-      if (prevGroup !== null && group !== prevGroup) {
-        rendered.push(
-          <div
-            key={`div-${item.href}`}
-            role="separator"
-            className="mx-2 my-1.5 h-px bg-border/60"
-          />,
-        );
-      }
-      rendered.push(navLink(item, compact));
-      prevGroup = group;
-    }
-    return (
-      <nav
-        aria-label="Secciones del panel"
-        className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-3"
-      >
-        {rendered}
-      </nav>
-    );
-  };
+  /** Lista de nav COMPLETA en orden natural, con separación UNIFORME (sin divisores). */
+  const navList = (compact: boolean): React.ReactElement => (
+    <nav
+      aria-label="Secciones del panel"
+      className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-3"
+    >
+      {items.map((item) => navLink(item, compact))}
+    </nav>
+  );
 
   // Pie uniforme: plegar (solo desktop) · tema · salir — TODOS con NAV_ITEM_BASE.
   const footer = (compact: boolean, withCollapse: boolean): React.ReactElement => (
@@ -283,9 +246,9 @@ export function AppSidebar({
           className={cn(NAV_ITEM_BASE, NAV_ITEM_IDLE, compact && "justify-center gap-0 px-0")}
         >
           {compact ? (
-            <ChevronsRight className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
+            <ChevronsRight className="h-6 w-6 shrink-0" aria-hidden="true" />
           ) : (
-            <ChevronsLeft className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
+            <ChevronsLeft className="h-6 w-6 shrink-0" aria-hidden="true" />
           )}
           <span className={cn(compact && "sr-only")}>Plegar menú</span>
         </button>
@@ -297,7 +260,7 @@ export function AppSidebar({
         title={`Tema: ${themeMeta.label}`}
         className={cn(NAV_ITEM_BASE, NAV_ITEM_IDLE, compact && "justify-center gap-0 px-0")}
       >
-        <ThemeIcon className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
+        <ThemeIcon className="h-6 w-6 shrink-0" aria-hidden="true" />
         <span className={cn(compact && "sr-only")}>Tema · {themeMeta.label}</span>
       </button>
 
@@ -307,7 +270,7 @@ export function AppSidebar({
           title={compact ? "Salir" : undefined}
           className={cn(NAV_ITEM_BASE, NAV_ITEM_IDLE, "w-full", compact && "justify-center gap-0 px-0")}
         >
-          <LogOut className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
+          <LogOut className="h-6 w-6 shrink-0" aria-hidden="true" />
           <span className={cn(compact && "sr-only")}>Salir</span>
         </button>
       </form>

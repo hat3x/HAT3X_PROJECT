@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Activity, ChevronLeft, Info } from "lucide-react";
+import { ChevronLeft, Info } from "lucide-react";
+
+import { PerioIcon } from "@/components/brand/dental-icons";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { PatientSelector } from "@/components/dental/patient-selector";
@@ -40,7 +42,7 @@ export default async function PeriodontogramaPage({
           aria-hidden="true"
           className="grid h-10 w-10 place-items-center rounded-xl border border-primary/15 bg-accent text-primary"
         >
-          <Activity className="h-5 w-5" />
+          <PerioIcon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Periodontograma</h1>

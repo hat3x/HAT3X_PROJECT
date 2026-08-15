@@ -3,12 +3,12 @@ import type { SVGProps } from "react";
 /**
  * Iconos dentales a medida para las secciones de Odontología del panel.
  *
- * Lucide no incluye piezas dentales, y las genéricas que se usaban (estetoscopio
- * para Odontograma, pulso para Periodontograma, llaves de código `{}` para
- * Ortodoncia…) no comunicaban bien. Estos SVG comparten el lenguaje de Lucide
- * (viewBox 24, trazo `currentColor`, extremos redondeados) para convivir con el
- * resto del icon-set. Firma `SVGProps` → aceptan `className`/`aria-hidden` igual
- * que un icono de Lucide, así encajan en `NavItem.icon` sin adaptadores.
+ * Lucide no incluye piezas dentales, y las genéricas que se usaban (estetoscopio,
+ * pulso, llaves de código `{}`) no comunicaban bien. Estos SVG comparten el
+ * lenguaje de Lucide: viewBox 24, trazo `currentColor`, `stroke-width` 2,
+ * extremos redondeados y — importante — el dibujo RELLENA el cuadro (≈ 2.5–21.5)
+ * para que se vean del MISMO tamaño que el resto del icon-set. Firma `SVGProps`
+ * → aceptan `className`/`aria-hidden` igual que un icono de Lucide.
  */
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -19,16 +19,16 @@ const BASE: IconProps = {
   height: 24,
   fill: "none",
   stroke: "currentColor",
-  strokeWidth: 1.9,
+  strokeWidth: 2,
   strokeLinecap: "round",
   strokeLinejoin: "round",
 };
 
-/** Odontograma — pieza dental (incisivo de dos cúspides). */
+/** Odontograma — pieza dental (dos cúspides), rellenando el cuadro. */
 export function ToothIcon(props: IconProps): React.ReactElement {
   return (
     <svg {...BASE} {...props}>
-      <path d="M6.4 3.2C4.7 3.2 3.5 4.6 3.5 6.6c0 1.7.3 3.4.8 5 .3 1.1.5 2.6.9 3.7.3.9 1.4.9 1.7 0 .3-1 .4-2.2.7-3.2.2-.7.5-1.2 1.4-1.2s1.2.5 1.4 1.2c.3 1 .4 2.2.7 3.2.3.9 1.4.9 1.7 0 .4-1.1.6-2.6.9-3.7.5-1.6.8-3.3.8-5 0-2-1.2-3.4-2.9-3.4-1.3 0-2.2.7-3.1 1.3-.9-.6-1.8-1.3-3.1-1.3Z" />
+      <path d="M12 3.4c-1.4-1.1-3.4-1.7-5.1-.9C5 3.4 4 5.7 4.2 8.1c.2 2.4.7 4.7 1.3 7 .4 1.6.7 3.3 1.2 4.8.3.9.7 1.7 1.5 1.7 1 0 1.2-1.7 1.5-3.3.3-1.7.5-3.4 1.3-3.4h.2c.8 0 1 1.7 1.3 3.4.3 1.6.5 3.3 1.5 3.3.8 0 1.2-.8 1.5-1.7.5-1.5.8-3.2 1.2-4.8.6-2.3 1.1-4.6 1.3-7 .2-2.4-.8-4.7-2.7-5.6-1.7-.8-3.7-.2-5.1.9Z" />
     </svg>
   );
 }
@@ -37,9 +37,9 @@ export function ToothIcon(props: IconProps): React.ReactElement {
 export function PerioIcon(props: IconProps): React.ReactElement {
   return (
     <svg {...BASE} {...props}>
-      <path d="M8 3.4C6.7 3.4 5.8 4.5 5.8 6c0 1.3.3 2.6.7 3.8.4 1.2 1.4 1.1 1.7.1.2-.7.4-1.4 1.1-1.4s.9.7 1.1 1.4c.3 1 1.3 1.1 1.7-.1.4-1.2.7-2.5.7-3.8 0-1.5-.9-2.6-2.2-2.6-.9 0-1.5.5-2.1 1-.6-.5-1.2-1-2.1-1Z" />
-      <path d="M3 15c2.5-1.4 5-1.4 6 0 1 1.4 2.5 1.4 3 0 1-1.4 4-1.4 6.5 0" />
-      <path d="M4.5 19v1.8M9.5 19v2.2M14.5 19v1.8M19.5 19v2.4" />
+      <path d="M12 3c-1-.9-2.5-1.3-3.8-.7C6.8 2.9 6 4.6 6.2 6.4c.2 1.6.6 3.2 1 4.7.3 1 .6 2.1 1.2 2.1.7 0 .9-1.1 1.1-2.1.2-.6.3-1 .8-1s.6.4.8 1c.3 1 .5 2.1 1.2 2.1.6 0 .9-1.1 1.2-2.1.4-1.5.8-3.1 1-4.7.2-1.8-.6-3.5-2-4.1-1.3-.6-2.8-.2-3.8.7Z" />
+      <path d="M3 16c2.3-1.3 4.5-1.3 6.2 0 1.7 1.3 3.4 1.3 6.2 0 1.2-.6 2.4-.7 2.6-.5" />
+      <path d="M5 19v2.4M10 19v2.8M15 19v2.4M19 19v3" />
     </svg>
   );
 }
@@ -48,10 +48,10 @@ export function PerioIcon(props: IconProps): React.ReactElement {
 export function BracesIcon(props: IconProps): React.ReactElement {
   return (
     <svg {...BASE} {...props}>
-      <path d="M2.5 12h19" />
-      <rect x="4.2" y="9" width="4.1" height="6" rx="1.2" />
-      <rect x="9.95" y="9" width="4.1" height="6" rx="1.2" />
-      <rect x="15.7" y="9" width="4.1" height="6" rx="1.2" />
+      <path d="M2 12h20" />
+      <rect x="4" y="6.5" width="4.4" height="11" rx="1.4" />
+      <rect x="9.8" y="6.5" width="4.4" height="11" rx="1.4" />
+      <rect x="15.6" y="6.5" width="4.4" height="11" rx="1.4" />
     </svg>
   );
 }
@@ -74,7 +74,7 @@ export function DentalRecordIcon(props: IconProps): React.ReactElement {
     <svg {...BASE} {...props}>
       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
       <path d="M14 3v6h6" />
-      <path d="M12 12.5c-.7-.6-1.7-.3-1.7.8 0 1 .6 1.6 1 2.4.2.4.5.4.7 0 .4-.8 1-1.4 1-2.4 0-1.1-1-1.4-1-.8Z" />
+      <path d="M12 12.4c-.8-.7-2-.4-2 .9 0 1.1.7 1.8 1.1 2.6.3.5.5.5.8 0 .4-.8 1.1-1.5 1.1-2.6 0-1.3-1.2-1.6-2-.9Z" />
     </svg>
   );
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ClipboardList, Info, ChevronLeft } from "lucide-react";
+import { ChevronLeft, Info } from "lucide-react";
 
+import { ToothIcon } from "@/components/brand/dental-icons";
 import { Card, CardContent } from "@/components/ui/card";
 import { OdontogramChart } from "@/components/dental/odontogram-chart";
 import { PatientSelector } from "@/components/dental/patient-selector";
@@ -42,7 +43,7 @@ export default async function OdontogramaPage({
           aria-hidden="true"
           className="grid h-10 w-10 place-items-center rounded-xl border border-primary/15 bg-accent text-primary"
         >
-          <ClipboardList className="h-5 w-5" />
+          <ToothIcon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Odontograma</h1>

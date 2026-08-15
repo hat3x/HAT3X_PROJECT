@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { ClipboardList, Info } from "lucide-react";
+import { Info } from "lucide-react";
+
+import { TreatmentPlanIcon } from "@/components/brand/dental-icons";
 
 import { PatientSelector } from "@/components/dental/patient-selector";
 import { PlanWorkspace } from "@/components/dental/plan-workspace";
@@ -42,7 +44,7 @@ export default async function PlanesPage({
           aria-hidden="true"
           className="grid h-10 w-10 place-items-center rounded-xl border border-primary/15 bg-accent text-primary"
         >
-          <ClipboardList className="h-5 w-5" />
+          <TreatmentPlanIcon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Planes de tratamiento</h1>
