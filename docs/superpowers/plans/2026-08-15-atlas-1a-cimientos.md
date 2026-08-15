@@ -2,7 +2,14 @@
 
 > **Para agentes ejecutores:** SUB-SKILL OBLIGATORIA: usa `superpowers:subagent-driven-development` (recomendada) o `superpowers:executing-plans` para implementar este plan tarea a tarea. Los pasos usan casillas (`- [ ]`) para seguimiento.
 
-**Objetivo:** dejar Atlas en pie: entras con doble factor, das de alta clientes, proyectos, contratos y servicios, y la interfaz ya tiene su cristal y sus cinco paletas.
+**Objetivo:** poner los cimientos de Atlas. Al terminar: el proyecto compila y despliega, el esquema completo existe con RLS probada contra Postgres real, el llavero cifra y descifra, la capa de datos consulta con tipos, y **entras con doble factor**. Las pantallas de gestión llegan en el plan siguiente.
+
+**Alcance:** tareas 1 a 9. El bloque 1A se ejecuta en **dos documentos** porque uno solo sería inejecutable:
+
+| Documento | Tareas | Deja funcionando |
+|---|---|---|
+| **Este** — cimientos | 1-9 | Base, esquema, RLS, cifrado, consultas y acceso con segundo factor |
+| `2026-08-15-atlas-1a2-gestion.md` | 10-17 | Marco visual, fichas de cliente y proyecto, contratos, servicios, ajustes y migración de datos |
 
 **Arquitectura:** aplicación Next.js 14 (App Router) desplegada en Vercel contra un Supabase propio. Toda la lógica sensible vive en servidor; el navegador nunca recibe secretos. El esquema implementa el modelo de dos ejes (clientes × proyectos cruzados por contratos) con RLS apoyada en la tabla `permisos`.
 
@@ -2606,3 +2613,49 @@ git commit -m "feat(atlas): acceso con segundo factor obligatorio"
 ```
 
 ---
+
+## Verificación de salida del plan 1A
+
+No se da por terminado hasta que las cinco comprobaciones pasan.
+
+- [ ] **1. Toda la batería en verde**
+
+Ejecuta: `npx supabase db reset && npm test`
+Esperado: PASA. 42 tests repartidos en andamiaje (2), tema (3), esquema núcleo (5), personas (6), vigilancia (5), RLS (8), cifrado (9) y capa de datos (4).
+
+- [ ] **2. Cobertura por encima del umbral**
+
+Ejecuta: `npm run test:coverage`
+Esperado: `src/lib/**` por encima del 80 % de líneas y funciones. `src/lib/cripto/cifrado.ts` al 100 %: es el módulo más sensible del proyecto.
+
+- [ ] **3. El build pasa**
+
+Ejecuta: `npm run typecheck && npm run build`
+Esperado: ambos sin errores. Esta comprobación no es opcional ni redundante — detecta errores que `tsc` no ve.
+
+- [ ] **4. Ni un solo `any` en la capa de librería**
+
+Ejecuta: `grep -rn ": any\|<any>\|as any" src/lib && echo "HAY ANY" || echo "limpio"`
+Esperado: `limpio`.
+
+- [ ] **5. Comprobación manual del segundo factor**
+
+Arranca `npm run dev`, crea un usuario en el Supabase local, entra con su contraseña y verifica que:
+- te lleva a `/alta-2fa` y no te deja salir de ahí escribiendo otra URL a mano;
+- tras escanear el QR con una app de autenticación y meter el código, entras;
+- al cerrar sesión y volver a entrar, te pide el código otra vez;
+- escribir `/ajustes/credenciales` sin haber verificado te rebota.
+
+Esto no se simula de forma útil: hay que verlo.
+
+---
+
+## Autorrevisión del plan
+
+**Cobertura del spec.** Este documento implementa: §4 completo (modelo de datos, tablas, convenciones), §5.1 (autenticación con TOTP), §5.2 y §5.3 (roles, RLS, ocultamiento de importes), §5.4 (llavero cifrado) y §8.6 parcialmente (tokens de tema y paletas). Quedan para el plan `1a2-gestion`: §8.1 a §8.5 (navegación, fichas, ajustes), §8.7 (PWA) y §10 (migración de datos). Quedan para los planes 1B y 1C: §4.4 (consolidación de retención — las tablas ya existen aquí), §6 completo y §7 completo.
+
+**Corrección aplicada sobre el spec.** La Tarea 7 corrige §5.3: la vista `contratos_visibles` no puede ser `security_invoker`. El spec ya está actualizado con la explicación.
+
+**Consistencia de tipos.** `Sb` se define en `src/lib/supabase/servidor.ts` y se reexporta desde `src/lib/db/clientes.ts`; `src/lib/db/proyectos.ts` la importa desde ahí. `Aal`, `EstadoSesion` y `decidirRuta` viven en `src/lib/auth/guardia.ts` y solo los consume `src/middleware.ts`. `SecretoCifrado`, `cifrar`, `descifrar` y `enmascarar` viven en `src/lib/cripto/cifrado.ts` y los consumirán las tareas de credenciales del plan siguiente. `Tema`, `Paleta`, `PALETAS`, `esPaletaCalida` y `atributosTema` viven en `src/lib/tema/tokens.ts`; los valores de `Paleta` coinciden exactamente con la restricción `check` de `perfiles.paleta` y con los selectores `[data-paleta="…"]` del CSS.
+
+**Dependencias entre tareas.** 1 → 2, 3 → 4 → 5 → 7, 3+4 → 8, 8 → 9. La Tarea 4 va antes que la 5 porque `checks.credencial_id` referencia `credenciales`. La Tarea 2 va antes que cualquier pantalla porque toda la interfaz posterior consume sus tokens.
