@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* --- Estados: NO cambian nunca con la paleta. Son significado. --- */
+  :root {
+    --estado-ok: #30d158;
+    --estado-aviso: #ff9f0a;
+    --estado-caido: #ff453a;
+    --estado-desconocido: #8e8e93;
+
+    /* Refuerzo de los distintivos de estado. En paletas frías es neutro;
+       en cálidas sube para que la alerta siga destacando sobre el fondo. */
+    --estado-fondo-alfa: 0.16;
+    --estado-borde-alfa: 0.45;
+
+    --cristal-blur: 20px;
+    --cristal-sat: 180%;
+    --radio: 12px;
+  }
+
+  [data-paleta="crepusculo"] {
+    --estado-fondo-alfa: 0.30;
+    --estado-borde-alfa: 0.75;
+  }
+
+  /* --- Base por tema --- */
+  [data-tema="claro"] {
+    --texto: #1d1d1f;
+    --texto-tenue: #5f6470;
+    --cristal-fondo: rgba(255, 255, 255, 0.58);
+    --cristal-borde: rgba(255, 255, 255, 0.90);
+    --cristal-sombra: 0 6px 22px rgba(20, 30, 60, 0.13);
+    /* Bajo texto denso el cristal se opaca: es enemigo de la letra pequeña. */
+    --cristal-fondo-denso: rgba(255, 255, 255, 0.86);
+  }
+
+  [data-tema="oscuro"] {
+    --texto: #f5f5f7;
+    --texto-tenue: #9b9ba3;
+    --cristal-fondo: rgba(255, 255, 255, 0.08);
+    --cristal-borde: rgba(255, 255, 255, 0.16);
+    --cristal-sombra: 0 6px 24px rgba(0, 0, 0, 0.45);
+    --cristal-fondo-denso: rgba(28, 28, 32, 0.88);
+  }
+
+  /* --- Paletas: base y las dos auroras --- */
+  [data-tema="claro"][data-paleta="zafiro"]     { --base:#eef2f8; --aurora-1:rgba(0,113,227,.32);  --aurora-2:rgba(0,199,190,.28); }
+  [data-tema="oscuro"][data-paleta="zafiro"]    { --base:#050810; --aurora-1:rgba(0,113,227,.60);  --aurora-2:rgba(0,199,190,.42); }
+  [data-tema="claro"][data-paleta="nebulosa"]   { --base:#f1eef9; --aurora-1:rgba(94,92,230,.30);  --aurora-2:rgba(191,90,242,.26); }
+  [data-tema="oscuro"][data-paleta="nebulosa"]  { --base:#08060f; --aurora-1:rgba(94,92,230,.62);  --aurora-2:rgba(191,90,242,.48); }
+  [data-tema="claro"][data-paleta="oceano"]     { --base:#ebf3f5; --aurora-1:rgba(10,162,192,.30); --aurora-2:rgba(29,63,110,.24); }
+  [data-tema="oscuro"][data-paleta="oceano"]    { --base:#03090d; --aurora-1:rgba(10,162,192,.55); --aurora-2:rgba(29,99,175,.45); }
+  [data-tema="claro"][data-paleta="grafito"]    { --base:#f0f1f3; --aurora-1:rgba(58,74,99,.20);   --aurora-2:rgba(120,132,150,.20); }
+  [data-tema="oscuro"][data-paleta="grafito"]   { --base:#0a0b0d; --aurora-1:rgba(90,107,133,.42); --aurora-2:rgba(58,74,99,.50); }
+  [data-tema="claro"][data-paleta="crepusculo"] { --base:#faf0ec; --aurora-1:rgba(255,159,10,.30); --aurora-2:rgba(255,55,95,.26); }
+  [data-tema="oscuro"][data-paleta="crepusculo"]{ --base:#0d0503; --aurora-1:rgba(255,159,10,.50); --aurora-2:rgba(255,55,95,.48); }
+
+  body {
+    background: var(--base);
+    color: var(--texto);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+@layer components {
+  .cristal {
+    background: var(--cristal-fondo);
+    border: 1px solid var(--cristal-borde);
+    box-shadow: var(--cristal-sombra);
+    border-radius: var(--radio);
+    backdrop-filter: blur(var(--cristal-blur)) saturate(var(--cristal-sat));
+    -webkit-backdrop-filter: blur(var(--cristal-blur)) saturate(var(--cristal-sat));
+  }
+  /* Para tablas y listas: el cristal se opaca bajo texto pequeño. */
+  .cristal-denso { background: var(--cristal-fondo-denso); }
+}
+
+/* Si el sistema pide menos movimiento, las auroras se quedan quietas. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
