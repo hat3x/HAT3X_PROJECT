@@ -7,18 +7,21 @@
 // desde ATLAS_MASTER_KEY, variable de entorno del servidor. Recibirla en lugar
 // de leerla es lo que hace este módulo probable sin tocar el entorno.
 
+// `Uint8Array<ArrayBuffer>` y no `Uint8Array` a secas: desde TypeScript 5.7 el
+// tipo es genérico sobre `ArrayBufferLike`, y WebCrypto exige que los bytes
+// estén respaldados por un `ArrayBuffer` de verdad, nunca por `SharedArrayBuffer`.
 export type SecretoCifrado = {
-  cifrado: Uint8Array;
-  iv: Uint8Array;
-  tag: Uint8Array;
+  cifrado: Uint8Array<ArrayBuffer>;
+  iv: Uint8Array<ArrayBuffer>;
+  tag: Uint8Array<ArrayBuffer>;
 };
 
 const LONGITUD_IV = 12; // recomendado para GCM
 const LONGITUD_TAG = 16; // 128 bits
 
-function aBytes(base64: string): Uint8Array {
+function aBytes(base64: string): Uint8Array<ArrayBuffer> {
   const binario = atob(base64);
-  const bytes = new Uint8Array(binario.length);
+  const bytes = new Uint8Array(new ArrayBuffer(binario.length));
   for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
   return bytes;
 }
