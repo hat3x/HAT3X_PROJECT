@@ -229,11 +229,13 @@ export function AppSidebar({
 
   const accountSection = (compact: boolean): React.ReactElement => (
     <div className="shrink-0 space-y-1 border-t border-border/70 px-3 py-3">
-      {/* Fila: rol + theme toggle (plegado: solo el theme toggle, centrado) */}
+      {/* Fila: rol + theme toggle. Plegado: sin padding lateral (el rail solo
+          tiene ~72px) y el conmutador en VERTICAL (iconos apilados) para que
+          quepa dentro de la barra en vez de sobresalir. */}
       <div
         className={cn(
-          "flex items-center px-3 py-1.5",
-          compact ? "justify-center" : "justify-between",
+          "flex items-center py-1.5",
+          compact ? "justify-center px-0" : "justify-between px-3",
         )}
       >
         {role !== null && !compact ? (
@@ -246,7 +248,7 @@ export function AppSidebar({
         ) : !compact ? (
           <span />
         ) : null}
-        <ThemeToggle />
+        <ThemeToggle className={cn(compact && "flex-col")} />
       </div>
 
       {/* Cierre de sesión */}
