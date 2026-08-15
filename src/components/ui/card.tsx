@@ -9,10 +9,10 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      // Radio generoso (rounded-xl), borde fino y sombra difusa. La transición
-      // de sombra (200ms) hace que cualquier elevación al hover que añada el
-      // consumidor (p. ej. hover:shadow-md) se sienta fluida.
-      "rounded-xl border border-border/70 bg-card text-card-foreground shadow-sm transition-shadow duration-200 ease-apple-out",
+      // Liquid Glass: panel translúcido con blur (cristal-panel) sobre la aurora,
+      // radio generoso y transición de sombra suave. Para datos muy densos que
+      // necesiten opacidad total, el consumidor puede añadir `cristal-densa`.
+      "cristal-panel rounded-xl text-card-foreground transition-shadow duration-200 ease-apple-out",
       className,
     )}
     {...props}

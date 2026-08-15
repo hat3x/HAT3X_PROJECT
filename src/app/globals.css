@@ -94,6 +94,7 @@
        letra pequeña. La aurora deriva de --brand, así el white-label del
        tenant tiñe también el ambiente automáticamente. */
     --glass-bg: hsl(0 0% 100% / 0.62);
+    --glass-panel: hsl(40 40% 99.5% / 0.72);
     --glass-bg-dense: hsl(40 40% 99.5% / 0.86);
     --glass-border: hsl(0 0% 100% / 0.9);
     --glass-shadow: 0 8px 30px -6px hsl(var(--shadow-color) / 0.16);
@@ -169,6 +170,7 @@
 
     /* ---- Liquid Glass + Aurora (oscuro): cristal más tenue, aurora más viva ---- */
     --glass-bg: hsl(0 0% 100% / 0.06);
+    --glass-panel: hsl(var(--card) / 0.5);
     --glass-bg-dense: hsl(var(--card) / 0.9);
     --glass-border: hsl(0 0% 100% / 0.12);
     --glass-shadow: 0 10px 34px -6px hsl(0 0% 0% / 0.5);
@@ -267,6 +269,16 @@
   }
   .cristal-densa {
     background: var(--glass-bg-dense);
+  }
+
+  /* Panel de contenido: cristal más DEFINIDO que el rail (para tarjetas,
+     modales y formularios) — translúcido pero legible, deja ver la aurora. */
+  .cristal-panel {
+    background: var(--glass-panel);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
   }
 
   /* Aurora: dos glows difuminados (derivados de --brand) detrás del contenido.
