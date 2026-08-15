@@ -3,26 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronsLeft, ChevronsRight, LogOut, Menu, User, X } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, LogOut, Menu, Monitor, Moon, Sun, X } from "lucide-react";
 
-import type { MemberRole } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { KairosMark } from "@/components/brand/kairos-mark";
 import { buildDashboardNavItems, type NavItem } from "@/components/dashboard-nav-items";
 import { useHasPos } from "@/components/providers/salon-features-provider";
 import { useSector } from "@/components/providers/sector-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
-
-const ROLE_LABEL: Record<MemberRole, string> = {
-  owner: "Propietario",
-  manager: "Gestor",
-  staff: "Personal",
-};
+import { useTheme, type Theme } from "@/components/providers/theme-provider";
+import type { MemberRole } from "@/types/database";
 
 /** Clave de localStorage para recordar si el rail está plegado entre sesiones. */
 const COLLAPSE_STORAGE_KEY = "kairos:nav-collapsed";
 
-/** Secciones de gestión → se anclan abajo del rail (como el mockup: analítica/ajustes al pie). */
+/** Secciones de gestión (owner/manager) → grupo final, separado por un divisor. */
 const MANAGEMENT_HREFS = new Set(["/analitica", "/facturacion", "/arqueo", "/ajustes"]);
 /** Secciones clínicas (odontología) → grupo propio, separado por un divisor. */
 const CLINICAL_HREFS = new Set([
@@ -49,23 +43,28 @@ function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-// Clases base compartidas entre desktop y drawer.
+/** Ciclo del conmutador de tema (temporal en el rail; el selector completo irá a Ajustes). */
+const THEME_CYCLE: Record<Theme, Theme> = { light: "dark", dark: "system", system: "light" };
+const THEME_META: Record<Theme, { label: string; icon: typeof Sun }> = {
+  light: { label: "Claro", icon: Sun },
+  dark: { label: "Oscuro", icon: Moon },
+  system: { label: "Sistema", icon: Monitor },
+};
+
+// Clase base de TODO botón/enlace del rail — misma altura, padding y radio,
+// para que la separación entre iconos sea idéntica en todo el rail.
 const NAV_ITEM_BASE =
   "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-apple-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
-// Estado activo con los tokens que el white-label del tenant SÍ sobrescribe
-// (--accent/--accent-foreground): así el color de marca del salón tiñe el acento.
+// Estado activo con tokens que el white-label SÍ sobrescribe → la marca del salón tiñe el acento.
 const NAV_ITEM_ACTIVE = "bg-accent text-accent-foreground shadow-xs";
 const NAV_ITEM_IDLE = "text-muted-foreground hover:bg-accent/60 hover:text-foreground";
 
 interface AppSidebarProps {
   /** Nombre del salón activo; cae a "Kairos" si no hay uno resuelto. */
   brandName: string | null;
-  /**
-   * URL pública del logo del salón (white-label). Si existe, sustituye a la
-   * marca genérica; si es `null`, se muestra el fallback con icono + nombre.
-   */
+  /** URL pública del logo del salón (white-label). Si es `null`, se usa el fallback con marca. */
   logoUrl?: string | null;
-  /** Rol del usuario, para mostrar un descriptor discreto en la sección de cuenta. */
+  /** Rol del usuario (reservado; el descriptor de cuenta se mostrará en Ajustes). */
   role: MemberRole | null;
   /** Si el usuario puede ver la sección de ajustes (owner/manager). */
   showSettings: boolean;
@@ -75,26 +74,23 @@ interface AppSidebarProps {
  * Sidebar de navegación principal — rail "Liquid Glass" estilo Atlas.
  *
  * - **Escritorio (lg+):** rail lateral en cristal (`sticky top-0 h-screen`) con
- *   la marca arriba, ítems de nav agrupados (operativa · clínica · gestión) con
- *   pastilla de activo + indicador de acento, y bloque de cuenta abajo. Por
- *   defecto se muestra PLEGADO (solo iconos con tooltip), y puede expandirse a
- *   etiquetas con el botón inferior; la preferencia se recuerda en `localStorage`.
- * - **Móvil (< lg):** cabecera sticky con hamburguesa + drawer con el mismo
- *   contenido SIEMPRE completo (el plegado solo aplica a desktop).
+ *   la marca arriba, UNA lista de secciones en su orden natural (con divisores
+ *   entre grupos operativa · clínica · gestión) y un pie uniforme (plegar ·
+ *   tema · salir). Por defecto PLEGADO (iconos con tooltip), expandible a
+ *   etiquetas; la preferencia se recuerda en `localStorage`.
+ * - **Móvil (< lg):** cabecera sticky + drawer con el mismo contenido completo.
  *
- * La selección de tema/paleta se trasladará a Ajustes (fase siguiente); de
- * momento el conmutador de tema vive en el pie del rail para no perder el
- * cambio claro/oscuro.
+ * El conmutador de tema es temporal aquí (un botón que cicla claro/oscuro/
+ * sistema); el selector de tema + paleta se trasladará a Ajustes.
  */
 export function AppSidebar({
   brandName,
   logoUrl,
-  role,
   showSettings,
 }: AppSidebarProps): React.ReactElement {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  // Por defecto PLEGADO (el rail de iconos que el usuario aprobó); expandible.
+  // Por defecto PLEGADO (el rail de iconos aprobado); expandible.
   const [collapsed, setCollapsed] = useState(true);
   // Habilita la transición de ancho SOLO tras el primer pintado (sin animación al cargar).
   const [mounted, setMounted] = useState(false);
@@ -102,12 +98,15 @@ export function AppSidebar({
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const hasPos = useHasPos();
   const sector = useSector();
+  const { theme, setTheme } = useTheme();
 
   const items = buildDashboardNavItems({ showSettings, hasPos, sector });
-  const mainItems = items.filter((item) => groupOf(item.href) !== "gestion");
-  const managementItems = items.filter((item) => groupOf(item.href) === "gestion");
   const brand = brandName?.trim() ? brandName : "Kairos";
   const logo = logoUrl?.trim() ? logoUrl : null;
+
+  // Antes de montar, un placeholder neutro (evita desajuste de hidratación con el tema real).
+  const themeMeta = mounted ? THEME_META[theme] : THEME_META.system;
+  const ThemeIcon = themeMeta.icon;
 
   // Cierra el drawer móvil al cambiar de ruta (navegación completada).
   useEffect(() => {
@@ -232,7 +231,6 @@ export function AppSidebar({
           compact && "justify-center gap-0 px-0",
         )}
       >
-        {/* Indicador de acento a la izquierda cuando está activo */}
         {active ? (
           <span
             aria-hidden="true"
@@ -245,18 +243,18 @@ export function AppSidebar({
     );
   };
 
-  /** Lista de nav con un divisor cada vez que cambia el grupo (operativa|clínica). */
-  const navList = (list: NavItem[], compact: boolean): React.ReactElement => {
+  /** Lista de nav COMPLETA en orden natural, con un divisor al cambiar de grupo. */
+  const navList = (compact: boolean): React.ReactElement => {
     const rendered: React.ReactElement[] = [];
     let prevGroup: NavGroup | null = null;
-    for (const item of list) {
+    for (const item of items) {
       const group = groupOf(item.href);
       if (prevGroup !== null && group !== prevGroup) {
         rendered.push(
           <div
             key={`div-${item.href}`}
             role="separator"
-            className={cn("my-2 h-px bg-border/70", compact ? "mx-3" : "mx-2")}
+            className="mx-2 my-1.5 h-px bg-border/60"
           />,
         );
       }
@@ -266,43 +264,43 @@ export function AppSidebar({
     return (
       <nav
         aria-label="Secciones del panel"
-        className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2"
+        className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-3"
       >
         {rendered}
       </nav>
     );
   };
 
-  const footerBlock = (compact: boolean): React.ReactElement => (
-    <div className="shrink-0 space-y-1 border-t border-border/70 px-3 py-3">
-      {/* Gestión (analítica · facturación · arqueo · ajustes), anclada al pie */}
-      {managementItems.length > 0 ? (
-        <div className="mb-1 flex flex-col gap-0.5">
-          {managementItems.map((item) => navLink(item, compact))}
-        </div>
+  // Pie uniforme: plegar (solo desktop) · tema · salir — TODOS con NAV_ITEM_BASE.
+  const footer = (compact: boolean, withCollapse: boolean): React.ReactElement => (
+    <div className="flex shrink-0 flex-col gap-1 border-t border-border/70 px-3 py-3">
+      {withCollapse ? (
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label={compact ? "Desplegar menú" : "Plegar menú"}
+          title={compact ? "Desplegar menú" : "Plegar menú"}
+          className={cn(NAV_ITEM_BASE, NAV_ITEM_IDLE, compact && "justify-center gap-0 px-0")}
+        >
+          {compact ? (
+            <ChevronsRight className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronsLeft className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
+          )}
+          <span className={cn(compact && "sr-only")}>Plegar menú</span>
+        </button>
       ) : null}
 
-      {/* Rol + conmutador de tema (el selector de paleta vivirá en Ajustes) */}
-      <div
-        className={cn(
-          "flex items-center py-1.5",
-          compact ? "justify-center px-0" : "justify-between px-3",
-        )}
+      <button
+        type="button"
+        onClick={() => setTheme(THEME_CYCLE[theme])}
+        title={`Tema: ${themeMeta.label}`}
+        className={cn(NAV_ITEM_BASE, NAV_ITEM_IDLE, compact && "justify-center gap-0 px-0")}
       >
-        {role !== null && !compact ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="truncate text-xs font-medium text-muted-foreground">
-              {ROLE_LABEL[role]}
-            </span>
-          </div>
-        ) : !compact ? (
-          <span />
-        ) : null}
-        <ThemeToggle className={cn(compact && "flex-col")} />
-      </div>
+        <ThemeIcon className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
+        <span className={cn(compact && "sr-only")}>Tema · {themeMeta.label}</span>
+      </button>
 
-      {/* Cierre de sesión */}
       <form action="/auth/signout" method="post">
         <button
           type="submit"
@@ -335,28 +333,8 @@ export function AppSidebar({
           {brandLink(collapsed)}
         </div>
 
-        {navList(mainItems, collapsed)}
-
-        {/* Botón de plegar/desplegar el rail */}
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? "Desplegar menú" : "Plegar menú"}
-          title={collapsed ? "Desplegar menú" : "Plegar menú"}
-          className={cn(
-            "mx-3 mb-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors duration-200 ease-apple-out hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            collapsed && "justify-center gap-0 px-0",
-          )}
-        >
-          {collapsed ? (
-            <ChevronsRight className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
-          ) : (
-            <ChevronsLeft className="h-[22px] w-[22px] shrink-0" aria-hidden="true" />
-          )}
-          {!collapsed ? <span>Plegar menú</span> : null}
-        </button>
-
-        {footerBlock(collapsed)}
+        {navList(collapsed)}
+        {footer(collapsed, true)}
       </aside>
 
       {/* ════════════ Cabecera móvil (< lg) ════════════ */}
@@ -414,8 +392,8 @@ export function AppSidebar({
             </button>
           </div>
 
-          {navList(mainItems, false)}
-          {footerBlock(false)}
+          {navList(false)}
+          {footer(false, false)}
         </aside>
       </div>
     </>
