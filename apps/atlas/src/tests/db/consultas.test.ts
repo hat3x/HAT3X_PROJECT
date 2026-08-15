@@ -112,3 +112,33 @@ describe("capa de acceso a datos", () => {
     expect(voz!.numClientes).toBe(1);
   });
 });
+
+describe("propagación de errores", () => {
+  // Sin sesión, el rol es `anon`, que no tiene GRANT sobre ninguna tabla. La
+  // capa debe dejar salir el error en vez de tragárselo y devolver lista
+  // vacía: una pantalla vacía por un fallo de permisos es indistinguible de
+  // «no hay datos», y eso es exactamente lo que no queremos.
+  //
+  // persistSession + storageKey propio son imprescindibles: por defecto el
+  // cliente guarda la sesión en localStorage, que en jsdom es compartido, y
+  // este cliente heredaría la sesión del propietario sin que se note.
+  const anonimo = createClient<Database>(URL_API, ANON, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      storageKey: "atlas-test-sin-sesion",
+    },
+  });
+
+  it("listarClientes propaga el error en lugar de devolver lista vacía", async () => {
+    await expect(listarClientes(anonimo)).rejects.toThrow();
+  });
+
+  it("obtenerCliente propaga el error", async () => {
+    await expect(obtenerCliente(anonimo, "dental-demo")).rejects.toThrow();
+  });
+
+  it("listarProyectos propaga el error", async () => {
+    await expect(listarProyectos(anonimo)).rejects.toThrow();
+  });
+});
