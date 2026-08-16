@@ -8,6 +8,25 @@ import { Portada } from "@/components/proyectos/Portada";
 import { Distintivo } from "@/components/ui/Distintivo";
 import { FormServicio } from "@/components/proyectos/FormServicio";
 import { FormContrato } from "@/components/proyectos/FormContrato";
+import { formatearUptime } from "@/lib/uptime/calcular";
+import type { EstadoCheck } from "@/lib/incidencias/maquina";
+import type { EstadoVisual } from "@/components/ui/Distintivo";
+
+const TEXTO_ESTADO: Record<EstadoCheck, string> = {
+  ok: "Operativo",
+  degradado: "Degradado",
+  caido: "Caído",
+  desconocido: "Sin datos",
+};
+
+// El distintivo habla de colores y el motor de estados. `degradado` se pinta
+// como aviso: no es una caída, pero tampoco es «todo bien».
+const COLOR_ESTADO: Record<EstadoCheck, EstadoVisual> = {
+  ok: "ok",
+  degradado: "aviso",
+  caido: "caido",
+  desconocido: "desconocido",
+};
 
 const EUROS = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 
@@ -88,12 +107,29 @@ export default async function FichaProyecto({
                   key={s.id}
                   className="flex flex-wrap items-center gap-3 py-2.5 text-sm"
                 >
-                  {/* El estado real llega con el motor de vigilancia (plan 1B).
-                      Hasta entonces no se inventa un «operativo» que nadie ha
-                      comprobado. */}
-                  <Distintivo estado="desconocido" texto="Sin datos" />
+                  <Distintivo
+                    estado={COLOR_ESTADO[s.estado]}
+                    texto={TEXTO_ESTADO[s.estado]}
+                  />
                   <span className="font-medium">{s.nombre}</span>
                   <span style={{ color: "var(--texto-tenue)" }}>{s.tipo}</span>
+                  {s.uptime30d !== null && (
+                    <span
+                      className="text-xs tabular-nums"
+                      style={{ color: "var(--texto-tenue)" }}
+                      title="Uptime de los últimos 30 días"
+                    >
+                      {formatearUptime(s.uptime30d)}
+                    </span>
+                  )}
+                  {s.ultimoError && (
+                    <span
+                      className="truncate text-xs"
+                      style={{ color: "var(--estado-caido)" }}
+                    >
+                      {s.ultimoError}
+                    </span>
+                  )}
                   {s.clienteNombre && (
                     <span className="cristal-denso ml-auto rounded-full px-2 py-0.5 text-[11px]">
                       {s.clienteNombre}

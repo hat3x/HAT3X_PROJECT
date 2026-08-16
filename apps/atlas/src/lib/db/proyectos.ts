@@ -1,5 +1,7 @@
 import type { Sb } from "./clientes";
 import { obtenerPerfil } from "./perfil";
+import { estadoDeServicios } from "./servicios-estado";
+import type { EstadoCheck } from "@/lib/incidencias/maquina";
 
 export type ProyectoResumen = {
   id: string;
@@ -49,6 +51,10 @@ export type ServicioResumen = {
   /** null = el servicio es del proyecto, sin dueño comercial concreto. */
   clienteNombre: string | null;
   activo: boolean;
+  /** Lo que dice el motor de vigilancia. Sin checks, «desconocido». */
+  estado: EstadoCheck;
+  uptime30d: number | null;
+  ultimoError: string | null;
 };
 
 export type ContratoDeProyecto = {
@@ -105,6 +111,13 @@ export async function obtenerProyecto(
   if (enlaces.error) throw enlaces.error;
   if (contratos.error) throw contratos.error;
 
+  // Va después y no dentro del Promise.all porque necesita los ids de los
+  // servicios que devuelve la consulta anterior.
+  const estados = await estadoDeServicios(
+    sb,
+    (servicios.data ?? []).map((s) => s.id)
+  );
+
   // Supabase genera TODAS las columnas de una vista como anulables: PostgREST
   // no puede inferir nulabilidad a través de una vista, aunque en la tabla de
   // origen sean NOT NULL. Se filtra en lugar de forzar el tipo, para no mentirle
@@ -128,14 +141,22 @@ export async function obtenerProyecto(
     numClientes: new Set(
       lista.filter((ct) => ct.estado === "activo").map((ct) => ct.clientes?.nombre)
     ).size,
-    servicios: (servicios.data ?? []).map((s) => ({
-      id: s.id,
-      nombre: s.nombre,
-      tipo: s.tipo,
-      proveedor: s.proveedor,
-      activo: s.activo,
-      clienteNombre: s.clientes?.nombre ?? null,
-    })),
+    servicios: (servicios.data ?? []).map((s) => {
+      // Sin checks dados de alta, el servicio queda en «desconocido»: es lo
+      // honesto. Atlas no dice «operativo» de algo que no ha mirado nunca.
+      const vigilancia = estados.get(s.id);
+      return {
+        id: s.id,
+        nombre: s.nombre,
+        tipo: s.tipo,
+        proveedor: s.proveedor,
+        activo: s.activo,
+        clienteNombre: s.clientes?.nombre ?? null,
+        estado: vigilancia?.estado ?? ("desconocido" as EstadoCheck),
+        uptime30d: vigilancia?.uptime30d ?? null,
+        ultimoError: vigilancia?.ultimoError ?? null,
+      };
+    }),
     enlaces: (enlaces.data ?? []).map((e) => ({
       id: e.id,
       etiqueta: e.etiqueta,
