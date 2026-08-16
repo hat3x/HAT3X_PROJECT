@@ -51,7 +51,7 @@ npm install
 cp .env.example .env.local     # y rellenar — ver la sección siguiente
 npx supabase start
 npx supabase migration up --local
-npm run dev                    # http://localhost:3000
+npm run dev                    # http://localhost:3010
 ```
 
 > **Nunca `npx supabase db reset`.** No hay `seed.sql`: un reset borra los clientes y proyectos dados de alta a mano. Para aplicar migraciones, siempre `migration up`.
@@ -89,7 +89,7 @@ Están todas en [`.env.example`](./.env.example) con su explicación. Las tres q
 
 | Comando | Qué hace |
 |---|---|
-| `npm run dev` | Servidor de desarrollo en el 3000 |
+| `npm run dev` | Servidor de desarrollo en el 3010 |
 | `npm test` | Toda la batería |
 | `npm run test:coverage` | Con cobertura; el umbral es 80 % y falla por debajo |
 | `npm run typecheck` | `tsc --noEmit` |

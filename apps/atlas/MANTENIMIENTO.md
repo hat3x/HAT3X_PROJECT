@@ -12,7 +12,7 @@ Un fallo en Atlas casi nunca está donde parece. El orden que ahorra tiempo:
 
 ```bash
 npx supabase status                                              # ¿está la base viva?
-curl -s localhost:3000/login -o /dev/null -w '%{http_code}\n'    # ¿está la app?
+curl -s localhost:3010/login -o /dev/null -w '%{http_code}\n'    # ¿está la app?
 ```
 
 ```sql
@@ -105,13 +105,47 @@ En local la URL es la de dentro de Docker: `http://kong:8000/functions/v1`. Y la
 
 ---
 
+## «De repente varias páginas dan 404 o ChunkLoadError»
+
+Si la app funcionaba y de golpe unas rutas cargan y otras no —con
+`ChunkLoadError: Loading chunk app/<algo>/page failed` al navegar entre ellas—
+**no busques el fallo en el código**. Casi seguro que el `.next` del servidor de
+desarrollo se ha quedado desincronizado con el disco. Dos formas de provocarlo:
+
+1. **`npm run build` con `npm run dev` corriendo.** Comparten el directorio
+   `.next`: el build lo borra y lo reescribe con artefactos de producción, y el
+   servidor de desarrollo se queda con un manifiesto en memoria que apunta a
+   ficheros que ya no existen. Las rutas que tenía cacheadas siguen sirviendo y
+   el resto da 404, que es lo que hace ese cuadro de síntomas tan desconcertante.
+2. **Dos servidores de desarrollo a la vez** sobre el mismo `.next`, aunque estén
+   en puertos distintos. Se pisan escribiendo. Por eso el script `dev` fija el
+   puerto 3010: para que arrancarlo dos veces choque en vez de duplicarse en
+   silencio.
+
+Se arregla parando **todo** y empezando limpio:
+
+```bash
+# parar todos los next dev, y luego:
+rm -rf .next
+npm run dev
+```
+
+Para comprobar que ha quedado bien, el síntoma se ve mirando si algún `<script>`
+del HTML da 404 — eso, y no otra cosa, es lo que el navegador convierte en
+`ChunkLoadError`.
+
+Y la regla que lo evita: **para el servidor antes de hacer un build**, y vuelve a
+levantarlo después.
+
+---
+
 ## «La app no se instala» / no sale el botón
 
 Casi siempre es que el guardia intercepta el manifiesto o el service worker:
 
 ```bash
-curl -o /dev/null -w '%{http_code} %{content_type}\n' localhost:3000/manifest.webmanifest
-curl -o /dev/null -w '%{http_code} %{content_type}\n' localhost:3000/sw.js
+curl -o /dev/null -w '%{http_code} %{content_type}\n' localhost:3010/manifest.webmanifest
+curl -o /dev/null -w '%{http_code} %{content_type}\n' localhost:3010/sw.js
 ```
 
 Los dos tienen que dar **200**. Un **307** significa que el `matcher` de `src/middleware.ts` ya no los excluye. Lo vigila `src/tests/pwa/instalable.test.ts`.
@@ -154,7 +188,7 @@ select atlas_consolidar_retencion();
 
 ## Al tocar el código
 
-- **`npm run build` antes de dar nada por terminado.** Los tests y `tsc` en verde no bastan: una función de servidor sin `async` en un módulo `"use server"` solo la caza el build.
+- **`npm run build` antes de dar nada por terminado.** Los tests y `tsc` en verde no bastan: una función de servidor sin `async` en un módulo `"use server"` solo la caza el build. **Pero para el servidor de desarrollo antes** — comparten `.next` y el build se lo deja inservible.
 - **Si tocas lógica compartida con las Edge Functions, vuelve a copiarla.** `copias.test.ts` falla si divergen aunque sea un byte. Las cinco copias son `maquina`, `evaluar`, `agrupar`, `firma` y `pendientes`.
 - **Migraciones con `npx supabase migration up --local`.** **Nunca `db reset`** — no hay `seed.sql` y borra los datos dados de alta a mano.
 - **Una migración aplicada no se edita.** Se corrige con otra encima.
