@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Palette, KeyRound, Users } from "lucide-react";
+import { Palette, KeyRound, Users, BellRing } from "lucide-react";
 import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 
@@ -11,6 +11,13 @@ const SECCIONES = [
     titulo: "Apariencia",
     descripcion: "Tema claro u oscuro y cinco paletas de cristal.",
     Icono: Palette,
+    soloPropietario: false,
+  },
+  {
+    href: "/ajustes/notificaciones",
+    titulo: "Notificaciones",
+    descripcion: "Dispositivos donde quieres recibir los avisos.",
+    Icono: BellRing,
     soloPropietario: false,
   },
   {
