@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
-import { validarApariencia, escribirApariencia, obtenerPerfil } from "@/lib/db/perfil";
+import {
+  validarApariencia,
+  escribirApariencia,
+  obtenerPerfil,
+  validarVista,
+  escribirVista,
+} from "@/lib/db/perfil";
 import { PALETAS } from "@/lib/tema/tokens";
 import type { Database } from "@/types/supabase";
 
@@ -113,5 +119,38 @@ describe("escritura de apariencia", () => {
     const perfil = await obtenerPerfil(sb);
     // Sigue con lo último válido: el rechazo no ha tocado la fila.
     expect(perfil?.paleta).toBe("oceano");
+  });
+});
+
+describe("vista del Resumen", () => {
+  it("acepta las tres vistas", () => {
+    for (const v of ["control", "lista", "oficina"]) {
+      expect(validarVista(v).ok, v).toBe(true);
+    }
+  });
+
+  it("rechaza cualquier otra", () => {
+    const r = validarVista("galeria");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/vista/i);
+    expect(validarVista("").ok).toBe(false);
+  });
+
+  it("empieza en «control», que es la sala de control", async () => {
+    expect((await obtenerPerfil(sb))?.vista).toBe("control");
+  });
+
+  it("guarda la vista elegida y se lee de vuelta", async () => {
+    expect((await escribirVista(sb, "lista")).ok).toBe(true);
+    expect((await obtenerPerfil(sb))?.vista).toBe("lista");
+
+    expect((await escribirVista(sb, "oficina")).ok).toBe(true);
+    expect((await obtenerPerfil(sb))?.vista).toBe("oficina");
+  });
+
+  it("una vista inventada no toca la fila", async () => {
+    await escribirVista(sb, "control");
+    expect((await escribirVista(sb, "galeria")).ok).toBe(false);
+    expect((await obtenerPerfil(sb))?.vista).toBe("control");
   });
 });

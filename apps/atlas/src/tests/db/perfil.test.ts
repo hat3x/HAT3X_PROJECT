@@ -58,12 +58,15 @@ afterAll(async () => {
 describe("perfil", () => {
   it("devuelve nombre, condición de propietario y preferencias visuales", async () => {
     const p = await obtenerPerfil(sb);
+    // Forma exacta a propósito: si alguien añade el correo al perfil, este test
+    // tiene que fallar y obligar a pensárselo.
     expect(p).toEqual({
       id,
       nombre: "Jose",
       esPropietario: true,
       tema: "claro",
       paleta: "oceano",
+      vista: "control",
     });
   });
 

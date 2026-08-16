@@ -607,6 +607,7 @@ export type Database = {
           nombre: string | null
           paleta: string
           tema: string
+          vista_resumen: string
         }
         Insert: {
           avatar_url?: string | null
@@ -616,6 +617,7 @@ export type Database = {
           nombre?: string | null
           paleta?: string
           tema?: string
+          vista_resumen?: string
         }
         Update: {
           avatar_url?: string | null
@@ -625,6 +627,7 @@ export type Database = {
           nombre?: string | null
           paleta?: string
           tema?: string
+          vista_resumen?: string
         }
         Relationships: []
       }
@@ -903,8 +906,11 @@ export type Database = {
       }
     }
     Functions: {
+      atlas_consolidar_retencion: { Args: never; Returns: undefined }
+      atlas_disparar_vigia: { Args: never; Returns: undefined }
       atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
       atlas_es_propietario: { Args: never; Returns: boolean }
+      atlas_ve_cliente: { Args: { c: string }; Returns: boolean }
       atlas_ve_proyecto: { Args: { p: string }; Returns: boolean }
     }
     Enums: {
