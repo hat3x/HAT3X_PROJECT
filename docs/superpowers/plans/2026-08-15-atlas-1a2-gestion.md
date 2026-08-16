@@ -1667,6 +1667,27 @@ git add src/lib/db/acciones-proyecto.ts src/tests/db/acciones-proyecto.test.ts
 git commit -m "feat(atlas): alta de contratos y servicios con validacion"
 ```
 
+### ✅ EJECUTADA — commit `15272c7`
+
+111 tests en total (23 nuevos), typecheck y `next build` limpios.
+
+**Hueco del plan, corregido:** la lista de ficheros incluía
+`FormServicio.tsx` pero **ningún paso lo definía**, y el paso 5 ni siquiera
+lo commiteaba. Ejecutado al pie de la letra, este plan dejaba dos acciones
+de servidor sin nada que las llamase. Se ha escrito la interfaz.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | Se escriben `FormServicio.tsx` y además `FormContrato.tsx` | El plan solo nombraba el primero, pero la tarea se llama «alta de contratos **y** servicios». Sin el segundo, `guardarContrato` nacía muerto. |
+| 2 | Se extrae `components/ui/Campo.tsx` | Lo usan los dos formularios. El `htmlFor` es lo que permite localizar los campos por su etiqueta visible en los tests, en vez de por clase CSS. |
+| 3 | Nuevo token `--entrada-fondo` y clase `.entrada` en `globals.css` | No había ningún estilo de campo de formulario: eran los primeros de Atlas. Sin cristal a propósito — el desenfoque bajo un campo editable estorba al leer lo que escribes. |
+| 4 | `FormContrato` se monta solo si `esPropietario` | La acción ya lo rechaza, pero enseñar un formulario que siempre va a fallar es una trampa. |
+| 5 | La fecha de alta por defecto se calcula en hora **local**, no con `toISOString()` | En España, un alta creada a la una de la madrugada se guardaría con la fecha del día anterior. Se calcula al abrir el formulario, no al renderizar, para que servidor y navegador no discrepen. |
+| 6 | 23 tests en vez de los 10 del plan | El plan no probaba los estados del contrato pese a validarlos. Añadidos además `2026-02-31` como fecha imposible, la baja mal formada, y los 11 del comportamiento de los formularios. |
+
+**Pendiente que este plan no cubre:** `guardarCliente` (Tarea 11) sigue sin
+ninguna interfaz que la llame. Ninguna tarea posterior la construye.
+
 ---
 
 ## Tarea 14: Ajustes — el llavero
