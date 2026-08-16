@@ -122,20 +122,32 @@ desarrollo se ha quedado desincronizado con el disco. Dos formas de provocarlo:
    puerto 3010: para que arrancarlo dos veces choque en vez de duplicarse en
    silencio.
 
+El mecanismo, por si ayuda a reconocerlo: al arrancar, cada `next dev` borra
+`.next` entero. Los demás compiladores no se enteran, y cuando les toca reemitir
+un chunk, webpack mira su contabilidad **en memoria**, ve que ya lo escribió una
+vez, crea el directorio de salida y sale sin escribir el fichero. Por eso el
+rastro es tan característico: `.next/static/chunks/app/<ruta>/` **existe y está
+vacío**. Y por eso las rutas afectadas **cambian en cada arranque** — la que se
+salva es la que se recompila primero.
+
 Se arregla parando **todo** y empezando limpio:
 
 ```bash
-# parar todos los next dev, y luego:
-rm -rf .next
+# parar TODOS los next dev, padres e hijos, y luego:
+rm -rf .next          # entero, no solo .next/cache
 npm run dev
 ```
 
-Para comprobar que ha quedado bien, el síntoma se ve mirando si algún `<script>`
-del HTML da 404 — eso, y no otra cosa, es lo que el navegador convierte en
-`ChunkLoadError`.
+Comprueba con `npm run humo`, que es justo lo que caza este fallo: mira si algún
+`<script>` del HTML da 404 — eso, y no otra cosa, es lo que el navegador
+convierte en `ChunkLoadError`.
 
-Y la regla que lo evita: **para el servidor antes de hacer un build**, y vuelve a
-levantarlo después.
+Si el navegador sigue enseñando la versión rota, es la caché de la PWA:
+DevTools → Application → Service Workers → *Unregister*, y Storage → *Clear site
+data*. Después, Ctrl+F5.
+
+Y las dos reglas que lo evitan: **para el servidor antes de hacer un build**, y
+no dejes nunca dos `next dev` vivos a la vez.
 
 ---
 

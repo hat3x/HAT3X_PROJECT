@@ -91,6 +91,7 @@ Están todas en [`.env.example`](./.env.example) con su explicación. Las tres q
 |---|---|
 | `npm run dev` | Servidor de desarrollo en el 3010 |
 | `npm test` | Toda la batería |
+| `npm run humo` | Abre la app **de verdad** con sesión y segundo factor, y comprueba que cada pantalla responde, trae datos y no pide ningún script que dé 404. Lo que la batería no puede ver |
 | `npm run test:coverage` | Con cobertura; el umbral es 80 % y falla por debajo |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run build` | Build de producción. **Correlo antes de dar nada por terminado**: hay errores que solo salen aquí |

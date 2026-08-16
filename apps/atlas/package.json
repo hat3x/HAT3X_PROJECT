@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "humo": "node scripts/humo.mjs",
     "e2e": "playwright test",
     "iconos": "node scripts/iconos.mjs",
     "tipos": "supabase gen types typescript --local > src/types/supabase.ts",
