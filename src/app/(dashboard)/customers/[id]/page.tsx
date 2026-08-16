@@ -6,6 +6,7 @@ import {
   activeSalonHasFeature,
   getActiveSalonId,
   getActiveSalonSector,
+  getSessionUser,
 } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,11 +34,7 @@ export async function generateMetadata({
 export default async function CustomerDetailPage({
   params,
 }: CustomerDetailPageProps): Promise<React.ReactElement> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getSessionUser();
   if (user === null) {
     redirect("/login");
   }
@@ -47,6 +44,7 @@ export default async function CustomerDetailPage({
     notFound();
   }
 
+  const supabase = createClient();
   const { data: customer, error } = await supabase
     .from("customers")
     .select("*")

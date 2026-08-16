@@ -1,6 +1,5 @@
 import { SalonBrandStyle } from "@/components/branding/salon-brand-theme";
 import { AppSidebar } from "@/components/app-sidebar";
-import { QueryProvider } from "@/components/providers/query-provider";
 import { SalonFeaturesProvider } from "@/components/providers/salon-features-provider";
 import { SectorProvider } from "@/components/providers/sector-provider";
 import {
@@ -43,7 +42,7 @@ export default async function DashboardLayout({
   const sector = salon?.sector ?? "peluqueria";
 
   return (
-    <QueryProvider>
+    <>
       <SalonBrandStyle branding={branding} sector={sector} />
       <SalonFeaturesProvider flags={featureFlags}>
         <SectorProvider sector={sector}>
@@ -64,6 +63,6 @@ export default async function DashboardLayout({
           </div>
         </SectorProvider>
       </SalonFeaturesProvider>
-    </QueryProvider>
+    </>
   );
 }

@@ -21,7 +21,7 @@ import {
   CustomersSplitChart,
   PaymentMethodChart,
   SalesTrendChart,
-} from "@/app/(dashboard)/analitica/analitica-charts";
+} from "@/app/(dashboard)/analitica/analitica-charts-lazy";
 import { FeatureGateNotice } from "@/components/feature-gate-notice";
 import {
   Card,
