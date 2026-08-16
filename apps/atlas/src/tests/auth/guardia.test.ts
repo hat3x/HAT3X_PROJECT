@@ -57,3 +57,28 @@ describe("guardia de acceso", () => {
     expect(decidirRuta(factorPendiente, "/ajustes/credenciales")).toBe("/verificar");
   });
 });
+
+describe("rutas que el guardia no toca", () => {
+  // El enlace de silenciar se pulsa desde una notificación del sistema, a veces
+  // con la app cerrada y siempre sin sesión. Si el guardia lo manda a /login, el
+  // botón de la notificación no sirve de nada. Su autorización es la firma.
+  it("silenciar funciona sin sesión", () => {
+    expect(decidirRuta(sinSesion, "/api/silenciar")).toBeNull();
+  });
+
+  it("y también con la sesión a medias", () => {
+    expect(decidirRuta(sinFactor, "/api/silenciar")).toBeNull();
+    expect(decidirRuta(factorPendiente, "/api/silenciar")).toBeNull();
+  });
+
+  // Con sesión tampoco puede rebotar a «/», que es lo que les pasa a las
+  // pantallas de entrada: no es una pantalla, es un endpoint.
+  it("y con la sesión completa tampoco rebota a la portada", () => {
+    expect(decidirRuta(dentro, "/api/silenciar")).toBeNull();
+  });
+
+  // Que sea pública no abre todo /api: mañana habrá endpoints que sí exijan sesión.
+  it("no abre el resto de /api por el camino", () => {
+    expect(decidirRuta(sinSesion, "/api/otra-cosa")).toBe("/login");
+  });
+});

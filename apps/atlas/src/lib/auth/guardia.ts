@@ -14,10 +14,22 @@ export type EstadoSesion = {
 
 export const RUTAS_ABIERTAS = ["/login", "/alta-2fa", "/verificar"] as const;
 
-export function decidirRuta(
-  estado: EstadoSesion,
-  rutaActual: string
-): string | null {
+/**
+ * Rutas que el guardia NO toca, ni con sesión ni sin ella.
+ *
+ * No son lo mismo que las abiertas: a una ruta abierta se llega sin sesión,
+ * pero con la sesión hecha rebota a «/» porque es una pantalla de entrada que
+ * ya no pinta nada. Estas no son pantallas, son endpoints, y rebotarlas las
+ * rompería igual en los dos casos.
+ *
+ * `/api/silenciar` se pulsa desde una notificación del sistema, a veces con la
+ * app cerrada. Su autorización es la firma del token, no la cookie.
+ */
+export const RUTAS_PUBLICAS = ["/api/silenciar"] as const;
+
+export function decidirRuta(estado: EstadoSesion, rutaActual: string): string | null {
+  if ((RUTAS_PUBLICAS as readonly string[]).includes(rutaActual)) return null;
+
   const { haySesion, nivelActual, nivelExigido } = estado;
 
   if (!haySesion) {
