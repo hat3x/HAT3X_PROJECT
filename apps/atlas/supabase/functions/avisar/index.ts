@@ -7,6 +7,7 @@
 //
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { agrupar, type SucesoAviso, type Aviso } from "./agrupar.ts";
+import { clasificar, repartirSellos, type FilaPendiente } from "./pendientes.ts";
 import { firmar } from "./firma.ts";
 import { enviarCorreo, type AvisoEnviable } from "./correo.ts";
 import { enviarPush } from "./push.ts";
@@ -20,11 +21,22 @@ type FilaIncidencia = {
   cerrada_en: string | null;
   causa: string | null;
   silenciada_hasta: string | null;
+  notificada_en: string | null;
+  recuperacion_notificada_en: string | null;
   servicios: {
     nombre: string;
     proyectos: { id: string; nombre: string; slug: string };
   };
 };
+
+const aPendiente = (i: FilaIncidencia): FilaPendiente => ({
+  id: i.id,
+  abiertaEn: i.abierta_en,
+  cerradaEn: i.cerrada_en,
+  notificadaEn: i.notificada_en,
+  recuperacionNotificadaEn: i.recuperacion_notificada_en,
+  silenciadaHasta: i.silenciada_hasta,
+});
 
 Deno.serve(async (peticion: Request) => {
   const autorizacion = peticion.headers.get("Authorization");
@@ -40,55 +52,75 @@ Deno.serve(async (peticion: Request) => {
 
   const ahora = new Date().toISOString();
 
-  // `notificada_en` es el candado contra el doble envío: si pg_net reintenta, la
-  // segunda invocación no encuentra nada que mandar.
+  // Los dos sellos son el candado contra el doble envío: si pg_net reintenta,
+  // la segunda invocación no encuentra nada que mandar. Se piden las filas a
+  // las que les falte alguno; cuál toca lo decide `clasificar`.
   const { data, error } = await sb
     .from("incidencias")
     .select(
       `id, abierta_en, cerrada_en, causa, silenciada_hasta,
+       notificada_en, recuperacion_notificada_en,
        servicios!inner(nombre, proyectos!inner(id, nombre, slug))`
     )
-    .is("notificada_en", null)
+    .or("notificada_en.is.null,recuperacion_notificada_en.is.null")
     .limit(100);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
-  const pendientes = (data ?? []) as unknown as FilaIncidencia[];
+  const candidatas = (data ?? []) as unknown as FilaIncidencia[];
 
   // Silenciadas: se sellan igual para que no vuelvan, pero NO se envían. Lo que
   // se calla es el aviso, nunca el registro.
-  const enviables = pendientes.filter(
-    (i) => !i.silenciada_hasta || i.silenciada_hasta <= ahora
-  );
+  const sucesos: SucesoAviso[] = [];
+  let silenciadas = 0;
 
-  const sucesos: SucesoAviso[] = enviables.map((i) => ({
-    incidenciaId: i.id,
-    proyectoId: i.servicios.proyectos.id,
-    proyectoNombre: i.servicios.proyectos.nombre,
-    servicioNombre: i.servicios.nombre,
-    tipo: i.cerrada_en ? "recuperacion" : "apertura",
-    abiertaEn: i.cerrada_en ?? i.abierta_en,
-    causa: i.causa,
-  }));
+  for (const i of candidatas) {
+    const { tipo, sello } = clasificar(aPendiente(i), ahora);
+    if (tipo === null) {
+      if (sello !== null) silenciadas++;
+      continue;
+    }
+    sucesos.push({
+      incidenciaId: i.id,
+      proyectoId: i.servicios.proyectos.id,
+      proyectoNombre: i.servicios.proyectos.nombre,
+      servicioNombre: i.servicios.nombre,
+      tipo,
+      abiertaEn: i.cerrada_en ?? i.abierta_en,
+      causa: i.causa,
+    });
+  }
 
   const avisos = agrupar(sucesos, VENTANA_MS);
-  const rutas = new Map(enviables.map((i) => [i.id, i.servicios.proyectos.slug] as const));
+  const rutas = new Map(candidatas.map((i) => [i.id, i.servicios.proyectos.slug] as const));
 
   let enviadas = 0;
   for (const aviso of avisos) {
     enviadas += await repartir(sb, aviso, rutas.get(aviso.incidenciaIds[0]!) ?? "", ahora);
   }
 
-  const ids = pendientes.map((i) => i.id);
-  if (ids.length > 0) {
-    await sb.from("incidencias").update({ notificada_en: ahora }).in("id", ids);
+  // Sellar SIEMPRE al final: si algo falla al enviar queda registrado en
+  // `notificaciones` con su motivo, y aun así no se reintenta en bucle cada
+  // minuto hasta el fin de los tiempos.
+  const sellos = repartirSellos(candidatas.map(aPendiente), ahora);
+  if (sellos.apertura.length > 0) {
+    await sb
+      .from("incidencias")
+      .update({ notificada_en: ahora })
+      .in("id", sellos.apertura);
+  }
+  if (sellos.recuperacion.length > 0) {
+    await sb
+      .from("incidencias")
+      .update({ recuperacion_notificada_en: ahora })
+      .in("id", sellos.recuperacion);
   }
 
   return Response.json({
     avisos: avisos.length,
-    silenciadas: pendientes.length - enviables.length,
+    silenciadas,
     notificaciones: enviadas,
   });
 });
@@ -157,7 +189,15 @@ async function repartir(
         claves
       );
       await registrar(sb, usuarioId, aviso.incidenciaIds[0]!, "push", r.ok, r.error);
-      if (r.ok) enviadas++;
+      if (r.ok) {
+        enviadas++;
+        // Sin esto la columna se queda en null para siempre y no hay forma de
+        // distinguir una suscripción viva de una que nunca ha recibido nada.
+        await sb
+          .from("suscripciones_push")
+          .update({ ultima_ok_en: ahora })
+          .eq("id", s.id);
+      }
       // Una suscripción que el navegador tiró se borra: si no, se reintentaría
       // en cada aviso, para siempre.
       if (r.caducada) await sb.from("suscripciones_push").delete().eq("id", s.id);

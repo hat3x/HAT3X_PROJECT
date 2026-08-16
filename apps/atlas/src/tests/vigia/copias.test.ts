@@ -28,6 +28,7 @@ describe.each([
   ["vigia", "incidencias", "evaluar"],
   ["avisar", "alertas", "agrupar"],
   ["avisar", "alertas", "firma"],
+  ["avisar", "alertas", "pendientes"],
 ])("copia de %s/%s.ts para Deno", (funcion, carpeta, nombre) => {
   const original = leer(`src/lib/${carpeta}/${nombre}.ts`);
   const copia = leer(`supabase/functions/${funcion}/${nombre}.ts`);
