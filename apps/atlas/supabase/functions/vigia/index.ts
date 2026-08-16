@@ -180,7 +180,8 @@ async function procesar(sb: SupabaseClient, fila: FilaCheck, ahora: string) {
     await sb.from("incidencias").update({ cerrada_en: ahora }).eq("id", incidencia.id);
   }
 
-  // `t.notificar` todavía no se envía: el envío llega en el plan 1C. Aquí solo
-  // se devuelve para que el resumen de la invocación lo refleje.
+  // El vigía no envía nada: deja la incidencia escrita y `avisar` la recoge en
+  // su siguiente pasada. Comprobar servicios no debe quedarse esperando a un
+  // servidor de correo. `t.notificar` se devuelve solo para el resumen.
   return { abrio: t.abrirIncidencia, cerro: t.cerrarIncidencia, avisar: t.notificar };
 }
