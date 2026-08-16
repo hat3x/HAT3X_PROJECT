@@ -2044,6 +2044,31 @@ git add src/lib/db/credenciales.ts src/app/ajustes src/tests/db/credenciales.tes
 git commit -m "feat(atlas): llavero — alta, rotacion y auditoria de uso"
 ```
 
+### ✅ EJECUTADA — commit `45e00f2`
+
+149 tests en total (24 nuevos), typecheck y `next build` limpios.
+
+**Fallo del plan, corregido — y su propio test no podía verlo.**
+`guardarCredencial` pasaba `Uint8Array` a supabase-js, pero PostgREST no mete
+eso en una columna `bytea`: lo serializa como `{"0":12,"1":34,…}` y Postgres
+lo rechaza. El test del paso 1 iba por `pg` directo —donde sí funciona con
+`Buffer`— así que habría dado verde con la aplicación rota. Se añaden
+`aBytea`/`deBytea`, que traducen a hexadecimal `\x…`, y el test reescrito
+pasa por PostgREST.
+
+**Segundo fallo, de seguridad.** El plan metía consultas y mutaciones en un
+único módulo `"use server"`. Eso habría expuesto `usarCredencial(sb, …)`
+—**la función que descifra**— como acción invocable desde el navegador.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | `aBytea`/`deBytea` y el test por PostgREST | Ver arriba: sin esto el llavero no guarda nada. |
+| 2 | Se parte en `credenciales.ts` (consultas) y `acciones-credenciales.ts` (mutaciones) | Es el patrón que ya usa el repo (`clientes.ts` frente a `acciones-clientes.ts`) y evita exponer el descifrado como endpoint. |
+| 3 | Se escriben `FormCredencial.tsx` y `FilaCredencial.tsx` | El plan listaba el primero en sus ficheros sin ningún paso que lo definiera, y no contemplaba interfaz de rotación ni de borrado. Sin ellos las acciones nacían muertas. |
+| 4 | Se añade `borrarCredencial` | El esquema tiene `ON DELETE CASCADE` sobre `credencial_usos` pensado para esto, pero el plan no daba forma de borrar una clave. |
+| 5 | Un test fija las claves exactas que salen de `listarCredenciales` | Que hoy no se seleccione una columna cifrada no impide que mañana alguien la añada. |
+| 6 | Se verifica el bundle compilado | `grep` sobre `.next/static`: ni `ATLAS_MASTER_KEY` ni ningún secreto llegan al JavaScript del cliente. |
+
 ---
 
 ## Tarea 15: Ajustes — usuarios y permisos
@@ -2273,6 +2298,23 @@ npm test && npm run typecheck && npm run build
 git add src/lib/db/usuarios.ts src/app/ajustes/usuarios src/tests/db/usuarios.test.ts
 git commit -m "feat(atlas): usuarios y permisos por proyecto"
 ```
+
+### ✅ EJECUTADA — commit `9df266d`
+
+163 tests en total (14 nuevos), typecheck y `next build` limpios.
+
+**Tercera tarea seguida cuyas acciones se quedaban sin interfaz.**
+`asignarPermiso` y `retirarPermiso` estaban escritas, pero la pantalla del
+paso 5 era de solo lectura: no había forma de repartir un acceso. Se añade
+`PermisosUsuario.tsx`.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | Se escribe `PermisosUsuario.tsx` | Ver arriba. Sin él la tarea no hace lo que dice su título. |
+| 2 | Se parte en `usuarios.ts` (consultas) y `acciones-usuarios.ts` (mutaciones) | Mismo motivo que en el llavero: `listarUsuarios(sb)` dentro de un módulo `"use server"` sería una acción invocable desde el navegador que recibe un cliente de Supabase como argumento. |
+| 3 | Un proyecto que la persona ya tiene no se vuelve a ofrecer | Reasignarle el mismo rol no hace nada. Para cambiarlo se quita y se vuelve a dar, que además deja claro qué pasó. |
+| 4 | Un test comprueba que no salen correos | `listarUsuarios` lee `perfiles`, nunca `auth.users`. El test fija las cuatro claves que salen, para que nadie añada el correo «porque viene bien». |
+| 5 | 14 tests en vez de los 3 del plan | El plan solo probaba `validarRol`. Se añaden el listado con permisos anidados contra la base de datos real, los mayúsculas/minúsculas del rol, y los 8 del comportamiento de la pantalla. |
 
 ---
 
