@@ -23,13 +23,20 @@ function leer(ruta: string): string {
   return readFileSync(resolve(RAIZ, ruta), "utf8").replace(/\r\n/g, "\n");
 }
 
-describe.each(["maquina", "evaluar"])("copia de %s.ts para Deno", (nombre) => {
-  const original = leer(`src/lib/incidencias/${nombre}.ts`);
-  const copia = leer(`supabase/functions/vigia/${nombre}.ts`);
+describe.each([
+  ["vigia", "incidencias", "maquina"],
+  ["vigia", "incidencias", "evaluar"],
+  ["avisar", "alertas", "agrupar"],
+  ["avisar", "alertas", "firma"],
+])("copia de %s/%s.ts para Deno", (funcion, carpeta, nombre) => {
+  const original = leer(`src/lib/${carpeta}/${nombre}.ts`);
+  const copia = leer(`supabase/functions/${funcion}/${nombre}.ts`);
 
   it("lleva la cabecera que avisa de que es una copia", () => {
     const lineas = copia.split("\n").slice(0, 3);
-    expect(lineas[0]).toBe(`// COPIA de src/lib/incidencias/${nombre}.ts — NO editar aquí.`);
+    expect(lineas[0]).toBe(
+      `// COPIA de src/lib/${carpeta}/${nombre}.ts — NO editar aquí.`
+    );
     expect(lineas[1]).toBe(CABECERA_2);
     expect(lineas[2]).toBe(CABECERA_3);
   });
