@@ -143,7 +143,7 @@ export function AppointmentDrawer({
         className={cn(
           // Mismo z-index que el velo: al ir DESPUÉS en el DOM ya queda por
           // encima (orden de pintado entre hermanos con igual z-index).
-          "fixed right-0 top-0 z-40 flex h-full w-[400px] max-w-[92vw] flex-col border-l border-border bg-card shadow-xl transition-transform duration-200 ease-apple-out",
+          "fixed right-0 top-0 z-40 flex h-full w-[400px] max-w-[92vw] flex-col border-l border-border bg-[var(--glass-panel)] shadow-xl backdrop-blur-xl backdrop-saturate-150 transition-transform duration-200 ease-apple-out",
           isOpen ? "translate-x-0" : "translate-x-full",
         )}
       >

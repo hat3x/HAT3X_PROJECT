@@ -618,7 +618,7 @@ export function WeekGrid({
       bajo la cabecera sticky se consigue con el margin-top del wrapper de
       abajo, no con padding en el contenedor con scroll. */}
       <div ref={scrollRef} className="h-full overflow-auto">
-        <div className="mb-4 mt-3 min-w-[760px] rounded-xl border border-border bg-card shadow-sm">
+        <div className="mb-4 mt-3 min-w-[760px] rounded-xl border border-border bg-[var(--glass-bg-dense)] shadow-sm backdrop-blur-xl">
           <div
             className="sticky top-0 z-20 grid rounded-t-xl border-b border-border bg-card shadow-md"
             style={{ gridTemplateColumns }}
@@ -709,7 +709,7 @@ function WeekGridSkeleton(): React.ReactElement {
 
   return (
     <div className="h-full overflow-hidden">
-      <div className="mb-4 mt-3 min-w-[760px] rounded-xl border border-border bg-card shadow-sm">
+      <div className="mb-4 mt-3 min-w-[760px] rounded-xl border border-border bg-[var(--glass-bg-dense)] shadow-sm backdrop-blur-xl">
         <div className="grid rounded-t-xl border-b border-border" style={{ gridTemplateColumns }}>
           <div aria-hidden="true" />
           {Array.from({ length: 7 }, (_, index) => (
@@ -740,7 +740,7 @@ function WeekGridSkeleton(): React.ReactElement {
 
 function WeekGridError(): React.ReactElement {
   return (
-    <div className="mb-4 mt-3 flex min-h-[320px] min-w-[760px] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card p-8 text-center shadow-sm">
+    <div className="mb-4 mt-3 flex min-h-[320px] min-w-[760px] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-[var(--glass-bg-dense)] p-8 text-center shadow-sm backdrop-blur-xl">
       <AlertCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
       <p className="font-semibold text-foreground">No se ha podido cargar la semana</p>
       <p className="max-w-sm text-sm text-muted-foreground">

@@ -118,7 +118,7 @@ export function AgendaSidePanel({
   return (
     <aside
       aria-label="Controles de la agenda"
-      className="flex w-[236px] shrink-0 flex-col gap-4 rounded-xl border bg-card p-3 shadow-sm"
+      className="cristal-panel flex w-[236px] shrink-0 flex-col gap-4 rounded-xl p-3"
     >
       {/* Mini-calendario navegable */}
       <div>

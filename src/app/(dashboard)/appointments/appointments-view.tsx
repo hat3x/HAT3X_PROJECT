@@ -326,7 +326,7 @@ export function AppointmentsView({
           vista, buscador y "Nueva cita". Sustituye las tres filas previas
           (cabecera, conmutador, nav. de fecha) — así solo la parrilla hace
           scroll por debajo (ver DayGrid: h-full en vez de max-h). */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-4 py-2.5 sm:px-6">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-[var(--glass-panel)] px-4 py-2.5 backdrop-blur-xl backdrop-saturate-150 sm:px-6">
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center gap-1 rounded-full border bg-card p-1 shadow-sm">
             <Button
