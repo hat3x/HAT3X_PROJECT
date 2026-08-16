@@ -1,5 +1,5 @@
 import type { Sb } from "./clientes";
-import type { Tema, Paleta } from "@/lib/tema/tokens";
+import { PALETAS, type Tema, type Paleta } from "@/lib/tema/tokens";
 
 export type Perfil = {
   id: string;
@@ -35,4 +35,45 @@ export async function obtenerPerfil(sb: Sb): Promise<Perfil | null> {
     tema: data.tema as Tema,
     paleta: data.paleta as Paleta,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Apariencia. Recibe `sb` para poder probarse contra la base; el envoltorio de
+// `acciones-apariencia.ts` solo resuelve el cliente de servidor y revalida.
+// ---------------------------------------------------------------------------
+
+export type OkApariencia = { ok: true } | { ok: false; error: string };
+
+const TEMAS = ["claro", "oscuro"] as const;
+
+export function validarApariencia(tema: string, paleta: string): OkApariencia {
+  if (!(TEMAS as readonly string[]).includes(tema)) {
+    return { ok: false, error: `El tema «${tema}» no existe.` };
+  }
+  if (!(PALETAS as readonly string[]).includes(paleta)) {
+    return { ok: false, error: `La paleta «${paleta}» no existe.` };
+  }
+  return { ok: true };
+}
+
+export async function escribirApariencia(
+  sb: Sb,
+  tema: string,
+  paleta: string
+): Promise<OkApariencia> {
+  // Se valida aquí y no se confía en el selector: una acción de servidor es un
+  // endpoint público, y lo que llega por la red no lo elige la interfaz.
+  const valido = validarApariencia(tema, paleta);
+  if (!valido.ok) return valido;
+
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) return { ok: false, error: "No hay sesión." };
+
+  // Cada cual manda sobre su propio aspecto: la política `perfiles_propio` lo
+  // permite sin ser propietario. El `.eq` es defensa en profundidad, no la
+  // barrera; la barrera es RLS.
+  const { error } = await sb.from("perfiles").update({ tema, paleta }).eq("id", user.id);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }

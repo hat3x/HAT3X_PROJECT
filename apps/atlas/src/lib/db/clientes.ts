@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
+import { obtenerPerfil } from "./perfil";
 
 export type Sb = SupabaseClient<Database>;
 
@@ -165,4 +166,86 @@ export async function obtenerCliente(
     })),
     contratos: lista,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Escritura. Recibe `sb` y hace todo el trabajo —validar, comprobar el rol y
+// escribir— para que se pueda probar contra la base. El envoltorio de
+// `acciones-clientes.ts` solo resuelve el cliente de servidor y revalida.
+// ---------------------------------------------------------------------------
+
+export type EntradaCliente = {
+  nombre: string;
+  slug: string;
+  sector?: string | null;
+  estado?: string;
+  razonSocial?: string | null;
+  cif?: string | null;
+  direccion?: string | null;
+};
+
+export type Resultado = { ok: true; slug: string } | { ok: false; error: string };
+
+const ESTADOS_CLIENTE = ["activo", "potencial", "pausado", "cerrado"] as const;
+const PATRON_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+export function validarEntradaCliente(entrada: EntradaCliente): Resultado {
+  if (entrada.nombre.trim().length === 0) {
+    return { ok: false, error: "El nombre no puede estar vacío." };
+  }
+  if (!PATRON_SLUG.test(entrada.slug)) {
+    return {
+      ok: false,
+      error:
+        "El identificador solo admite minúsculas, números y guiones " +
+        "(por ejemplo: 100-montaditos).",
+    };
+  }
+  if (
+    entrada.estado &&
+    !(ESTADOS_CLIENTE as readonly string[]).includes(entrada.estado)
+  ) {
+    return { ok: false, error: `El estado «${entrada.estado}» no existe.` };
+  }
+  return { ok: true, slug: entrada.slug };
+}
+
+export async function escribirCliente(
+  sb: Sb,
+  entrada: EntradaCliente,
+  id?: string
+): Promise<Resultado> {
+  const valido = validarEntradaCliente(entrada);
+  if (!valido.ok) return valido;
+
+  // RLS ya lo impediría, pero se comprueba aquí también: la red de seguridad no
+  // debe ser la única defensa, y así el mensaje de error es comprensible.
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) {
+    return { ok: false, error: "Solo el propietario puede dar de alta clientes." };
+  }
+
+  const fila = {
+    nombre: entrada.nombre.trim(),
+    slug: entrada.slug,
+    sector: entrada.sector ?? null,
+    estado: entrada.estado ?? "activo",
+    razon_social: entrada.razonSocial ?? null,
+    cif: entrada.cif ?? null,
+    direccion: entrada.direccion ?? null,
+  };
+
+  const { error } = id
+    ? await sb.from("clientes").update(fila).eq("id", id)
+    : await sb.from("clientes").insert(fila);
+
+  if (error) {
+    return error.code === "23505"
+      ? {
+          ok: false,
+          error: `Ya existe un cliente con el identificador «${entrada.slug}».`,
+        }
+      : { ok: false, error: error.message };
+  }
+  return { ok: true, slug: entrada.slug };
 }

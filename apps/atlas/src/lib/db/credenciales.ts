@@ -4,7 +4,8 @@
 // acción invocable desde el navegador. Las mutaciones viven en
 // `acciones-credenciales.ts`, igual que clientes.ts frente a acciones-clientes.ts.
 //
-import { descifrar } from "@/lib/cripto/cifrado";
+import { cifrar, descifrar, enmascarar } from "@/lib/cripto/cifrado";
+import { obtenerPerfil } from "./perfil";
 import type { Sb } from "./clientes";
 
 export type CredencialResumen = {
@@ -96,4 +97,102 @@ export async function usarCredencial(
     },
     claveMaestra()
   );
+}
+
+// ---------------------------------------------------------------------------
+// Escritura. Recibe `sb` y hace todo el trabajo, para que se pueda probar
+// contra la base; `acciones-credenciales.ts` solo resuelve el cliente de
+// servidor y revalida.
+// ---------------------------------------------------------------------------
+
+export type Ok = { ok: true } | { ok: false; error: string };
+
+export type EntradaCredencial = {
+  proveedor: string;
+  etiqueta: string;
+  secreto: string;
+  proyectoId: string | null;
+};
+
+export function validarCredencial(entrada: EntradaCredencial): Ok {
+  if (entrada.proveedor.trim() === "") {
+    return { ok: false, error: "Di de qué proveedor es la clave." };
+  }
+  if (entrada.etiqueta.trim() === "") {
+    return {
+      ok: false,
+      error: "Ponle una etiqueta: dentro de un año no recordarás cuál es cuál.",
+    };
+  }
+  // No se valida el formato: cada proveedor tiene el suyo y una regla de más
+  // acabaría rechazando una clave buena. Solo se descarta lo obviamente vacío.
+  if (entrada.secreto.trim().length < 8) {
+    return { ok: false, error: "El secreto parece demasiado corto. Revísalo." };
+  }
+  return { ok: true };
+}
+
+/** El llavero no se comparte: es del propietario y de nadie más. */
+async function soloPropietario(sb: Sb): Promise<Ok> {
+  const perfil = await obtenerPerfil(sb);
+  return perfil?.esPropietario
+    ? { ok: true }
+    : { ok: false, error: "Solo el propietario gestiona el llavero." };
+}
+
+export async function escribirCredencial(
+  sb: Sb,
+  entrada: EntradaCredencial
+): Promise<Ok> {
+  const valido = validarCredencial(entrada);
+  if (!valido.ok) return valido;
+  const permiso = await soloPropietario(sb);
+  if (!permiso.ok) return permiso;
+
+  const s = await cifrar(entrada.secreto, claveMaestra());
+  const { error } = await sb.from("credenciales").insert({
+    proveedor: entrada.proveedor.trim(),
+    etiqueta: entrada.etiqueta.trim(),
+    proyecto_id: entrada.proyectoId,
+    secreto_cifrado: aBytea(s.cifrado),
+    iv: aBytea(s.iv),
+    tag: aBytea(s.tag),
+    // Lo único legible que queda del secreto.
+    prefijo: enmascarar(entrada.secreto),
+  });
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function rotarSecreto(
+  sb: Sb,
+  id: string,
+  secretoNuevo: string
+): Promise<Ok> {
+  if (secretoNuevo.trim().length < 8) {
+    return { ok: false, error: "El secreto parece demasiado corto. Revísalo." };
+  }
+  const permiso = await soloPropietario(sb);
+  if (!permiso.ok) return permiso;
+
+  const s = await cifrar(secretoNuevo, claveMaestra());
+  const { error } = await sb
+    .from("credenciales")
+    .update({
+      secreto_cifrado: aBytea(s.cifrado),
+      iv: aBytea(s.iv),
+      tag: aBytea(s.tag),
+      prefijo: enmascarar(secretoNuevo),
+      rotada_en: new Date().toISOString(),
+    })
+    .eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+export async function borrarSecreto(sb: Sb, id: string): Promise<Ok> {
+  const permiso = await soloPropietario(sb);
+  if (!permiso.ok) return permiso;
+
+  // El historial de usos se va detrás por el ON DELETE CASCADE del esquema.
+  const { error } = await sb.from("credenciales").delete().eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }

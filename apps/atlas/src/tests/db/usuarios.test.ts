@@ -1,8 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
-import { validarRol } from "@/lib/db/acciones-usuarios";
-import { listarUsuarios } from "@/lib/db/usuarios";
+import {
+  validarRol,
+  listarUsuarios,
+  escribirPermiso,
+  quitarPermiso,
+} from "@/lib/db/usuarios";
 import type { Database } from "@/types/supabase";
 
 const URL_API = "http://127.0.0.1:54321";
@@ -128,5 +132,59 @@ describe("listado de usuarios con sus permisos", () => {
       "nombre",
       "permisos",
     ]);
+  });
+});
+
+describe("reparto de permisos", () => {
+  it("cambiar de rol reasigna en vez de acumular filas", async () => {
+    // El editor ya tiene 'editor' sobre este proyecto desde el beforeAll.
+    const r = await escribirPermiso(sb, idEditor, idProyecto, "lector");
+    expect(r.ok, r.ok ? "" : r.error).toBe(true);
+
+    const { rows } = await pg.query(
+      `SELECT rol FROM permisos WHERE usuario_id=$1 AND proyecto_id=$2`,
+      [idEditor, idProyecto]
+    );
+    expect(rows).toHaveLength(1); // una sola fila: ha reasignado
+    expect(rows[0].rol).toBe("lector");
+  });
+
+  it("no escribe nada con un rol que no existe", async () => {
+    const r = await escribirPermiso(sb, idEditor, idProyecto, "propietario");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/propietario/i);
+
+    const { rows } = await pg.query(
+      `SELECT rol FROM permisos WHERE usuario_id=$1 AND proyecto_id=$2`,
+      [idEditor, idProyecto]
+    );
+    // Sigue como estaba: el rechazo no ha tocado nada.
+    expect(rows[0].rol).toBe("lector");
+  });
+
+  it("quien no es propietario no reparte permisos", async () => {
+    const sbEditor = createClient<Database>(URL_API, ANON, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: "usu-editor" },
+    });
+    const { error } = await sbEditor.auth.signInWithPassword({
+      email: "editor@atlas.test",
+      password: "contrasena-de-prueba",
+    });
+    if (error) throw error;
+
+    const r = await escribirPermiso(sbEditor, idDuenyo, idProyecto, "editor");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/propietario/i);
+  });
+
+  it("retirar el acceso lo borra", async () => {
+    const r = await quitarPermiso(sb, idEditor, idProyecto);
+    expect(r.ok, r.ok ? "" : r.error).toBe(true);
+
+    const { rows } = await pg.query(
+      `SELECT count(*)::int AS n FROM permisos WHERE usuario_id=$1 AND proyecto_id=$2`,
+      [idEditor, idProyecto]
+    );
+    expect(rows[0].n).toBe(0);
   });
 });

@@ -7,6 +7,9 @@ import {
   deBytea,
   listarCredenciales,
   usarCredencial,
+  escribirCredencial,
+  rotarSecreto,
+  borrarSecreto,
 } from "@/lib/db/credenciales";
 import type { Database } from "@/types/supabase";
 
@@ -205,5 +208,83 @@ describe("lo que el listado deja ver", () => {
       "proyectoId",
       "rotadaEn",
     ]);
+  });
+});
+
+describe("escritura del llavero", () => {
+  it("guarda una clave nueva cifrada y con su prefijo", async () => {
+    const r = await escribirCredencial(sb, {
+      proveedor: "  vercel  ",
+      etiqueta: "  PRUEBA F  ",
+      secreto: "sk_live_escritura1",
+      proyectoId: null,
+    });
+    expect(r.ok, r.ok ? "" : r.error).toBe(true);
+
+    const { rows } = await pg.query(
+      `SELECT proveedor, etiqueta, prefijo, proyecto_id,
+              encode(secreto_cifrado,'escape') AS cifrado
+       FROM credenciales WHERE etiqueta = 'PRUEBA F'`
+    );
+    expect(rows).toHaveLength(1);
+    // Proveedor y etiqueta viajan recortados.
+    expect(rows[0].proveedor).toBe("vercel");
+    expect(rows[0].prefijo).toBe("sk_live_••••ura1");
+    expect(rows[0].proyecto_id).toBeNull();
+    // Lo guardado no contiene el secreto por ningún lado.
+    expect(rows[0].cifrado).not.toContain("escritura1");
+  });
+
+  it("no escribe nada si el secreto es demasiado corto", async () => {
+    const r = await escribirCredencial(sb, {
+      proveedor: "x",
+      etiqueta: "PRUEBA CORTA",
+      secreto: "abc",
+      proyectoId: null,
+    });
+    expect(r.ok).toBe(false);
+    const { rows } = await pg.query(
+      `SELECT count(*)::int AS n FROM credenciales WHERE etiqueta='PRUEBA CORTA'`
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
+  it("rotar cambia el secreto y sella la fecha", async () => {
+    const id = await alta("n8n", "PRUEBA G", "sk_live_original9");
+    const r = await rotarSecreto(sb, id, "sk_live_rotado22");
+    expect(r.ok, r.ok ? "" : r.error).toBe(true);
+
+    const { data } = await sb
+      .from("credenciales")
+      .select("secreto_cifrado, iv, tag, prefijo, rotada_en")
+      .eq("id", id)
+      .single();
+    expect(data!.rotada_en).not.toBeNull();
+    expect(data!.prefijo).toBe("sk_live_••••do22");
+    expect(
+      await descifrar(
+        {
+          cifrado: deBytea(data!.secreto_cifrado),
+          iv: deBytea(data!.iv),
+          tag: deBytea(data!.tag),
+        },
+        CLAVE
+      )
+    ).toBe("sk_live_rotado22");
+  });
+
+  it("borrar se lleva la clave y su historial de usos", async () => {
+    const id = await alta("twilio", "PRUEBA H", "sk_live_borrable1");
+    await usarCredencial(sb, id, "antes de borrar");
+
+    const r = await borrarSecreto(sb, id);
+    expect(r.ok, r.ok ? "" : r.error).toBe(true);
+
+    const { rows } = await pg.query(
+      `SELECT (SELECT count(*) FROM credenciales    WHERE id=$1)::int AS claves,
+              (SELECT count(*) FROM credencial_usos WHERE credencial_id=$1)::int AS usos`,
+      [id]
+    );
+    expect(rows[0]).toEqual({ claves: 0, usos: 0 });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validarCredencial } from "@/lib/db/acciones-credenciales";
+import { validarCredencial } from "@/lib/db/credenciales";
 
 // Secretos inventados para la prueba: no abren nada.
 const base = {
