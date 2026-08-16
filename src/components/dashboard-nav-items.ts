@@ -33,10 +33,8 @@ import {
 
 import {
   BracesIcon,
-  DentalRecordIcon,
   PerioIcon,
   ToothIcon,
-  TreatmentPlanIcon,
 } from "@/components/brand/dental-icons";
 import { SECTOR_REGISTRY } from "@/lib/sector/registry";
 import type { SalonSector } from "@/types/database";
@@ -147,31 +145,6 @@ export const ORTODONCIA_ITEM: NavItem = {
 };
 
 /**
- * Planes de tratamiento / presupuestos. Solo visible para el sector
- * odontología, justo después de Periodontograma: primero el mapa de dientes,
- * luego la exploración periodontal y, por último, el presupuesto/plan de
- * tratamiento derivado de ambos.
- */
-export const PLANES_ITEM: NavItem = {
-  href: "/planes",
-  label: "Planes",
-  icon: TreatmentPlanIcon,
-};
-
-/**
- * Expediente clínico (consentimientos informados + imágenes/radiografías).
- * Solo visible para el sector odontología, justo después de Planes: primero
- * el mapa de dientes, la exploración periodontal y el presupuesto/plan, y por
- * último el expediente (consentimientos firmados + imágenes) que documenta
- * todo lo anterior.
- */
-export const EXPEDIENTE_ITEM: NavItem = {
-  href: "/expediente",
-  label: "Expediente",
-  icon: DentalRecordIcon,
-};
-
-/**
  * Carta (backoffice de categorías/estaciones/productos/modificadores/combos).
  * Solo visible para el sector restauración, y solo para gestión (owner/manager):
  * es materia de gestión, igual que Odontograma lo es para odontología.
@@ -244,8 +217,9 @@ export interface NavGating {
  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
- * además inserta Odontograma y, justo detrás, Periodontograma, Ortodoncia, Planes
- * y Expediente (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
+ * además inserta Odontograma y, justo detrás, Periodontograma y Ortodoncia (en ese
+ * orden) tras "Pacientes". Planes y Expediente NO van en el rail: son pestañas de la
+ * ficha del paciente (/customers/[id]?tab=…). Restauración inserta Mostrador (venta de
  * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
  * staff incluido) — es operativa de venta del día a día, como la Caja lo es
  * para el resto de sectores. Justo detrás, Sala (plano de mesas: comensales,
@@ -299,8 +273,9 @@ export function buildDashboardNavItems({
 
   if (sector === "odontologia") {
     // Odontología: añadir Odontograma justo después de Pacientes, Periodontograma
-    // justo después de Odontograma, Planes justo después de Periodontograma, y
-    // Expediente justo después de Planes.
+    // justo después de Odontograma y Ortodoncia justo después. Planes y Expediente
+    // NO viven en el rail: son pestañas dentro de la ficha del paciente
+    // (/customers/[id]?tab=planes|expediente), donde el paciente ya está elegido.
     const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
     const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
     return [
@@ -308,8 +283,6 @@ export function buildDashboardNavItems({
       ODONTOGRAMA_ITEM,
       PERIODONTOGRAMA_ITEM,
       ORTODONCIA_ITEM,
-      PLANES_ITEM,
-      EXPEDIENTE_ITEM,
       ...withSectorLabels.slice(insertAt),
     ];
   }

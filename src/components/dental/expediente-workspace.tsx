@@ -58,6 +58,13 @@ import { PrescriptionList } from "./prescription-list";
 export interface ExpedienteWorkspaceProps {
   salonId: string;
   customerId: string;
+  /**
+   * Oculta el enlace "Cambiar paciente" cuando la vista va EMBEBIDA dentro de la
+   * ficha del paciente (pestaña Expediente de `/customers/[id]`), donde el
+   * paciente ya está fijado. En la ruta suelta se omite (por defecto `false`)
+   * para conservar el flujo de cambio de paciente.
+   */
+  hideChangePatient?: boolean;
 }
 
 type ExpedienteTab = "consentimientos" | "imagenes" | "recetas";
@@ -71,6 +78,7 @@ const TABS: readonly { id: ExpedienteTab; label: string }[] = [
 export function ExpedienteWorkspace({
   salonId,
   customerId,
+  hideChangePatient = false,
 }: ExpedienteWorkspaceProps): React.ReactElement {
   const [tab, setTab] = useState<ExpedienteTab>("consentimientos");
 
@@ -91,13 +99,15 @@ export function ExpedienteWorkspace({
           </span>
           <h2 className="text-sm font-medium text-muted-foreground">Expediente clínico</h2>
         </div>
-        <Link
-          href="/expediente"
-          className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          Cambiar paciente
-        </Link>
+        {!hideChangePatient && (
+          <Link
+            href="/expediente"
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Cambiar paciente
+          </Link>
+        )}
       </div>
 
       {/* Pestañas */}

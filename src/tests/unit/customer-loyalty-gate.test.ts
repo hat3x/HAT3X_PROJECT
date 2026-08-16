@@ -28,9 +28,13 @@ vi.mock("next/link", () => ({
     createElement("a", { href, ...rest }, children),
 }));
 
-// next/navigation → router inerte (la ficha usa useRouter al borrar/volver).
+// next/navigation → router inerte (la ficha usa useRouter al borrar/volver, y
+// usePathname/useSearchParams para las pestañas de odontología, sin ?tab → cae
+// a la pestaña "Resumen" por defecto).
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => "/customers/test-id",
+  useSearchParams: () => new URLSearchParams(""),
 }));
 
 // Hooks de datos: la decisión de gating no depende de ellos. Stubs mínimos y

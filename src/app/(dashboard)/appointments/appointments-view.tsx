@@ -631,7 +631,7 @@ export function AppointmentsView({
         timezone={timezone}
         patientHref={
           sector === "odontologia" && selectedAppointment
-            ? `/expediente?paciente=${selectedAppointment.customer_id}`
+            ? `/customers/${selectedAppointment.customer_id}?tab=expediente`
             : null
         }
         payHref={selectedAppointment ? `/tpv?appointment=${selectedAppointment.id}` : "/tpv"}

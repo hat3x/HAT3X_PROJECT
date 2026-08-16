@@ -22,22 +22,22 @@ describe("buildDashboardNavItems — por sector", () => {
     const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
     expect(peluqueria.some((i) => i.href === "/periodontograma")).toBe(false);
   });
-  it("odontologia: '/planes' aparece justo después de '/ortodoncia'; en peluquería NO aparece", () => {
+  it("odontologia: '/ortodoncia' es el último item dental; '/planes' NO va en el rail", () => {
     const dental = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "odontologia" });
-    expect(dental.some((i) => i.href === "/planes")).toBe(true);
+    // Planes y Expediente ya no viven en el rail: son pestañas de la ficha del
+    // paciente (/customers/[id]?tab=planes|expediente).
+    expect(dental.some((i) => i.href === "/planes")).toBe(false);
+    // Ortodoncia sí sigue en el rail, justo tras Periodontograma.
+    const perioIdx = dental.findIndex((i) => i.href === "/periodontograma");
     const ortoIdx = dental.findIndex((i) => i.href === "/ortodoncia");
-    const planesIdx = dental.findIndex((i) => i.href === "/planes");
-    expect(planesIdx).toBe(ortoIdx + 1);
+    expect(ortoIdx).toBe(perioIdx + 1);
 
     const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
     expect(peluqueria.some((i) => i.href === "/planes")).toBe(false);
   });
-  it("odontologia: '/expediente' aparece justo después de '/planes'; en peluquería NO aparece", () => {
+  it("odontologia: '/expediente' NO va en el rail (es pestaña del paciente)", () => {
     const dental = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "odontologia" });
-    expect(dental.some((i) => i.href === "/expediente")).toBe(true);
-    const planesIdx = dental.findIndex((i) => i.href === "/planes");
-    const expedienteIdx = dental.findIndex((i) => i.href === "/expediente");
-    expect(expedienteIdx).toBe(planesIdx + 1);
+    expect(dental.some((i) => i.href === "/expediente")).toBe(false);
 
     const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
     expect(peluqueria.some((i) => i.href === "/expediente")).toBe(false);

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -25,6 +25,8 @@ import { ClinicalHistoryCard } from "@/app/(dashboard)/customers/[id]/clinical-h
 import { ClinicalRecordCard } from "@/app/(dashboard)/customers/[id]/clinical-record-card";
 import { InsuranceCard } from "@/app/(dashboard)/customers/[id]/insurance-card";
 import { VisitNotesCard } from "@/app/(dashboard)/customers/[id]/visit-notes-card";
+import { ExpedienteWorkspace } from "@/components/dental/expediente-workspace";
+import { PlanWorkspace } from "@/components/dental/plan-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PillTabs } from "@/components/ui/pill-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useCustomer,
@@ -51,6 +54,29 @@ import {
 } from "@/hooks/use-customers";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import type { Customer, SalonSector } from "@/types/database";
+
+/**
+ * Pestañas de la ficha del paciente (SOLO odontología). El resto de sectores
+ * conserva el scroll único (su ficha es corta y las pestañas sobrarían).
+ *
+ * Planes y Expediente ya no viven en el rail lateral: son pestañas de aquí, con
+ * el paciente ya fijado. La pestaña activa se sincroniza con la URL (`?tab=`)
+ * para que la ficha siga siendo enlazable (deep-link) igual que cuando esas
+ * secciones eran rutas propias. "resumen" es el estado por defecto → URL limpia.
+ */
+const PATIENT_TABS = [
+  { id: "resumen", label: "Resumen" },
+  { id: "clinico", label: "Ficha clínica" },
+  { id: "facturacion", label: "Facturación" },
+  { id: "planes", label: "Planes" },
+  { id: "expediente", label: "Expediente" },
+] as const;
+
+type PatientTabId = (typeof PATIENT_TABS)[number]["id"];
+
+function isPatientTabId(value: string | null): value is PatientTabId {
+  return value !== null && PATIENT_TABS.some((t) => t.id === value);
+}
 
 interface CustomerDetailViewProps {
   salonId: string;
@@ -74,8 +100,21 @@ export function CustomerDetailView({
   salonSector,
 }: CustomerDetailViewProps): React.ReactElement {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // Pestaña activa (odontología). Se inicializa desde la URL para soportar
+  // deep-links (?tab=planes) sin parpadeo, y se actualiza con
+  // `history.replaceState` para NO disparar una navegación de servidor en cada
+  // cambio de pestaña (la ruta no depende de searchParams). Back → sale de la
+  // ficha (a la lista), no salta entre pestañas.
+  const [activeTab, setActiveTab] = useState<PatientTabId>(() =>
+    isPatientTabId(searchParams.get("tab")) ? (searchParams.get("tab") as PatientTabId) : "resumen",
+  );
+
+  const isDental = salonSector === "odontologia";
 
   const { data: customer } = useCustomer(salonId, customerId, initialCustomer);
   const visitsQuery = useCustomerVisits(salonId, customerId);
@@ -97,67 +136,18 @@ export function CustomerDetailView({
     };
   }, [visitsQuery.data]);
 
-  return (
-    <main className="container py-10">
-      <Link
-        href="/customers"
-        className="group mb-6 inline-flex items-center text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="mr-1 h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-        Volver a clientes
-      </Link>
+  function handleTabChange(id: string): void {
+    const tab = isPatientTabId(id) ? id : "resumen";
+    setActiveTab(tab);
+    const target = tab === "resumen" ? pathname : `${pathname}?tab=${tab}`;
+    window.history.replaceState(null, "", target);
+  }
 
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4 animate-fade-up">
-        <div className="flex items-center gap-4">
-          <CustomerAvatar name={record.full_name} size="lg" />
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold tracking-tight">
-              {record.full_name}
-            </h1>
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-              <CalendarHeart className="h-4 w-4" />
-              Cliente desde {formatDate(record.created_at)}
-              {record.marketing_consent ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
-                  <Sparkles className="h-3 w-3" />
-                  Marketing
-                </span>
-              ) : null}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {salonSector === "odontologia" ? (
-            <Button variant="outline" asChild>
-              <Link href={`/odontograma?paciente=${customerId}`}>
-                <Stethoscope className="mr-2 h-4 w-4" aria-hidden="true" />
-                Ver odontograma
-              </Link>
-            </Button>
-          ) : null}
-          {loyaltyEnabled ? (
-            <Button variant="outline" asChild>
-              <Link href={`/customers/${customerId}/loyalty`}>
-                <Gift className="mr-2 h-4 w-4" aria-hidden="true" />
-                Fidelización
-              </Link>
-            </Button>
-          ) : null}
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Editar
-          </Button>
-          <Button
-            variant="outline"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Eliminar
-          </Button>
-        </div>
-      </div>
-
+  // ── Resumen: contacto + stats + historial de visitas + notas ────────────────
+  // Es el contenido de la pestaña "Resumen" en odontología, y el layout íntegro
+  // en el resto de sectores (donde las tarjetas clínicas ni se renderizan).
+  const overviewBlock = (
+    <>
       {visitStats !== null ? (
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3 animate-fade-up [animation-delay:80ms]">
           <div className="rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-5 shadow-sm transition-shadow hover:shadow-md">
@@ -323,34 +313,115 @@ export function CustomerDetailView({
       <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:240ms]">
         <VisitNotesCard salonId={salonId} customerId={customerId} />
       </div>
+    </>
+  );
 
-      {/* Ficha clínica — solo visible en salones con sector odontología */}
-      {salonSector === "odontologia" ? (
-        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:320ms]">
-          <ClinicalRecordCard salonId={salonId} customerId={customerId} />
-        </div>
-      ) : null}
+  return (
+    <main className="container py-10">
+      <Link
+        href="/customers"
+        className="group mb-6 inline-flex items-center text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="mr-1 h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+        Volver a clientes
+      </Link>
 
-      {/* Historial clínico / evolutivo — solo sector odontología */}
-      {salonSector === "odontologia" ? (
-        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:340ms]">
-          <ClinicalHistoryCard salonId={salonId} customerId={customerId} />
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4 animate-fade-up">
+        <div className="flex items-center gap-4">
+          <CustomerAvatar name={record.full_name} size="lg" />
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight">
+              {record.full_name}
+            </h1>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <CalendarHeart className="h-4 w-4" />
+              Cliente desde {formatDate(record.created_at)}
+              {record.marketing_consent ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
+                  <Sparkles className="h-3 w-3" />
+                  Marketing
+                </span>
+              ) : null}
+            </p>
+          </div>
         </div>
-      ) : null}
+        <div className="flex gap-2">
+          {isDental ? (
+            <Button variant="outline" asChild>
+              <Link href={`/odontograma?paciente=${customerId}`}>
+                <Stethoscope className="mr-2 h-4 w-4" aria-hidden="true" />
+                Ver odontograma
+              </Link>
+            </Button>
+          ) : null}
+          {loyaltyEnabled ? (
+            <Button variant="outline" asChild>
+              <Link href={`/customers/${customerId}/loyalty`}>
+                <Gift className="mr-2 h-4 w-4" aria-hidden="true" />
+                Fidelización
+              </Link>
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={() => setEditOpen(true)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Editar
+          </Button>
+          <Button
+            variant="outline"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Eliminar
+          </Button>
+        </div>
+      </div>
 
-      {/* Facturación histórica — solo sector odontología */}
-      {salonSector === "odontologia" ? (
-        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:350ms]">
-          <BillingHistoryCard salonId={salonId} customerId={customerId} />
-        </div>
-      ) : null}
+      {isDental ? (
+        <>
+          <PillTabs
+            tabs={PATIENT_TABS}
+            active={activeTab}
+            onChange={handleTabChange}
+            ariaLabel="Secciones de la ficha del paciente"
+            className="mb-6 animate-fade-up [animation-delay:80ms]"
+          />
 
-      {/* Seguro / Mutua — solo visible en salones con sector odontología */}
-      {salonSector === "odontologia" ? (
-        <div className="mt-6 grid gap-6 animate-fade-up [animation-delay:360ms]">
-          <InsuranceCard salonId={salonId} customerId={customerId} />
-        </div>
-      ) : null}
+          {activeTab === "resumen" ? overviewBlock : null}
+
+          {activeTab === "clinico" ? (
+            <div className="grid gap-6 animate-fade-up">
+              <ClinicalRecordCard salonId={salonId} customerId={customerId} />
+              <ClinicalHistoryCard salonId={salonId} customerId={customerId} />
+              <InsuranceCard salonId={salonId} customerId={customerId} />
+            </div>
+          ) : null}
+
+          {activeTab === "facturacion" ? (
+            <div className="grid gap-6 animate-fade-up">
+              <BillingHistoryCard salonId={salonId} customerId={customerId} />
+            </div>
+          ) : null}
+
+          {activeTab === "planes" ? (
+            <div className="animate-fade-up">
+              <PlanWorkspace salonId={salonId} customerId={customerId} hideChangePatient />
+            </div>
+          ) : null}
+
+          {activeTab === "expediente" ? (
+            <div className="animate-fade-up">
+              <ExpedienteWorkspace
+                salonId={salonId}
+                customerId={customerId}
+                hideChangePatient
+              />
+            </div>
+          ) : null}
+        </>
+      ) : (
+        overviewBlock
+      )}
 
       {/* Diálogo de edición */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

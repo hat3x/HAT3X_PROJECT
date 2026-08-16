@@ -47,6 +47,13 @@ import { PlanList } from "./plan-list";
 export interface PlanWorkspaceProps {
   salonId: string;
   customerId: string;
+  /**
+   * Oculta el enlace "Cambiar paciente" cuando la vista va EMBEBIDA dentro de la
+   * ficha del paciente (pestaña Planes de `/customers/[id]`), donde el paciente
+   * ya está fijado y ese enlace no tiene sentido. En la ruta suelta se omite
+   * (por defecto `false`) para conservar el flujo de cambio de paciente.
+   */
+  hideChangePatient?: boolean;
 }
 
 /**
@@ -74,6 +81,7 @@ function useAddPlanPhase(salonId: string, planId: string) {
 export function PlanWorkspace({
   salonId,
   customerId,
+  hideChangePatient = false,
 }: PlanWorkspaceProps): React.ReactElement {
   const plansQuery = usePlans(salonId, customerId);
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
@@ -110,13 +118,15 @@ export function PlanWorkspace({
             Planes de tratamiento
           </h2>
         </div>
-        <Link
-          href="/planes"
-          className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          Cambiar paciente
-        </Link>
+        {!hideChangePatient && (
+          <Link
+            href="/planes"
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Cambiar paciente
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
