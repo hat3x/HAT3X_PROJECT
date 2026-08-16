@@ -1,15 +1,26 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 import { atributosTema } from "@/lib/tema/tokens";
 import { BarraLateral } from "@/components/marco/BarraLateral";
 import { Auroras } from "@/components/marco/Auroras";
+import { RegistrarSW } from "@/components/marco/RegistrarSW";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Atlas — HAT3X",
   description: "Todo lo que HAT3X tiene en producción, en un solo sitio.",
+  manifest: "/manifest.webmanifest",
+  // En iOS esto es lo que hace que «Añadir a inicio» abra Atlas a pantalla
+  // completa — y ahí no es un lujo: sin instalar, iOS no da push.
+  appleWebApp: { capable: true, title: "Atlas", statusBarStyle: "black-translucent" },
+  icons: { icon: "/iconos/atlas-192.png", apple: "/iconos/atlas-192.png" },
+};
+
+// En Next 14 `themeColor` va aquí, no en `metadata`: puesto allí avisa en cada build.
+export const viewport: Viewport = {
+  themeColor: "#050810",
 };
 
 export default async function RootLayout({
@@ -31,6 +42,7 @@ export default async function RootLayout({
     <html lang="es" {...atributosTema(tema, paleta)}>
       <body className="min-h-dvh">
         <Auroras />
+        <RegistrarSW />
         {perfil ? (
           <div className="flex min-h-dvh">
             <BarraLateral

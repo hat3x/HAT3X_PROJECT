@@ -46,6 +46,14 @@ export async function middleware(peticion: NextRequest) {
   return respuesta;
 }
 
+// Next exige que esto sea un literal: lo analiza en el build, así que no puede
+// venir de una variable ni de otro módulo. Lo vigila src/tests/pwa/instalable.test.ts.
+//
+// El manifiesto y el service worker tienen que quedar FUERA. Con sesión el
+// guardia los dejaría pasar, pero sin ella los redirige a /login: el navegador
+// recibe un 307 donde esperaba JSON o JavaScript, y Atlas no se instala.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.json|.*\\.png$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|sw\\.js|.*\\.png$).*)",
+  ],
 };
