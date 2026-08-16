@@ -1,19 +1,35 @@
 import Link from "next/link";
-import { Palette } from "lucide-react";
+import { Palette, KeyRound } from "lucide-react";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "@/lib/db/perfil";
 
-// Las demás secciones (llavero, usuarios) llegan con las tareas 14 y 15. Aquí
-// solo se enseña lo que de verdad funciona: un enlace muerto es peor que un
-// hueco honesto.
+// La sección que falta (usuarios) llega con la tarea 15. Aquí solo se enseña lo
+// que de verdad funciona: un enlace muerto es peor que un hueco honesto.
 const SECCIONES = [
   {
     href: "/ajustes/apariencia",
     titulo: "Apariencia",
     descripcion: "Tema claro u oscuro y cinco paletas de cristal.",
     Icono: Palette,
+    soloPropietario: false,
+  },
+  {
+    href: "/ajustes/credenciales",
+    titulo: "Llavero",
+    descripcion: "Las claves de los servicios, cifradas. Alta, rotación y borrado.",
+    Icono: KeyRound,
+    soloPropietario: true,
   },
 ] as const;
 
-export default function PaginaAjustes() {
+export default async function PaginaAjustes() {
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  const esPropietario = perfil?.esPropietario ?? false;
+  // El gating se decide AQUÍ, en servidor. La página del llavero además devuelve
+  // 404 por su cuenta: esto solo evita enseñar una puerta cerrada.
+  const visibles = SECCIONES.filter((s) => !s.soloPropietario || esPropietario);
+
   return (
     <section className="max-w-3xl space-y-4">
       <header>
@@ -24,7 +40,7 @@ export default function PaginaAjustes() {
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {SECCIONES.map(({ href, titulo, descripcion, Icono }) => (
+        {visibles.map(({ href, titulo, descripcion, Icono }) => (
           <Link
             key={href}
             href={href}
