@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "tipos": "supabase gen types typescript --local > src/types/supabase.ts"
+    "tipos": "supabase gen types typescript --local > src/types/supabase.ts",
+    "migrar:ensayo": "tsx scripts/migrar/traer.ts --ensayo",
+    "migrar": "tsx scripts/migrar/traer.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
