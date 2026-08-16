@@ -1554,7 +1554,56 @@ git commit -m "feat(atlas): estados y uptime reales en la ficha de proyecto"
 
 ---
 
-## Verificación de salida del plan 1B
+## ✅ PLAN 1B COMPLETO — verificación de salida
+
+Ejecutado entre los commits `7dddd8a` y `be8c282`.
+
+| Criterio | Real |
+|---|---|
+| Batería en verde | **291 tests**, 35 ficheros |
+| Cobertura global de `src/lib/**` | **85.68 %** líneas, 91.37 % funciones |
+| `lib/incidencias` y `lib/uptime` | **100 %** de líneas Y de ramas |
+| `typecheck` y `next build` | limpios |
+| Copias para Deno sincronizadas | verificado por test, no a mano |
+
+**Verificado de verdad, no solo con el caso vacío.** El plan pedía comprobar
+que la función responde `{"comprobados":0}`. Se hizo eso y además el ciclo
+completo contra la base local, con dos checks sintéticos:
+
+```
+{"comprobados":2,"incidenciasAbiertas":1,"incidenciasCerradas":0}
+  el caído → estado caido, incidencia abierta con su causa
+  el sano  → estado ok, HTTP 200, 3 ms
+al recuperarse → {"incidenciasCerradas":1}, abierta_en < cerrada_en
+```
+
+Y las dos puertas: con la `service_role` key entra; con cualquier otra cosa,
+o sin cabecera, 401.
+
+### Desvíos del plan
+
+| # | Desvío | Por qué |
+|---|---|---|
+| 1 | **`copias.test.ts`**: compara byte a byte las copias de Deno con sus originales | El plan lo dejaba como comprobación manual de salida (la nº 3), que es justo lo que nadie repite. Una copia sincronizada a mano diverge SIEMPRE, y aquí divergir significa que la pantalla y el motor decidan cosas distintas del mismo servicio. El test además prohíbe que los originales importen nada, que es lo que los rompería en Deno. |
+| 2 | `allowImportingTsExtensions` en `tsconfig.json` | Deno **exige** la extensión en los imports relativos (`./evaluar.ts`). Sin esa opción hay que elegir entre que compile en el repo o que arranque en la Edge Function. Es legal porque `noEmit` ya estaba puesto. |
+| 3 | `index.ts` tipa la fila en el límite en vez de usar `any` | El plan usaba `any` con un `deno-lint-ignore`. Es el único sitio donde los nombres de columna en snake_case se cruzan con el resto del código, y equivocarse ahí no lo detecta nadie. |
+| 4 | **Migraciones aplicadas con `migration up`, no con `db reset`** | El plan pedía `db reset` en las tareas 5 y 6. **No hay `seed.sql`**: un reset se habría llevado por delante los 6 clientes y 8 proyectos dados de alta a mano. Comprobado tras cada migración que seguían ahí. |
+| 5 | Se escribe `estadoDeServicios()`, que el plan no daba | La Tarea 7 decía «modificar `proyectos.ts`» sin dar la consulta. Resuelve todos los servicios en cuatro consultas en paralelo en vez de una por servicio. |
+| 6 | El error visible sale de la **incidencia abierta** | «¿Por qué está caído AHORA?» es la pregunta de quien mira la pantalla, y la responde la incidencia viva, no el último resultado fallido que quede en el histórico. |
+| 7 | Tabla `COLOR_ESTADO` en la ficha | El `Distintivo` admite `ok/aviso/caido/desconocido` y el motor produce `ok/degradado/caido/desconocido`. El plan pasaba `s.estado` directo, lo que no compila. |
+| 8 | ~40 tests más de los que pedía el plan | Los que más importan: que el uptime **no cambie** al consolidar (dos, uno total y otro parcial), que un rechazo de validación no deje nada a medias, que el cuerpo HTTP no se descargue si no hay texto que comprobar, y que `desconocido` no empeore a un `degradado`. |
+
+**Pendiente al desplegar:** fijar los dos ajustes de la base, sin los cuales el
+disparador avisa y se calla (hay un test que lo comprueba):
+
+```sql
+alter database postgres set app.atlas_funciones_url = 'https://xxxx.supabase.co/functions/v1';
+alter database postgres set app.atlas_service_key   = '<service_role key>';
+```
+
+---
+
+## Verificación original (referencia)
 
 - [ ] **1. Toda la batería en verde**
 
