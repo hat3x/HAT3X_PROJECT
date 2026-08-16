@@ -18,7 +18,7 @@ Aplican las de los planes anteriores. Las propias de este:
 
 - **Ninguna función de decisión lee la hora del sistema.** El instante entra como parámetro, igual que en 1B. Es lo que permite probar la agrupación por ventana sin esperas.
 - **Una notificación que falla se registra igual.** Una suscripción push caducada debe detectarse, no perderse en silencio: cada envío escribe en `notificaciones`, con `ok = false` y su error cuando corresponde.
-- **Nunca se notifica dos veces la misma incidencia.** `incidencias.notificada_en` es el candado. Si la función se invoca dos veces por un reintento de `pg_net`, la segunda no manda nada.
+- **Nunca se notifica dos veces el mismo suceso.** ⚠️ *Corregido durante la ejecución:* el plan decía «la misma incidencia» y ponía `incidencias.notificada_en` como candado **único**. Es un error de diseño: una incidencia avisa **dos** veces —al abrirse y al cerrarse— y un solo campo no puede marcar dos sucesos. Con un único sello la recuperación no se enviaba jamás. Los candados son **dos**: `notificada_en` y `recuperacion_notificada_en`. Ver «Desviaciones» al final.
 - **Las claves VAPID y la de Resend viven en el entorno de la Edge Function**, nunca en la base ni en el repositorio. La pública sí viaja al navegador: es su cometido.
 - **El enlace de silenciar va firmado.** Es una URL que se pulsa desde una notificación, sin sesión: si no llevara firma, cualquiera que la adivinara podría silenciar tus alertas.
 
@@ -51,7 +51,7 @@ De la vigilancia (plan 1B): la Edge Function `vigia`, `transicion()` y su campo 
   - `type Aviso = { proyectoId: string; proyectoNombre: string; tipo: "apertura" | "recuperacion"; incidenciaIds: string[]; titulo: string; cuerpo: string }`
   - `function agrupar(sucesos: SucesoAviso[], ventanaMs: number): Aviso[]`
 
-- [ ] **Paso 1: escribir el test que falla**
+- [x] **Paso 1: escribir el test que falla**
 
 ```ts
 // src/tests/alertas/agrupar.test.ts
@@ -191,12 +191,12 @@ describe("agrupación de avisos", () => {
 });
 ```
 
-- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+- [x] **Paso 2: ejecutarlo y comprobar que falla**
 
 Ejecuta: `npx vitest run src/tests/alertas/agrupar.test.ts`
 Esperado: FALLA con «Failed to resolve import "@/lib/alertas/agrupar"».
 
-- [ ] **Paso 3: implementar**
+- [x] **Paso 3: implementar**
 
 ```ts
 // src/lib/alertas/agrupar.ts
@@ -287,12 +287,12 @@ export function agrupar(sucesos: SucesoAviso[], ventanaMs: number): Aviso[] {
 }
 ```
 
-- [ ] **Paso 4: ejecutar y exigir cobertura total**
+- [x] **Paso 4: ejecutar y exigir cobertura total**
 
 Ejecuta: `npx vitest run src/tests/alertas/ --coverage.enabled --coverage.include="src/lib/alertas/**" --coverage.thresholds.lines=100 --coverage.thresholds.branches=100`
 Esperado: PASA, 11 tests, `agrupar.ts` al **100 %** de líneas y ramas. Como la máquina de estados: aquí no se admite una rama sin probar.
 
-- [ ] **Paso 5: commit**
+- [x] **Paso 5: commit**
 
 ```bash
 git add src/lib/alertas src/tests/alertas
@@ -316,7 +316,7 @@ Quién recibe qué. El propietario recibe todo, siempre; los demás, solo lo de 
   - `function quienRecibe(proyectoId: string, personas: Persona[]): string[]`
   - `async function cargarPersonas(sb: Sb): Promise<Persona[]>`
 
-- [ ] **Paso 1: escribir el test que falla**
+- [x] **Paso 1: escribir el test que falla**
 
 ```ts
 // src/tests/alertas/destinatarios.test.ts
@@ -359,12 +359,12 @@ describe("destinatarios de un aviso", () => {
 });
 ```
 
-- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+- [x] **Paso 2: ejecutarlo y comprobar que falla**
 
 Ejecuta: `npx vitest run src/tests/alertas/destinatarios.test.ts`
 Esperado: FALLA por módulo no resuelto.
 
-- [ ] **Paso 3: implementar**
+- [x] **Paso 3: implementar**
 
 ```ts
 // src/lib/alertas/destinatarios.ts
@@ -402,12 +402,12 @@ export async function cargarPersonas(sb: Sb): Promise<Persona[]> {
 }
 ```
 
-- [ ] **Paso 4: ejecutar y comprobar que pasa**
+- [x] **Paso 4: ejecutar y comprobar que pasa**
 
 Ejecuta: `npx vitest run src/tests/alertas/destinatarios.test.ts`
 Esperado: PASA, 6 tests.
 
-- [ ] **Paso 5: commit**
+- [x] **Paso 5: commit**
 
 ```bash
 git add src/lib/alertas/destinatarios.ts src/tests/alertas/destinatarios.test.ts
@@ -431,7 +431,7 @@ Un enlace que se pulsa desde una notificación, **sin sesión**. Si no fuera fir
   - `async function firmar(carga: CargaSilencio, claveB64: string): Promise<string>`
   - `async function verificar(token: string, claveB64: string, ahoraMs: number): Promise<CargaSilencio | null>`
 
-- [ ] **Paso 1: escribir el test que falla**
+- [x] **Paso 1: escribir el test que falla**
 
 ```ts
 // src/tests/alertas/firma.test.ts
@@ -493,12 +493,12 @@ describe("firma del enlace de silenciar", () => {
 });
 ```
 
-- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+- [x] **Paso 2: ejecutarlo y comprobar que falla**
 
 Ejecuta: `npx vitest run src/tests/alertas/firma.test.ts`
 Esperado: FALLA por módulo no resuelto.
 
-- [ ] **Paso 3: implementar**
+- [x] **Paso 3: implementar**
 
 ```ts
 // src/lib/alertas/firma.ts
@@ -580,12 +580,12 @@ export async function verificar(
 }
 ```
 
-- [ ] **Paso 4: ejecutar y exigir cobertura total**
+- [x] **Paso 4: ejecutar y exigir cobertura total**
 
 Ejecuta: `npx vitest run src/tests/alertas/firma.test.ts --coverage.enabled --coverage.include="src/lib/alertas/firma.ts" --coverage.thresholds.lines=100`
 Esperado: PASA, 7 tests, al 100 %.
 
-- [ ] **Paso 5: commit**
+- [x] **Paso 5: commit**
 
 ```bash
 git add src/lib/alertas/firma.ts src/tests/alertas/firma.test.ts
@@ -608,7 +608,7 @@ git commit -m "feat(atlas): enlaces de silenciar firmados con HMAC"
   - `async function olvidarDispositivo(endpoint: string): Promise<Ok>`
   - componente `<Dispositivos suscritos={Suscrito[]} clavePublica={string} soportado={boolean} />`
 
-- [ ] **Paso 1: escribir el test que falla**
+- [x] **Paso 1: escribir el test que falla**
 
 ```tsx
 // src/tests/componentes/dispositivos.test.tsx
@@ -665,12 +665,12 @@ describe("dispositivos para notificaciones", () => {
 });
 ```
 
-- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+- [x] **Paso 2: ejecutarlo y comprobar que falla**
 
 Ejecuta: `npx vitest run src/tests/componentes/dispositivos.test.tsx`
 Esperado: FALLA por módulo no resuelto.
 
-- [ ] **Paso 3: la acción de servidor**
+- [x] **Paso 3: la acción de servidor**
 
 ```ts
 // src/lib/db/acciones-push.ts
@@ -723,7 +723,7 @@ export async function olvidarDispositivo(endpoint: string): Promise<Ok> {
 }
 ```
 
-- [ ] **Paso 4: el componente**
+- [x] **Paso 4: el componente**
 
 ```tsx
 // src/components/ajustes/Dispositivos.tsx
@@ -849,7 +849,7 @@ export function Dispositivos({
 }
 ```
 
-- [ ] **Paso 5: la pantalla**
+- [x] **Paso 5: la pantalla**
 
 ```tsx
 // src/app/ajustes/notificaciones/page.tsx
@@ -913,7 +913,7 @@ Y añade la entrada a `SECCIONES` en `src/app/ajustes/page.tsx`, con `BellRing` 
 },
 ```
 
-- [ ] **Paso 6: ejecutar, build y commit**
+- [x] **Paso 6: ejecutar, build y commit**
 
 ```bash
 npm test && npm run typecheck && npm run build
@@ -941,7 +941,7 @@ Recoge lo pendiente, agrupa, resuelve destinatarios y envía. Corre sobre **Deno
   - `async function enviarPush(sus, aviso, claves): Promise<{ ok: boolean; error: string | null; caducada: boolean }>`
   - `async function enviarEmail(destino, aviso, apiKey, buscar): Promise<{ ok: boolean; error: string | null }>`
 
-- [ ] **Paso 1: escribir el test que falla**
+- [x] **Paso 1: escribir el test que falla**
 
 ```ts
 // src/tests/avisar/enviar.test.ts
@@ -999,12 +999,12 @@ describe("envío de correo", () => {
 });
 ```
 
-- [ ] **Paso 2: ejecutarlo y comprobar que falla**
+- [x] **Paso 2: ejecutarlo y comprobar que falla**
 
 Ejecuta: `npx vitest run src/tests/avisar/enviar.test.ts`
 Esperado: FALLA por módulo no resuelto.
 
-- [ ] **Paso 3: copiar la lógica compartida**
+- [x] **Paso 3: copiar la lógica compartida**
 
 ```bash
 for f in agrupar firma; do
@@ -1015,7 +1015,7 @@ done
 
 Ambos módulos deben tener **cero imports**, o no servirán en Deno. El test del paso 6 lo comprueba.
 
-- [ ] **Paso 4: implementar el envío**
+- [x] **Paso 4: implementar el envío**
 
 ```ts
 // supabase/functions/avisar/enviar.ts
@@ -1086,7 +1086,7 @@ export async function enviarEmail(
 }
 ```
 
-- [ ] **Paso 5: la función**
+- [x] **Paso 5: la función**
 
 ```ts
 // supabase/functions/avisar/index.ts
@@ -1157,7 +1157,7 @@ Deno.serve(async (peticion: Request) => {
 
 `repartir()` resuelve destinatarios con `quienRecibe`, firma el enlace de silenciar con `firmar`, envía por los dos canales y **registra cada intento en `notificaciones`**, incluidos los fallos. Sigue el mismo patrón que `procesar()` en `vigia/index.ts`: consultas en paralelo, errores recogidos y nunca lanzados. Cuando `enviarPush` devuelve `caducada: true`, borra esa fila de `suscripciones_push`: no es un fallo pasajero.
 
-- [ ] **Paso 6: ampliar el test de copias**
+- [x] **Paso 6: ampliar el test de copias**
 
 En `src/tests/vigia/copias.test.ts`, cambia la tabla de casos para cubrir las cuatro copias:
 
@@ -1174,7 +1174,7 @@ describe.each([
 });
 ```
 
-- [ ] **Paso 7: programar la tarea**
+- [x] **Paso 7: programar la tarea**
 
 ```sql
 -- supabase/migrations/20260816100000_avisar.sql
@@ -1204,11 +1204,11 @@ select cron.schedule('atlas-avisos', '* * * * *', $$select atlas_disparar_avisos
 
 Aplícala con `npx supabase migration up --local`. **No uses `db reset`.**
 
-- [ ] **Paso 8: comprobar de punta a punta**
+- [x] **Paso 8: comprobar de punta a punta**
 
 No basta con el caso vacío. Da de alta un check que falle, deja que `vigia` abra la incidencia, invoca `avisar` y comprueba en la base que hay filas en `notificaciones` y que `incidencias.notificada_en` quedó sellada. **Repite la invocación: no debe enviarse nada la segunda vez.**
 
-- [ ] **Paso 9: commit**
+- [x] **Paso 9: commit**
 
 ```bash
 git add supabase/functions/avisar supabase/migrations src/tests
@@ -1235,7 +1235,7 @@ Puntos que el implementador no debe pasar por alto, y que el test debe cubrir:
 - Un token inválido o caducado devuelve **410**, no 500 ni una traza.
 - La respuesta es **HTML**, no JSON: la abre un navegador, no un programa.
 
-- [ ] **Commit**
+- [x] **Commit**
 
 ```bash
 git add src/app/api/silenciar src/tests/api
@@ -1271,7 +1271,7 @@ Lo que no puede fallar, y por tanto lleva test propio:
 
 En la vista **Oficina**, este bloque construye solo el plano: cada sala es un proyecto y se pinta entera del color de su peor servicio. Los agentes moviéndose por las salas son del bloque 6.
 
-- [ ] **Commit**
+- [x] **Commit**
 
 ```bash
 git add src/lib/db/resumen.ts src/components/resumen src/app/page.tsx supabase/migrations src/tests
@@ -1294,7 +1294,7 @@ Detalles con consecuencias:
 - Las incidencias de proyectos sobre los que no tienes permiso **no aparecen**. Lo garantiza RLS; el test lo comprueba con un usuario editor, no suponiéndolo.
 - Los filtros van en la URL (`?proyecto=…&severidad=…`), no en estado de cliente: un filtro que no se puede compartir por enlace es la mitad de útil.
 
-- [ ] **Commit**
+- [x] **Commit**
 
 ```bash
 git add src/lib/db/alertas.ts src/app/alertas src/components/alertas src/tests
@@ -1319,7 +1319,7 @@ El service worker es el único fichero del proyecto que no pasa por TypeScript n
 
 El contrato del evento `push` es **exactamente** `AvisoEnviable` — `{ titulo, cuerpo, url }`. Si cambia en `enviar.ts`, cambia aquí.
 
-- [ ] **Commit**
+- [x] **Commit**
 
 ```bash
 git add public src/components/marco/RegistrarSW.tsx src/app/layout.tsx
@@ -1330,22 +1330,30 @@ git commit -m "feat(atlas): PWA instalable con push y cache offline"
 
 ## Verificación de salida del plan 1C
 
-- [ ] **1. Toda la batería en verde**
+Ejecutada el **2026-08-16**. Resultados reales anotados bajo cada punto.
+
+- [x] **1. Toda la batería en verde**
 
 Ejecuta: `npm test`
 Esperado: los 291 tests de los planes anteriores más los de este, todos pasando.
 
-- [ ] **2. Cobertura**
+→ **449 tests en 46 ficheros, todos en verde.**
+
+- [x] **2. Cobertura**
 
 Ejecuta: `npm run test:coverage`
 Esperado: `src/lib/**` por encima del 80 %; `src/lib/alertas/**` al **100 %** de líneas y ramas, como `incidencias` y `uptime`.
 
-- [ ] **3. Las copias para Deno no divergen**
+→ **89,43 % de líneas y 91,02 % de funciones** en el conjunto. `alertas/**` al **100 %** en los cuatro módulos: `agrupar`, `firma`, `destinatarios` y `pendientes`.
+
+- [x] **3. Las copias para Deno no divergen**
 
 Ejecuta: `npx vitest run src/tests/vigia/copias.test.ts`
 Esperado: PASA con las **cuatro** copias.
 
-- [ ] **4. Ningún secreto llega al navegador**
+→ PASA con **cinco**: se añadió `pendientes.ts` al arreglar la recuperación. 15 tests.
+
+- [x] **4. Ningún secreto llega al navegador**
 
 ```bash
 npm run build
@@ -1353,7 +1361,9 @@ grep -rl "VAPID_PRIVADA\|RESEND_API_KEY\|ATLAS_MASTER_KEY\|ATLAS_FIRMA_KEY" .nex
 ```
 Esperado: `limpio`. La VAPID **pública** sí puede aparecer: es su cometido.
 
-- [ ] **5. La prueba que de verdad importa**
+→ `limpio`. Y se añadió la comprobación que faltaba: este `grep` busca los **nombres**, que es lo barato de comprobar y lo que menos importa. Se comprobó además que ninguno de los cuatro **valores** de `.env.local` aparece en los 11 ficheros de `.next/static`. También limpio.
+
+- [x] **5. La prueba que de verdad importa**
 
 Con un check apuntando a algo que puedas tirar a mano:
 
@@ -1365,6 +1375,61 @@ Con un check apuntando a algo que puedas tirar a mano:
 6. Vuelve a invocar `avisar` a mano: **no debe llegar nada repetido**.
 
 Si algo de esto falla, no está terminado, por muy verde que esté la batería.
+
+→ **Este punto encontró cuatro fallos con la batería entera en verde.** Está detallado en «Desviaciones», pero el resumen es que el aviso de recuperación no llegaba nunca y el push no salía. Tras arreglarlo, el ciclo completo contra la base local y las Edge Functions reales:
+
+| Paso | Resultado |
+|---|---|
+| Caída de 2 servicios del mismo proyecto → `vigia` | 2 incidencias abiertas |
+| `avisar` | **1 aviso** agrupado, 1 push con `ok = true` |
+| Servicio levantado → `vigia` | 2 incidencias cerradas |
+| `avisar` | **1 aviso de recuperación**, 1 push con `ok = true` |
+| `avisar` otra vez | `{avisos: 0, notificaciones: 0}` |
+| Enlace firmado de silenciar, **sin sesión** | HTTP 200, `silenciada_hasta` grabado |
+| El mismo enlace con un carácter cambiado | HTTP 410 |
+
+Los pasos 2 y 3 —que la notificación *aparezca* en la pantalla y que al pulsarla abra la ficha— son los únicos que no se pueden automatizar: hay que verlos. El envío llegó a FCM con `ok = true` y `suscripciones_push.ultima_ok_en` quedó grabado, así que lo que falta por confirmar a ojo es el tramo del navegador.
+
+El correo quedó registrado como `ok = false` con el motivo `«Correo sin configurar: falta RESEND_API_KEY»`, que es el comportamiento correcto y no un fallo: falta esa clave por dar de alta.
+
+---
+
+## Desviaciones durante la ejecución
+
+Lo que el plan decía y no funcionaba, o no contemplaba. Anotado el **2026-08-16**.
+
+### 1. Un candado no basta: la recuperación no llegaba nunca
+
+**Qué decía el plan.** «`incidencias.notificada_en` es el candado.» La Tarea 5 lo implementaba con `.is("notificada_en", null)`.
+
+**Qué pasaba.** Una incidencia avisa dos veces en su vida. Al abrirse, `avisar` la envía y sella `notificada_en`. Al cerrarse, la fila **sigue sellada**, así que la consulta de pendientes no vuelve a verla: el `tipo: i.cerrada_en ? "recuperacion" : "apertura"` que el propio plan escribía era código inalcanzable. La caída llegaba; el «ya funciona», nunca.
+
+**Cómo se arregló.** Migración `20260816120000_sello_recuperacion.sql` con `recuperacion_notificada_en`, más un módulo nuevo, `src/lib/alertas/pendientes.ts`, que decide qué se envía y qué campo se sella. Al 100 % de líneas y ramas, sin imports, con su copia vigilada para Deno. La decisión estaba antes embebida en un filtro de PostgREST, donde ninguna prueba podía alcanzarla — que es precisamente por qué el fallo sobrevivió a 435 tests en verde.
+
+Dos casos que el plan tampoco contemplaba y que el módulo ahora resuelve:
+
+- Una incidencia que se abre y se cierra **entre dos pasadas** no debe avisar su recuperación: decir «ya funciona» de algo que nadie sabía roto desconcierta más que informar. Se sella y se calla.
+- Una silenciada se sella igual aunque no se envíe. Lo que se calla es el aviso, nunca el registro.
+
+### 2. Tres cosas que solo se ven ejecutando
+
+- **`VAPID_PUBLICA` frente a `NEXT_PUBLIC_VAPID_PUBLICA`.** La Edge Function lee el nombre a secas; el navegador solo ve las variables con prefijo. Estaba solo la segunda, así que cada envío se registraba como «Push sin configurar». La clave pública tiene que estar **dos veces con el mismo valor**, y no pasa nada: no es un secreto.
+- **`ATLAS_URL_PUBLICA` no existía.** El código cae a `http://localhost:3010` y el servidor escucha en el 3000: los enlaces de las notificaciones no abrían nada.
+- **`suscripciones_push.ultima_ok_en` no se escribía jamás**, pese a existir para saber si una suscripción sigue viva.
+
+`.env.example` tenía 4 de las 10 variables. Ahora están las diez, con el porqué de cada una.
+
+### 3. El `matcher` del middleware se comía la PWA (Tarea 9)
+
+Excluía `manifest.json`, pero el fichero se llama `manifest.webmanifest`; y `sw.js` no estaba excluido en absoluto. Sin sesión, el guardia respondía **307** a los dos, y el navegador recibía una redirección donde esperaba JSON o JavaScript: Atlas no se instalaba y no había push. Comprobado contra el servidor real, antes `307` y ahora `200` con sus tipos de contenido. Lo vigila `src/tests/pwa/instalable.test.ts`, que extrae el literal del `matcher` del fuente —Next exige que lo sea— y comprueba que las páginas entran y estos ficheros no.
+
+### 4. Iconos generados, no traídos
+
+El plan pedía «iconos en `public/iconos/`» sin decir de dónde. Se generan por cálculo con `scripts/iconos.mjs` (`npm run iconos`), sin dependencias: así se sabe qué hay dentro de cada byte y se pueden rehacer. Regenerarlos produce ficheros idénticos, comprobado por checksum.
+
+### 5. Un `.env` a la vista de git
+
+No es del plan, pero salió al commitear: `.gitignore` decía `.env*.local`, que **no** cubre `.env.local.bak`. Una copia del entorno —con la clave maestra, la de firma, la privada de VAPID y la `service_role`— aparecía en `git status` esperando a un `git add -A`. Nunca llegó a commitearse (`git log --all -- 'apps/atlas/.env*'` está vacío). Ahora es `.env*` con `!.env.example`.
 
 ---
 
