@@ -123,6 +123,19 @@ try {
   const { rows: clientes } = await db.query(`SELECT nombre FROM clientes ORDER BY nombre`);
   const { rows: proyectos } = await db.query(`SELECT nombre FROM proyectos ORDER BY nombre`);
 
+  // Las fichas se prueban con el cliente y el proyecto que MÁS servicios tienen:
+  // son las que de verdad pintan algo, y por tanto las que pueden romperse.
+  const { rows: fichaCliente } = await db.query(
+    `SELECT c.slug, c.nombre, count(s.id) AS n FROM clientes c
+       JOIN servicios s ON s.cliente_id = c.id
+      GROUP BY c.slug, c.nombre ORDER BY n DESC LIMIT 1`
+  );
+  const { rows: fichaProyecto } = await db.query(
+    `SELECT p.slug, p.nombre, count(s.id) AS n FROM proyectos p
+       JOIN servicios s ON s.proyecto_id = p.id
+      GROUP BY p.slug, p.nombre ORDER BY n DESC LIMIT 1`
+  );
+
   const PANTALLAS = [
     { ruta: "/", exige: proyectos.slice(0, 2).map((p) => p.nombre) },
     { ruta: "/clientes", exige: clientes.slice(0, 3).map((c) => c.nombre) },
@@ -134,6 +147,31 @@ try {
     { ruta: "/ajustes/usuarios", exige: [] },
     { ruta: "/ajustes/credenciales", exige: [] },
   ];
+
+  // Una ficha que carga pero no lista los servicios es justo el fallo que no se
+  // ve desde fuera: responde 200, se ve bien y está mintiendo.
+  for (const c of fichaCliente) {
+    const { rows: suyos } = await db.query(
+      `SELECT s.nombre FROM servicios s JOIN clientes cl ON cl.id = s.cliente_id
+        WHERE cl.slug = $1 ORDER BY s.nombre LIMIT 3`,
+      [c.slug]
+    );
+    PANTALLAS.push({
+      ruta: `/clientes/${c.slug}`,
+      exige: [c.nombre, ...suyos.map((s) => s.nombre)],
+    });
+  }
+  for (const p of fichaProyecto) {
+    const { rows: suyos } = await db.query(
+      `SELECT s.nombre FROM servicios s JOIN proyectos pr ON pr.id = s.proyecto_id
+        WHERE pr.slug = $1 ORDER BY s.nombre LIMIT 3`,
+      [p.slug]
+    );
+    PANTALLAS.push({
+      ruta: `/proyectos/${p.slug}`,
+      exige: [p.nombre, ...suyos.map((s) => s.nombre)],
+    });
+  }
 
   console.log(`Atlas en ${BASE} — sesión con segundo factor superada\n`);
 

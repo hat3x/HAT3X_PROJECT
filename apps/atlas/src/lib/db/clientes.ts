@@ -168,6 +168,53 @@ export async function obtenerCliente(
   };
 }
 
+export type ServicioDeCliente = {
+  id: string;
+  nombre: string;
+  tipo: string;
+  proyectoNombre: string;
+  proyectoSlug: string;
+};
+
+type FilaServicioCliente = {
+  id: string;
+  nombre: string;
+  tipo: string;
+  proyectos: { nombre: string; slug: string };
+};
+
+/**
+ * Lo que es de ESTE cliente, para poder responder a «¿le está afectando algo
+ * ahora mismo?» (§8.4 del spec).
+ *
+ * Solo los que tienen `cliente_id`. Un proyecto como Kairos también tiene
+ * servicios de plataforma —la web, la base de datos— comunes a todos los
+ * inquilinos: colarlos aquí diría que a este cliente le pasa algo que en
+ * realidad no es suyo.
+ *
+ * No filtra por permiso a propósito: de eso se encarga RLS. Si filtrase por su
+ * cuenta, un fallo de RLS pasaría desapercibido.
+ */
+export async function serviciosDeCliente(
+  sb: Sb,
+  clienteId: string
+): Promise<ServicioDeCliente[]> {
+  const { data, error } = await sb
+    .from("servicios")
+    .select("id, nombre, tipo, proyectos!inner(nombre, slug)")
+    .eq("cliente_id", clienteId)
+    .order("nombre");
+  if (error) throw error;
+
+  return ((data ?? []) as unknown as FilaServicioCliente[]).map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
+    tipo: s.tipo,
+    proyectoNombre: s.proyectos.nombre,
+    proyectoSlug: s.proyectos.slug,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Escritura. Recibe `sb` y hace todo el trabajo —validar, comprobar el rol y
 // escribir— para que se pueda probar contra la base. El envoltorio de
