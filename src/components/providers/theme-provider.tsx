@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 
-import { THEME_STORAGE_KEY } from "@/components/providers/theme-script";
+import { PALETTE_STORAGE_KEY, THEME_STORAGE_KEY } from "@/components/providers/theme-script";
 
 /**
  * Provider de tema claro/oscuro sin dependencias externas.
@@ -24,10 +24,23 @@ import { THEME_STORAGE_KEY } from "@/components/providers/theme-script";
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
+/** Paletas de ambiente (tiñen la aurora/marca). "laton" = la de la casa (default). */
+export type Palette = "laton" | "zafiro" | "oceano" | "nebulosa" | "grafito" | "crepusculo";
+export const PALETTES: readonly Palette[] = [
+  "laton",
+  "zafiro",
+  "oceano",
+  "nebulosa",
+  "grafito",
+  "crepusculo",
+];
+
 interface ThemeContextValue {
   theme: Theme;
   resolvedTheme: ResolvedTheme;
   setTheme: (theme: Theme) => void;
+  palette: Palette;
+  setPalette: (palette: Palette) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -52,14 +65,25 @@ export function ThemeProvider({
   // hidratación; el valor real se rehidrata en el efecto de montaje.
   const [theme, setThemeState] = useState<Theme>("system");
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
+  const [palette, setPaletteState] = useState<Palette>("laton");
 
-  // Rehidrata la preferencia persistida al montar.
+  // Rehidrata las preferencias persistidas al montar.
   useEffect(() => {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system") {
       setThemeState(stored);
     }
+    const storedPalette = window.localStorage.getItem(PALETTE_STORAGE_KEY);
+    if (storedPalette && (PALETTES as readonly string[]).includes(storedPalette)) {
+      setPaletteState(storedPalette as Palette);
+    }
   }, []);
+
+  // Refleja la paleta en el atributo `data-paleta` del <html> (la aurora y el
+  // tinte de marca dependen de él). El anti-FOUC lo cubre ThemeScript.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-paleta", palette);
+  }, [palette]);
 
   // Resuelve el tema efectivo y sincroniza la clase cada vez que cambia la
   // preferencia; en "system", además, sigue los cambios del SO en vivo.
@@ -84,9 +108,14 @@ export function ThemeProvider({
     setThemeState(next);
   }, []);
 
+  const setPalette = useCallback((next: Palette): void => {
+    window.localStorage.setItem(PALETTE_STORAGE_KEY, next);
+    setPaletteState(next);
+  }, []);
+
   const value = useMemo<ThemeContextValue>(
-    () => ({ theme, resolvedTheme, setTheme }),
-    [theme, resolvedTheme, setTheme],
+    () => ({ theme, resolvedTheme, setTheme, palette, setPalette }),
+    [theme, resolvedTheme, setTheme, palette, setPalette],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

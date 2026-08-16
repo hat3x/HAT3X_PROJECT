@@ -6,6 +6,7 @@ import {
   Blocks,
   Building2,
   Clock,
+  Contrast,
   Palette,
   Receipt,
   Scissors,
@@ -31,6 +32,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/ajustes/datos", label: "Datos del salón", icon: Store },
   { href: "/ajustes/fiscal", label: "Datos fiscales", icon: Receipt },
   { href: "/ajustes/marca", label: "Marca", icon: Palette },
+  { href: "/ajustes/apariencia", label: "Apariencia", icon: Contrast },
   { href: "/ajustes/complementos", label: "Complementos", icon: Blocks },
 ];
 

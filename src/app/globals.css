@@ -193,6 +193,22 @@
     color-scheme: dark;
   }
 
+  /* ---- Paletas de ambiente (multi-paleta estilo Atlas) ------------------
+     Cada paleta redefine SOLO --brand, del que derivan la aurora y el tinte
+     de marca (::selection, bg-brand). "latón" es el valor por defecto de
+     :root/.dark (sin regla). El white-label del tenant sigue mandando en el
+     acento (--primary/--accent), así que esto es puramente el AMBIENTE. */
+  [data-paleta="zafiro"] { --brand: 211 90% 46%; }
+  .dark[data-paleta="zafiro"] { --brand: 211 90% 64%; }
+  [data-paleta="oceano"] { --brand: 191 82% 34%; }
+  .dark[data-paleta="oceano"] { --brand: 189 75% 55%; }
+  [data-paleta="nebulosa"] { --brand: 245 70% 60%; }
+  .dark[data-paleta="nebulosa"] { --brand: 250 88% 76%; }
+  [data-paleta="grafito"] { --brand: 215 25% 42%; }
+  .dark[data-paleta="grafito"] { --brand: 215 20% 68%; }
+  [data-paleta="crepusculo"] { --brand: 350 66% 52%; }
+  .dark[data-paleta="crepusculo"] { --brand: 350 85% 74%; }
+
   /* Scrollbars finas e integradas con el fondo (thumb "flotante" gracias al
    * borde transparente + background-clip), en lugar de la barra nativa gruesa.
    * Coherentes en toda la app y en claro/oscuro vía tokens del tema. */

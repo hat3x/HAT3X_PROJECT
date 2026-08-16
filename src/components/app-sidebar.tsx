@@ -3,14 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ChevronsLeft, ChevronsRight, LogOut, Menu, Monitor, Moon, Sun, X } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, LogOut, Menu, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { KairosMark } from "@/components/brand/kairos-mark";
 import { buildDashboardNavItems, type NavItem } from "@/components/dashboard-nav-items";
 import { useHasPos } from "@/components/providers/salon-features-provider";
 import { useSector } from "@/components/providers/sector-provider";
-import { useTheme, type Theme } from "@/components/providers/theme-provider";
 import type { MemberRole } from "@/types/database";
 
 /** Clave de localStorage para recordar si el rail está plegado entre sesiones. */
@@ -23,14 +22,6 @@ const COLLAPSE_STORAGE_KEY = "kairos:nav-collapsed";
 function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
-
-/** Ciclo del conmutador de tema (temporal en el rail; el selector completo irá a Ajustes). */
-const THEME_CYCLE: Record<Theme, Theme> = { light: "dark", dark: "system", system: "light" };
-const THEME_META: Record<Theme, { label: string; icon: typeof Sun }> = {
-  light: { label: "Claro", icon: Sun },
-  dark: { label: "Oscuro", icon: Moon },
-  system: { label: "Sistema", icon: Monitor },
-};
 
 // Clase base de TODO botón/enlace del rail — misma altura, padding y radio,
 // para que la separación entre iconos sea idéntica en todo el rail.
@@ -79,15 +70,9 @@ export function AppSidebar({
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const hasPos = useHasPos();
   const sector = useSector();
-  const { theme, setTheme } = useTheme();
-
   const items = buildDashboardNavItems({ showSettings, hasPos, sector });
   const brand = brandName?.trim() ? brandName : "Kairos";
   const logo = logoUrl?.trim() ? logoUrl : null;
-
-  // Antes de montar, un placeholder neutro (evita desajuste de hidratación con el tema real).
-  const themeMeta = mounted ? THEME_META[theme] : THEME_META.system;
-  const ThemeIcon = themeMeta.icon;
 
   // Cierra el drawer móvil al cambiar de ruta (navegación completada).
   useEffect(() => {
@@ -253,16 +238,6 @@ export function AppSidebar({
           <span className={cn(compact && "sr-only")}>Plegar menú</span>
         </button>
       ) : null}
-
-      <button
-        type="button"
-        onClick={() => setTheme(THEME_CYCLE[theme])}
-        title={`Tema: ${themeMeta.label}`}
-        className={cn(NAV_ITEM_BASE, NAV_ITEM_IDLE, compact && "justify-center gap-0 px-0")}
-      >
-        <ThemeIcon className="h-6 w-6 shrink-0" aria-hidden="true" />
-        <span className={cn(compact && "sr-only")}>Tema · {themeMeta.label}</span>
-      </button>
 
       <form action="/auth/signout" method="post">
         <button
