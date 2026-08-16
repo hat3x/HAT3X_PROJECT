@@ -236,7 +236,7 @@ function WeekGrid({
           const list = byDay.get(day) ?? [];
           const isToday = day === today;
           return (
-            <div key={day} className="flex flex-col rounded-xl border bg-card">
+            <div key={day} className="flex flex-col rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150">
               <button
                 type="button"
                 onClick={() => onPickDay(day)}
@@ -402,7 +402,7 @@ function YearGrid({
         const gridStart = startOfWeek(first);
         const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
         return (
-          <div key={mi} className="rounded-xl border bg-card p-3">
+          <div key={mi} className="rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-3">
             <p className="mb-2 text-sm font-semibold capitalize">
               {label(toUtc(first), { month: "long" })}
             </p>

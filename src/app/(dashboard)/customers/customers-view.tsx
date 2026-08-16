@@ -100,7 +100,7 @@ export function CustomersView({ salonId }: CustomersViewProps): React.ReactEleme
         />
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm animate-fade-up [animation-delay:120ms]">
+      <div className="overflow-hidden rounded-xl border bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-sm animate-fade-up [animation-delay:120ms]">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">

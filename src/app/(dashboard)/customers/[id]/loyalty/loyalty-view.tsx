@@ -129,7 +129,7 @@ export function CustomerLoyaltyView({
               </p>
               <p className="text-xs text-muted-foreground">puntos acumulados</p>
             </div>
-            <div className="rounded-xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+            <div className="rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-5 shadow-sm transition-shadow hover:shadow-md">
               <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                 <CalendarCheck className="h-5 w-5" />
               </span>
@@ -138,7 +138,7 @@ export function CustomerLoyaltyView({
                 {visits_total === 1 ? "visita registrada" : "visitas registradas"}
               </p>
             </div>
-            <div className="rounded-xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+            <div className="rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-5 shadow-sm transition-shadow hover:shadow-md">
               <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                 <CalendarClock className="h-5 w-5" />
               </span>

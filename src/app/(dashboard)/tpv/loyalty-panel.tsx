@@ -364,7 +364,7 @@ function Stat({
     <div
       className={cn(
         "rounded-xl border p-3 shadow-xs",
-        highlight ? "border-primary/25 bg-primary/[0.06]" : "border-border/70 bg-card",
+        highlight ? "border-primary/25 bg-primary/[0.06]" : "border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150",
       )}
     >
       <span

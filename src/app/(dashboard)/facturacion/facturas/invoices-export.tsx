@@ -170,7 +170,7 @@ function ExportFormatLink({
         href={href}
         download
         className={cn(
-          "group flex items-start gap-3 rounded-lg border border-border/70 bg-card p-3 text-left",
+          "group flex items-start gap-3 rounded-lg border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-3 text-left",
           "transition-all duration-200 ease-apple-out",
           "hover:border-ring/40 hover:bg-accent active:scale-[0.99]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",

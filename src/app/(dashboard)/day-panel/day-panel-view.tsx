@@ -293,7 +293,7 @@ export function DayPanelView({
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="rounded-xl border border-border/70 bg-card p-4 shadow-sm"
+              className="rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-4 shadow-sm"
             >
               <div className="mb-4 flex items-center gap-2">
                 <Skeleton className="h-3 w-3 rounded-full" />

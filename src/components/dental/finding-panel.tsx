@@ -136,7 +136,7 @@ export function FindingPanel({
     : TOOTH_COLORS.sano;
 
   return (
-    <Card className="border-primary/20 bg-card shadow-md animate-in slide-in-from-bottom-4 duration-200">
+    <Card className="border-primary/20 shadow-md animate-in slide-in-from-bottom-4 duration-200">
       <CardHeader className="pb-3 flex flex-row items-start justify-between gap-2">
         <div>
           <CardTitle className="text-base">Diente {fdi}</CardTitle>

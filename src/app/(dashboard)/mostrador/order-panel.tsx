@@ -256,7 +256,7 @@ export function OrderPanel({
             {displayLines.map((line, i) => (
               <li
                 key={items[i]!.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card p-3 text-sm shadow-xs"
+                className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-3 text-sm shadow-xs"
               >
                 <span className="min-w-0 flex-1">
                   <span className="font-medium tabular-nums text-foreground">

@@ -839,7 +839,7 @@ function CatalogButton({
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex h-24 flex-col items-start justify-between overflow-hidden rounded-xl border border-border/70 bg-card p-3 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.98]"
+      className="group relative flex h-24 flex-col items-start justify-between overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-3 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.98]"
     >
       <span className="flex w-full items-start justify-between gap-1.5">
         <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
@@ -901,7 +901,7 @@ function AppointmentPicker({
     return null;
   }
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-3 shadow-xs">
       <span className="inline-flex items-center gap-1.5 pl-1 pr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <CalendarClock className="h-3.5 w-3.5" />
         Desde cita
@@ -955,7 +955,7 @@ function TicketRow({
   }
 
   return (
-    <li className="grid gap-2.5 rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+    <li className="grid gap-2.5 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-3 shadow-xs">
       <div className="flex items-start justify-between gap-2">
         {line.kind === "manual" ? (
           <Input

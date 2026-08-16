@@ -147,7 +147,7 @@ export function RangeSelector({
         <form
           id={`${fieldId}-custom`}
           onSubmit={handleCustomSubmit}
-          className="mt-3 flex flex-wrap items-end gap-3 rounded-xl border border-border/70 bg-card p-3 shadow-xs animate-fade-up"
+          className="mt-3 flex flex-wrap items-end gap-3 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-3 shadow-xs animate-fade-up"
         >
           <div className="flex flex-col gap-1.5">
             <label

@@ -252,7 +252,7 @@ function BrandPreview({
   return (
     <div
       aria-hidden="true"
-      className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs"
+      className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 shadow-xs"
     >
       <div
         className="flex items-center gap-3 px-4 py-3"

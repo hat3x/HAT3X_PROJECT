@@ -52,7 +52,7 @@ export function TicketDetailView({ detail }: TicketDetailViewProps): React.React
   return (
     <div className="space-y-8">
       {/* Cabecera de la venta */}
-      <dl className="grid animate-fade-up grid-cols-2 gap-x-6 gap-y-5 rounded-xl border bg-card p-5 sm:grid-cols-3 [animation-delay:60ms]">
+      <dl className="grid animate-fade-up grid-cols-2 gap-x-6 gap-y-5 rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-5 sm:grid-cols-3 [animation-delay:60ms]">
         <MetaField label="Fecha y hora">{formatDateTime(detail.soldAt)}</MetaField>
         <MetaField label="Estado">
           <Badge variant={SALE_STATUS_VARIANT[detail.status]}>
@@ -177,7 +177,7 @@ export function TicketDetailView({ detail }: TicketDetailViewProps): React.React
         {/* Totales */}
         <section className="space-y-3">
           <h3 className="text-sm font-semibold tracking-tight">Totales</h3>
-          <dl className="space-y-2 rounded-xl border bg-card p-5 tabular-nums">
+          <dl className="space-y-2 rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-5 tabular-nums">
             {hasDiscount ? (
               <>
                 <div className="flex justify-between text-sm text-muted-foreground">

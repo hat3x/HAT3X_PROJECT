@@ -37,7 +37,7 @@ export function OpenOrdersBar({
   const orders = openOrders.data ?? [];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-3 shadow-xs">
       <span className="inline-flex items-center gap-1.5 pl-1 pr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <Receipt className="h-3.5 w-3.5" />
         Cuentas abiertas

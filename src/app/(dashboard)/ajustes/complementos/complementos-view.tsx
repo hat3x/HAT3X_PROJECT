@@ -174,7 +174,7 @@ export function ComplementosView({
             <li key={feature}>
               <div
                 className={cn(
-                  "flex h-full flex-col gap-4 rounded-xl border border-border/70 bg-card p-5 shadow-xs",
+                  "flex h-full flex-col gap-4 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-5 shadow-xs",
                   meta.cardClassName,
                 )}
               >

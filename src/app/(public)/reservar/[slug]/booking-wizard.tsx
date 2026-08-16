@@ -375,7 +375,7 @@ export function BookingWizard({
                     type="button"
                     onClick={() => chooseService(service.id)}
                     style={{ animationDelay: `${index * 45}ms` }}
-                    className="group flex w-full animate-fade-up items-center gap-4 rounded-xl border border-border/70 bg-card p-4 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]"
+                    className="group flex w-full animate-fade-up items-center gap-4 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-4 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2">
@@ -429,7 +429,7 @@ export function BookingWizard({
                   <button
                     type="button"
                     onClick={() => chooseProfessional("any")}
-                    className="group flex w-full items-center gap-3.5 rounded-xl border border-border/70 bg-card p-4 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]"
+                    className="group flex w-full items-center gap-3.5 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-4 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]"
                   >
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-brand">
                       <Sparkles className="h-5 w-5" />
@@ -448,7 +448,7 @@ export function BookingWizard({
                       type="button"
                       onClick={() => chooseProfessional(professional.id)}
                       style={{ animationDelay: `${index * 45}ms` }}
-                      className="group flex w-full animate-fade-up items-center gap-3.5 rounded-xl border border-border/70 bg-card p-4 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]"
+                      className="group flex w-full animate-fade-up items-center gap-3.5 rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 p-4 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]"
                     >
                       <span
                         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-semibold text-white shadow-sm"
