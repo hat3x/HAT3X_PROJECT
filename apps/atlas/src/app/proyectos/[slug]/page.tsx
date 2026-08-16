@@ -3,8 +3,11 @@ import Link from "next/link";
 import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 import { obtenerProyecto } from "@/lib/db/proyectos";
+import { listarClientes } from "@/lib/db/clientes";
 import { Portada } from "@/components/proyectos/Portada";
 import { Distintivo } from "@/components/ui/Distintivo";
+import { FormServicio } from "@/components/proyectos/FormServicio";
+import { FormContrato } from "@/components/proyectos/FormContrato";
 
 const EUROS = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 
@@ -22,12 +25,15 @@ export default async function FichaProyecto({
   params: { slug: string };
 }) {
   const sb = await clienteServidor();
-  const [perfil, proyecto] = await Promise.all([
+  const [perfil, proyecto, clientes] = await Promise.all([
     obtenerPerfil(sb),
     obtenerProyecto(sb, params.slug),
+    listarClientes(sb),
   ]);
   if (!proyecto) notFound();
   const verImportes = perfil?.esPropietario ?? false;
+  // A los formularios solo viaja lo que necesitan para poblar un desplegable.
+  const elegibles = clientes.map((c) => ({ id: c.id, nombre: c.nombre }));
   const enProduccion =
     proyecto.estado === "produccion" || proyecto.estado === "mantenimiento";
 
@@ -97,6 +103,13 @@ export default async function FichaProyecto({
               ))}
             </ul>
           )}
+          <div className="mt-3">
+            <FormServicio
+              proyectoId={proyecto.id}
+              slugProyecto={proyecto.slug}
+              clientes={elegibles}
+            />
+          </div>
         </section>
 
         <aside className="space-y-4">
@@ -124,6 +137,13 @@ export default async function FichaProyecto({
                   </li>
                 ))}
               </ul>
+            )}
+            {/* Un contrato lleva dinero: solo el propietario. La acción lo
+                rechaza igualmente, pero no se enseña lo que no se puede usar. */}
+            {verImportes && (
+              <div className="mt-3">
+                <FormContrato proyectoId={proyecto.id} clientes={elegibles} />
+              </div>
             )}
           </section>
 

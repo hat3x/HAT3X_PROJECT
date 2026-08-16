@@ -34,6 +34,7 @@
     --cristal-sombra: 0 6px 22px rgba(20, 30, 60, 0.13);
     /* Bajo texto denso el cristal se opaca: es enemigo de la letra pequeña. */
     --cristal-fondo-denso: rgba(255, 255, 255, 0.86);
+    --entrada-fondo: rgba(255, 255, 255, 0.92);
   }
 
   [data-tema="oscuro"] {
@@ -43,6 +44,7 @@
     --cristal-borde: rgba(255, 255, 255, 0.16);
     --cristal-sombra: 0 6px 24px rgba(0, 0, 0, 0.45);
     --cristal-fondo-denso: rgba(28, 28, 32, 0.88);
+    --entrada-fondo: rgba(0, 0, 0, 0.35);
   }
 
   /* --- Paletas: base y las dos auroras --- */
@@ -75,6 +77,26 @@
   }
   /* Para tablas y listas: el cristal se opaca bajo texto pequeño. */
   .cristal-denso { background: var(--cristal-fondo-denso); }
+
+  /* Campos de formulario. Sin cristal a propósito: el desenfoque bajo un campo
+     editable estorba a la lectura de lo que estás escribiendo. */
+  .entrada {
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
+    color: var(--texto);
+    background: var(--entrada-fondo);
+    border: 1px solid var(--cristal-borde);
+    border-radius: 8px;
+  }
+  .entrada:focus-visible {
+    outline: 2px solid var(--texto);
+    outline-offset: 1px;
+  }
+  /* El icono del selector de fecha es negro fijo: en tema oscuro desaparece. */
+  [data-tema="oscuro"] .entrada::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
 }
 
 /* Si el sistema pide menos movimiento, las auroras se quedan quietas. */
