@@ -86,17 +86,36 @@ describe("agrupación de avisos", () => {
   });
 
   it("cinco servicios del mismo proyecto en la ventana dan UN aviso", () => {
+    // Los instantes se construyen sumando a una base, no formateando segundos a
+    // mano: «10:00:60» no es una hora válida y `new Date` devuelve NaN.
+    const base = Date.parse("2026-08-16T10:00:00.000Z");
     const sucesos = ["a", "b", "c", "d", "e"].map((n, i) =>
       suceso({
         incidenciaId: n,
         servicioNombre: `Servicio ${n}`,
-        abiertaEn: `2026-08-16T10:00:${String(i * 20).padStart(2, "0")}.000Z`,
+        abiertaEn: new Date(base + i * 20_000).toISOString(),
       })
     );
     const avisos = agrupar(sucesos, VENTANA);
     expect(avisos).toHaveLength(1);
     expect(avisos[0]!.titulo).toBe("Recepcionista Sara: 5 servicios caídos");
     expect(avisos[0]!.incidenciaIds).toHaveLength(5);
+  });
+
+  // La ventana se mide desde el PRIMERO del grupo, no desde el anterior. Si se
+  // midiera en cadena, una caída lenta iría absorbiendo sucesos sin fin.
+  it("la ventana se mide desde el primero del grupo, no en cadena", () => {
+    const avisos = agrupar(
+      [
+        suceso({ incidenciaId: "i1", abiertaEn: "2026-08-16T10:00:00.000Z" }),
+        suceso({ incidenciaId: "i2", abiertaEn: "2026-08-16T10:01:30.000Z" }),
+        suceso({ incidenciaId: "i3", abiertaEn: "2026-08-16T10:03:00.000Z" }),
+      ],
+      VENTANA
+    );
+    expect(avisos).toHaveLength(2);
+    expect(avisos[0]!.incidenciaIds).toEqual(["i1", "i2"]);
+    expect(avisos[1]!.incidenciaIds).toEqual(["i3"]);
   });
 
   it("dos proyectos distintos dan dos avisos aunque caigan a la vez", () => {
