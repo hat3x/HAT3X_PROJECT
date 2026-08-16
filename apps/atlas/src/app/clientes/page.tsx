@@ -2,6 +2,7 @@ import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 import { listarClientes } from "@/lib/db/clientes";
 import { TarjetaCliente } from "@/components/clientes/TarjetaCliente";
+import { FormCliente } from "@/components/clientes/FormCliente";
 
 export default async function PaginaClientes() {
   const sb = await clienteServidor();
@@ -14,9 +15,14 @@ export default async function PaginaClientes() {
     <section className="space-y-4">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
-        <span className="text-sm" style={{ color: "var(--texto-tenue)" }}>
-          {clientes.length === 1 ? "1 cliente" : `${clientes.length} clientes`}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm" style={{ color: "var(--texto-tenue)" }}>
+            {clientes.length === 1 ? "1 cliente" : `${clientes.length} clientes`}
+          </span>
+          {/* Dar de alta un cliente es cosa del propietario, igual que el
+              contrato. La acción lo rechaza igualmente. */}
+          {verImportes && <FormCliente />}
+        </div>
       </header>
 
       {clientes.length === 0 ? (
