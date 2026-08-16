@@ -6,7 +6,7 @@ import { SelectorApariencia } from "@/components/ajustes/SelectorApariencia";
 // El módulo real es "use server" y hablaría con Supabase. Aquí se prueba el
 // selector, no la persistencia: de eso se ocupa apariencia.test.ts.
 const guardar = vi.fn(async (_tema: string, _paleta: string) => ({ ok: true }));
-vi.mock("@/lib/db/apariencia", () => ({
+vi.mock("@/lib/db/acciones-apariencia", () => ({
   guardarApariencia: (tema: string, paleta: string) => guardar(tema, paleta),
 }));
 

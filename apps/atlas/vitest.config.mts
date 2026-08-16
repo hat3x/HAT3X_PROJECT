@@ -19,8 +19,18 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/lib/**"],
-      // Envoltorios de red, no lógica: no aportan cobertura significativa.
-      exclude: ["src/lib/supabase/**"],
+      exclude: [
+        // Envoltorios de red, no lógica: no aportan cobertura significativa.
+        "src/lib/supabase/**",
+        // Los `acciones-*` son el límite HTTP y nada más: resuelven el cliente
+        // de servidor, delegan en el núcleo y revalidan la caché. Lo que deciden
+        // vive en el módulo que recibe `sb`, y ese sí se prueba contra la base.
+        //
+        // Sin esto la métrica mentía en las dos direcciones: `acciones-push` y
+        // `apariencia` salían al 0 % solo porque un test de componente los
+        // cargaba con `vi.mock`, y los otros cinco no aparecían siquiera.
+        "src/lib/db/acciones-*.ts",
+      ],
       reporter: ["text", "html"],
       thresholds: { lines: 80, functions: 80 },
     },

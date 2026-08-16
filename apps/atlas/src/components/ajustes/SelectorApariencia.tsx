@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { Check } from "lucide-react";
-import { guardarApariencia } from "@/lib/db/apariencia";
+import { guardarApariencia } from "@/lib/db/acciones-apariencia";
 import { esPaletaCalida, type Tema, type Paleta } from "@/lib/tema/tokens";
 
 const NOMBRES: Record<Paleta, string> = {
