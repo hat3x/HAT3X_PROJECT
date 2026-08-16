@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { Palette, KeyRound } from "lucide-react";
+import { Palette, KeyRound, Users } from "lucide-react";
 import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 
-// La sección que falta (usuarios) llega con la tarea 15. Aquí solo se enseña lo
-// que de verdad funciona: un enlace muerto es peor que un hueco honesto.
+// Solo se enseña lo que de verdad funciona: un enlace muerto es peor que un
+// hueco honesto.
 const SECCIONES = [
   {
     href: "/ajustes/apariencia",
@@ -18,6 +18,13 @@ const SECCIONES = [
     titulo: "Llavero",
     descripcion: "Las claves de los servicios, cifradas. Alta, rotación y borrado.",
     Icono: KeyRound,
+    soloPropietario: true,
+  },
+  {
+    href: "/ajustes/usuarios",
+    titulo: "Usuarios y permisos",
+    descripcion: "Quién llega a qué proyecto, y como editor o como lector.",
+    Icono: Users,
     soloPropietario: true,
   },
 ] as const;
