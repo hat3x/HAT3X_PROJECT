@@ -3050,9 +3050,64 @@ git add scripts src/tests/migrar package.json
 git commit -m "feat(atlas): migracion idempotente de clientes, proyectos y contratos"
 ```
 
+### ✅ EJECUTADA — commit `edf4758`
+
+179 tests en total (16 nuevos), typecheck y `next build` limpios.
+
+**Verificada de punta a punta, no solo con tests unitarios.** Como la base de
+origen no era alcanzable (ver abajo), se montó una base desechable con el
+esquema antiguo y filas que cubren los cuatro casos límite: cliente sin
+nombre, proyecto sin fecha de alta, proyecto sin cliente y baja anterior al
+alta. El script se ejecutó **dos veces seguidas** contra la base local de
+Atlas y dejó los mismos 2 clientes, 5 proyectos y 3 contratos: la
+idempotencia funciona.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | El mapeo va a `src/lib/migrar/mapeo.ts`, no a `scripts/` | Así entra en el umbral de cobertura como el resto de `src/lib`. El script lo importa con ruta relativa. |
+| 2 | `aSlug` se reexporta de `src/lib/texto.ts` en vez de duplicarse | El formulario de clientes ya lo usa. Dos versiones del mismo slug acabarían divergiendo, y la migración propondría identificadores que la aplicación rechaza. |
+| 3 | **No se crea `scripts/tsconfig.json`** ni `typecheck:scripts` | El `tsconfig.json` raíz ya incluye `**/*.ts`, así que `scripts/` se typechequea con el `npm run typecheck` de siempre. El paso 6 del plan sobra. |
+| 4 | `mapearContrato` filtra presupuestos no numéricos | El plan hacía `Number(fila.budget)` a pelo: un `""` o un `"gratis"` darían `NaN`, que PostgREST rechaza **a mitad** de la migración, dejándola incompleta. |
+| 5 | En `--ensayo` también se cuentan los contratos descartados | El plan solo los contaba en la pasada real, justo al revés de lo que sirve: el ensayo existe para ver qué se perdería **antes** de escribir. |
+
+**Bloqueado, para revisar con Jose.** El ensayo contra los datos de verdad no
+se ha podido correr: el `DATABASE_URL` de `apps/command/.env` apunta a
+`db.ojdulflurxyujlkhsttb.supabase.co`, que **no resuelve** (`ENOTFOUND`).
+O el proyecto de Supabase está pausado, o hay que pasar por el *pooler*
+(`aws-0-<región>.pooler.supabase.com`), que es a donde Supabase movió las
+conexiones directas. El script está listo; solo le falta una URL viva.
+
 ---
 
-## Verificación de salida del plan 1A-2
+## ✅ Verificación de salida — PLAN 1A-2 COMPLETO
+
+Ejecutado entre los commits `81a23e0` y `ab9f572`.
+
+| Criterio | Exigido | Real |
+|---|---|---|
+| Batería en verde | 91 tests | **203 tests**, 27 ficheros |
+| Cobertura de `src/lib/**` | ≥ 80 % líneas y funciones | **88.12 %** líneas, **90 %** funciones |
+| `typecheck` y `build` | sin errores | limpios los dos |
+| Componente cliente que importe consultas o cripto | ninguno | ninguno — solo módulos `"use server"` e `import type` |
+| Lectura directa de la tabla `contratos` | ninguna | ninguna, todo por `contratos_visibles` |
+| `any` en `src/lib` o `scripts` | ninguno | ninguno |
+| Secretos en el bundle del navegador | ninguno | `grep` sobre `.next/static`: limpio |
+
+**Una corrección de fondo, no cosmética.** La cobertura salía al 72.73 % y la
+causa era que **ninguna escritura estaba probada**: los cinco módulos de
+acciones iban del 22 % al 45 % porque una acción `"use server"` necesita un
+ámbito de petición HTTP y desde vitest no hay ninguno. Ni un solo `INSERT`
+pasaba por un test. Se separó el núcleo —validar, comprobar el rol y
+escribir— a la capa de datos, donde recibe `sb` y se prueba contra la base de
+verdad; la acción quedó como envoltorio de tres líneas. Ninguna firma pública
+cambió, así que ningún componente se tocó. Commit `ab9f572`.
+
+**Lo que quedó pendiente de Jose:** el ensayo de la migración contra los datos
+reales. El `DATABASE_URL` de la Oficina no resuelve (ver Tarea 17).
+
+---
+
+## Verificación original (referencia)
 
 - [ ] **1. Toda la batería en verde**
 
