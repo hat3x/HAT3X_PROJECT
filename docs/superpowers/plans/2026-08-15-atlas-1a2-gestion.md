@@ -2519,6 +2519,18 @@ git add src/lib/db/apariencia.ts src/app/ajustes/apariencia src/components/ajust
 git commit -m "feat(atlas): apariencia — 2 temas x 5 paletas por usuario"
 ```
 
+### ✅ EJECUTADA — commit `81a23e0`
+
+88 tests en total (12 nuevos), typecheck y `next build` limpios.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | Se añade `src/app/ajustes/page.tsx`, que el plan no contemplaba | La barra lateral ya enlazaba `/ajustes` desde la Tarea 10 y **daba 404**. Sin el índice, la pantalla de apariencia solo era alcanzable escribiendo la URL a mano. Lista solo lo que funciona: las tareas 14 y 15 añadirán las suyas. |
+| 2 | El selector escribe `data-tema`/`data-paleta` en `documentElement` antes de llamar a la acción | El plan solo revalidaba el layout, así que el color tardaba un viaje de ida y vuelta en cambiar. Elegir una paleta a ciegas no sirve. Si la acción falla, se revierten atributos y estado. |
+| 3 | El test del componente mockea `@/lib/db/apariencia` | Sin mock, pulsar un radio ejecutaría la acción de servidor de verdad: `cookies()` fuera de un ámbito de petición revienta, y el fallo llegaría como rechazo sin capturar dentro de `useTransition`. |
+| 4 | 12 tests en vez de los 7 del plan | Añadidos: cadena vacía en ambos campos, que se llama a guardar con los valores correctos, el pintado inmediato, que cambiar de tema conserva la paleta, y que el error sale por `role="alert"`. |
+| 5 | La paleta elegida lleva `outline` e icono de check | Solo con `font-semibold` en el nombre no se distinguía cuál estaba puesta. |
+
 ---
 
 ## Tarea 17: Migración de los datos que ya existen
