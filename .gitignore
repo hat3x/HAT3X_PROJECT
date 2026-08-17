@@ -10,3 +10,16 @@ dist/
 
 # Maquetas del companion visual de brainstorming
 .superpowers/
+
+# Exports y copias de seguridad de workflows de n8n.
+#
+# Llevan DENTRO las claves de los nodos en claro —la de recepción de Kairos, por
+# ejemplo, que da acceso a nombres de pacientes y a sus tratamientos—. Un
+# `git add -A` los metería en el historial, y de ahí ya no salen: borrarlos del
+# fichero no los borra de git.
+#
+# Si hace falta versionar un workflow, primero se sustituye la clave por una
+# referencia a variable de entorno.
+*-backup-*.json
+**/n8n/**/backup*.json
+**/n8n/*-export.json
