@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 import { Line } from 'react-native-svg'
 import { ProveedorTema, ContextoTema } from '../proveedor'
 import type { Tema } from '../tema'
@@ -78,6 +79,21 @@ describe('recetas que ningún tema registrado activa', () => {
     const arbol = toJSON()
     if (arbol === null || Array.isArray(arbol)) throw new Error('se esperaba un único nodo raíz')
     expect(arbol.children).toHaveLength(10)
+  })
+
+  // Contar segmentos NO basta: los diez siguen existiendo aunque estén
+  // comprimidos. La invariante que de verdad hay que fijar es que el
+  // contenedor no lleve ancho, porque basta añadírselo —sin reintroducir
+  // ningún envoltorio— para reproducir el bug con los contadores en verde.
+  it('el contenedor de segmentos nunca lleva ancho propio', () => {
+    conReceta({ barra: 'segmentada' }, <Barra progreso={0.5} color="#4ECB9C" />)
+    const contenedor = screen.getByTestId('barra-segmentos')
+    expect(StyleSheet.flatten(contenedor.props.style).width).toBeUndefined()
+  })
+
+  it('la barra anuncia su progreso a un lector de pantalla', () => {
+    conReceta({ barra: 'segmentada' }, <Barra progreso={0.4} color="#4ECB9C" />)
+    expect(screen.getByRole('progressbar').props.accessibilityValue.now).toBe(40)
   })
 
   it('el anillo medidor dibuja sus marcas de escala', () => {

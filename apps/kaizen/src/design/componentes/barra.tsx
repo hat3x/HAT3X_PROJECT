@@ -6,7 +6,11 @@ export function Barra({ progreso, color, alto = 7 }:
   const t = useTema()
   const recortado = Math.min(1, Math.max(0, progreso))
 
+  // `accessible` no es opcional: sin él, React Native recorre los hijos en vez
+  // de tratar la vista como una unidad, y ni VoiceOver ni TalkBack llegan a
+  // anunciar el rol ni el valor. Las otras dos props quedarían inertes.
   const accesibilidad = {
+    accessible: true,
     accessibilityRole: 'progressbar' as const,
     accessibilityValue: { min: 0, max: 100, now: Math.round(recortado * 100) },
   }
