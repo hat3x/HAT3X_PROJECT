@@ -35,8 +35,17 @@ export function BorrarCuenta() {
     // El servidor ya ha borrado el usuario y sus datos: cerrar sesión limpia
     // el estado local y dispara la redirección a `/acceso` desde la raíz de
     // la app (ver `src/app/_layout.tsx`), sin que esta pantalla tenga que
-    // saber nada de navegación.
-    await supabase.auth.signOut()
+    // saber nada de navegación. Si esto falla, la cuenta ya está borrada de
+    // todos modos: no es el mismo error que el de arriba, y sin este aviso
+    // la pantalla se quedaría en «Borrando…» para siempre sin decir nada.
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      setError(
+        'Tu cuenta se ha borrado, pero no hemos podido cerrar la sesión en este dispositivo. Cierra la app para completar el proceso.',
+      )
+      setBorrando(false)
+    }
   }
 
   const campo = {

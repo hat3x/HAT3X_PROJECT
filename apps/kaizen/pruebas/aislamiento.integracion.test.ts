@@ -68,4 +68,20 @@ describe('aislamiento entre usuarios', () => {
     expect(data).toBeNull()
     expect(error).not.toBeNull()
   })
+
+  // Las dos anteriores solo ejercitan el `using` de la política (lectura).
+  // Sin estas dos, romper el `with check` (escritura) en un refactor
+  // dejaría la suite en verde con fotos corporales sin protección real.
+  it('B no puede subir un fichero en la carpeta de A', async () => {
+    const { error } = await b.cliente.storage
+      .from('fotos')
+      .upload(`${a.id}/intruso.txt`, Buffer.from('intruso'), { contentType: 'text/plain' })
+    expect(error).not.toBeNull()
+  })
+
+  it('B no puede borrar una foto de A', async () => {
+    await b.cliente.storage.from('fotos').remove([`${a.id}/foto-a.txt`])
+    const { data } = await a.cliente.storage.from('fotos').list(a.id)
+    expect(data).toHaveLength(1)
+  })
 })
