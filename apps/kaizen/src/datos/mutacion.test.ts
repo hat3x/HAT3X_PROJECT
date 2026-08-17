@@ -1,11 +1,25 @@
-import { nuevoId } from './mutacion'
+import { insertarIdempotente, nuevoId } from './mutacion'
 
 // `mutacion.ts` importa `./supabase`, que importa el módulo nativo de
 // AsyncStorage. Bajo jest-expo (sin dispositivo real) esa carga revienta con
-// «NativeModule: AsyncStorage is null». Este test solo ejercita `nuevoId()`,
-// que no toca Supabase, así que basta con vaciar el módulo para que cargue.
-// Mismo patrón que ya usan autenticacion.test.ts y sesion.test.tsx.
-jest.mock('./supabase', () => ({ supabase: {} }))
+// «NativeModule: AsyncStorage is null». Se sustituye por un mock mínimo que
+// además expone `from().upsert()` capturable, para que el test de
+// `insertarIdempotente` de más abajo pueda comprobar con qué argumentos se
+// llama. El test de `nuevoId()` no toca Supabase, así que este mismo mock le
+// basta. Mismo patrón que ya usan autenticacion.test.ts y sesion.test.tsx.
+//
+// La variable se llama `mockUpsert` (no `upsert`, como en el brief original)
+// porque babel-plugin-jest-hoist solo permite referenciar, dentro del factory
+// de `jest.mock()`, variables cuyo nombre empiece por «mock» (para evitar
+// mocks no inicializados por el hoist). Con `upsert` a secas, Jest revienta
+// en tiempo de transformación con «not allowed to reference any out-of-scope
+// variables». Es un renombrado mecánico: no cambia qué comprueban los tests.
+const mockUpsert = jest.fn()
+jest.mock('./supabase', () => ({
+  supabase: {
+    from: (tabla: string) => ({ upsert: (...a: unknown[]) => mockUpsert(tabla, ...a) }),
+  },
+}))
 
 // El mock nativo autogenerado de expo-crypto (node_modules/expo-crypto/mocks)
 // no implementa `randomUUID`: devuelve `undefined`. Se sustituye por el
@@ -21,4 +35,23 @@ it('genera identificadores únicos con forma de UUID', () => {
   const b = nuevoId()
   expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
   expect(a).not.toBe(b)
+})
+
+describe('insertarIdempotente', () => {
+  beforeEach(() => mockUpsert.mockReset())
+
+  it('inserta descartando el duplicado, no sobrescribiéndolo', async () => {
+    mockUpsert.mockResolvedValue({ error: null })
+    await insertarIdempotente('registros_agua', { id: 'abc', ml: 250 })
+    expect(mockUpsert).toHaveBeenCalledWith(
+      'registros_agua',
+      { id: 'abc', ml: 250 },
+      { onConflict: 'id', ignoreDuplicates: true },
+    )
+  })
+
+  it('convierte el error de Supabase en una excepción', async () => {
+    mockUpsert.mockResolvedValue({ error: { message: 'permission denied' } })
+    await expect(insertarIdempotente('pesos', { id: 'abc' })).rejects.toThrow('permission denied')
+  })
 })
