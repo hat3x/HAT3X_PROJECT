@@ -3,12 +3,15 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { ProveedorSesion, useSesion } from '@/datos/sesion'
 import { crearClienteConsultas, persistidor } from '@/datos/cliente-consultas'
 import { ProveedorTema } from '@/design/proveedor'
+import { Pantalla } from '@/design/componentes/pantalla'
 
 const cliente = crearClienteConsultas()
 
 function Puerta() {
   const { sesion, cargando } = useSesion()
-  if (cargando) return null
+  // Nunca `null`: sin nada montado se ve el fondo por defecto de React Native
+  // —blanco— y en una app oscura eso es un fogonazo en cada arranque lento.
+  if (cargando) return <Pantalla />
   if (!sesion) return <Redirect href="/acceso" />
   return (
     <Stack screenOptions={{ headerShown: false }}>

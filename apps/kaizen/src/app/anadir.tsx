@@ -1,6 +1,7 @@
-import { View, Pressable } from 'react-native'
+import { Pressable } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Texto } from '@/design/componentes/texto'
+import { Pantalla } from '@/design/componentes/pantalla'
 import { useTema } from '@/design/proveedor'
 
 // Las seis rutas de destino (buscar alimento, escanear código, entrada
@@ -21,7 +22,7 @@ export default function Anadir() {
   const t = useTema()
   const router = useRouter()
   return (
-    <View style={{ flex: 1, padding: t.espaciado[3], gap: t.espaciado[1] }}>
+    <Pantalla style={{ padding: t.espaciado[3], gap: t.espaciado[1] }}>
       <Texto variante="etiqueta">Añadir</Texto>
       {OPCIONES.map((o) => (
         <Pressable
@@ -33,6 +34,6 @@ export default function Anadir() {
           <Texto>{o.titulo}</Texto>
         </Pressable>
       ))}
-    </View>
+    </Pantalla>
   )
 }

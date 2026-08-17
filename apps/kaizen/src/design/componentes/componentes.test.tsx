@@ -8,6 +8,7 @@ import { Texto } from './texto'
 import { Boton } from './boton'
 import { Barra } from './barra'
 import { Anillo } from './anillo'
+import { Pantalla } from './pantalla'
 
 function envolver(nodo: React.ReactNode) {
   return render(<ProveedorTema nombre="defecto">{nodo}</ProveedorTema>)
@@ -49,6 +50,13 @@ it('el anillo se dibuja y anuncia su progreso', () => {
   envolver(<Anillo progreso={0.82}><Texto>82</Texto></Anillo>)
   expect(screen.getByText('82')).toBeTruthy()
   expect(screen.getByRole('progressbar').props.accessibilityValue.now).toBe(82)
+})
+
+it('la pantalla pinta el fondo del tema y no el del sistema', () => {
+  envolver(<Pantalla><Texto>Contenido</Texto></Pantalla>)
+  const fondo = temaDefecto.fondo.pantalla
+  const esperado = fondo.tipo === 'color' ? fondo.valor : ''
+  expect(JSON.stringify(screen.toJSON())).toContain(esperado)
 })
 
 it('un tema desconocido cae al tema por defecto en vez de romper', () => {

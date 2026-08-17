@@ -1,8 +1,13 @@
 import { Tabs, useRouter } from 'expo-router'
-import { Pressable, View } from 'react-native'
+import { Pressable } from 'react-native'
 import { Superficie } from '@/design/componentes/superficie'
 import { Texto } from '@/design/componentes/texto'
 import { useTema } from '@/design/proveedor'
+
+// Disposición, no tema: cuánto mide el botón central y cuánto sobresale de la
+// barra. No hay token para esto porque no es «look», es geometría de esta barra.
+const LADO_MAS = 52
+const SOBRESALIENTE_MAS = 18
 
 function BotonAnadir() {
   const t = useTema()
@@ -13,8 +18,11 @@ function BotonAnadir() {
       accessibilityRole="button"
       accessibilityLabel="Añadir registro"
       style={{
-        width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
-        backgroundColor: t.color.acento, marginTop: -18,
+        width: LADO_MAS, height: LADO_MAS,
+        borderRadius: LADO_MAS / 2, // círculo: derivado, no un radio inventado
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: t.color.acento,
+        marginTop: -SOBRESALIENTE_MAS,
       }}
     >
       <Texto variante="titulo" style={{ color: t.color.sobreAcento }}>+</Texto>
