@@ -10,6 +10,18 @@ import { useTema } from '@/design/proveedor'
 const LADO_MAS = 52
 const SOBRESALIENTE_MAS = 18
 
+// Hay 2 pestañas a la izquierda del botón + y 3 a la derecha. Con seis celdas
+// del mismo ancho, el hueco del centro cae en el 41,7% de la barra, no en el
+// 50%: el botón sale desplazado a la izquierda por mucho que esté centrado
+// dentro de su propia celda.
+//
+// Se corrige con la proporción, no moviendo el botón. Llamando `a` al ancho de
+// cada pestaña izquierda, `b` al de cada derecha y `g` al hueco, centrar el
+// hueco exige  2a + g/2 = (2a + g + 3b)/2 , que se simplifica a  2a = 3b .
+// O sea: a = 1,5·b. Las de la izquierda («Hoy», «Nutrición») son las que menos
+// texto llevan, así que el ancho de más no las descuadra.
+const PESO_IZQUIERDA = { flex: 1.5 }
+
 function BotonAnadir() {
   const t = useTema()
   const router = useRouter()
@@ -49,6 +61,7 @@ export default function LayoutPestanas() {
         name="index"
         options={{
           title: 'Hoy',
+          tabBarItemStyle: PESO_IZQUIERDA,
           tabBarIcon: ({ color, size }) => <Feather name="sun" size={size} color={color} />,
         }}
       />
@@ -56,6 +69,7 @@ export default function LayoutPestanas() {
         name="nutricion"
         options={{
           title: 'Nutrición',
+          tabBarItemStyle: PESO_IZQUIERDA,
           tabBarIcon: ({ color, size }) => <Feather name="coffee" size={size} color={color} />,
         }}
       />
