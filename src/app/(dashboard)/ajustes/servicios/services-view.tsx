@@ -132,7 +132,7 @@ export function ServicesView({ salonId }: ServicesViewProps): React.ReactElement
           />
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border/70 shadow-xs">
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-xs">
           <Table>
           <TableHeader>
             <TableRow>

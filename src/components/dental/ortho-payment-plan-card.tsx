@@ -572,7 +572,7 @@ function ActivePlan({
         </p>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border/70">
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-bg-dense)] backdrop-blur-xl">
         <Table scrollRegionLabel="Cuotas del plan de pago">
           <TableCaption className="sr-only">
             Cuotas del plan de pago: entrada y cuotas mensuales, con fecha, importe y estado.
