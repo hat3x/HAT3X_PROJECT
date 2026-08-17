@@ -31,6 +31,8 @@ export const temaDefecto: Tema = {
   superficie: {
     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
     barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
+    botonPrimario: { tipo: 'color', valor: '#4ECB9C' },
+    botonSecundario: { tipo: 'color', valor: 'rgba(255,255,255,0.10)' },
     desenfoque: 22,
   },
   recetas: { barra: 'continua', anillo: 'liso' },

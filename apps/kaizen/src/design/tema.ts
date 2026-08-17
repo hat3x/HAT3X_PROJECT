@@ -41,7 +41,13 @@ export interface Tema {
 
   fondo: { pantalla: Fondo; velo: string }
 
-  superficie: { tarjeta: Fondo; barraInferior: Fondo; desenfoque: number }
+  superficie: {
+    tarjeta: Fondo
+    barraInferior: Fondo
+    botonPrimario: Fondo
+    botonSecundario: Fondo
+    desenfoque: number
+  }
 
   recetas: { barra: RecetaBarra; anillo: RecetaAnillo }
 
