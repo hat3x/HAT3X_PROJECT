@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { TextInput } from 'react-native'
+import { useQueryClient } from '@tanstack/react-query'
 import { Texto } from '@/design/componentes/texto'
 import { Boton } from '@/design/componentes/boton'
 import { Pantalla } from '@/design/componentes/pantalla'
 import { useTema } from '@/design/proveedor'
 import { supabase } from '@/datos/supabase'
+import { purgarCacheLocal } from '@/datos/cliente-consultas'
 
 const PALABRA_CONFIRMACION = 'BORRAR'
 
@@ -16,6 +18,7 @@ const PALABRA_CONFIRMACION = 'BORRAR'
  */
 export function BorrarCuenta() {
   const t = useTema()
+  const clienteConsultas = useQueryClient()
   const [confirmacion, setConfirmacion] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [borrando, setBorrando] = useState(false)
@@ -45,6 +48,12 @@ export function BorrarCuenta() {
         'Tu cuenta se ha borrado, pero no hemos podido cerrar la sesión en este dispositivo. Cierra la app para completar el proceso.',
       )
       setBorrando(false)
+    } finally {
+      // La cuenta ya está borrada en el servidor tanto si `signOut()` ha
+      // funcionado como si no: purgar aquí evita que el JSON del perfil
+      // borrado —nombre, unidades, zona horaria, tema— siga siendo legible
+      // en el dispositivo hasta que se reinstale la app.
+      await purgarCacheLocal(clienteConsultas)
     }
   }
 

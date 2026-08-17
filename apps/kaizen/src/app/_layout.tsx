@@ -1,4 +1,4 @@
-import { Stack, Redirect } from 'expo-router'
+import { Stack, Redirect, Slot } from 'expo-router'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { ProveedorSesion, useSesion } from '@/datos/sesion'
 import { crearClienteConsultas, persistidor } from '@/datos/cliente-consultas'
@@ -12,7 +12,23 @@ function Puerta() {
   // Nunca `null`: sin nada montado se ve el fondo por defecto de React Native
   // —blanco— y en una app oscura eso es un fogonazo en cada arranque lento.
   if (cargando) return <Pantalla />
-  if (!sesion) return <Redirect href="/acceso" />
+  if (!sesion) {
+    // El layout raíz SIEMPRE tiene que renderizar un navegador de expo-router
+    // para que la ruta a la que redirige pueda montarse. `return <Redirect
+    // .../>` a secas no renderiza ningún navegador: el árbol queda sin
+    // resolver para siempre. Reproducido, no razonado: monta así y el
+    // proceso agota los 4 GB de heap con «Ineffective mark-compacts near
+    // heap limit»; con `<Slot/>` conviviendo con el `<Redirect/>`, verde en
+    // 50 ms. Pasa en el primer arranque sin sesión y justo después de
+    // borrar la cuenta, porque el `signOut()` de esa pantalla dispara esta
+    // misma rama.
+    return (
+      <>
+        <Redirect href="/acceso" />
+        <Slot />
+      </>
+    )
+  }
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(pestanas)" />

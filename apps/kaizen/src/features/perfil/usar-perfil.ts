@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/datos/supabase'
 import { useSesion } from '@/datos/sesion'
+import { CLAVE_MUTACION_GUARDAR_PERFIL } from '@/datos/claves-mutacion'
 
 export type Perfil = {
   id: string
@@ -28,6 +29,10 @@ export function usarPerfil() {
   })
 
   const mutacion = useMutation({
+    // Misma clave que el default registrado en `crearClienteConsultas`: sin
+    // ella, una mutación pausada en modo avión se persiste sin forma de
+    // recuperar su función al rehidratar (ver AGENTS.md).
+    mutationKey: CLAVE_MUTACION_GUARDAR_PERFIL,
     mutationFn: async (cambios: Partial<Perfil>) => {
       const { error } = await supabase.from('perfiles').update(cambios).eq('id', id!)
       if (error) throw new Error(error.message)

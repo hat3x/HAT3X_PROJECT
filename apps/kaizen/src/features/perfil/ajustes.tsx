@@ -1,12 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { View, Pressable, ScrollView, TextInput } from 'react-native'
 import { useRouter } from 'expo-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { Texto } from '@/design/componentes/texto'
 import { Boton } from '@/design/componentes/boton'
 import { Pantalla } from '@/design/componentes/pantalla'
 import { Superficie } from '@/design/componentes/superficie'
 import { useTema } from '@/design/proveedor'
 import { TEMAS } from '@/design/temas/indice'
+import { salir } from '@/datos/autenticacion'
+import { purgarCacheLocal } from '@/datos/cliente-consultas'
 import { usarPerfil } from './usar-perfil'
 
 const UNIDADES = [
@@ -113,9 +116,12 @@ function SelectorNumerico({ valores, seleccionado, deshabilitado = false, alSele
 export function Ajustes() {
   const t = useTema()
   const router = useRouter()
+  const clienteConsultas = useQueryClient()
   const { perfil, guardar, guardando, errorAlGuardar } = usarPerfil()
   const [zonaHoraria, setZonaHoraria] = useState('')
   const [errorZona, setErrorZona] = useState<string | null>(null)
+  const [cerrandoSesion, setCerrandoSesion] = useState(false)
+  const [errorSesion, setErrorSesion] = useState<string | null>(null)
 
   // Sincroniza el campo con lo que llega del servidor, pero solo mientras el
   // usuario no está escribiendo: si reescribiéramos en cada render, cualquier
@@ -152,6 +158,22 @@ export function Ajustes() {
     }
     setErrorZona(null)
     guardar({ zona_horaria: zonaHoraria })
+  }
+
+  async function cerrarSesion() {
+    setCerrandoSesion(true)
+    setErrorSesion(null)
+    const { error } = await salir()
+    if (error) {
+      setErrorSesion(error)
+      setCerrandoSesion(false)
+      return
+    }
+    // El `signOut()` de dentro de `salir()` ya ha disparado la redirección a
+    // `/acceso` desde la raíz de la app (ver `src/app/_layout.tsx`); purgar
+    // aquí evita que el JSON del perfil —nombre, unidades, zona horaria,
+    // tema— sobreviva en el disco del dispositivo a la sesión que lo guardó.
+    await purgarCacheLocal(clienteConsultas)
   }
 
   function detectarZonaHoraria() {
@@ -240,6 +262,16 @@ export function Ajustes() {
             ))}
           </View>
         </Seccion>
+
+        {errorSesion && (
+          <Texto variante="tenue" style={{ color: t.color.peligro }}>{errorSesion}</Texto>
+        )}
+        <Boton
+          titulo={cerrandoSesion ? 'Cerrando sesión…' : 'Cerrar sesión'}
+          tono="secundario"
+          deshabilitado={cerrandoSesion}
+          alPulsar={cerrarSesion}
+        />
 
         <Boton titulo="Borrar cuenta" tono="peligro" alPulsar={() => router.push('/borrar-cuenta')} />
       </ScrollView>

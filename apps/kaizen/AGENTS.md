@@ -28,3 +28,9 @@ El proyecto usa una configuración específica de Jest que **no puede cambiar** 
 - NO incrustada en `package.json` (causa conflicto "multiple configurations")
 
 **Por qué:** El `moduleNameMapper` solo es necesario para unitarios (mockea test-renderer), pero rompería las pruebas de integración que hablan con base datos real. Tener dos ficheros evita esa colisión. Jest rechaza múltiples configuraciones simultáneas si una está en package.json y otra en jest.config.js — la solución stable es que SOLO viva en jest.config.js.
+
+### 4. Toda mutación nueva necesita `mutationKey` + `setMutationDefaults`
+
+**Restricción:** cualquier `useMutation()` que escriba datos de usuario debe declarar `mutationKey`, y su `mutationFn` debe registrarse también con `clienteConsultas.setMutationDefaults(clave, { mutationFn })` en `src/datos/cliente-consultas.ts` (o donde se cree el `QueryClient`), de forma síncrona al crearlo — nunca dentro de un componente que se monte después de que `PersistQueryClientProvider` rehidrate el estado persistido.
+
+**Por qué:** el persistidor de la cola offline (`@tanstack/query-async-storage-persister`) guarda una mutación pausada con su `mutationKey`, su `state` y sus metadatos — **nunca la función**. Al rehidratar, `resumePausedMutations()` solo puede reconstruir un `mutationFn` ejecutable si encuentra unos defaults registrados para esa `mutationKey` (`QueryClient.getMutationDefaults`). Sin `mutationKey`, o con el registro llegando tarde, la mutación reconstruida se queda sin función; `resumePausedMutations()` la ejecuta igual, falla con «No mutationFn found», y ese rechazo lo traga un `catch` interno de la propia librería — el cambio se pierde sin ningún aviso en pantalla. Pasó con la única mutación de usuario que había en el bloque 0 (guardar ajustes del perfil) y nadie lo detectó hasta una revisión final expresa: este agujero solo estaba anotado en la bitácora del proceso, no aquí. Que no vuelva a pasar con la siguiente mutación.
