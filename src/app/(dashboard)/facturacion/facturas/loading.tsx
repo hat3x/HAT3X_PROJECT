@@ -38,7 +38,7 @@ export default function FacturasLoading(): React.ReactElement {
       </div>
 
       {/* Tabla */}
-      <div className="overflow-hidden rounded-xl border bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-sm">
+      <div className="overflow-hidden rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 shadow-sm">
         <div className="border-b bg-muted/30 px-3 py-3">
           <Skeleton className="h-4 w-full max-w-md" />
         </div>

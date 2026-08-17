@@ -129,7 +129,7 @@ export function RecallView({ salonId }: RecallViewProps): React.ReactElement {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-sm animate-fade-up [animation-delay:120ms]">
+      <div className="overflow-x-auto rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 shadow-sm animate-fade-up [animation-delay:120ms]">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">

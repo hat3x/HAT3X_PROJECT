@@ -415,7 +415,7 @@ function MoneyField({
 function SchedulePreview({ schedule }: { schedule: ScheduledInstallment[] }): React.ReactElement {
   const total = schedule.reduce((acc, s) => acc + s.amountCents, 0);
   return (
-    <div className="overflow-hidden rounded-xl border border-border/70">
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150">
       <div className="flex items-center justify-between border-b border-border/70 bg-muted/50 px-4 py-2.5">
         <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
@@ -572,7 +572,7 @@ function ActivePlan({
         </p>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-bg-dense)] backdrop-blur-xl">
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150">
         <Table scrollRegionLabel="Cuotas del plan de pago">
           <TableCaption className="sr-only">
             Cuotas del plan de pago: entrada y cuotas mensuales, con fecha, importe y estado.

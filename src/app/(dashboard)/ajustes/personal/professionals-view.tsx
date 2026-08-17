@@ -142,7 +142,7 @@ export function ProfessionalsView({
           />
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-xs">
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 shadow-xs">
           <Table>
           <TableHeader>
             <TableRow>

@@ -123,7 +123,7 @@ export function MutuasView({ salonId }: MutuasViewProps): React.ReactElement {
       />
 
       <div className="animate-fade-up [animation-delay:60ms]">
-        <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-xs">
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150 shadow-xs">
           <Table>
             <TableHeader>
               <TableRow>
