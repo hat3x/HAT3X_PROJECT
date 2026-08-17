@@ -5,7 +5,7 @@ import { useTema } from '@/design/proveedor'
 export default function Entrenamiento() {
   const t = useTema()
   return (
-    <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5] }}>
+    <Pantalla style={{ justifyContent: 'flex-start', padding: t.espaciado[5] }}>
       <Texto variante="titulo">Entreno</Texto>
       <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
         Tus entrenamientos aparecerán aquí en cuanto registres el primero.

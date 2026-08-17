@@ -1,5 +1,6 @@
 import { Tabs, useRouter } from 'expo-router'
 import { Pressable } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 import { Superficie } from '@/design/componentes/superficie'
 import { Texto } from '@/design/componentes/texto'
 import { useTema } from '@/design/proveedor'
@@ -44,15 +45,56 @@ export default function LayoutPestanas() {
         ),
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Hoy' }} />
-      <Tabs.Screen name="nutricion" options={{ title: 'Nutrición' }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Hoy',
+          tabBarIcon: ({ color, size }) => <Feather name="sun" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="nutricion"
+        options={{
+          title: 'Nutrición',
+          tabBarIcon: ({ color, size }) => <Feather name="coffee" size={size} color={color} />,
+        }}
+      />
       <Tabs.Screen
         name="anadir-hueco"
-        options={{ title: '', tabBarButton: () => <BotonAnadir /> }}
+        options={{
+          title: '',
+          tabBarButton: () => <BotonAnadir />,
+          // `tabBarButton` sustituye por completo al botón por defecto, así
+          // que también se salta el `alignItems`/`justifyContent` que ese
+          // renderer aplica de serie. Sin fijarlo aquí, el círculo cae
+          // pegado a la esquina superior izquierda de su celda en vez de
+          // centrado, y el saliente que da `marginTop` en `BotonAnadir`
+          // queda descuadrado respecto a la barra en vez de flotar centrado
+          // sobre ella.
+          tabBarItemStyle: { alignItems: 'center', justifyContent: 'center' },
+        }}
       />
-      <Tabs.Screen name="entrenamiento" options={{ title: 'Entreno' }} />
-      <Tabs.Screen name="evolucion" options={{ title: 'Evolución' }} />
-      <Tabs.Screen name="coach" options={{ title: 'Coach' }} />
+      <Tabs.Screen
+        name="entrenamiento"
+        options={{
+          title: 'Entreno',
+          tabBarIcon: ({ color, size }) => <Feather name="activity" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="evolucion"
+        options={{
+          title: 'Evolución',
+          tabBarIcon: ({ color, size }) => <Feather name="trending-up" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="coach"
+        options={{
+          title: 'Coach',
+          tabBarIcon: ({ color, size }) => <Feather name="message-circle" size={size} color={color} />,
+        }}
+      />
     </Tabs>
   )
 }
