@@ -4,11 +4,10 @@ const URL = process.env.SUPABASE_URL!
 const ANON = process.env.SUPABASE_ANON_KEY!
 const SERVICIO = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-// Ninguna migración crea todavía el bucket de fotos: subir fotos es una
-// funcionalidad futura, fuera de este bloque. Se crea aquí, de forma
-// idempotente, porque sin un fichero real que sobreviva o no al borrado,
-// este test no demuestra nada sobre la única parte que el `on delete
-// cascade` de auth.users NO limpia por su cuenta: el Storage.
+// El bucket `fotos` lo crea la migración 0003_almacenamiento.sql (privado,
+// con política de acceso por carpeta propia) — este test se lo encuentra
+// hecho, no lo crea: crearlo aquí probaría un mundo que no existe en
+// producción, donde el bucket ya está ahí desde el primer despliegue.
 const BUCKET = 'fotos'
 
 it('borrar la cuenta elimina al usuario y todos sus datos', async () => {
@@ -27,7 +26,6 @@ it('borrar la cuenta elimina al usuario y todos sus datos', async () => {
     id: crypto.randomUUID(), user_id: id, fecha_local: '2026-08-17', kg: 80,
   })
 
-  await admin.storage.createBucket(BUCKET, { public: false })
   const { error: errorSubida } = await admin.storage
     .from(BUCKET)
     .upload(`${id}/foto-prueba.txt`, Buffer.from('contenido de prueba'), { contentType: 'text/plain' })

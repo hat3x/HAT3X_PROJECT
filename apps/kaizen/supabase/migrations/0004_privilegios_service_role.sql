@@ -1,0 +1,14 @@
+-- Descubierto al verificar en verde el test de borrado de cuenta (Tarea 10):
+-- `service_role` no tiene privilegios de tabla sobre `public` en esta
+-- instancia de Supabase CLI, por la misma razón ya documentada en
+-- `0002_rls.sql` para `authenticated` -- y el propio `config.toml` lo deja
+-- explícito: `auto_expose_new_tables` habla de los roles de la API
+-- (`anon`, `authenticated`, `service_role`), no solo de `authenticated`.
+-- 0002_rls.sql concedió a `authenticated` pero se dejó `service_role` fuera.
+--
+-- Sin esto, cualquier consulta hecha con la clave de servicio contra una
+-- tabla de `public` a través de PostgREST falla con "permission denied"
+-- (42501) antes de que RLS llegue a evaluarse -- exactamente el mismo modo
+-- de fallo que ya se corrigió una vez para `authenticated`, ahora repetido
+-- para el otro rol que también usa la Data API.
+grant select, insert, update, delete on all tables in schema public to service_role;

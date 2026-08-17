@@ -26,6 +26,13 @@ describe('aislamiento entre usuarios', () => {
       id: crypto.randomUUID(), user_id: a.id, fecha_local: '2026-08-17', kg: 80,
     })
     expect(error).toBeNull()
+
+    // Fotos corporales: categoría especial de RGPD, igual que `pesos`. El
+    // bucket y la política salen de la migración 0003, no de este test.
+    const { error: errorSubida } = await a.cliente.storage
+      .from('fotos')
+      .upload(`${a.id}/foto-a.txt`, Buffer.from('contenido de a'), { contentType: 'text/plain' })
+    expect(errorSubida).toBeNull()
   })
 
   it('B no puede leer los pesos de A', async () => {
@@ -48,6 +55,17 @@ describe('aislamiento entre usuarios', () => {
     const { error } = await b.cliente.from('pesos').insert({
       id: crypto.randomUUID(), user_id: a.id, fecha_local: '2026-08-18', kg: 70,
     })
+    expect(error).not.toBeNull()
+  })
+
+  it('B no puede listar las fotos de A', async () => {
+    const { data } = await b.cliente.storage.from('fotos').list(a.id)
+    expect(data).toEqual([])
+  })
+
+  it('B no puede descargar una foto de A', async () => {
+    const { data, error } = await b.cliente.storage.from('fotos').download(`${a.id}/foto-a.txt`)
+    expect(data).toBeNull()
     expect(error).not.toBeNull()
   })
 })
