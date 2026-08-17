@@ -173,7 +173,14 @@ export function Ajustes() {
     // `/acceso` desde la raíz de la app (ver `src/app/_layout.tsx`); purgar
     // aquí evita que el JSON del perfil —nombre, unidades, zona horaria,
     // tema— sobreviva en el disco del dispositivo a la sesión que lo guardó.
-    await purgarCacheLocal(clienteConsultas)
+    try {
+      await purgarCacheLocal(clienteConsultas)
+    } catch {
+      // La sesión ya se ha cerrado en el servidor pase lo que pase aquí: si
+      // solo la purga de caché falla, no dejamos el botón bloqueado en
+      // «Cerrando sesión…» para siempre ni una promesa sin capturar.
+      setCerrandoSesion(false)
+    }
   }
 
   function detectarZonaHoraria() {

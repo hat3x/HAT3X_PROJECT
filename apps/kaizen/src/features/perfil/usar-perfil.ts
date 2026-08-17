@@ -33,8 +33,14 @@ export function usarPerfil() {
     // ella, una mutación pausada en modo avión se persiste sin forma de
     // recuperar su función al rehidratar (ver AGENTS.md).
     mutationKey: CLAVE_MUTACION_GUARDAR_PERFIL,
-    mutationFn: async (cambios: Partial<Perfil>) => {
-      const { error } = await supabase.from('perfiles').update(cambios).eq('id', id!)
+    // Las variables llevan el `id` del dueño en el momento de encolar, no
+    // solo los campos a cambiar. Es lo que le permite al mutationFn de
+    // respaldo (`cliente-consultas.ts`, el que se ejecuta al reanudar tras
+    // reabrir la app) comprobar si la sesión activa en ese momento sigue
+    // siendo la misma que encoló el cambio — y no la de otra persona que
+    // haya entrado después en el mismo dispositivo.
+    mutationFn: async ({ id, cambios }: { id: string; cambios: Partial<Perfil> }) => {
+      const { error } = await supabase.from('perfiles').update(cambios).eq('id', id)
       if (error) throw new Error(error.message)
     },
     onSuccess: () => clienteConsultas.invalidateQueries({ queryKey: ['perfil', id] }),
@@ -42,7 +48,7 @@ export function usarPerfil() {
 
   return {
     perfil: consulta.data ?? null,
-    guardar: (cambios: Partial<Perfil>) => mutacion.mutateAsync(cambios),
+    guardar: (cambios: Partial<Perfil>) => mutacion.mutateAsync({ id: id!, cambios }),
     // Sin estos dos, un fallo al guardar es indistinguible de un éxito: la
     // pantalla no tiene de dónde leerlo y el usuario cree que se guardó.
     guardando: mutacion.isPending,

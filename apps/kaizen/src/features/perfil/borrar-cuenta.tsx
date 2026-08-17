@@ -53,7 +53,19 @@ export function BorrarCuenta() {
       // funcionado como si no: purgar aquí evita que el JSON del perfil
       // borrado —nombre, unidades, zona horaria, tema— siga siendo legible
       // en el dispositivo hasta que se reinstale la app.
-      await purgarCacheLocal(clienteConsultas)
+      try {
+        await purgarCacheLocal(clienteConsultas)
+      } catch {
+        // La cuenta ya está borrada en el servidor pase lo que pase aquí; si
+        // solo la purga de caché falla, no dejamos el botón bloqueado en
+        // «Borrando…» para siempre esperando una promesa que nunca se
+        // resuelve. No pisa un error de `signOut()` ya mostrado arriba.
+        setError((previo) =>
+          previo ??
+          'Tu cuenta se ha borrado, pero no hemos podido limpiar los datos guardados en este dispositivo. Cierra la app para completar el proceso.',
+        )
+        setBorrando(false)
+      }
     }
   }
 

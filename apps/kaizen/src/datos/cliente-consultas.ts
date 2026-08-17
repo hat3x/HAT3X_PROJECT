@@ -26,10 +26,31 @@ export function crearClienteConsultas(): QueryClient {
   // ningún componente esté montado, potencialmente tras reabrir la app—, así
   // que resuelve su propia sesión antes de escribir.
   clienteConsultas.setMutationDefaults(CLAVE_MUTACION_GUARDAR_PERFIL, {
-    mutationFn: async (cambios: Record<string, unknown>) => {
+    mutationFn: async ({ id, cambios }: { id: string; cambios: Record<string, unknown> }) => {
+      // `id` es el dueño que encoló el cambio (viaja en las variables
+      // persistidas, ver `usar-perfil.ts`) — NO la sesión activa ahora
+      // mismo. Sin esta comprobación: el usuario A encola un cambio sin
+      // conexión, su sesión caduca (esa salida no pasa por
+      // `purgarCacheLocal`, que solo corre en cerrar-sesión y borrar-cuenta),
+      // entra B en el mismo dispositivo, y al recuperar red esto escribiría
+      // los campos de A sobre la fila de B con el token de B — RLS no lo
+      // frena porque, desde el punto de vista de B, es una escritura propia
+      // y legítima.
       const { data } = await supabase.auth.getSession()
-      const id = data.session?.user.id
-      if (!id) throw new Error('No hay sesión activa para guardar los ajustes.')
+      const idActual = data.session?.user.id
+      if (!idActual) throw new Error('No hay sesión activa para reanudar este cambio de ajustes.')
+      if (idActual !== id) {
+        // `resumePausedMutations()` traga este rechazo con un `.catch(noop)`
+        // interno (ver `mutationCache.js` de la propia librería instalada):
+        // nada en pantalla va a mostrar este mensaje hoy. El estado de la
+        // mutación sí queda en "error" para quien la inspeccione, y el
+        // `console.error` es la única señal que sobrevive a ese catch —
+        // aborta de forma visible, no como un fallo silencioso más.
+        console.error(
+          '[kaizen] Cambio de ajustes descartado al reanudar: la sesión activa ya no es la que lo encoló.',
+        )
+        throw new Error('La sesión ha cambiado desde que se encoló este cambio de ajustes.')
+      }
       const { error } = await supabase.from('perfiles').update(cambios).eq('id', id)
       if (error) throw new Error(error.message)
     },

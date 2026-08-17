@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react-native'
-import Coach from './(pestanas)/coach'
+import Coach from './app/(pestanas)/coach'
 import { ProveedorTema } from '@/design/proveedor'
 
 it('Coach muestra su estado vacío explicando por qué', () => {
