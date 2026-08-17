@@ -72,7 +72,7 @@ it('sin sesión, el navegador se monta y se llega a la pantalla de acceso (no un
 
   await waitFor(() => expect(screen.getByText('Entrar en KAIZEN')).toBeTruthy())
   // No se cuela por la rama de sesión: el armazón de pestañas no está.
-  expect(screen.queryByText('Hola')).toBeNull()
+  expect(screen.queryByText(/buenos días/i)).toBeNull()
 })
 
 it('con sesión, se llega al armazón de pestañas', async () => {
@@ -92,6 +92,6 @@ it('con sesión, se llega al armazón de pestañas', async () => {
   // Contenido real de la pestaña activa (Hoy) Y la propia barra de pestañas:
   // ambas cosas solo existen si `(pestanas)/_layout.tsx` —el `Tabs` real— ha
   // llegado a montarse.
-  await waitFor(() => expect(screen.getByText('Hola')).toBeTruthy())
+  await waitFor(() => expect(screen.getByText(/buenos días, jota/i)).toBeTruthy())
   expect(screen.getByText('Nutrición')).toBeTruthy()
 })
