@@ -92,7 +92,7 @@ export function TicketDetailView({ detail }: TicketDetailViewProps): React.React
             Esta venta no tiene líneas de detalle registradas.
           </p>
         ) : (
-          <div className="animate-fade-up overflow-hidden rounded-xl border [animation-delay:80ms]">
+          <div className="animate-fade-up overflow-hidden rounded-xl border bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-sm [animation-delay:80ms]">
             <Table scrollRegionLabel="Líneas del ticket (desplázate en horizontal para ver todas las columnas)">
               <TableCaption className="sr-only">
                 Líneas de detalle del ticket: concepto, cantidad, precio unitario, IVA
@@ -146,7 +146,7 @@ export function TicketDetailView({ detail }: TicketDetailViewProps): React.React
         {/* Cobros */}
         <section className="space-y-3">
           <h3 className="text-sm font-semibold tracking-tight">Cobros</h3>
-          <div className="rounded-xl border">
+          <div className="rounded-xl border bg-[var(--glass-panel)] backdrop-blur-xl backdrop-saturate-150">
             {detail.payments.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-muted-foreground">
                 Sin cobros registrados.

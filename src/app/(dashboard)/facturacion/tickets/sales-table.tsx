@@ -42,7 +42,7 @@ function Placeholder({ children }: { children: React.ReactNode }): React.ReactEl
  */
 export function SalesTable({ sales }: SalesTableProps): React.ReactElement {
   return (
-    <div className="animate-fade-up overflow-hidden rounded-xl border [animation-delay:60ms]">
+    <div className="animate-fade-up overflow-hidden rounded-xl border bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-sm [animation-delay:60ms]">
       <Table scrollRegionLabel="Histórico de tickets y ventas (desplázate en horizontal para ver todas las columnas)">
         <TableCaption className="sr-only">
           Histórico de tickets y ventas: fecha, sede, profesional, cliente, método de

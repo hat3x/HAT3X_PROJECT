@@ -49,7 +49,7 @@ export function InvoicesTable({
   currency = "EUR",
 }: InvoicesTableProps): React.ReactElement {
   return (
-    <div className="animate-fade-up overflow-hidden rounded-xl border [animation-delay:60ms]">
+    <div className="animate-fade-up overflow-hidden rounded-xl border bg-[var(--glass-bg-dense)] backdrop-blur-xl shadow-sm [animation-delay:60ms]">
       <Table scrollRegionLabel="Libro registro de facturas (desplázate en horizontal para ver todas las columnas)">
         <TableCaption className="sr-only">
           Libro registro de facturas del periodo: número, tipo, fecha, destinatario,
