@@ -31,7 +31,10 @@ export function Pantalla({ style, children }: { style?: ViewStyle; children?: Re
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
   return (
     <Superficie fondo={t.fondo.pantalla} radio={0} style={{ flex: 1 }}>
-      <View style={{ flex: 1, backgroundColor: t.fondo.velo, paddingTop: margen.top }}>
+      <View
+        testID="pantalla-velo"
+        style={{ flex: 1, backgroundColor: t.fondo.velo, paddingTop: margen.top }}
+      >
         <View style={[{ flex: 1 }, style]}>{children}</View>
       </View>
     </Superficie>

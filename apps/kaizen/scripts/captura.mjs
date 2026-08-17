@@ -1,0 +1,198 @@
+// Captura pantallas de la app servida en web y avisa de errores de consola.
+//
+// Existe porque el bloque 0 se dio por bueno con 65 pruebas en verde y aun asi
+// llego al movil con iconos en blanco y contenido debajo de la barra de estado.
+// Ninguna prueba mira la pantalla. Esto la mira.
+//
+// Uso:
+//   node scripts/captura.mjs                    -> todas las rutas
+//   node scripts/captura.mjs /ajustes /coach    -> solo esas
+//   KAIZEN_SESION=no node scripts/captura.mjs   -> sin sesion simulada
+//
+// En Git Bash los argumentos que empiezan por "/" se convierten en rutas de
+// Windows. Usa MSYS_NO_PATHCONV=1 delante del comando si pasas rutas.
+//
+// El servidor tiene que estar levantado:  npx expo start --web --port 8099
+
+import { chromium } from 'playwright'
+import { mkdir, rm, readFile } from 'node:fs/promises'
+import path from 'node:path'
+
+const BASE = process.env.KAIZEN_WEB ?? 'http://localhost:8099'
+const SALIDA = path.resolve('capturas')
+const CON_SESION = process.env.KAIZEN_SESION !== 'no'
+
+// Pixel 9: 1080x2424 fisicos, 2,625 de densidad. Redondeamos a un viewport
+// realista y pedimos el doble de pixeles para poder leer el texto pequeno.
+const MOVIL = { width: 412, height: 915 }
+const DENSIDAD = 2
+
+const RUTAS_POR_DEFECTO = [
+  '/',
+  '/nutricion',
+  '/entrenamiento',
+  '/evolucion',
+  '/coach',
+  '/anadir',
+  '/anadir-hueco',
+  '/ajustes',
+  '/borrar-cuenta',
+  '/acceso',
+]
+
+const nombreDe = (ruta) => (ruta === '/' ? 'inicio' : ruta.replace(/^\//, '').replace(/\//g, '-'))
+
+/** Lee el .env sin traerse una dependencia solo para esto. */
+async function leerEnv() {
+  const texto = await readFile('.env', 'utf8').catch(() => '')
+  const pares = {}
+  for (const linea of texto.split(/\r?\n/)) {
+    const par = linea.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/)
+    if (par) pares[par[1]] = par[2].trim().replace(/^["']|["']$/g, '')
+  }
+  return pares
+}
+
+const base64url = (objeto) =>
+  Buffer.from(JSON.stringify(objeto)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+/**
+ * Sesion falsa escrita directamente en el almacen que lee supabase-js.
+ *
+ * En web, AsyncStorage es `window.localStorage` con la clave tal cual, y
+ * supabase-js guarda la sesion bajo `sb-<ref>-auth-token`. El token no esta
+ * firmado con nada valido: sirve para que la app se crea que hay sesion y
+ * pinte las pantallas, no para hablar con el servidor. Por eso ademas
+ * cortamos todo el trafico hacia Supabase mas abajo.
+ */
+function sesionSimulada(url) {
+  const ref = new URL(url).hostname.split('.')[0]
+  const usuario = '00000000-0000-4000-8000-000000000001'
+  const caduca = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365
+  const token = [
+    base64url({ alg: 'HS256', typ: 'JWT' }),
+    base64url({
+      sub: usuario,
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'capturas@kaizen.local',
+      exp: caduca,
+      iat: Math.floor(Date.now() / 1000),
+    }),
+    'firma-no-valida-solo-para-capturas',
+  ].join('.')
+
+  return {
+    clave: `sb-${ref}-auth-token`,
+    valor: JSON.stringify({
+      access_token: token,
+      refresh_token: 'refresco-no-valido',
+      token_type: 'bearer',
+      expires_in: 60 * 60 * 24 * 365,
+      expires_at: caduca,
+      user: {
+        id: usuario,
+        aud: 'authenticated',
+        role: 'authenticated',
+        email: 'capturas@kaizen.local',
+        app_metadata: { provider: 'email', providers: ['email'] },
+        user_metadata: {},
+        created_at: new Date(0).toISOString(),
+      },
+    }),
+  }
+}
+
+const rutas = process.argv.slice(2).length > 0 ? process.argv.slice(2) : RUTAS_POR_DEFECTO
+const env = await leerEnv()
+const urlSupabase = process.env.EXPO_PUBLIC_SUPABASE_URL ?? env.EXPO_PUBLIC_SUPABASE_URL
+
+if (CON_SESION && !urlSupabase) {
+  console.error('Falta EXPO_PUBLIC_SUPABASE_URL (en .env o en el entorno).')
+  process.exit(1)
+}
+
+await rm(SALIDA, { recursive: true, force: true })
+await mkdir(SALIDA, { recursive: true })
+
+// Usamos el Chrome del sistema en vez del Chromium que trae Playwright: son
+// unos 150 MB que no hace falta bajar, y en esta maquina el disco va justo.
+const navegador = await chromium.launch({ channel: 'chrome' })
+const contexto = await navegador.newContext({
+  viewport: MOVIL,
+  deviceScaleFactor: DENSIDAD,
+  isMobile: true,
+  hasTouch: true,
+  colorScheme: 'dark',
+  locale: 'es-ES',
+  timezoneId: 'Europe/Madrid',
+})
+
+if (CON_SESION) {
+  const { clave, valor } = sesionSimulada(urlSupabase)
+  await contexto.addInitScript(
+    ([c, v]) => window.localStorage.setItem(c, v),
+    [clave, valor],
+  )
+
+  // Cinturon: la base de datos de este proyecto es la de produccion. Ninguna
+  // captura debe poder leerla ni, mucho menos, escribirla.
+  const anfitrion = new URL(urlSupabase).hostname
+  await contexto.route(`**://${anfitrion}/**`, (ruta) =>
+    ruta.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  )
+}
+
+const informe = []
+
+for (const ruta of rutas) {
+  const pagina = await contexto.newPage()
+  const problemas = []
+
+  pagina.on('console', (mensaje) => {
+    if (mensaje.type() === 'error') problemas.push(`consola: ${mensaje.text()}`)
+  })
+  pagina.on('pageerror', (error) => problemas.push(`excepcion: ${error.message}`))
+
+  const ficheros = []
+  try {
+    await pagina.goto(`${BASE}${ruta}`, { waitUntil: 'networkidle', timeout: 120_000 })
+    // Metro tarda en el primer paquete y las fuentes de iconos cargan aparte.
+    await pagina.waitForTimeout(2_500)
+
+    // Dos vistas de cada pantalla: lo que cabe en el movil (donde se ven los
+    // recortes y lo que tapa la barra) y la pantalla entera desplegada.
+    const visible = path.join(SALIDA, `${nombreDe(ruta)}.png`)
+    await pagina.screenshot({ path: visible })
+    ficheros.push(visible)
+
+    const alto = await pagina.evaluate(() => document.documentElement.scrollHeight)
+    if (alto > MOVIL.height + 40) {
+      const completa = path.join(SALIDA, `${nombreDe(ruta)}-completa.png`)
+      await pagina.screenshot({ path: completa, fullPage: true })
+      ficheros.push(completa)
+    }
+  } catch (error) {
+    problemas.push(`navegacion: ${error.message}`)
+  }
+
+  informe.push({ ruta, ficheros, problemas })
+  await pagina.close()
+}
+
+await navegador.close()
+
+for (const { ruta, ficheros, problemas } of informe) {
+  console.log(`\n${ruta}`)
+  console.log(`  ${ficheros.length > 0 ? ficheros.map((f) => path.basename(f)).join(' + ') : 'NO SE PUDO'}`)
+  if (problemas.length === 0) {
+    console.log('  sin errores de consola')
+  } else {
+    for (const problema of [...new Set(problemas)].slice(0, 8)) console.log(`  ! ${problema}`)
+  }
+}
+
+const rotas = informe.filter((r) => r.ficheros.length === 0).length
+console.log(`\n${informe.length - rotas}/${informe.length} rutas capturadas en ${SALIDA}`)
+console.log(CON_SESION ? 'con sesion simulada, sin tocar Supabase' : 'sin sesion')
+process.exit(rotas > 0 ? 1 : 0)

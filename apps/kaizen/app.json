@@ -27,6 +27,13 @@
     "plugins": [
       "expo-router",
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d0586b3c-bcbb-4b77-95d9-ca2605b85b77"
+      }
+    },
+    "owner": "hat3xs-team"
   }
 }
