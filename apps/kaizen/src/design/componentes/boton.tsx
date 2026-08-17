@@ -25,7 +25,10 @@ export function Boton({ titulo, alPulsar, tono = 'primario' }:
           alignItems: 'center',
         }}
       >
-        <Texto style={{ color: primario ? t.color.sobreAcento : t.color.texto, fontWeight: '700' }}>
+        <Texto style={{
+          color: primario ? t.color.sobreAcento : t.color.texto,
+          fontWeight: t.tipografia.pesoTitular,
+        }}>
           {titulo}
         </Texto>
       </Superficie>

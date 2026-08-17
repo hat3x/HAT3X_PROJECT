@@ -16,7 +16,12 @@ export function Anillo({ progreso, tamano = 168, grosor = 12, children }: {
   const vuelta = 2 * Math.PI * radio
 
   return (
-    <View style={{ width: tamano, height: tamano }}>
+    <View
+      style={{ width: tamano, height: tamano }}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(recortado * 100) }}
+    >
       <Svg width={tamano} height={tamano}>
         <Circle cx={centro} cy={centro} r={radio} fill="none"
                 stroke={t.color.pista} strokeWidth={grosor} />
