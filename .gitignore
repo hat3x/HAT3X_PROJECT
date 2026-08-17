@@ -7,3 +7,6 @@ dist/
 *.log
 *.tsbuildinfo
 .env 
+
+# Maquetas del companion visual de brainstorming
+.superpowers/
