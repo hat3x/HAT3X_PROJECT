@@ -1,22 +1,11 @@
-import type { ReactNode } from 'react'
 import { Stack, Redirect } from 'expo-router'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { ProveedorSesion, useSesion } from '@/datos/sesion'
 import { crearClienteConsultas, persistidor } from '@/datos/cliente-consultas'
-import { ProveedorTema } from '@/design/proveedor'
 import { Pantalla } from '@/design/componentes/pantalla'
-import { usarPerfil } from '@/features/perfil/usar-perfil'
+import { ProveedorTemaDelPerfil } from '@/features/perfil/proveedor-tema-del-perfil'
 
 const cliente = crearClienteConsultas()
-
-/**
- * Lee el tema del perfil. Antes de iniciar sesión no hay perfil, así que cae
- * al de por defecto — que es justo lo que debe verse en la pantalla de acceso.
- */
-function ProveedorTemaDelPerfil({ children }: { children: ReactNode }) {
-  const { perfil } = usarPerfil()
-  return <ProveedorTema nombre={perfil?.tema ?? 'defecto'}>{children}</ProveedorTema>
-}
 
 function Puerta() {
   const { sesion, cargando } = useSesion()

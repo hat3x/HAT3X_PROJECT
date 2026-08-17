@@ -38,5 +38,11 @@ export function usarPerfil() {
   return {
     perfil: consulta.data ?? null,
     guardar: (cambios: Partial<Perfil>) => mutacion.mutateAsync(cambios),
+    // Sin estos dos, un fallo al guardar es indistinguible de un éxito: la
+    // pantalla no tiene de dónde leerlo y el usuario cree que se guardó.
+    guardando: mutacion.isPending,
+    errorAlGuardar: mutacion.isError
+      ? 'No hemos podido guardar el cambio. Inténtalo de nuevo.'
+      : null,
   }
 }

@@ -21,6 +21,34 @@ const UNIDADES = [
 const CORTES_DIA = Array.from({ length: 13 }, (_, i) => i)
 const HORAS_SILENCIO = Array.from({ length: 24 }, (_, i) => i)
 
+// Etiquetas legibles para las claves crudas de `TEMAS`. Un tema que no esté
+// en este mapa (p. ej. el que añade el perfil `personal` de EAS desde fuera
+// del control de versiones, ver `design/temas/indice.ts`) cae a su propia
+// clave con la primera letra en mayúscula, en vez de romper o desaparecer.
+const ETIQUETAS_TEMA: Record<string, string> = {
+  defecto: 'Oscuro',
+  claro: 'Claro',
+}
+
+function etiquetaTema(nombre: string): string {
+  return ETIQUETAS_TEMA[nombre] ?? nombre.charAt(0).toUpperCase() + nombre.slice(1)
+}
+
+/**
+ * Valida contra el mismo mecanismo que después consume la zona horaria
+ * (`fechaLocal`, Tarea 3), no contra una lista propia: si `Intl` la acepta,
+ * el cálculo del día funcionará con ella; si `Intl` la rechaza, aceptarla
+ * aquí solo trasladaría la rotura, en silencio, al cálculo del día entero.
+ */
+function esZonaValida(valor: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: valor })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function Seccion({ titulo, ayuda, children }: { titulo: string; ayuda?: string; children: ReactNode }) {
   const t = useTema()
   return (
@@ -32,14 +60,21 @@ function Seccion({ titulo, ayuda, children }: { titulo: string; ayuda?: string; 
   )
 }
 
-function Ficha({ titulo, seleccionado, alPulsar }: {
+function Ficha({ titulo, seleccionado, deshabilitado = false, alPulsar }: {
   titulo: string
   seleccionado: boolean
+  deshabilitado?: boolean
   alPulsar: () => void
 }) {
   const t = useTema()
   return (
-    <Pressable onPress={alPulsar} accessibilityRole="button" accessibilityState={{ selected: seleccionado }}>
+    <Pressable
+      onPress={alPulsar}
+      disabled={deshabilitado}
+      accessibilityRole="button"
+      accessibilityState={{ selected: seleccionado, disabled: deshabilitado }}
+      style={{ opacity: deshabilitado ? 0.5 : 1 }}
+    >
       <Superficie
         fondo={seleccionado ? t.superficie.botonPrimario : t.superficie.botonSecundario}
         radio={t.radio.pastilla}
@@ -51,9 +86,10 @@ function Ficha({ titulo, seleccionado, alPulsar }: {
   )
 }
 
-function SelectorNumerico({ valores, seleccionado, alSeleccionar }: {
+function SelectorNumerico({ valores, seleccionado, deshabilitado = false, alSeleccionar }: {
   valores: number[]
   seleccionado: number
+  deshabilitado?: boolean
   alSeleccionar: (valor: number) => void
 }) {
   const t = useTema()
@@ -65,6 +101,7 @@ function SelectorNumerico({ valores, seleccionado, alSeleccionar }: {
             key={valor}
             titulo={String(valor)}
             seleccionado={valor === seleccionado}
+            deshabilitado={deshabilitado}
             alPulsar={() => alSeleccionar(valor)}
           />
         ))}
@@ -76,8 +113,9 @@ function SelectorNumerico({ valores, seleccionado, alSeleccionar }: {
 export function Ajustes() {
   const t = useTema()
   const router = useRouter()
-  const { perfil, guardar } = usarPerfil()
+  const { perfil, guardar, guardando, errorAlGuardar } = usarPerfil()
   const [zonaHoraria, setZonaHoraria] = useState('')
+  const [errorZona, setErrorZona] = useState<string | null>(null)
 
   // Sincroniza el campo con lo que llega del servidor, pero solo mientras el
   // usuario no está escribiendo: si reescribiéramos en cada render, cualquier
@@ -101,13 +139,27 @@ export function Ajustes() {
     padding: t.espaciado[2], color: t.color.texto,
   }
 
+  function alCambiarZonaHoraria(valor: string) {
+    setZonaHoraria(valor)
+    setErrorZona(null)
+  }
+
   function confirmarZonaHoraria() {
-    if (perfil && zonaHoraria !== perfil.zona_horaria) guardar({ zona_horaria: zonaHoraria })
+    if (!perfil || zonaHoraria === perfil.zona_horaria) return
+    if (!esZonaValida(zonaHoraria)) {
+      setErrorZona('Esa zona horaria no existe. Revisa cómo la has escrito.')
+      return
+    }
+    setErrorZona(null)
+    guardar({ zona_horaria: zonaHoraria })
   }
 
   function detectarZonaHoraria() {
+    // Lo que devuelve `Intl` en este dispositivo es, por construcción, una
+    // zona que el propio `Intl` acepta: no hace falta validarla.
     const detectada = Intl.DateTimeFormat().resolvedOptions().timeZone
     setZonaHoraria(detectada)
+    setErrorZona(null)
     guardar({ zona_horaria: detectada })
   }
 
@@ -116,6 +168,10 @@ export function Ajustes() {
       <ScrollView contentContainerStyle={{ padding: t.espaciado[5], gap: t.espaciado[5] }}>
         <Texto variante="titulo">Ajustes</Texto>
 
+        {errorAlGuardar && (
+          <Texto variante="tenue" style={{ color: t.color.peligro }}>{errorAlGuardar}</Texto>
+        )}
+
         <Seccion titulo="Unidades">
           <View style={{ flexDirection: 'row', gap: t.espaciado[1] }}>
             {UNIDADES.map((u) => (
@@ -123,6 +179,7 @@ export function Ajustes() {
                 <Boton
                   titulo={u.titulo}
                   tono={perfil.unidades === u.clave ? 'primario' : 'secundario'}
+                  deshabilitado={guardando}
                   alPulsar={() => guardar({ unidades: u.clave })}
                 />
               </View>
@@ -134,19 +191,29 @@ export function Ajustes() {
           <TextInput
             style={campo}
             value={zonaHoraria}
-            onChangeText={setZonaHoraria}
+            onChangeText={alCambiarZonaHoraria}
             onBlur={confirmarZonaHoraria}
             placeholderTextColor={t.color.textoTenue}
             autoCapitalize="none"
             autoCorrect={false}
+            editable={!guardando}
           />
-          <Boton titulo="Detectar automáticamente" tono="secundario" alPulsar={detectarZonaHoraria} />
+          {errorZona && (
+            <Texto variante="tenue" style={{ color: t.color.peligro }}>{errorZona}</Texto>
+          )}
+          <Boton
+            titulo="Detectar automáticamente"
+            tono="secundario"
+            deshabilitado={guardando}
+            alPulsar={detectarZonaHoraria}
+          />
         </Seccion>
 
         <Seccion titulo="Corte de día" ayuda="Lo que registres antes de esta hora contará como el día anterior.">
           <SelectorNumerico
             valores={CORTES_DIA}
             seleccionado={perfil.corte_dia}
+            deshabilitado={guardando}
             alSeleccionar={(valor) => guardar({ corte_dia: valor })}
           />
         </Seccion>
@@ -155,6 +222,7 @@ export function Ajustes() {
           <SelectorNumerico
             valores={HORAS_SILENCIO}
             seleccionado={perfil.hora_silencio}
+            deshabilitado={guardando}
             alSeleccionar={(valor) => guardar({ hora_silencio: valor })}
           />
         </Seccion>
@@ -164,8 +232,9 @@ export function Ajustes() {
             {Object.keys(TEMAS).map((nombre) => (
               <Ficha
                 key={nombre}
-                titulo={nombre}
+                titulo={etiquetaTema(nombre)}
                 seleccionado={perfil.tema === nombre}
+                deshabilitado={guardando}
                 alPulsar={() => guardar({ tema: nombre })}
               />
             ))}
