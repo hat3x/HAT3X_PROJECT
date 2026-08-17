@@ -42,6 +42,21 @@ const RUTAS_POR_DEFECTO = [
 
 const nombreDe = (ruta) => (ruta === '/' ? 'inicio' : ruta.replace(/^\//, '').replace(/\//g, '-'))
 
+// El usuario de mentira de las capturas. Mismo `id` que el `sub` del token de
+// mas abajo, y todos los campos con valor: la consulta del perfil usa
+// `.single()`, asi que un hueco aqui se convierte en un control en blanco en
+// Ajustes que parece un fallo de la app sin serlo.
+const USUARIO_DE_EJEMPLO = '00000000-0000-4000-8000-000000000001'
+const PERFIL_DE_EJEMPLO = {
+  id: USUARIO_DE_EJEMPLO,
+  nombre: 'Jota',
+  unidades: 'metrico',
+  zona_horaria: 'Europe/Madrid',
+  corte_dia: 4,
+  hora_silencio: 22,
+  tema: 'defecto',
+}
+
 /** Lee el .env sin traerse una dependencia solo para esto. */
 async function leerEnv() {
   const texto = await readFile('.env', 'utf8').catch(() => '')
@@ -137,10 +152,19 @@ if (CON_SESION) {
 
   // Cinturon: la base de datos de este proyecto es la de produccion. Ninguna
   // captura debe poder leerla ni, mucho menos, escribirla.
+  //
+  // Y lo que se devuelve tiene que ser CREIBLE, no vacio. Devolviendo `[]` a
+  // todo, `.single()` del perfil se traga el array, `perfil.zona_horaria` sale
+  // `undefined` y Ajustes se pinta con el campo en blanco y sin nada
+  // seleccionado. Eso no es un fallo de la app: es el arnes fabricandolo. Un
+  // arnes que inventa fallos es peor que no tenerlo.
   const anfitrion = new URL(urlSupabase).hostname
-  await contexto.route(`**://${anfitrion}/**`, (ruta) =>
-    ruta.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
-  )
+  await contexto.route(`**://${anfitrion}/**`, (ruta) => {
+    const cuerpo = ruta.request().url().includes('/rest/v1/perfiles')
+      ? JSON.stringify(PERFIL_DE_EJEMPLO)
+      : '[]'
+    return ruta.fulfill({ status: 200, contentType: 'application/json', body: cuerpo })
+  })
 }
 
 const informe = []

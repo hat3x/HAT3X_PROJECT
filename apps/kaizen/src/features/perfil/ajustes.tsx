@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { View, Pressable, ScrollView, TextInput } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -23,6 +23,12 @@ const UNIDADES = [
 // amplía en la base, este selector tiene que ampliarse con él.
 const CORTES_DIA = Array.from({ length: 13 }, (_, i) => i)
 const HORAS_SILENCIO = Array.from({ length: 24 }, (_, i) => i)
+
+// Ancho aproximado de una ficha con su hueco al lado. Es una estimación a
+// propósito: solo sirve para colocar el desplazamiento inicial de la fila, así
+// que errar por unos píxeles deja el valor seleccionado igual de visible. Medir
+// de verdad exigiría `onLayout` y un render extra para algo que no lo merece.
+const ANCHO_FICHA = 42
 
 // Etiquetas legibles para las claves crudas de `TEMAS`. Un tema que no esté
 // en este mapa (p. ej. el que añade el perfil `personal` de EAS desde fuera
@@ -96,8 +102,23 @@ function SelectorNumerico({ valores, seleccionado, deshabilitado = false, alSele
   alSeleccionar: (valor: number) => void
 }) {
   const t = useTema()
+  const fila = useRef<ScrollView>(null)
+
+  // Arranca mostrando el valor guardado, no el 0. Con 24 horas en fila, quien
+  // tenga la hora de silencio a las 22 abría Ajustes y veía «0 1 2 3…» sin
+  // rastro de su propio ajuste, como si no estuviera puesto. Se dejan dos
+  // fichas a la izquierda para que se vea que la fila continúa hacia atrás.
+  //
+  // Con `ref` y no con la prop `contentOffset`: esa solo la respeta iOS —web y
+  // Android la ignoran en silencio—. Probado: con `contentOffset` la captura
+  // salía idéntica, arrancando en 0.
+  useEffect(() => {
+    const x = Math.max(0, valores.indexOf(seleccionado) - 2) * ANCHO_FICHA
+    fila.current?.scrollTo({ x, animated: false })
+  }, [valores, seleccionado])
+
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+    <ScrollView ref={fila} horizontal showsHorizontalScrollIndicator={false}>
       <View style={{ flexDirection: 'row', gap: t.espaciado[1] }}>
         {valores.map((valor) => (
           <Ficha
