@@ -217,6 +217,9 @@ export async function emitInvoiceAction(
       recipient,
     });
     revalidatePath("/tpv");
+    // El libro de facturas y el detalle de tickets muestran la nueva emisión.
+    revalidatePath("/facturacion/facturas");
+    revalidatePath("/facturacion/tickets");
     return { ok: true, data: invoice };
   } catch (error) {
     if (error instanceof InvoiceEmissionError) {

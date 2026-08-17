@@ -41,12 +41,25 @@ export default async function TpvPage({
   // escaneo, así que ni siquiera ofrecemos el campo.
   const loyaltyEnabled = await activeSalonHasFeature("loyalty");
 
+  // Datos fiscales del salón (emisor de facturas), para emitir factura desde el
+  // recibo del cobro. Si faltan, el propio diálogo los pide y los guarda.
+  const { data: fiscalRow } = await supabase
+    .from("salons")
+    .select("tax_id, legal_name, fiscal_address")
+    .eq("id", salon.id)
+    .maybeSingle();
+
   return (
     <TpvView
       salonId={salon.id}
       salonName={salon.name}
       timezone={salon.timezone}
       loyaltyEnabled={loyaltyEnabled}
+      issuer={{
+        taxId: fiscalRow?.tax_id ?? null,
+        legalName: fiscalRow?.legal_name ?? null,
+        fiscalAddress: fiscalRow?.fiscal_address ?? null,
+      }}
       initialAppointmentId={
         typeof searchParams.appointment === "string"
           ? searchParams.appointment

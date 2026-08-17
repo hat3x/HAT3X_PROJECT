@@ -47,6 +47,10 @@ import {
   PAYMENT_METHOD_LABELS,
   printTicketDocument,
 } from "@/app/(dashboard)/tpv/print-ticket";
+import {
+  EmitInvoiceDialog,
+  type InvoiceIssuer,
+} from "@/components/facturacion/emit-invoice-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -156,6 +160,8 @@ interface TpvViewProps {
    * 403); el resto del cobro funciona igual, la fidelización es aditiva.
    */
   loyaltyEnabled: boolean;
+  /** Datos fiscales del salón (emisor), para emitir factura desde el recibo del cobro. */
+  issuer: InvoiceIssuer;
   /**
    * Cita de la que arrancar el cobro automáticamente al abrir la caja (viene de
    * "Cobrar" en el panel de citas: /tpv?appointment=<id>). Solo surte efecto si
@@ -175,6 +181,7 @@ export function TpvView({
   salonName,
   timezone,
   loyaltyEnabled,
+  issuer,
   initialAppointmentId,
 }: TpvViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
@@ -778,6 +785,24 @@ export function TpvView({
               ))}
             </div>
           </div>
+
+          {/* Emitir factura de esta venta (simplificada o completa). El ticket ya
+              está registrado; la factura es un documento aparte a demanda. */}
+          {receipt !== null ? (
+            <EmitInvoiceDialog
+              saleId={receipt.saleId}
+              issuer={issuer}
+              customer={{
+                name: ticketSale?.customerName ?? null,
+                taxId: null,
+                address: null,
+              }}
+              triggerLabel="Emitir factura"
+              triggerVariant="outline"
+              triggerSize="default"
+              triggerClassName="h-11 w-full"
+            />
+          ) : null}
 
           <DialogFooter>
             <Button className="h-11" onClick={closeReceipt}>

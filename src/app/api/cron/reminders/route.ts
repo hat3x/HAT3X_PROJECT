@@ -1,13 +1,16 @@
 /**
- * /api/cron/reminders — Vercel Cron Job trigger
+ * /api/cron/reminders — disparador de los recordatorios de cita
  *
- * Vercel llama a esta ruta cada 5 minutos (ver vercel.json).
- * La ruta verifica el secreto y reenvía la petición a la Supabase Edge
- * Function process-reminders, que hace el trabajo real.
+ * Vercel llama a esta ruta según la sección `crons` de vercel.json. La ruta
+ * verifica el secreto y reenvía a la Edge Function process-reminders, que hace
+ * el trabajo real: enviar WhatsApp y SMS a los clientes.
+ *
+ * ESTA RUTA PROVOCA ENVÍOS REALES. Por eso falla CERRADA: si falta la
+ * configuración, no se dispara nada.
  *
  * Variables de entorno necesarias:
- *   CRON_SECRET              — secreto compartido con la Edge Function
- *   NEXT_PUBLIC_SUPABASE_URL — URL base del proyecto Supabase
+ *   CRON_SECRET               — secreto compartido con la Edge Function
+ *   NEXT_PUBLIC_SUPABASE_URL  — URL base del proyecto Supabase
  *   SUPABASE_SERVICE_ROLE_KEY — clave de servicio para Authorization
  */
 
@@ -17,19 +20,32 @@ export const dynamic     = 'force-dynamic';
 export const maxDuration = 30;
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET?.trim();
 
-  if (cronSecret) {
-    // Vercel adjunta Authorization: Bearer <CRON_SECRET> en producción
-    const authHeader = request.headers.get('authorization');
-    const directHeader = request.headers.get('x-cron-secret');
-    const authorized =
-      authHeader === `Bearer ${cronSecret}` ||
-      directHeader === cronSecret;
+  // Sin secreto NO se ejecuta. Antes esto era `if (cronSecret) { …comprobar… }`,
+  // que se saltaba la comprobación entera cuando la variable no estaba puesta:
+  // una variable de entorno ausente desactivaba la autorización y dejaba la ruta
+  // abierta a cualquiera que supiera la URL, disparando envíos reales a los
+  // clientes. Una configuración que falta tiene que parar el proceso, nunca
+  // abrirlo. Y una cadena en blanco tampoco es un secreto: de ahí el trim.
+  if (!cronSecret) {
+    console.error('[cron/reminders] CRON_SECRET sin definir: no se dispara nada');
+    return NextResponse.json(
+      { error: 'CRON_SECRET no está configurado; el disparador queda deshabilitado' },
+      { status: 500 },
+    );
+  }
 
-    if (!authorized) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  // Vercel adjunta Authorization: Bearer <CRON_SECRET> en producción; la
+  // cabecera directa permite dispararlo a mano para depurar.
+  const authHeader = request.headers.get('authorization');
+  const directHeader = request.headers.get('x-cron-secret');
+  const authorized =
+    authHeader === `Bearer ${cronSecret}` ||
+    directHeader === cronSecret;
+
+  if (!authorized) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const supabaseUrl    = process.env.NEXT_PUBLIC_SUPABASE_URL;

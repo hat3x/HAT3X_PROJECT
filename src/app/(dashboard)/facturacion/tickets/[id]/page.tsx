@@ -5,11 +5,13 @@ import { ArrowLeft, Printer, ReceiptText } from "lucide-react";
 
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import { TicketDetailView } from "@/app/(dashboard)/facturacion/tickets/[id]/ticket-detail-view";
+import { EmitInvoiceDialog } from "@/components/facturacion/emit-invoice-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import { fetchSaleDetail } from "@/lib/facturacion/queries";
 import { formatSaleRef } from "@/lib/facturacion/sale-ticket";
 import { formatDateTime } from "@/lib/format";
 import { getActiveSalonId } from "@/lib/salon";
+import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
 interface TicketDetailPageProps {
@@ -39,12 +41,42 @@ export default async function TicketDetailPage({
     redirect(`/login?next=/facturacion/tickets/${params.id}`);
   }
 
-  const detail = await fetchSaleDetail(salonId, params.id);
+  const supabase = createClient();
+  const [detail, salonRow, saleRow] = await Promise.all([
+    fetchSaleDetail(salonId, params.id),
+    supabase
+      .from("salons")
+      .select("tax_id, legal_name, fiscal_address")
+      .eq("id", salonId)
+      .maybeSingle(),
+    supabase
+      .from("pos_sales")
+      .select("customer:customers(full_name, tax_id, address)")
+      .eq("id", params.id)
+      .eq("salon_id", salonId)
+      .maybeSingle(),
+  ]);
   if (detail === null) {
     notFound();
   }
 
   const ref = formatSaleRef(detail.id);
+
+  // Emisor (datos fiscales del salón) y receptor sugerido (cliente de la venta),
+  // para el diálogo de emisión de factura.
+  const issuer = {
+    taxId: salonRow.data?.tax_id ?? null,
+    legalName: salonRow.data?.legal_name ?? null,
+    fiscalAddress: salonRow.data?.fiscal_address ?? null,
+  };
+  const saleCustomer = saleRow.data?.customer ?? null;
+  const invoiceCustomer = saleCustomer
+    ? {
+        name: saleCustomer.full_name ?? null,
+        taxId: saleCustomer.tax_id ?? null,
+        address: saleCustomer.address ?? null,
+      }
+    : null;
 
   return (
     <div>
@@ -61,7 +93,12 @@ export default async function TicketDetailPage({
         title={`Venta ${ref}`}
         description={`Detalle de líneas y cobros de la venta cerrada el ${formatDateTime(detail.soldAt)}.`}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <EmitInvoiceDialog
+              saleId={detail.id}
+              issuer={issuer}
+              customer={invoiceCustomer}
+            />
             <a
               href={`/api/facturacion/ticket/${detail.id}`}
               target="_blank"
