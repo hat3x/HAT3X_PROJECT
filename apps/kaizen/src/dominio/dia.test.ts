@@ -29,4 +29,20 @@ describe('fechaLocal', () => {
     expect(fechaLocal(instante, 'America/Mexico_City', 4)).toBe('2026-08-17')
     expect(fechaLocal(instante, 'Pacific/Auckland', 4)).toBe('2026-08-18')
   })
+
+  // Los dos cambios de hora del año. Son el caso que rompe la implementación
+  // ingenua de restar horas al instante absoluto.
+  it('el cambio de hora de otoño no adelanta el día', () => {
+    // Madrid atrasa el reloj a las 03:00 CEST del 25-oct (01:00 UTC).
+    // 03:30 hora local del 25, ya en CET (+1), son las 02:30 UTC.
+    const instante = new Date('2026-10-25T02:30:00Z')
+    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-10-24')
+  })
+
+  it('el cambio de hora de primavera no atrasa el día', () => {
+    // Madrid adelanta el reloj a las 02:00 CET del 29-mar (01:00 UTC).
+    // 04:30 hora local del 29, ya en CEST (+2), son las 02:30 UTC.
+    const instante = new Date('2026-03-29T02:30:00Z')
+    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-03-29')
+  })
 })
