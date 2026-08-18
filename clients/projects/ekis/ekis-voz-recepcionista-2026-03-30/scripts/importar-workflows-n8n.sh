@@ -3,7 +3,7 @@
 # Ekis Recepcionista - HAT3X
 
 N8N_BASE="https://hat3xia.app.n8n.cloud"
-N8N_API_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkMzIxMjMzOC0xN2NhLTQzODgtYWVlNC01NjJmMGE2Njc0ZGQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiNTA0M2IwYTMtNjI5MS00NDhmLThhMzQtMWMyNjBjZTJiN2NkIiwiaWF0IjoxNzc0OTEyNDI1fQ.Oq_KdJjwsUyUwT588VjLqbkkKBvuXEoxkDoBh_WkZ58"
+N8N_API_KEY="${N8N_API_KEY:?Falta N8N_API_KEY. Exportala antes de ejecutar este script.}"
 
 # IDs de workflows existentes en n8n
 WORKFLOW_CREAR="QTEkPUTUb4lLI6Tm"
