@@ -4,6 +4,28 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 ---
 
+## Antes de dar una pantalla por buena, MÍRALA
+
+```
+npx expo start --web --port 8099    # dejarlo levantado
+npm run capturas                     # un PNG por ruta en capturas/
+KAIZEN_TEMA=claro npm run capturas   # la otra piel
+```
+
+`scripts/captura.mjs` sirve la app en web, simula sesión en `localStorage`, **corta todo el tráfico hacia Supabase** —la base de este proyecto es la de producción— y responde con un perfil de ejemplo completo. Guarda una captura por ruta y lista los errores de consola de cada una.
+
+**Por qué existe.** El bloque 0 se cerró con 65 pruebas en verde y once rondas de revisión, y llegó al móvil con los iconos de las pestañas en blanco y el fondo de las cuatro tarjetas del Home metido hacia dentro del borde redondeado. Ninguna prueba miraba la pantalla, así que ninguna lo vio. En su primera ejecución, el arnés lo encontró.
+
+Tres reglas que salieron de usarlo:
+
+1. **Si el arnés devuelve datos vacíos, fabrica fallos que no existen.** Con `[]` en todas las respuestas, el `.single()` del perfil se traga el array y Ajustes se pinta con la zona horaria en blanco y nada seleccionado. Parecen tres bugs y no lo son. Por eso `PERFIL_DE_EJEMPLO` lleva todos los campos con valor.
+2. **Lo que web NO ve:** el margen seguro (en el navegador no hay barra de estado, el contexto entrega cero) y la fidelidad del desenfoque. Eso va cubierto con pruebas —ver «margen seguro» en `componentes.test.tsx`— o no va cubierto.
+3. **Web y Android ignoran en silencio algunas props que iOS sí respeta.** `contentOffset` de `ScrollView` es una: el arreglo parecía puesto y la captura salía idéntica. Se usa `ref` + `scrollTo`.
+
+No hay emulador de Android disponible: los AVDs existen pero sin imagen de sistema, y no cabe en disco.
+
+---
+
 ## Restricciones críticas del arnés de tests
 
 El proyecto usa una configuración específica de Jest que **no puede cambiar** sin breaking el suite. Estas restricciones nacen de incompatibilidades reales en el ecosistema Expo 57 y aparecen en varias tareas; las documentamos aquí para que cualquier agente entienda el por qué.
