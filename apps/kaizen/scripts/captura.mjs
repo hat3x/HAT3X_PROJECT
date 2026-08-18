@@ -38,6 +38,7 @@ const RUTAS_POR_DEFECTO = [
   '/registrar-peso',
   '/registrar-entrenamiento',
   '/entrada-rapida',
+  '/buscar-alimento',
   '/ajustes',
   '/borrar-cuenta',
   '/acceso',

@@ -16,7 +16,7 @@ const TAMANO_ICONO = 20
 // entradas quedan visibles y funcionales, sin opciones deshabilitadas ni
 // «próximamente».
 const OPCIONES = [
-  { clave: 'buscar',   titulo: 'Buscar alimento', icono: 'search',      ruta: '/' },
+  { clave: 'buscar',   titulo: 'Buscar alimento', icono: 'search',      ruta: '/buscar-alimento' },
   { clave: 'escanear', titulo: 'Escanear código', icono: 'camera',      ruta: '/' },
   { clave: 'rapida',   titulo: 'Entrada rápida',  icono: 'edit-3',      ruta: '/entrada-rapida' },
   { clave: 'agua',     titulo: 'Agua',            icono: 'droplet',     ruta: '/' },

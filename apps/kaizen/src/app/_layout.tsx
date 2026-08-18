@@ -33,6 +33,15 @@ function Puerta() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(pestanas)" />
       <Stack.Screen name="anadir" options={{ presentation: 'modal' }} />
+      {/* Las cinco se abren como modal: son gestos cortos —registrar algo y
+          volver—, no destinos donde uno se queda. Sin declararlas aqui la ruta
+          existe igual, porque expo-router la crea del fichero, pero se abre
+          como una pantalla normal. Estuvo asi un rato y no se noto: el fichero
+          se veia bien y la app tambien. */}
+      <Stack.Screen name="registrar-peso" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="registrar-entrenamiento" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="entrada-rapida" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="buscar-alimento" options={{ presentation: 'modal' }} />
     </Stack>
   )
 }
