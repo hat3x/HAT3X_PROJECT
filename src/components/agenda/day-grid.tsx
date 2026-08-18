@@ -543,7 +543,7 @@ export function DayGrid({
       consigue con el margin-top del wrapper de abajo, no con padding en el
       contenedor con scroll (si no, la cabecera sticky deja un "bleed"). */}
       <div ref={scrollRef} className="h-full overflow-auto">
-      <div className="mb-4 mt-3 min-w-[640px] rounded-xl border border-border bg-[var(--glass-bg-dense)] shadow-sm backdrop-blur-xl">
+      <div className="mb-4 mt-3 rounded-xl border border-border bg-[var(--glass-bg-dense)] shadow-sm backdrop-blur-xl">
         <div
           className="sticky top-0 z-20 grid rounded-t-xl border-b border-border bg-card shadow-md"
           style={{ gridTemplateColumns }}
@@ -666,7 +666,7 @@ function DayGridSkeleton({ columns }: { columns: number }): React.ReactElement {
 
   return (
     <div className="h-full overflow-hidden">
-      <div className="mb-4 mt-3 min-w-[640px] rounded-xl border border-border bg-[var(--glass-bg-dense)] shadow-sm backdrop-blur-xl">
+      <div className="mb-4 mt-3 rounded-xl border border-border bg-[var(--glass-bg-dense)] shadow-sm backdrop-blur-xl">
         <div className="grid rounded-t-xl border-b border-border" style={{ gridTemplateColumns }}>
           <div aria-hidden="true" />
           {Array.from({ length: columns }, (_, index) => (
@@ -703,7 +703,7 @@ function DayGridSkeleton({ columns }: { columns: number }): React.ReactElement {
 
 function DayGridError(): React.ReactElement {
   return (
-    <div className="mb-4 mt-3 flex min-h-[320px] min-w-[640px] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-[var(--glass-bg-dense)] p-8 text-center shadow-sm backdrop-blur-xl">
+    <div className="mb-4 mt-3 flex min-h-[320px] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-[var(--glass-bg-dense)] p-8 text-center shadow-sm backdrop-blur-xl">
       <AlertCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
       <p className="font-semibold text-foreground">No se han podido cargar las citas del día</p>
       <p className="max-w-sm text-sm text-muted-foreground">
@@ -715,7 +715,7 @@ function DayGridError(): React.ReactElement {
 
 function DayGridNoProfessionals(): React.ReactElement {
   return (
-    <div className="mb-4 mt-3 flex min-h-[320px] min-w-[640px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-[var(--glass-bg-dense)] p-8 text-center shadow-sm backdrop-blur-xl">
+    <div className="mb-4 mt-3 flex min-h-[320px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-[var(--glass-bg-dense)] p-8 text-center shadow-sm backdrop-blur-xl">
       <Users className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
       <p className="font-semibold text-foreground">No hay profesionales activos</p>
       <p className="max-w-sm text-sm text-muted-foreground">

@@ -326,7 +326,7 @@ export function AppointmentsView({
           vista, buscador y "Nueva cita". Sustituye las tres filas previas
           (cabecera, conmutador, nav. de fecha) — así solo la parrilla hace
           scroll por debajo (ver DayGrid: h-full en vez de max-h). */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-[var(--glass-panel)] px-4 py-2.5 backdrop-blur-xl backdrop-saturate-150 sm:px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 bg-[var(--glass-panel)] px-4 py-2.5 backdrop-blur-xl backdrop-saturate-150 sm:flex-nowrap sm:gap-3 sm:px-6">
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center gap-1 rounded-full border bg-card p-1 shadow-sm">
             <Button
@@ -367,8 +367,9 @@ export function AppointmentsView({
           </div>
         </div>
 
-        <div className="flex-1" />
-
+        {/* Grupo derecho: en móvil ocupa toda la fila (w-full) y baja debajo de
+            la fecha; en sm+ toma el espacio restante y se alinea a la derecha. */}
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-1 sm:flex-nowrap">
         {realtimeStatus === "connected" && (
           <span className="hidden shrink-0 items-center gap-1.5 text-xs font-medium text-emerald-600 xl:inline-flex dark:text-emerald-400">
             <span className="relative flex h-2 w-2">
@@ -422,9 +423,13 @@ export function AppointmentsView({
         </div>
 
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <Button onClick={() => setCreateOpen(true)} className="shrink-0 whitespace-nowrap shadow-brand">
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva cita
+          <Button
+            onClick={() => setCreateOpen(true)}
+            aria-label="Nueva cita"
+            className="shrink-0 whitespace-nowrap shadow-brand"
+          >
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Nueva cita</span>
           </Button>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -442,6 +447,7 @@ export function AppointmentsView({
             />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {view === "dia" ? (
