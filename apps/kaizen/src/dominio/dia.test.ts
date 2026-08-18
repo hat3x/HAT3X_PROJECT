@@ -1,4 +1,4 @@
-import { fechaLocal } from './dia'
+import { fechaLocal, fechaLarga } from './dia'
 
 describe('fechaLocal', () => {
   it('una comida de mediodía cuenta en su propio día', () => {
@@ -44,5 +44,23 @@ describe('fechaLocal', () => {
     // 04:30 hora local del 29, ya en CEST (+2), son las 02:30 UTC.
     const instante = new Date('2026-03-29T02:30:00Z')
     expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-03-29')
+  })
+})
+
+describe('fecha larga', () => {
+  it('escribe el dia de la semana y el mes en espanol', () => {
+    expect(fechaLarga('2026-08-18')).toBe('Martes, 18 de agosto')
+    expect(fechaLarga('2026-01-01')).toBe('Jueves, 1 de enero')
+    expect(fechaLarga('2026-12-25')).toBe('Viernes, 25 de diciembre')
+  })
+
+  // Interpretar la cadena con `new Date(...)` depende de la zona del
+  // dispositivo y puede devolver el dia anterior.
+  it('no se desplaza un dia segun la zona horaria', () => {
+    expect(fechaLarga('2026-03-01')).toBe('Domingo, 1 de marzo')
+  })
+
+  it('una fecha ilegible se devuelve tal cual en vez de romper', () => {
+    expect(fechaLarga('no es una fecha')).toBe('no es una fecha')
   })
 })

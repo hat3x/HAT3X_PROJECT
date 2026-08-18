@@ -39,3 +39,29 @@ export function fechaLocal(
   }
   return fecha.toISOString().slice(0, 10)
 }
+
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+const MESES_LARGOS = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+]
+
+/**
+ * «Martes, 18 de agosto» a partir de «2026-08-18».
+ *
+ * Sustituye al «Día 24 · Fase Definición» de la maqueta, que era mentira: sin
+ * alta guiada no hay fecha de inicio ni fase, y ponerlas inventadas es peor que
+ * no ponerlas. La fecha sí es verdad, y sitúa el día igual de bien.
+ *
+ * Sin `Intl`, como el resto de formatos de la app: su soporte de locales en
+ * Hermes es irregular entre plataformas.
+ */
+export function fechaLarga(fechaLocal: string): string {
+  const [ano, mes, dia] = fechaLocal.split('-').map(Number)
+  if (!ano || !mes || !dia) return fechaLocal
+  // `Date.UTC` y no `new Date(cadena)`: interpretar la cadena depende de la
+  // zona del dispositivo y puede devolver el día anterior.
+  const nombreDia = DIAS_SEMANA[new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay()] ?? ''
+  const conMayuscula = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)
+  return `${conMayuscula}, ${dia} de ${MESES_LARGOS[mes - 1] ?? mes}`
+}

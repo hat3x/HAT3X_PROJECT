@@ -85,7 +85,7 @@ it('con sesión, se llega al armazón de pestañas', async () => {
   })
   mockPerfilSelectUnico.mockResolvedValue({
     data: {
-      id: 'u1', nombre: '', unidades: 'metrico', zona_horaria: 'Europe/Madrid',
+      id: 'u1', nombre: 'Jota', unidades: 'metrico', zona_horaria: 'Europe/Madrid',
       corte_dia: 4, hora_silencio: 22, tema: 'defecto',
     },
     error: null,

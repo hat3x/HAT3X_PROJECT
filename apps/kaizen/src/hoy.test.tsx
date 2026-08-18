@@ -11,6 +11,15 @@ import { ProveedorTema } from '@/design/proveedor'
 //
 // Prefijo `mock` obligatorio por el hoisting de Jest, igual que `mockPush`.
 const mockAnadir = jest.fn()
+// El Home lee el nombre del perfil y la fecha del dia. Se sustituyen los dos:
+// este fichero comprueba que PINTA, no de donde salen los datos —y ademas
+// importar el cliente de Supabase aqui revienta el suite.
+jest.mock('@/features/perfil/usar-perfil', () => ({
+  usarPerfil: () => ({ perfil: { nombre: 'Jota' }, guardar: jest.fn(), guardando: false, errorAlGuardar: null }),
+}))
+jest.mock('@/features/dia/usar-fecha-de-hoy', () => ({
+  usarFechaDeHoy: () => '2026-08-18',
+}))
 jest.mock('@/features/nutricion/usar-nutricion', () => ({
   usarNutricion: () => ({
     items: [],
@@ -64,10 +73,19 @@ it('el Home pinta el score, las calorías, los tres macros, el agua y la misión
 
   // Saludo.
   expect(screen.getByText('Buenos días, Jota')).toBeTruthy()
+  // La fecha de verdad, no el «Día 24 · Fase Definición» inventado de antes.
+  expect(screen.getByText('Martes, 18 de agosto')).toBeTruthy()
 
   // Kaizen Score: el número dentro del anillo y su etiqueta (las etiquetas
   // van en mayúsculas por el tema, igual que en componentes.test.tsx).
-  expect(screen.getByText('82')).toBeTruthy()
+  // El score ya no es un 82 fijo: sale de lo simulado arriba. Echada la cuenta
+  // a mano, que es lo unico que hace de esto una comprobacion y no un espejo:
+  //   calorias    1720/2300, dia en curso -> 1720/2116 = 0,8129  x30 = 24,39
+  //   proteina     132/170                = 0,7765             x25 = 19,41
+  //   hidratacion 1000/2500               = 0,4000             x15 =  6,00
+  //   entrenamiento  1 sesion             = 1                  x20 = 20,00
+  //   -> 69,80 sobre 90 activos = 77,55 -> 78
+  expect(screen.getByText('78')).toBeTruthy()
   expect(screen.getByText('KAIZEN SCORE')).toBeTruthy()
 
   // Calorías consumidas/objetivo, con separador de miles, y lo que resta.
@@ -94,11 +112,14 @@ it('el Home pinta el score, las calorías, los tres macros, el agua y la misión
   expect(screen.getByText('Otro')).toBeTruthy()
 
   // La misión de hoy: sus cinco líneas, en orden.
-  expect(screen.getByText('Desayuno registrado')).toBeTruthy()
-  expect(screen.getByText('1 L de agua')).toBeTruthy()
+  // La mision se deriva de lo registrado, no es una lista fija: con el
+  // entrenamiento simulado a una sesion, esa linea sale marcada y las de comida
+  // sin marcar, porque los items simulados van vacios.
+  expect(screen.getByText('Registrar el desayuno')).toBeTruthy()
+  expect(screen.getByText('Registrar la cena')).toBeTruthy()
   expect(screen.getByText('Llegar a 170 g de proteína')).toBeTruthy()
-  expect(screen.getByText('Entrenamiento')).toBeTruthy()
-  expect(screen.getByText('Registrar cena')).toBeTruthy()
+  expect(screen.getByText('Beber 2,5 L de agua')).toBeTruthy()
+  expect(screen.getByText('Entrenar')).toBeTruthy()
 })
 
 it('el Home se puede desplazar: el contenido vive dentro de un ScrollView', () => {

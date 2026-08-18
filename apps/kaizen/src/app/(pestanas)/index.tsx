@@ -15,6 +15,10 @@ import { usarEntrenamiento } from '@/features/entrenamiento/usar-entrenamiento'
 import { resumenEntrenamiento } from '@/dominio/entrenamiento'
 import { usarNutricion } from '@/features/nutricion/usar-nutricion'
 import { enKcal, enGramos } from '@/dominio/nutricion'
+import { kaizenScore, mensajeScore, mision } from '@/dominio/kaizen-score'
+import { fechaLarga } from '@/dominio/dia'
+import { usarPerfil } from '@/features/perfil/usar-perfil'
+import { usarFechaDeHoy } from '@/features/dia/usar-fecha-de-hoy'
 
 // Separador de miles con punto y coma decimal a la española, sin tirar de
 // `Intl`: el soporte de locales en Hermes es irregular entre plataformas, y
@@ -52,42 +56,6 @@ const VASOS_ML = [250, 500] as const
 // poder probarla, distinto de como se prueba el resto del suite.
 const ALTURA_CONTENIDO_BARRA = 49
 
-/**
- * Datos de ejemplo para maquetar el Home mientras no existe registro real.
- * El bloque 1 los sustituye por datos leídos de verdad (Supabase): nada de
- * lo que hay debajo es un dato real, y no debe tratarse como tal.
- */
-const DATOS_DE_EJEMPLO = {
-  usuario: 'Jota',
-  dia: 24,
-  fase: 'Fase Definición',
-  kaizenScore: 82,
-  mensajeScore: 'Vas por muy buen camino.',
-  nutricion: {
-    caloriasConsumidas: 1720,
-    caloriasObjetivo: 2300,
-    macros: [
-      { clave: 'proteina', etiqueta: 'Proteína', actual: 132, objetivo: 170 },
-      { clave: 'carbos', etiqueta: 'Carbos', actual: 164, objetivo: 220 },
-      { clave: 'grasas', etiqueta: 'Grasas', actual: 48, objetivo: 70 },
-    ],
-  },
-  agua: { actual: 1.8, objetivo: 2.5 },
-  entrenamiento: { estado: 'Pendiente hoy' },
-  mision: [
-    { texto: 'Desayuno registrado', hecho: true },
-    { texto: '1 L de agua', hecho: true },
-    { texto: 'Llegar a 170 g de proteína', hecho: false },
-    { texto: 'Entrenamiento', hecho: false },
-    { texto: 'Registrar cena', hecho: false },
-  ],
-} as const
-
-// Todavía no hay dónde guardar nada (eso llega en el bloque 1): este
-// manejador compartido existe solo para que los botones de la pantalla no
-// rompan al pulsarlos, sin inventar una ruta ni una pantalla que no existe.
-function sinDestino() {}
-
 // Geometría de esta lista, no del tema: no hay token de tamaño de icono en
 // `Tema`, igual que `LADO_MAS`/`SOBRESALIENTE_MAS` en el layout de pestañas.
 const TAMANO_ICONO_MISION = 16
@@ -99,6 +67,8 @@ export default function Hoy() {
   const agua = usarAgua()
   const entreno = usarEntrenamiento()
   const nutricion = usarNutricion()
+  const { perfil } = usarPerfil()
+  const fechaDeHoy = usarFechaDeHoy()
 
   // Las tres columnas de macros, leidas de lo comido hoy y de los objetivos.
   const macros = [
@@ -106,6 +76,35 @@ export default function Hoy() {
     { clave: 'carbos', etiqueta: 'Carbos', actual: nutricion.total.carbos_g, objetivo: nutricion.objetivos.carbos_g, color: t.color.carbos },
     { clave: 'grasas', etiqueta: 'Grasas', actual: nutricion.total.grasas_g, objetivo: nutricion.objetivos.grasas_g, color: t.color.grasas },
   ]
+
+  // El score del dia. `diaEnCurso` va fijo a `true` porque este Home siempre
+  // ensena hoy: el dia cerrado con su nota llegara con el historico.
+  //
+  // `tocabaEntrenar` va a `false` mientras no exista la planificacion (bloque
+  // 5): sin ella no se puede saber si hoy tocaba, y suponer que si penalizaria
+  // por una obligacion que nadie ha puesto.
+  const { score } = kaizenScore({
+    kcal: nutricion.total.kcal,
+    kcalObjetivo: nutricion.objetivos.kcal,
+    proteinaG: nutricion.total.proteina_g,
+    proteinaObjetivoG: nutricion.objetivos.proteina_g,
+    aguaMl: agua.ml,
+    aguaObjetivoMl: agua.objetivoMl,
+    entrenamientos: entreno.deHoy.length,
+    tocabaEntrenar: false,
+    habitos: 0,
+    habitosHechos: 0,
+    diaEnCurso: true,
+  })
+
+  const pasos = mision({
+    momentosRegistrados: nutricion.items.map((i) => i.momento),
+    proteinaG: nutricion.total.proteina_g,
+    proteinaObjetivoG: nutricion.objetivos.proteina_g,
+    aguaMl: agua.ml,
+    aguaObjetivoMl: agua.objetivoMl,
+    entrenamientos: entreno.deHoy.length,
+  })
 
   // Nunca negativo en pantalla: pasarse del objetivo son «0 restantes», no
   // «-140 restantes», que se lee como si debieras calorias.
@@ -142,16 +141,20 @@ export default function Hoy() {
       >
         {/* 1. Saludo */}
         <View>
-          <Texto variante="titulo">Buenos días, {DATOS_DE_EJEMPLO.usuario}</Texto>
+          <Texto variante="titulo">
+            {perfil?.nombre ? `Buenos días, ${perfil.nombre}` : 'Buenos días'}
+          </Texto>
+          {/* La fecha, no «Día 24 · Fase Definición»: sin alta guiada no hay
+              fecha de inicio ni fase, e inventarlas es peor que no ponerlas. */}
           <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
-            Día {DATOS_DE_EJEMPLO.dia} · {DATOS_DE_EJEMPLO.fase}
+            {fechaDeHoy ? fechaLarga(fechaDeHoy) : ' '}
           </Texto>
         </View>
 
         {/* 2. Kaizen Score */}
         <View style={{ alignItems: 'center' }}>
-          <Anillo progreso={DATOS_DE_EJEMPLO.kaizenScore / 100}>
-            <Texto variante="heroe">{DATOS_DE_EJEMPLO.kaizenScore}</Texto>
+          <Anillo progreso={score / 100}>
+            <Texto variante="heroe">{score}</Texto>
             <Texto variante="etiqueta" style={{ marginTop: t.espaciado[0], textAlign: 'center' }}>
               Kaizen Score
             </Texto>
@@ -171,7 +174,7 @@ export default function Hoy() {
               marginTop: t.espaciado[3],
             }}
           >
-            <Texto variante="tenue">{DATOS_DE_EJEMPLO.mensajeScore}</Texto>
+            <Texto variante="tenue">{mensajeScore(score, true)}</Texto>
             <Feather name="chevron-right" size={TAMANO_ICONO_MISION} color={t.color.textoTenue} />
           </Pressable>
         </View>
@@ -263,8 +266,8 @@ export default function Hoy() {
         <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
           <Texto variante="etiqueta">Tu misión de hoy</Texto>
           <View style={{ marginTop: t.espaciado[3], gap: t.espaciado[2] }}>
-            {DATOS_DE_EJEMPLO.mision.map((item) => (
-              <View key={item.texto} style={{ flexDirection: 'row', alignItems: 'center', gap: t.espaciado[1] }}>
+            {pasos.map((item) => (
+              <View key={item.clave} style={{ flexDirection: 'row', alignItems: 'center', gap: t.espaciado[1] }}>
                 <Feather
                   name={item.hecho ? 'check-circle' : 'circle'}
                   size={TAMANO_ICONO_MISION}
