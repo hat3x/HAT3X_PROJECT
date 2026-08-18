@@ -13,6 +13,8 @@ import { useTema } from '@/design/proveedor'
 import { usarAgua } from '@/features/agua/usar-agua'
 import { usarEntrenamiento } from '@/features/entrenamiento/usar-entrenamiento'
 import { resumenEntrenamiento } from '@/dominio/entrenamiento'
+import { usarNutricion } from '@/features/nutricion/usar-nutricion'
+import { enKcal, enGramos } from '@/dominio/nutricion'
 
 // Separador de miles con punto y coma decimal a la española, sin tirar de
 // `Intl`: el soporte de locales en Hermes es irregular entre plataformas, y
@@ -96,15 +98,19 @@ export default function Hoy() {
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
   const agua = usarAgua()
   const entreno = usarEntrenamiento()
+  const nutricion = usarNutricion()
 
-  const colorMacro: Record<(typeof DATOS_DE_EJEMPLO.nutricion.macros)[number]['clave'], string> = {
-    proteina: t.color.proteina,
-    carbos: t.color.carbos,
-    grasas: t.color.grasas,
-  }
+  // Las tres columnas de macros, leidas de lo comido hoy y de los objetivos.
+  const macros = [
+    { clave: 'proteina', etiqueta: 'Proteína', actual: nutricion.total.proteina_g, objetivo: nutricion.objetivos.proteina_g, color: t.color.proteina },
+    { clave: 'carbos', etiqueta: 'Carbos', actual: nutricion.total.carbos_g, objetivo: nutricion.objetivos.carbos_g, color: t.color.carbos },
+    { clave: 'grasas', etiqueta: 'Grasas', actual: nutricion.total.grasas_g, objetivo: nutricion.objetivos.grasas_g, color: t.color.grasas },
+  ]
 
-  const restantes = DATOS_DE_EJEMPLO.nutricion.caloriasObjetivo - DATOS_DE_EJEMPLO.nutricion.caloriasConsumidas
-  const progresoCalorias = DATOS_DE_EJEMPLO.nutricion.caloriasConsumidas / DATOS_DE_EJEMPLO.nutricion.caloriasObjetivo
+  // Nunca negativo en pantalla: pasarse del objetivo son «0 restantes», no
+  // «-140 restantes», que se lee como si debieras calorias.
+  const restantes = Math.max(0, nutricion.objetivos.kcal - nutricion.total.kcal)
+  const progresoCalorias = nutricion.objetivos.kcal === 0 ? 0 : nutricion.total.kcal / nutricion.objetivos.kcal
 
   return (
     <Pantalla>
@@ -174,10 +180,9 @@ export default function Hoy() {
         <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <Texto variante="titulo">
-              {conSeparadorDeMiles(DATOS_DE_EJEMPLO.nutricion.caloriasConsumidas)} /{' '}
-              {conSeparadorDeMiles(DATOS_DE_EJEMPLO.nutricion.caloriasObjetivo)}
+              {enKcal(nutricion.total.kcal)} / {enKcal(nutricion.objetivos.kcal)}
             </Texto>
-            <Texto variante="tenue">{restantes} restantes</Texto>
+            <Texto variante="tenue">{enKcal(restantes)} restantes</Texto>
           </View>
           <View style={{ marginTop: t.espaciado[2] }}>
             <Barra progreso={progresoCalorias} color={t.color.acento} />
@@ -190,16 +195,20 @@ export default function Hoy() {
             }}
           />
           <View style={{ flexDirection: 'row', gap: t.espaciado[3] }}>
-            {DATOS_DE_EJEMPLO.nutricion.macros.map((macro) => (
+            {macros.map((macro) => (
               <View key={macro.clave} style={{ flex: 1 }}>
                 <Texto variante="etiqueta">{macro.etiqueta}</Texto>
                 <Texto style={{ marginTop: t.espaciado[0] }}>
-                  {macro.actual}/{macro.objetivo}
+                  {enGramos(macro.actual)}/{enGramos(macro.objetivo)}
                 </Texto>
                 <View style={{ marginTop: t.espaciado[1] }}>
                   {/* Más fina que la barra de calorías (por defecto 7, como
                       la de arriba): son tres, secundarias, y comparten fila. */}
-                  <Barra progreso={macro.actual / macro.objetivo} color={colorMacro[macro.clave]} alto={5} />
+                  <Barra
+                    progreso={macro.objetivo === 0 ? 0 : macro.actual / macro.objetivo}
+                    color={macro.color}
+                    alto={5}
+                  />
                 </View>
               </View>
             ))}

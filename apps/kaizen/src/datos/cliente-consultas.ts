@@ -8,6 +8,7 @@ import {
   CLAVE_MUTACION_ANADIR_AGUA,
   CLAVE_MUTACION_GUARDAR_PESO,
   CLAVE_MUTACION_REGISTRAR_ENTRENAMIENTO,
+  CLAVE_MUTACION_REGISTRAR_COMIDA,
 } from './claves-mutacion'
 
 onlineManager.setEventListener((setOnline) =>
@@ -128,6 +129,32 @@ export function crearClienteConsultas(): QueryClient {
         .from('entrenamientos')
         .upsert(fila, { onConflict: 'id', ignoreDuplicates: true })
       if (error) throw new Error(error.message)
+    },
+  })
+
+  // La comida escribe DOS filas —la comida y su renglon— y las dos son
+  // idempotentes por `id`, asi que reanudar no duplica. La comprobacion de
+  // dueno es la misma de siempre.
+  clienteConsultas.setMutationDefaults(CLAVE_MUTACION_REGISTRAR_COMIDA, {
+    mutationFn: async ({ id, comida, item }: {
+      id: string
+      comida: Record<string, unknown>
+      item: Record<string, unknown>
+    }) => {
+      const { data } = await supabase.auth.getSession()
+      const idActual = data.session?.user.id
+      if (!idActual) throw new Error('No hay sesion activa para reanudar esta comida.')
+      if (idActual !== id) {
+        console.error(
+          '[kaizen] Comida descartada al reanudar: la sesion activa ya no es la que la encolo.',
+        )
+        throw new Error('La sesion ha cambiado desde que se encolo esta comida.')
+      }
+      const conflicto = { onConflict: 'id', ignoreDuplicates: true } as const
+      const { error: errorComida } = await supabase.from('comidas').upsert(comida, conflicto)
+      if (errorComida) throw new Error(errorComida.message)
+      const { error: errorItem } = await supabase.from('comida_items').upsert(item, conflicto)
+      if (errorItem) throw new Error(errorItem.message)
     },
   })
 

@@ -37,6 +37,7 @@ const RUTAS_POR_DEFECTO = [
   '/anadir-hueco',
   '/registrar-peso',
   '/registrar-entrenamiento',
+  '/entrada-rapida',
   '/ajustes',
   '/borrar-cuenta',
   '/acceso',
@@ -130,7 +131,9 @@ const RESPUESTAS = {
   perfiles: PERFIL_DE_EJEMPLO,
   registros_agua: [{ ml: 250 }, { ml: 500 }, { ml: 250 }],
   // `.maybeSingle()` con `.limit(1)`: tambien objeto.
-  objetivos: { agua_ml: 2500 },
+  // Completa, como en la base real (todas esas columnas son `not null`).
+  // Devolviendo solo `agua_ml`, el Home pintaba «1.167 / NaN».
+  objetivos: { agua_ml: 2500, kcal: 2300, proteina_g: 170, carbos_g: 220, grasas_g: 70 },
   // De mas nuevo a mas viejo, como los pide la consulta.
   pesos: [
     { fecha_local: '2026-08-18', kg: 78.4 },
@@ -143,6 +146,13 @@ const RESPUESTAS = {
     { id: 'e1', fecha_local: '2026-08-18', tipo: 'fuerza', duracion_min: 75 },
     { id: 'e2', fecha_local: '2026-08-17', tipo: 'cardio', duracion_min: 35 },
     { id: 'e3', fecha_local: '2026-08-16', tipo: 'movilidad', duracion_min: null },
+  ],
+  comida_items: [
+    { id: 'c1', nombre: 'Avena con platano', cantidad_g: 80, kcal: 310, proteina_g: 10.4, carbos_g: 52, grasas_g: 5.6, comidas: { momento: 'desayuno', fecha_local: '2026-08-18' } },
+    { id: 'c2', nombre: 'Cafe con leche', cantidad_g: 200, kcal: 90, proteina_g: 6.6, carbos_g: 9.4, grasas_g: 3.2, comidas: { momento: 'desayuno', fecha_local: '2026-08-18' } },
+    { id: 'c3', nombre: 'Pechuga de pollo', cantidad_g: 180, kcal: 297, proteina_g: 55.8, carbos_g: 0, grasas_g: 6.5, comidas: { momento: 'comida', fecha_local: '2026-08-18' } },
+    { id: 'c4', nombre: 'Arroz blanco', cantidad_g: 250, kcal: 325, proteina_g: 6.8, carbos_g: 70, grasas_g: 0.8, comidas: { momento: 'comida', fecha_local: '2026-08-18' } },
+    { id: 'c5', nombre: 'Yogur griego', cantidad_g: 150, kcal: 145, proteina_g: 13.5, carbos_g: 5.4, grasas_g: 7.5, comidas: { momento: 'snack', fecha_local: '2026-08-18' } },
   ],
 }
 

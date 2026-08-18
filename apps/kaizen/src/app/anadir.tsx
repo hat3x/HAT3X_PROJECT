@@ -18,7 +18,7 @@ const TAMANO_ICONO = 20
 const OPCIONES = [
   { clave: 'buscar',   titulo: 'Buscar alimento', icono: 'search',      ruta: '/' },
   { clave: 'escanear', titulo: 'Escanear código', icono: 'camera',      ruta: '/' },
-  { clave: 'rapida',   titulo: 'Entrada rápida',  icono: 'edit-3',      ruta: '/' },
+  { clave: 'rapida',   titulo: 'Entrada rápida',  icono: 'edit-3',      ruta: '/entrada-rapida' },
   { clave: 'agua',     titulo: 'Agua',            icono: 'droplet',     ruta: '/' },
   { clave: 'entreno',  titulo: 'Entrenamiento',   icono: 'activity',    ruta: '/registrar-entrenamiento' },
   { clave: 'peso',     titulo: 'Peso',            icono: 'bar-chart-2', ruta: '/registrar-peso' },

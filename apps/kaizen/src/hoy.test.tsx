@@ -11,6 +11,17 @@ import { ProveedorTema } from '@/design/proveedor'
 //
 // Prefijo `mock` obligatorio por el hoisting de Jest, igual que `mockPush`.
 const mockAnadir = jest.fn()
+jest.mock('@/features/nutricion/usar-nutricion', () => ({
+  usarNutricion: () => ({
+    items: [],
+    total: { kcal: 1720, proteina_g: 132, carbos_g: 164, grasas_g: 48 },
+    objetivos: { kcal: 2300, proteina_g: 170, carbos_g: 220, grasas_g: 70 },
+    cargando: false,
+    registrar: jest.fn(),
+    guardando: false,
+    errorAlGuardar: null,
+  }),
+}))
 jest.mock('@/features/entrenamiento/usar-entrenamiento', () => ({
   usarEntrenamiento: () => ({
     historico: [],
