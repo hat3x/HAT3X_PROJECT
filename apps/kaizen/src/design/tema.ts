@@ -7,6 +7,26 @@ export type Fondo =
   | { tipo: 'degradado'; desde: string; hasta: string }
   | { tipo: 'recurso'; fuente: ImageSourcePropType; recuadro: Recuadro | null }
 
+/**
+ * Una tarjeta cuyo marco es arte, con zonas ya dibujadas dentro.
+ *
+ * El arte de esta clase no es un marco vacío: trae ilustraciones fijas a los
+ * lados —una gota, el edificio de Capsule Corp, una bola de dragón— y a veces
+ * botones enteros con su texto. El contenido de la app tiene que caer en el
+ * hueco que queda, y los botones dibujados necesitan que alguien escuche el
+ * toque encima de ellos.
+ *
+ * Todo va en fracción del ancho (0 a 1) y no en píxeles, porque la misma
+ * imagen se estira a cualquier pantalla.
+ */
+export type TarjetaIlustrada = {
+  fondo: Fondo
+  /** Dónde empieza y acaba la zona vacía utilizable. */
+  contenido: { izquierda: number; derecha: number }
+  /** Botones ya pintados en el arte, en el orden en que actúan. */
+  pulsables: { desde: number; hasta: number }[]
+}
+
 export type RecetaBarra = 'continua' | 'segmentada'
 export type RecetaAnillo = 'liso' | 'medidor'
 
@@ -104,10 +124,10 @@ export interface Tema {
    */
   decoracion: {
     cabecera: Fondo | null
-    tarjetaNutricion: Fondo | null
-    tarjetaAgua: Fondo | null
-    tarjetaEntrenamiento: Fondo | null
-    tarjetaMision: Fondo | null
+    tarjetaNutricion: TarjetaIlustrada | null
+    tarjetaAgua: TarjetaIlustrada | null
+    tarjetaEntrenamiento: TarjetaIlustrada | null
+    tarjetaMision: TarjetaIlustrada | null
     barraCalorias: ImageSourcePropType | null
     botonRegistrar: ImageSourcePropType | null
     botonAgua250: ImageSourcePropType | null

@@ -7,6 +7,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { Texto } from '@/design/componentes/texto'
 import { Pantalla, SIN_MARGEN } from '@/design/componentes/pantalla'
 import { Superficie } from '@/design/componentes/superficie'
+import { Tarjeta } from '@/design/componentes/tarjeta'
 import { Anillo } from '@/design/componentes/anillo'
 import { Barra } from '@/design/componentes/barra'
 import { Boton } from '@/design/componentes/boton'
@@ -147,6 +148,9 @@ export default function Hoy() {
   // `tocabaEntrenar` va a `false` mientras no exista la planificacion (bloque
   // 5): sin ella no se puede saber si hoy tocaba, y suponer que si penalizaria
   // por una obligacion que nadie ha puesto.
+  // Cuántas líneas de misión caben. Sin arte, todas.
+  const MISION_CON_ARTE = 4
+
   const { score } = kaizenScore({
     kcal: nutricion.total.kcal,
     kcalObjetivo: nutricion.objetivos.kcal,
@@ -169,6 +173,10 @@ export default function Hoy() {
     aguaObjetivoMl: agua.objetivoMl,
     entrenamientos: entreno.deHoy.length,
   })
+
+  const pasosVisibles = t.decoracion.tarjetaMision
+    ? [...pasos.filter((p) => !p.hecho), ...pasos.filter((p) => p.hecho)].slice(0, MISION_CON_ARTE)
+    : pasos
 
   // Nunca negativo en pantalla: pasarse del objetivo son «0 restantes», no
   // «-140 restantes», que se lee como si debieras calorias.
@@ -267,13 +275,9 @@ export default function Hoy() {
         {/* 3. Nutrición. Cuando la piel trae marco propio, el contenido baja:
             este arte lleva una cabecera dibujada («CAPSULE CORP.») y sin el
             hueco el primer renglón se escribe justo encima de ella. */}
-        <Superficie
-          fondo={t.decoracion.tarjetaNutricion ?? t.superficie.tarjeta}
-          radio={t.radio.tarjeta}
-          style={{
-            padding: t.espaciado[4],
-            paddingTop: t.decoracion.tarjetaNutricion ? t.espaciado[7] : t.espaciado[4],
-          }}
+        <Tarjeta
+          arte={t.decoracion.tarjetaNutricion}
+          style={t.decoracion.tarjetaNutricion ? { paddingTop: t.espaciado[5] } : undefined}
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <Texto variante="titulo">
@@ -317,10 +321,14 @@ export default function Hoy() {
               </View>
             ))}
           </View>
-        </Superficie>
+        </Tarjeta>
 
         {/* 4. Agua */}
-        <Superficie fondo={t.decoracion.tarjetaAgua ?? t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+        <Tarjeta
+          arte={t.decoracion.tarjetaAgua}
+          acciones={VASOS_ML.map((ml) => () => agua.anadir(ml))}
+          etiquetas={VASOS_ML.map((ml) => `Añadir ${ml} mililitros`)}
+        >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View>
               <Texto variante="etiqueta">Agua</Texto>
@@ -329,7 +337,10 @@ export default function Hoy() {
               </Texto>
             </View>
             <View style={{ flexDirection: 'row', gap: t.espaciado[1] }}>
-              {VASOS_ML.map((ml) => {
+              {/* Con arte, los botones ya están pintados en la tarjeta y sus
+                  zonas pulsables las pone `Tarjeta`: dibujar otros aquí los
+                  duplicaría. */}
+              {t.decoracion.tarjetaAgua ? null : VASOS_ML.map((ml) => {
                 const arte = ml === 250 ? t.decoracion.botonAgua250 : t.decoracion.botonAgua500
                 return arte ? (
                   <BotonDeArte
@@ -352,14 +363,18 @@ export default function Hoy() {
               })}
             </View>
           </View>
-        </Superficie>
+        </Tarjeta>
 
         {agua.errorAlGuardar && (
           <Texto variante="tenue" style={{ color: t.color.peligro }}>{agua.errorAlGuardar}</Texto>
         )}
 
         {/* 5. Entrenamiento */}
-        <Superficie fondo={t.decoracion.tarjetaEntrenamiento ?? t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+        <Tarjeta
+          arte={t.decoracion.tarjetaEntrenamiento}
+          acciones={[() => router.push('/registrar-entrenamiento')]}
+          etiquetas={['Registrar entrenamiento']}
+        >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View style={{ flex: 1, paddingRight: t.espaciado[2] }}>
               <Texto variante="etiqueta">Entrenamiento</Texto>
@@ -367,7 +382,7 @@ export default function Hoy() {
                 {resumenEntrenamiento(entreno.cargando, entreno.deHoy)}
               </Texto>
             </View>
-            {t.decoracion.botonRegistrar ? (
+            {t.decoracion.tarjetaEntrenamiento ? null : t.decoracion.botonRegistrar ? (
               <BotonDeArte
                 fuente={t.decoracion.botonRegistrar}
                 etiqueta="Registrar entrenamiento"
@@ -382,24 +397,37 @@ export default function Hoy() {
               />
             )}
           </View>
-        </Superficie>
+        </Tarjeta>
 
         {/* 6. Misión de hoy */}
-        <Superficie fondo={t.decoracion.tarjetaMision ?? t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+        <Tarjeta arte={t.decoracion.tarjetaMision}>
           <Texto variante="etiqueta">Tu misión de hoy</Texto>
           <View style={{ marginTop: t.espaciado[3], gap: t.espaciado[2] }}>
-            {pasos.map((item) => (
+            {/* Con arte, la tarjeta tiene la altura que le da su ilustración —cuatro
+                líneas, como el original— y la lista se sale si trae más. Se
+                enseñan las cuatro primeras sin marcar, que son las que quedan
+                por hacer; las ya cumplidas no necesitan sitio. */}
+            {pasosVisibles.map((item) => (
               <View key={item.clave} style={{ flexDirection: 'row', alignItems: 'center', gap: t.espaciado[1] }}>
                 <Feather
                   name={item.hecho ? 'check-circle' : 'circle'}
                   size={TAMANO_ICONO_MISION}
                   color={item.hecho ? t.color.acento : t.color.textoTenue}
                 />
-                <Texto variante={item.hecho ? 'tenue' : 'cuerpo'}>{item.texto}</Texto>
+                {/* Una linea por renglon cuando la tarjeta tiene altura fija: si
+                    «Llegar a 170 g de proteina» se parte en dos, la cuarta
+                    entrada se sale del marco. */}
+                <Texto
+                  variante={item.hecho ? 'tenue' : 'cuerpo'}
+                  numberOfLines={t.decoracion.tarjetaMision ? 1 : undefined}
+                  style={{ flex: 1 }}
+                >
+                  {item.texto}
+                </Texto>
               </View>
             ))}
           </View>
-        </Superficie>
+        </Tarjeta>
 
         {/* 7. Habitos. Solo aparece si hay alguno: una tarjeta vacia invitando
             a configurar algo es ruido en la pantalla que se mira cada dia. La

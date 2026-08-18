@@ -1,4 +1,4 @@
-import { View, ImageBackground, StyleSheet, type ViewStyle } from 'react-native'
+import { View, Image, StyleSheet, type ViewStyle } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { ReactNode } from 'react'
@@ -26,17 +26,21 @@ export function Superficie({ fondo, radio, style, testID, children }: {
 
   if (fondo.tipo === 'recurso') {
     const r = fondo.recuadro
+    // Misma forma que el degradado, y por el mismo motivo: la imagen va en una
+    // capa absoluta DETRAS del contenido, no envolviendolo. Con
+    // `ImageBackground` el arte salia recortado en vez de escalado —visto en
+    // captura—, porque su altura la decidia el contenido y no el `aspectRatio`
+    // del contenedor. Asi la imagen llena siempre exactamente la tarjeta.
     return (
-      <ImageBackground
-        testID={testID}
-        source={fondo.fuente}
-        capInsets={r ? { top: r.arriba, left: r.izquierda, bottom: r.abajo, right: r.derecha } : undefined}
-        resizeMode="stretch"
-        style={base}
-        imageStyle={{ borderRadius: radio }}
-      >
+      <View testID={testID} style={base}>
+        <Image
+          source={fondo.fuente}
+          capInsets={r ? { top: r.arriba, left: r.izquierda, bottom: r.abajo, right: r.derecha } : undefined}
+          resizeMode="stretch"
+          style={[StyleSheet.absoluteFill, { width: '100%', height: '100%', borderRadius: radio }]}
+        />
         {children}
-      </ImageBackground>
+      </View>
     )
   }
 
