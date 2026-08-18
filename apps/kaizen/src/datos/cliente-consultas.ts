@@ -7,6 +7,7 @@ import {
   CLAVE_MUTACION_GUARDAR_PERFIL,
   CLAVE_MUTACION_ANADIR_AGUA,
   CLAVE_MUTACION_GUARDAR_PESO,
+  CLAVE_MUTACION_REGISTRAR_ENTRENAMIENTO,
 } from './claves-mutacion'
 
 onlineManager.setEventListener((setOnline) =>
@@ -105,6 +106,27 @@ export function crearClienteConsultas(): QueryClient {
       const { error } = await supabase
         .from('pesos')
         .upsert(fila, { onConflict: 'user_id,fecha_local' })
+      if (error) throw new Error(error.message)
+    },
+  })
+
+  // Por `id` y con `ignoreDuplicates`, como el agua: se puede entrenar dos
+  // veces el mismo dia y las dos sesiones cuentan, asi que el conflicto no
+  // puede ir por (usuario, fecha) como el peso.
+  clienteConsultas.setMutationDefaults(CLAVE_MUTACION_REGISTRAR_ENTRENAMIENTO, {
+    mutationFn: async ({ id, fila }: { id: string; fila: Record<string, unknown> }) => {
+      const { data } = await supabase.auth.getSession()
+      const idActual = data.session?.user.id
+      if (!idActual) throw new Error('No hay sesion activa para reanudar este entrenamiento.')
+      if (idActual !== id) {
+        console.error(
+          '[kaizen] Entrenamiento descartado al reanudar: la sesion activa ya no es la que lo encolo.',
+        )
+        throw new Error('La sesion ha cambiado desde que se encolo este entrenamiento.')
+      }
+      const { error } = await supabase
+        .from('entrenamientos')
+        .upsert(fila, { onConflict: 'id', ignoreDuplicates: true })
       if (error) throw new Error(error.message)
     },
   })

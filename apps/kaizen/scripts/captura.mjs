@@ -36,6 +36,7 @@ const RUTAS_POR_DEFECTO = [
   '/anadir',
   '/anadir-hueco',
   '/registrar-peso',
+  '/registrar-entrenamiento',
   '/ajustes',
   '/borrar-cuenta',
   '/acceso',
@@ -137,6 +138,11 @@ const RESPUESTAS = {
     { fecha_local: '2026-08-15', kg: 79.1 },
     { fecha_local: '2026-08-12', kg: 79.1 },
     { fecha_local: '2026-08-09', kg: 80.3 },
+  ],
+  entrenamientos: [
+    { id: 'e1', fecha_local: '2026-08-18', tipo: 'fuerza', duracion_min: 75 },
+    { id: 'e2', fecha_local: '2026-08-17', tipo: 'cardio', duracion_min: 35 },
+    { id: 'e3', fecha_local: '2026-08-16', tipo: 'movilidad', duracion_min: null },
   ],
 }
 

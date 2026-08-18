@@ -11,6 +11,8 @@ import { Barra } from '@/design/componentes/barra'
 import { Boton } from '@/design/componentes/boton'
 import { useTema } from '@/design/proveedor'
 import { usarAgua } from '@/features/agua/usar-agua'
+import { usarEntrenamiento } from '@/features/entrenamiento/usar-entrenamiento'
+import { resumenEntrenamiento } from '@/dominio/entrenamiento'
 
 // Separador de miles con punto y coma decimal a la española, sin tirar de
 // `Intl`: el soporte de locales en Hermes es irregular entre plataformas, y
@@ -93,6 +95,7 @@ export default function Hoy() {
   const router = useRouter()
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
   const agua = usarAgua()
+  const entreno = usarEntrenamiento()
 
   const colorMacro: Record<(typeof DATOS_DE_EJEMPLO.nutricion.macros)[number]['clave'], string> = {
     proteina: t.color.proteina,
@@ -233,13 +236,17 @@ export default function Hoy() {
         {/* 5. Entrenamiento */}
         <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View>
+            <View style={{ flex: 1, paddingRight: t.espaciado[2] }}>
               <Texto variante="etiqueta">Entrenamiento</Texto>
               <Texto variante="tenue" style={{ marginTop: t.espaciado[0] }}>
-                {DATOS_DE_EJEMPLO.entrenamiento.estado}
+                {resumenEntrenamiento(entreno.cargando, entreno.deHoy)}
               </Texto>
             </View>
-            <Boton titulo="Registrar" tono="primario" alPulsar={sinDestino} />
+            <Boton
+              titulo={entreno.deHoy.length > 0 ? 'Otro' : 'Registrar'}
+              tono="primario"
+              alPulsar={() => router.push('/registrar-entrenamiento')}
+            />
           </View>
         </Superficie>
 

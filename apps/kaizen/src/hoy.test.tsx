@@ -11,6 +11,16 @@ import { ProveedorTema } from '@/design/proveedor'
 //
 // Prefijo `mock` obligatorio por el hoisting de Jest, igual que `mockPush`.
 const mockAnadir = jest.fn()
+jest.mock('@/features/entrenamiento/usar-entrenamiento', () => ({
+  usarEntrenamiento: () => ({
+    historico: [],
+    deHoy: [{ tipo: 'fuerza', duracion_min: 75 }],
+    cargando: false,
+    registrar: jest.fn(),
+    guardando: false,
+    errorAlGuardar: null,
+  }),
+}))
 jest.mock('@/features/agua/usar-agua', () => ({
   usarAgua: () => ({
     ml: 1000,
@@ -66,6 +76,11 @@ it('el Home pinta el score, las calorías, los tres macros, el agua y la misión
   // redondos: «1 / 2,5 L» parecia mezclar dos unidades distintas.
   expect(screen.getByText('AGUA')).toBeTruthy()
   expect(screen.getByText('1,0 / 2,5 L')).toBeTruthy()
+
+  // El entrenamiento tampoco sale ya de los datos de ejemplo: describe lo
+  // registrado hoy, y el boton cambia a «Otro» porque ya hay una sesion.
+  expect(screen.getByText('Fuerza · 1 h 15 min')).toBeTruthy()
+  expect(screen.getByText('Otro')).toBeTruthy()
 
   // La misión de hoy: sus cinco líneas, en orden.
   expect(screen.getByText('Desayuno registrado')).toBeTruthy()
