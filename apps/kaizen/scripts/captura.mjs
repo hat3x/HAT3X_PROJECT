@@ -54,7 +54,9 @@ const PERFIL_DE_EJEMPLO = {
   zona_horaria: 'Europe/Madrid',
   corte_dia: 4,
   hora_silencio: 22,
-  tema: 'defecto',
+  // El tema sale del perfil, no del sistema, asi que para ver la piel clara hay
+  // que pedirla aqui:  KAIZEN_TEMA=claro npm run capturas
+  tema: process.env.KAIZEN_TEMA ?? 'defecto',
 }
 
 /** Lee el .env sin traerse una dependencia solo para esto. */

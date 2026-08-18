@@ -70,7 +70,11 @@ it('sin sesión, el navegador se monta y se llega a la pantalla de acceso (no un
 
   renderRouter('src/app', { initialUrl: '/' })
 
-  await waitFor(() => expect(screen.getByText('Entrar en KAIZEN')).toBeTruthy())
+  // Se busca un botón y no el titular: el titular es decoración de marca y
+  // cambia cuando cambie el diseño —de hecho ya cambió una vez y rompió esta
+  // prueba sin que nada estuviera mal—. «Crear cuenta» solo existe en esta
+  // pantalla y demuestra además que se pintó entera, no solo su cabecera.
+  await waitFor(() => expect(screen.getByText('Crear cuenta')).toBeTruthy())
   // No se cuela por la rama de sesión: el armazón de pestañas no está.
   expect(screen.queryByText(/buenos días/i)).toBeNull()
 })

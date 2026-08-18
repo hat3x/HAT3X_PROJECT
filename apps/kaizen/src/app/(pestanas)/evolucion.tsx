@@ -1,5 +1,6 @@
 import { Texto } from '@/design/componentes/texto'
 import { Pantalla } from '@/design/componentes/pantalla'
+import { Vacio } from '@/design/componentes/vacio'
 import { useTema } from '@/design/proveedor'
 
 export default function Evolucion() {
@@ -7,9 +8,7 @@ export default function Evolucion() {
   return (
     <Pantalla style={{ justifyContent: 'flex-start', padding: t.espaciado[5] }}>
       <Texto variante="titulo">Evolución</Texto>
-      <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
-        Cuando lleves unas semanas registrando, aquí verás cómo has cambiado.
-      </Texto>
+      <Vacio icono="trending-up" mensaje="Cuando lleves unas semanas registrando, aquí verás cómo has cambiado." />
     </Pantalla>
   )
 }

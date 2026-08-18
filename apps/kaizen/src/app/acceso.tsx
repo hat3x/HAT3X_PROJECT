@@ -1,10 +1,15 @@
 import { useState } from 'react'
-import { TextInput, Platform } from 'react-native'
+import { TextInput, Platform, View } from 'react-native'
 import { Texto } from '@/design/componentes/texto'
 import { Boton } from '@/design/componentes/boton'
 import { Pantalla } from '@/design/componentes/pantalla'
 import { useTema } from '@/design/proveedor'
 import { entrarConCorreo, registrarConCorreo, entrarConApple } from '@/datos/autenticacion'
+
+// Solo para el nombre de la marca. No es un token del tema porque no se usa en
+// ningún otro sitio: separar las letras es lo que distingue un logotipo de una
+// palabra escrita, y solo hay un logotipo.
+const SEPARACION_MARCA = 6
 
 export default function Acceso() {
   const t = useTema()
@@ -30,7 +35,21 @@ export default function Acceso() {
 
   return (
     <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5], gap: t.espaciado[2] }}>
-      <Texto variante="titulo">Entrar en KAIZEN</Texto>
+      {/* La marca, no un encabezado de formulario. Esta es la primera pantalla
+          que ve nadie y antes era un «Entrar en KAIZEN» del tamaño de
+          cualquier otro título, con el formulario flotando en medio de la
+          nada. El nombre separado del claim, y ambos separados del formulario,
+          es lo que convierte el hueco en composición.
+
+          Sin kanji ni ningún glifo raro por muy bien que quede: si la fuente
+          del dispositivo no lo trae sale un cuadrado vacío, y eso ya pasó con
+          los iconos de las pestañas. */}
+      <View style={{ alignItems: 'center', marginBottom: t.espaciado[6] }}>
+        <Texto variante="heroe" style={{ letterSpacing: SEPARACION_MARCA }}>KAIZEN</Texto>
+        <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
+          Un poco mejor cada día.
+        </Texto>
+      </View>
 
       <TextInput
         style={campo}
