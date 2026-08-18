@@ -9,6 +9,7 @@ import {
   CLAVE_MUTACION_GUARDAR_PESO,
   CLAVE_MUTACION_REGISTRAR_ENTRENAMIENTO,
   CLAVE_MUTACION_REGISTRAR_COMIDA,
+  CLAVE_MUTACION_GUARDAR_OBJETIVOS,
 } from './claves-mutacion'
 
 onlineManager.setEventListener((setOnline) =>
@@ -155,6 +156,26 @@ export function crearClienteConsultas(): QueryClient {
       if (errorComida) throw new Error(errorComida.message)
       const { error: errorItem } = await supabase.from('comida_items').upsert(item, conflicto)
       if (errorItem) throw new Error(errorItem.message)
+    },
+  })
+
+  // Los objetivos, con el conflicto por `(user_id, vigente_desde)`: recalcular
+  // dos veces el mismo dia corrige la fila en vez de dejar dos vigentes.
+  clienteConsultas.setMutationDefaults(CLAVE_MUTACION_GUARDAR_OBJETIVOS, {
+    mutationFn: async ({ id, fila }: { id: string; fila: Record<string, unknown> }) => {
+      const { data } = await supabase.auth.getSession()
+      const idActual = data.session?.user.id
+      if (!idActual) throw new Error('No hay sesion activa para reanudar estos objetivos.')
+      if (idActual !== id) {
+        console.error(
+          '[kaizen] Objetivos descartados al reanudar: la sesion activa ya no es la que los encolo.',
+        )
+        throw new Error('La sesion ha cambiado desde que se encolaron estos objetivos.')
+      }
+      const { error } = await supabase
+        .from('objetivos')
+        .upsert(fila, { onConflict: 'user_id,vigente_desde' })
+      if (error) throw new Error(error.message)
     },
   })
 

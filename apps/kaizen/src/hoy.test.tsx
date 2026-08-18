@@ -11,6 +11,13 @@ import { ProveedorTema } from '@/design/proveedor'
 //
 // Prefijo `mock` obligatorio por el hoisting de Jest, igual que `mockPush`.
 const mockAnadir = jest.fn()
+// Con objetivos ya calculados: el aviso de «calcula tus objetivos» solo sale
+// cuando NO los hay, y este fichero comprueba el Home normal.
+jest.mock('@/features/objetivos/usar-objetivos', () => ({
+  usarObjetivos: () => ({
+    hayObjetivos: true, guardar: jest.fn(), guardando: false, errorAlGuardar: null,
+  }),
+}))
 // El Home lee el nombre del perfil y la fecha del dia. Se sustituyen los dos:
 // este fichero comprueba que PINTA, no de donde salen los datos —y ademas
 // importar el cliente de Supabase aqui revienta el suite.

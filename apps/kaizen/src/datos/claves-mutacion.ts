@@ -18,3 +18,5 @@ export const CLAVE_MUTACION_GUARDAR_PESO = ['peso', 'guardar'] as const
 export const CLAVE_MUTACION_REGISTRAR_ENTRENAMIENTO = ['entrenamiento', 'registrar'] as const
 
 export const CLAVE_MUTACION_REGISTRAR_COMIDA = ['comida', 'registrar'] as const
+
+export const CLAVE_MUTACION_GUARDAR_OBJETIVOS = ['objetivos', 'guardar'] as const

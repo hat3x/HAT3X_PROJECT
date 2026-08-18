@@ -19,6 +19,7 @@ import { kaizenScore, mensajeScore, mision } from '@/dominio/kaizen-score'
 import { fechaLarga } from '@/dominio/dia'
 import { usarPerfil } from '@/features/perfil/usar-perfil'
 import { usarFechaDeHoy } from '@/features/dia/usar-fecha-de-hoy'
+import { usarObjetivos } from '@/features/objetivos/usar-objetivos'
 
 // Separador de miles con punto y coma decimal a la española, sin tirar de
 // `Intl`: el soporte de locales en Hermes es irregular entre plataformas, y
@@ -69,6 +70,7 @@ export default function Hoy() {
   const nutricion = usarNutricion()
   const { perfil } = usarPerfil()
   const fechaDeHoy = usarFechaDeHoy()
+  const { hayObjetivos } = usarObjetivos()
 
   // Las tres columnas de macros, leidas de lo comido hoy y de los objetivos.
   const macros = [
@@ -178,6 +180,27 @@ export default function Hoy() {
             <Feather name="chevron-right" size={TAMANO_ICONO_MISION} color={t.color.textoTenue} />
           </Pressable>
         </View>
+
+        {/* Sin objetivos propios, todo lo de abajo se compara contra cifras
+            genericas. Se dice y se ofrece arreglarlo, en vez de dejar que
+            alguien confie en un objetivo que no es suyo. `hayObjetivos` es
+            `null` mientras carga: asi no parpadea el aviso en cada arranque. */}
+        {hayObjetivos === false && (
+          <Pressable onPress={() => router.push('/alta')} accessibilityRole="button">
+            <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: t.espaciado[3] }}>
+                <Feather name="target" size={TAMANO_ICONO_MISION + 4} color={t.color.acento} />
+                <View style={{ flex: 1 }}>
+                  <Texto>Calcula tus objetivos</Texto>
+                  <Texto variante="tenue" style={{ marginTop: t.espaciado[0] }}>
+                    Ahora usamos cifras genéricas. Con tus datos serán las tuyas.
+                  </Texto>
+                </View>
+                <Feather name="chevron-right" size={TAMANO_ICONO_MISION} color={t.color.textoTenue} />
+              </View>
+            </Superficie>
+          </Pressable>
+        )}
 
         {/* 3. Nutrición */}
         <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>

@@ -237,6 +237,14 @@ export function Ajustes() {
           </View>
         </Seccion>
 
+        <Seccion titulo="Objetivos" ayuda="Recalcula tus calorías y macros si han cambiado tu peso, tu actividad o lo que buscas.">
+          <Boton
+            titulo="Calcular mis objetivos"
+            tono="secundario"
+            alPulsar={() => router.push('/alta')}
+          />
+        </Seccion>
+
         <Seccion titulo="Zona horaria">
           <TextInput
             style={campo}
