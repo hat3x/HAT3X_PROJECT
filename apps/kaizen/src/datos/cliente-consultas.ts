@@ -10,6 +10,8 @@ import {
   CLAVE_MUTACION_REGISTRAR_ENTRENAMIENTO,
   CLAVE_MUTACION_REGISTRAR_COMIDA,
   CLAVE_MUTACION_GUARDAR_OBJETIVOS,
+  CLAVE_MUTACION_GUARDAR_HABITO,
+  CLAVE_MUTACION_MARCAR_HABITO,
 } from './claves-mutacion'
 
 onlineManager.setEventListener((setOnline) =>
@@ -175,6 +177,60 @@ export function crearClienteConsultas(): QueryClient {
       const { error } = await supabase
         .from('objetivos')
         .upsert(fila, { onConflict: 'user_id,vigente_desde' })
+      if (error) throw new Error(error.message)
+    },
+  })
+
+  // Los habitos: crear es un upsert que ignora duplicados y desactivar es un
+  // update. Comparten clave porque son la misma intencion —«guardar el
+  // habito»— pero no la misma escritura, y confundirlas hace que desactivar no
+  // haga nada.
+  clienteConsultas.setMutationDefaults(CLAVE_MUTACION_GUARDAR_HABITO, {
+    mutationFn: async ({ id, modo, fila }: {
+      id: string
+      modo: 'crear' | 'desactivar'
+      fila: Record<string, unknown>
+    }) => {
+      const { data } = await supabase.auth.getSession()
+      const idActual = data.session?.user.id
+      if (!idActual) throw new Error('No hay sesion activa para reanudar este habito.')
+      if (idActual !== id) {
+        console.error(
+          '[kaizen] Habito descartado al reanudar: la sesion activa ya no es la que lo encolo.',
+        )
+        throw new Error('La sesion ha cambiado desde que se encolo este habito.')
+      }
+      if (modo === 'crear') {
+        const { error } = await supabase
+          .from('habitos')
+          .upsert(fila, { onConflict: 'id', ignoreDuplicates: true })
+        if (error) throw new Error(error.message)
+        return
+      }
+      const { error } = await supabase
+        .from('habitos')
+        .update({ activo: false })
+        .eq('id', fila.id as string)
+      if (error) throw new Error(error.message)
+    },
+  })
+
+  // Marcar y desmarcar: el conflicto va por `(habito_id, fecha_local)` porque
+  // solo hay un registro por habito y dia.
+  clienteConsultas.setMutationDefaults(CLAVE_MUTACION_MARCAR_HABITO, {
+    mutationFn: async ({ id, fila }: { id: string; fila: Record<string, unknown> }) => {
+      const { data } = await supabase.auth.getSession()
+      const idActual = data.session?.user.id
+      if (!idActual) throw new Error('No hay sesion activa para reanudar esta marca.')
+      if (idActual !== id) {
+        console.error(
+          '[kaizen] Marca de habito descartada al reanudar: la sesion activa ya no es la que la encolo.',
+        )
+        throw new Error('La sesion ha cambiado desde que se encolo esta marca.')
+      }
+      const { error } = await supabase
+        .from('habitos_registro')
+        .upsert(fila, { onConflict: 'habito_id,fecha_local' })
       if (error) throw new Error(error.message)
     },
   })

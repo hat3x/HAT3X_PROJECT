@@ -38,6 +38,8 @@ const RUTAS_POR_DEFECTO = [
   '/registrar-peso',
   '/registrar-entrenamiento',
   '/entrada-rapida',
+  '/habitos',
+  '/alta',
   '/buscar-alimento',
   '/ajustes',
   '/borrar-cuenta',
@@ -148,6 +150,12 @@ const RESPUESTAS = {
     { id: 'e2', fecha_local: '2026-08-17', tipo: 'cardio', duracion_min: 35 },
     { id: 'e3', fecha_local: '2026-08-16', tipo: 'movilidad', duracion_min: null },
   ],
+  habitos: [
+    { id: 'h1', nombre: 'Creatina', icono: null, activo: true, orden: 0 },
+    { id: 'h2', nombre: 'Dormir 7 h', icono: null, activo: true, orden: 1 },
+    { id: 'h3', nombre: 'Estirar', icono: null, activo: true, orden: 2 },
+  ],
+  habitos_registro: [{ habito_id: 'h1', hecho: true }, { habito_id: 'h3', hecho: true }],
   comida_items: [
     { id: 'c1', nombre: 'Avena con platano', cantidad_g: 80, kcal: 310, proteina_g: 10.4, carbos_g: 52, grasas_g: 5.6, comidas: { momento: 'desayuno', fecha_local: '2026-08-18' } },
     { id: 'c2', nombre: 'Cafe con leche', cantidad_g: 200, kcal: 90, proteina_g: 6.6, carbos_g: 9.4, grasas_g: 3.2, comidas: { momento: 'desayuno', fecha_local: '2026-08-18' } },
@@ -200,7 +208,12 @@ if (CON_SESION) {
   const anfitrion = new URL(urlSupabase).hostname
   await contexto.route(`**://${anfitrion}/**`, (ruta) => {
     const url = ruta.request().url()
-    const tabla = Object.keys(RESPUESTAS).find((t) => url.includes(`/rest/v1/${t}`))
+    // El nombre EXACTO, no `includes`: «/rest/v1/habitos_registro» contiene
+    // «/rest/v1/habitos», asi que con `includes` las marcas de habitos
+    // recibian la lista de habitos y el Home contaba 0 de 3. Otra vez el arnes
+    // fabricando un fallo que la app no tenia.
+    const nombreTabla = new URL(url).pathname.split('/rest/v1/')[1]?.split('/')[0] ?? ''
+    const tabla = Object.keys(RESPUESTAS).find((t) => t === nombreTabla)
     const cuerpo = tabla ? JSON.stringify(RESPUESTAS[tabla]) : '[]'
     return ruta.fulfill({ status: 200, contentType: 'application/json', body: cuerpo })
   })

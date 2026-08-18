@@ -1,0 +1,16 @@
+# Lo que NO viaja al servidor de compilacion.
+#
+# El primer build subio 920 MB porque `node_modules` se colaba entera. EAS
+# instala las dependencias por su cuenta desde el `package-lock.json`, asi que
+# mandarlas es tirar ancho de banda y minutos de subida.
+node_modules/
+
+# Capturas de pantalla del arnes de revision visual.
+capturas/
+
+# Migraciones y configuracion de Supabase: se aplican contra la base, no se
+# empaquetan en la app.
+supabase/
+pruebas/
+
+.expo/

@@ -20,6 +20,7 @@ import { fechaLarga } from '@/dominio/dia'
 import { usarPerfil } from '@/features/perfil/usar-perfil'
 import { usarFechaDeHoy } from '@/features/dia/usar-fecha-de-hoy'
 import { usarObjetivos } from '@/features/objetivos/usar-objetivos'
+import { usarHabitos } from '@/features/habitos/usar-habitos'
 
 // Separador de miles con punto y coma decimal a la española, sin tirar de
 // `Intl`: el soporte de locales en Hermes es irregular entre plataformas, y
@@ -71,6 +72,7 @@ export default function Hoy() {
   const { perfil } = usarPerfil()
   const fechaDeHoy = usarFechaDeHoy()
   const { hayObjetivos } = usarObjetivos()
+  const habitos = usarHabitos()
 
   // Las tres columnas de macros, leidas de lo comido hoy y de los objetivos.
   const macros = [
@@ -94,8 +96,8 @@ export default function Hoy() {
     aguaObjetivoMl: agua.objetivoMl,
     entrenamientos: entreno.deHoy.length,
     tocabaEntrenar: false,
-    habitos: 0,
-    habitosHechos: 0,
+    habitos: habitos.cuantos,
+    habitosHechos: habitos.cuantosHechos,
     diaEnCurso: true,
   })
 
@@ -301,6 +303,38 @@ export default function Hoy() {
             ))}
           </View>
         </Superficie>
+
+        {/* 7. Habitos. Solo aparece si hay alguno: una tarjeta vacia invitando
+            a configurar algo es ruido en la pantalla que se mira cada dia. La
+            entrada para crearlos vive en Ajustes. */}
+        {habitos.cuantos > 0 && (
+          <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <Texto variante="etiqueta">Hábitos</Texto>
+              <Texto variante="tenue">{habitos.cuantosHechos}/{habitos.cuantos}</Texto>
+            </View>
+            <View style={{ marginTop: t.espaciado[3], gap: t.espaciado[2] }}>
+              {habitos.deHoy.map((habito) => (
+                <Pressable
+                  key={habito.id}
+                  onPress={() => habitos.alternar(habito)}
+                  disabled={habitos.guardando}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: habito.hecho }}
+                  accessibilityLabel={habito.nombre}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: t.espaciado[1] }}
+                >
+                  <Feather
+                    name={habito.hecho ? 'check-circle' : 'circle'}
+                    size={TAMANO_ICONO_MISION}
+                    color={habito.hecho ? t.color.acento : t.color.textoTenue}
+                  />
+                  <Texto variante={habito.hecho ? 'tenue' : 'cuerpo'}>{habito.nombre}</Texto>
+                </Pressable>
+              ))}
+            </View>
+          </Superficie>
+        )}
       </ScrollView>
     </Pantalla>
   )

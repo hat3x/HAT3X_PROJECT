@@ -245,6 +245,10 @@ export function Ajustes() {
           />
         </Seccion>
 
+        <Seccion titulo="Hábitos" ayuda="Cosas pequeñas de cada día. Aparecen en el Home para marcarlas de un toque.">
+          <Boton titulo="Gestionar mis hábitos" tono="secundario" alPulsar={() => router.push('/habitos')} />
+        </Seccion>
+
         <Seccion titulo="Zona horaria">
           <TextInput
             style={campo}

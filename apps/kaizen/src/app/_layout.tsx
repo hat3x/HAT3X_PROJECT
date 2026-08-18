@@ -43,6 +43,7 @@ function Puerta() {
       <Stack.Screen name="entrada-rapida" options={{ presentation: 'modal' }} />
       <Stack.Screen name="buscar-alimento" options={{ presentation: 'modal' }} />
       <Stack.Screen name="alta" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="habitos" options={{ presentation: 'modal' }} />
     </Stack>
   )
 }

@@ -11,6 +11,26 @@ import { ProveedorTema } from '@/design/proveedor'
 //
 // Prefijo `mock` obligatorio por el hoisting de Jest, igual que `mockPush`.
 const mockAnadir = jest.fn()
+const mockAlternar = jest.fn()
+// Dos habitos, uno hecho: asi se comprueba que la tarjeta aparece, que cuenta
+// bien y que el score los recoge.
+jest.mock('@/features/habitos/usar-habitos', () => ({
+  usarHabitos: () => ({
+    habitos: [{ id: 'h1', nombre: 'Creatina' }, { id: 'h2', nombre: 'Estirar' }],
+    deHoy: [
+      { id: 'h1', nombre: 'Creatina', hecho: true },
+      { id: 'h2', nombre: 'Estirar', hecho: false },
+    ],
+    cuantos: 2,
+    cuantosHechos: 1,
+    cargando: false,
+    crear: jest.fn(),
+    desactivar: jest.fn(),
+    alternar: mockAlternar,
+    guardando: false,
+    errorAlGuardar: null,
+  }),
+}))
 // Con objetivos ya calculados: el aviso de «calcula tus objetivos» solo sale
 // cuando NO los hay, y este fichero comprueba el Home normal.
 jest.mock('@/features/objetivos/usar-objetivos', () => ({
@@ -91,8 +111,9 @@ it('el Home pinta el score, las calorías, los tres macros, el agua y la misión
   //   proteina     132/170                = 0,7765             x25 = 19,41
   //   hidratacion 1000/2500               = 0,4000             x15 =  6,00
   //   entrenamiento  1 sesion             = 1                  x20 = 20,00
-  //   -> 69,80 sobre 90 activos = 77,55 -> 78
-  expect(screen.getByText('78')).toBeTruthy()
+  //   habitos       1 de 2                = 0,5                x10 =  5,00
+  //   -> 74,80 sobre 100 activos = 74,80 -> 75
+  expect(screen.getByText('75')).toBeTruthy()
   expect(screen.getByText('KAIZEN SCORE')).toBeTruthy()
 
   // Calorías consumidas/objetivo, con separador de miles, y lo que resta.
@@ -140,4 +161,14 @@ it('los botones de agua registran la cantidad que anuncian', () => {
   expect(mockAnadir).toHaveBeenCalledWith(250)
   fireEvent.press(screen.getByText('+500'))
   expect(mockAnadir).toHaveBeenCalledWith(500)
+})
+
+it('los habitos se marcan de un toque desde el Home', () => {
+  envolver()
+  // «1/2» es el contador de la tarjeta, y demuestra que solo cuenta los hechos.
+  expect(screen.getByText('1/2')).toBeTruthy()
+  fireEvent.press(screen.getByText('Estirar'))
+  expect(mockAlternar).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'h2', hecho: false }),
+  )
 })

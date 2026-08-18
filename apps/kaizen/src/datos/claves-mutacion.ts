@@ -20,3 +20,6 @@ export const CLAVE_MUTACION_REGISTRAR_ENTRENAMIENTO = ['entrenamiento', 'registr
 export const CLAVE_MUTACION_REGISTRAR_COMIDA = ['comida', 'registrar'] as const
 
 export const CLAVE_MUTACION_GUARDAR_OBJETIVOS = ['objetivos', 'guardar'] as const
+
+export const CLAVE_MUTACION_GUARDAR_HABITO = ['habito', 'guardar'] as const
+export const CLAVE_MUTACION_MARCAR_HABITO = ['habito', 'marcar'] as const
