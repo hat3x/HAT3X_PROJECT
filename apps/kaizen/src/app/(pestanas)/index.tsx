@@ -10,6 +10,7 @@ import { Anillo } from '@/design/componentes/anillo'
 import { Barra } from '@/design/componentes/barra'
 import { Boton } from '@/design/componentes/boton'
 import { useTema } from '@/design/proveedor'
+import { usarAgua } from '@/features/agua/usar-agua'
 
 // Separador de miles con punto y coma decimal a la española, sin tirar de
 // `Intl`: el soporte de locales en Hermes es irregular entre plataformas, y
@@ -19,9 +20,22 @@ function conSeparadorDeMiles(n: number): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 }
 
-function comaDecimal(n: number): string {
+function comaDecimal(n: number | string): string {
   return n.toString().replace('.', ',')
 }
+
+// El agua se guarda en mililitros —enteros, sin decimales que redondear mal— y
+// se ensena en litros, que es como la gente la piensa. Un decimal basta: «1,8 L»
+// se lee de un vistazo y «1,75 L» no anade nada util.
+// Siempre un decimal, tambien cuando es redondo: «1 / 2,5 L» se lee como si
+// una de las dos cifras fuera de otra unidad. «1,0 / 2,5 L» se lee de un golpe.
+function enLitros(ml: number): string {
+  return comaDecimal((Math.round(ml / 100) / 10).toFixed(1))
+}
+
+// Las dos cantidades de un toque. No es un token del tema: es cuanto bebe
+// alguien de un trago, no como se ve la app.
+const VASOS_ML = [250, 500] as const
 
 // Altura del contenido de la barra de pestañas (variante uikit, sin el
 // margen de seguridad del dispositivo): react-navigation la fija en 49pt y
@@ -78,6 +92,7 @@ export default function Hoy() {
   const t = useTema()
   const router = useRouter()
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
+  const agua = usarAgua()
 
   const colorMacro: Record<(typeof DATOS_DE_EJEMPLO.nutricion.macros)[number]['clave'], string> = {
     proteina: t.color.proteina,
@@ -194,15 +209,26 @@ export default function Hoy() {
             <View>
               <Texto variante="etiqueta">Agua</Texto>
               <Texto variante="titulo" style={{ marginTop: t.espaciado[0] }}>
-                {comaDecimal(DATOS_DE_EJEMPLO.agua.actual)} / {comaDecimal(DATOS_DE_EJEMPLO.agua.objetivo)} L
+                {agua.cargando ? '—' : `${enLitros(agua.ml)} / ${enLitros(agua.objetivoMl)} L`}
               </Texto>
             </View>
             <View style={{ flexDirection: 'row', gap: t.espaciado[1] }}>
-              <Boton titulo="+250" tono="secundario" alPulsar={sinDestino} />
-              <Boton titulo="+500" tono="secundario" alPulsar={sinDestino} />
+              {VASOS_ML.map((ml) => (
+                <Boton
+                  key={ml}
+                  titulo={`+${ml}`}
+                  tono="secundario"
+                  deshabilitado={agua.cargando}
+                  alPulsar={() => agua.anadir(ml)}
+                />
+              ))}
             </View>
           </View>
         </Superficie>
+
+        {agua.errorAlGuardar && (
+          <Texto variante="tenue" style={{ color: t.color.peligro }}>{agua.errorAlGuardar}</Texto>
+        )}
 
         {/* 5. Entrenamiento */}
         <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>

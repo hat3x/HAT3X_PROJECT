@@ -120,6 +120,17 @@ function sesionSimulada(url) {
   }
 }
 
+// Lo que responde cada tabla. Con datos, no vacio: una pantalla con ceros no
+// distingue «funciona y hoy no has bebido» de «no lee nada», que es justo el
+// error que hay que poder ver aqui.
+const RESPUESTAS = {
+  // `.single()` espera objeto, no lista.
+  perfiles: PERFIL_DE_EJEMPLO,
+  registros_agua: [{ ml: 250 }, { ml: 500 }, { ml: 250 }],
+  // `.maybeSingle()` con `.limit(1)`: tambien objeto.
+  objetivos: { agua_ml: 2500 },
+}
+
 const rutas = process.argv.slice(2).length > 0 ? process.argv.slice(2) : RUTAS_POR_DEFECTO
 const env = await leerEnv()
 const urlSupabase = process.env.EXPO_PUBLIC_SUPABASE_URL ?? env.EXPO_PUBLIC_SUPABASE_URL
@@ -162,9 +173,9 @@ if (CON_SESION) {
   // arnes que inventa fallos es peor que no tenerlo.
   const anfitrion = new URL(urlSupabase).hostname
   await contexto.route(`**://${anfitrion}/**`, (ruta) => {
-    const cuerpo = ruta.request().url().includes('/rest/v1/perfiles')
-      ? JSON.stringify(PERFIL_DE_EJEMPLO)
-      : '[]'
+    const url = ruta.request().url()
+    const tabla = Object.keys(RESPUESTAS).find((t) => url.includes(`/rest/v1/${t}`))
+    const cuerpo = tabla ? JSON.stringify(RESPUESTAS[tabla]) : '[]'
     return ruta.fulfill({ status: 200, contentType: 'application/json', body: cuerpo })
   })
 }
