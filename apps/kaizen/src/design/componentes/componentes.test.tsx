@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react-native'
-import { StyleSheet } from 'react-native'
+import { StyleSheet, processColor } from 'react-native'
 import { Line } from 'react-native-svg'
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -55,11 +55,21 @@ it('el anillo se dibuja y anuncia su progreso', () => {
   expect(screen.getByRole('progressbar').props.accessibilityValue.now).toBe(82)
 })
 
+// Ojo con esta prueba: nació con un `esperado = ''` para el caso de que el
+// fondo no fuese de color liso, y el día que el tema pasó a degradado —para que
+// el cristal tuviera algo que recoger— se convirtió en `toContain('')`, que
+// pasa siempre. Ahora cada tipo de fondo tiene su comprobación y ninguna
+// admite el vacío.
 it('la pantalla pinta el fondo del tema y no el del sistema', () => {
   envolver(<Pantalla><Texto>Contenido</Texto></Pantalla>)
   const fondo = temaDefecto.fondo.pantalla
-  const esperado = fondo.tipo === 'color' ? fondo.valor : ''
-  expect(JSON.stringify(screen.toJSON())).toContain(esperado)
+  const esperados =
+    fondo.tipo === 'color' ? [fondo.valor]
+    : fondo.tipo === 'degradado' ? [fondo.desde, fondo.hasta].map((c) => String(processColor(c)))
+    : []
+  expect(esperados.length).toBeGreaterThan(0)
+  const arbol = JSON.stringify(screen.toJSON())
+  for (const esperado of esperados) expect(arbol).toContain(esperado)
 })
 
 it('un tema desconocido cae al tema por defecto en vez de romper', () => {
@@ -124,14 +134,32 @@ describe('Superficie', () => {
   const degradado = { tipo: 'degradado', desde: '#1A1D1B', hasta: '#121513' } as const
 
   it('el fondo de degradado cubre toda la superficie, no el hueco que deja el padding', () => {
-    const { UNSAFE_root } = envolver(
+    envolver(
       <Superficie fondo={degradado} radio={16} style={{ padding: 20 }}>
         <Texto>Contenido</Texto>
       </Superficie>,
     )
-    const capa = StyleSheet.flatten(UNSAFE_root.findByType(LinearGradient).props.style)
+    const capa = StyleSheet.flatten(screen.getByTestId('superficie-fondo').props.style)
     expect(capa.position).toBe('absolute')
     expect([capa.top, capa.left, capa.right, capa.bottom]).toEqual([0, 0, 0, 0])
+  })
+
+  // El filo de luz del canto superior es lo que hace que una superficie
+  // translúcida se lea como vidrio y no como un rectángulo gris. Se fija aquí
+  // que existe, que va pegado arriba y que su color sale del tema —no de un
+  // blanco escrito a mano, que ninguna piel podría apagar.
+  it('la superficie de cristal lleva el filo de luz del tema en el canto de arriba', () => {
+    envolver(
+      <Superficie fondo={degradado} radio={16} style={{ padding: 20 }}>
+        <Texto>Contenido</Texto>
+      </Superficie>,
+    )
+    const filo = screen.getByTestId('superficie-especular')
+    // `processColor`: expo-linear-gradient normaliza los colores a entero antes
+    // de entregárselos al componente nativo, así que la cadena del tema ya no
+    // está ahí tal cual. Se compara contra la misma conversión que hace él.
+    expect(filo.props.colors).toContain(processColor(temaDefecto.color.especular))
+    expect(StyleSheet.flatten(filo.props.style).top).toBe(0)
   })
 
   it('el padding que se le pasa separa el contenido, no encoge el fondo', () => {

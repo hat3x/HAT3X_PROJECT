@@ -59,7 +59,22 @@ export function Superficie({ fondo, radio, style, testID, children }: {
       />
       {/* Degradado de verdad: pintar solo `desde` haría que el tema declarase
           dos colores y la pantalla mostrase uno. */}
-      <LinearGradient colors={[fondo.desde, fondo.hasta]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        testID="superficie-fondo"
+        colors={[fondo.desde, fondo.hasta]}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* El filo de luz del canto superior. Se apaga hacia los lados en vez de
+          cruzar de lado a lado: una línea uniforme se lee como un borde
+          dibujado, y una que se desvanece, como luz resbalando por un canto.
+          Va después del degradado —encima— y antes del contenido. */}
+      <LinearGradient
+        testID="superficie-especular"
+        colors={['transparent', t.color.especular, 'transparent']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth }}
+      />
       {children}
     </View>
   )

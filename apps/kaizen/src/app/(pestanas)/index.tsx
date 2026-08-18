@@ -132,9 +132,24 @@ export default function Hoy() {
               Kaizen Score
             </Texto>
           </Anillo>
-          <Texto variante="tenue" style={{ marginTop: t.espaciado[3], textAlign: 'center' }}>
-            {DATOS_DE_EJEMPLO.mensajeScore}
-          </Texto>
+          {/* Coach ya no tiene pestaña propia —salía la quinta y descuadraba el
+              botón + del centro—, así que su entrada es este mensaje, que es
+              donde el usuario ya lo lee. Sin la flecha no habría forma de
+              saber que se puede pulsar, y la pantalla quedaría inalcanzable. */}
+          <Pressable
+            onPress={() => router.push('/coach')}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir el coach"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: t.espaciado[1],
+              marginTop: t.espaciado[3],
+            }}
+          >
+            <Texto variante="tenue">{DATOS_DE_EJEMPLO.mensajeScore}</Texto>
+            <Feather name="chevron-right" size={TAMANO_ICONO_MISION} color={t.color.textoTenue} />
+          </Pressable>
         </View>
 
         {/* 3. Nutrición */}

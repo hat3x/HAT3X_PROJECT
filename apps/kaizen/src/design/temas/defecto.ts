@@ -9,6 +9,7 @@ export const temaDefecto: Tema = {
     texto: '#F4F5F2',
     textoTenue: '#98A09A',
     borde: 'rgba(255,255,255,0.10)',
+    especular: 'rgba(255,255,255,0.28)',
     pista: 'rgba(255,255,255,0.10)',
     peligro: '#E2574C',
     sobrePeligro: '#2A0A07',
@@ -27,8 +28,21 @@ export const temaDefecto: Tema = {
     mayusculasEtiquetas: true,
   },
   fondo: {
-    pantalla: { tipo: 'color', valor: '#060807' },
+    // Degradado y no color plano: aunque la diferencia entre los dos extremos
+    // sea mínima, basta para que el borde superior de la pantalla no se
+    // confunda con el inferior y el conjunto deje de parecer un folio negro.
+    pantalla: { tipo: 'degradado', desde: '#0B0F0D', hasta: '#040605' },
     velo: 'rgba(0,0,0,0)',
+    // Tres manchas, no más: con cuatro el fondo empieza a competir con el
+    // contenido. Verde del acento arriba a la derecha (donde cae el anillo),
+    // un azul frío a la izquierda para que las tarjetas de en medio no recojan
+    // todas el mismo tinte, y un ámbar muy tenue abajo que calienta la zona de
+    // la barra. Opacidades por debajo de 0,20: esto es atmósfera, no adorno.
+    aurora: [
+      { color: '#4ECB9C', x: 0.82, y: 0.14, radio: 0.75, opacidad: 0.17 },
+      { color: '#5C7CE0', x: 0.08, y: 0.46, radio: 0.70, opacidad: 0.13 },
+      { color: '#D9B26F', x: 0.70, y: 0.92, radio: 0.65, opacidad: 0.09 },
+    ],
   },
   superficie: {
     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },

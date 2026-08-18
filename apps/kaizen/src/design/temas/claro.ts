@@ -9,6 +9,9 @@ export const temaClaro: Tema = {
     texto: '#141715',
     textoTenue: '#6B726C',
     borde: 'rgba(0,0,0,0.10)',
+    // Blanco casi opaco: sobre superficies ya claras, el canto se lee por ser
+    // MÁS blanco que la tarjeta, no por ser más claro que el fondo.
+    especular: 'rgba(255,255,255,0.95)',
     pista: 'rgba(0,0,0,0.08)',
     peligro: '#C0392B',
     sobrePeligro: '#FFFFFF',
@@ -27,8 +30,16 @@ export const temaClaro: Tema = {
     mayusculasEtiquetas: true,
   },
   fondo: {
-    pantalla: { tipo: 'color', valor: '#FAF9F7' },
+    pantalla: { tipo: 'degradado', desde: '#FDFCFA', hasta: '#F2F1EC' },
     velo: 'rgba(255,255,255,0)',
+    // Las mismas tres posiciones que el tema oscuro, para que las dos pieles se
+    // sientan la misma app. En claro hay que bajar mucho la opacidad: sobre
+    // fondo casi blanco, un 0,17 de verde no es atmósfera, es una mancha verde.
+    aurora: [
+      { color: '#1E9E73', x: 0.82, y: 0.14, radio: 0.75, opacidad: 0.1 },
+      { color: '#4A7FBF', x: 0.08, y: 0.46, radio: 0.7, opacidad: 0.08 },
+      { color: '#B08A3C', x: 0.7, y: 0.92, radio: 0.65, opacidad: 0.06 },
+    ],
   },
   superficie: {
     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },

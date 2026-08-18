@@ -3,6 +3,7 @@ import { useContext, type ReactNode } from 'react'
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { useTema } from '../proveedor'
 import { Superficie } from './superficie'
+import { Aurora } from './aurora'
 
 // Sin margen seguro que aplicar: cero en las cuatro direcciones, ni negativo
 // ni inventado, hasta que el proveedor real entregue el suyo. Se exporta
@@ -31,6 +32,9 @@ export function Pantalla({ style, children }: { style?: ViewStyle; children?: Re
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
   return (
     <Superficie fondo={t.fondo.pantalla} radio={0} style={{ flex: 1 }}>
+      {/* Antes que nada: la aurora va detrás del contenido y delante del
+          fondo, para que el cristal de las tarjetas tenga color que recoger. */}
+      <Aurora />
       <View
         testID="pantalla-velo"
         style={{ flex: 1, backgroundColor: t.fondo.velo, paddingTop: margen.top }}
