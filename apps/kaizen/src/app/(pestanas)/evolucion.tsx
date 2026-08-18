@@ -1,17 +1,16 @@
 import { View, ScrollView } from 'react-native'
 import { useContext } from 'react'
+import { useWindowDimensions } from 'react-native'
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { Texto } from '@/design/componentes/texto'
 import { Pantalla, SIN_MARGEN } from '@/design/componentes/pantalla'
 import { Superficie } from '@/design/componentes/superficie'
 import { Vacio } from '@/design/componentes/vacio'
 import { useTema } from '@/design/proveedor'
+import { altoBarra } from '@/design/alto-barra'
 import { usarPeso, type Peso } from '@/features/peso/usar-peso'
 import { fechaCorta, variacion, enKg } from '@/dominio/peso'
 
-// Misma altura de barra que en el Home, y por el mismo motivo: que la última
-// fila no quede debajo de la barra flotante. Ver el comentario de allí.
-const ALTURA_CONTENIDO_BARRA = 49
 
 
 function Fila({ peso, anterior }: { peso: Peso; anterior: number | undefined }) {
@@ -33,6 +32,7 @@ function Fila({ peso, anterior }: { peso: Peso; anterior: number | undefined }) 
 export default function Evolucion() {
   const t = useTema()
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
+  const { width: anchoPantalla } = useWindowDimensions()
   const peso = usarPeso()
 
   return (
@@ -53,7 +53,7 @@ export default function Evolucion() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingTop: t.espaciado[3],
-            paddingBottom: margen.bottom + ALTURA_CONTENIDO_BARRA + t.espaciado[5],
+            paddingBottom: margen.bottom + altoBarra(t, anchoPantalla) + t.espaciado[5],
             gap: t.espaciado[2],
           }}
         >

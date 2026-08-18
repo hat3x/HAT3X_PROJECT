@@ -1,16 +1,16 @@
 import { View, ScrollView } from 'react-native'
 import { useContext } from 'react'
+import { useWindowDimensions } from 'react-native'
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { Texto } from '@/design/componentes/texto'
 import { Pantalla, SIN_MARGEN } from '@/design/componentes/pantalla'
 import { Superficie } from '@/design/componentes/superficie'
 import { Vacio } from '@/design/componentes/vacio'
 import { useTema } from '@/design/proveedor'
+import { altoBarra } from '@/design/alto-barra'
 import { usarNutricion, type ItemComido } from '@/features/nutricion/usar-nutricion'
 import { MOMENTOS, tituloDeMomento, sumarMacros, enKcal, enGramos } from '@/dominio/nutricion'
 
-// Misma altura de barra que en las otras pestañas, y por el mismo motivo.
-const ALTURA_CONTENIDO_BARRA = 49
 
 function Renglon({ item }: { item: ItemComido }) {
   const t = useTema()
@@ -31,6 +31,7 @@ function Renglon({ item }: { item: ItemComido }) {
 export default function Nutricion() {
   const t = useTema()
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
+  const { width: anchoPantalla } = useWindowDimensions()
   const nutricion = usarNutricion()
 
   // Se agrupa por momento en el orden del día, no en el que se registró: quien
@@ -70,7 +71,7 @@ export default function Nutricion() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingTop: t.espaciado[3],
-            paddingBottom: margen.bottom + ALTURA_CONTENIDO_BARRA + t.espaciado[5],
+            paddingBottom: margen.bottom + altoBarra(t, anchoPantalla) + t.espaciado[5],
             gap: t.espaciado[3],
           }}
         >

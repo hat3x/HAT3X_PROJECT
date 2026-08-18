@@ -1,17 +1,17 @@
 import { View, ScrollView } from 'react-native'
 import { useContext } from 'react'
+import { useWindowDimensions } from 'react-native'
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { Texto } from '@/design/componentes/texto'
 import { Pantalla, SIN_MARGEN } from '@/design/componentes/pantalla'
 import { Superficie } from '@/design/componentes/superficie'
 import { Vacio } from '@/design/componentes/vacio'
 import { useTema } from '@/design/proveedor'
+import { altoBarra } from '@/design/alto-barra'
 import { usarEntrenamiento, type Entrenamiento } from '@/features/entrenamiento/usar-entrenamiento'
 import { tituloDeTipo, enDuracion } from '@/dominio/entrenamiento'
 import { fechaCorta } from '@/dominio/peso'
 
-// Misma altura de barra que en el Home y en Evolución, y por el mismo motivo.
-const ALTURA_CONTENIDO_BARRA = 49
 
 function Fila({ sesion }: { sesion: Entrenamiento }) {
   const t = useTema()
@@ -37,6 +37,7 @@ function Fila({ sesion }: { sesion: Entrenamiento }) {
 export default function EntrenamientoPantalla() {
   const t = useTema()
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
+  const { width: anchoPantalla } = useWindowDimensions()
   const entreno = usarEntrenamiento()
 
   return (
@@ -57,7 +58,7 @@ export default function EntrenamientoPantalla() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingTop: t.espaciado[3],
-            paddingBottom: margen.bottom + ALTURA_CONTENIDO_BARRA + t.espaciado[5],
+            paddingBottom: margen.bottom + altoBarra(t, anchoPantalla) + t.espaciado[5],
             gap: t.espaciado[2],
           }}
         >

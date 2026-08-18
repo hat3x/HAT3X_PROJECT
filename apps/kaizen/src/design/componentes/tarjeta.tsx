@@ -44,12 +44,21 @@ function proporcionDe(fuente: ImageSourcePropType): number | undefined {
   return undefined
 }
 
-export function Tarjeta({ arte, acciones, etiquetas, style, children }: {
+export function Tarjeta({ arte, acciones, etiquetas, alMantener, etiquetaMantener, style, children }: {
   arte: TarjetaIlustrada | null
   /** Una por cada zona pulsable del arte, en el mismo orden. */
   acciones?: (() => void)[]
   /** Lo que anuncia cada zona a un lector de pantalla. Mismo orden. */
   etiquetas?: string[]
+  /**
+   * Qué hace mantener pulsada la tarjeta entera.
+   *
+   * Existe porque con arte no caben botones nuevos: los que hay están pintados
+   * dentro de la imagen. Cuando hace falta una acción más —deshacer el último
+   * vaso de agua— este es el único hueco que queda.
+   */
+  alMantener?: () => void
+  etiquetaMantener?: string
   style?: ViewStyle
   children?: ReactNode
 }) {
@@ -57,7 +66,7 @@ export function Tarjeta({ arte, acciones, etiquetas, style, children }: {
   const [ancho, setAncho] = useState(0)
 
   if (!arte) {
-    return (
+    const contenido = (
       <Superficie
         fondo={t.superficie.tarjeta}
         radio={t.radio.tarjeta}
@@ -65,6 +74,12 @@ export function Tarjeta({ arte, acciones, etiquetas, style, children }: {
       >
         {children}
       </Superficie>
+    )
+    if (!alMantener) return contenido
+    return (
+      <Pressable onLongPress={alMantener} accessibilityLabel={etiquetaMantener} delayLongPress={500}>
+        {contenido}
+      </Pressable>
     )
   }
 
@@ -75,7 +90,7 @@ export function Tarjeta({ arte, acciones, etiquetas, style, children }: {
     ? proporcionDe(arte.fondo.fuente)
     : undefined
 
-  return (
+  const conArte = (
     <Superficie
       fondo={arte.fondo}
       radio={t.radio.tarjeta}
@@ -117,5 +132,14 @@ export function Tarjeta({ arte, acciones, etiquetas, style, children }: {
           })}
       </View>
     </Superficie>
+  )
+
+  if (!alMantener) return conArte
+  // El mantener envuelve por fuera: las zonas pulsables de dentro siguen
+  // atendiendo el toque corto, y el largo cae aquí.
+  return (
+    <Pressable onLongPress={alMantener} accessibilityLabel={etiquetaMantener} delayLongPress={500}>
+      {conArte}
+    </Pressable>
   )
 }

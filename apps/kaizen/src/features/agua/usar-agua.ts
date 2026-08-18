@@ -22,7 +22,7 @@ export function usarAgua() {
   const fecha = usarFechaDeHoy()
   const clienteConsultas = useQueryClient()
 
-  const consulta = useQuery({
+  const consulta = useQuery<{ id: string; ml: number }[]>({
     queryKey: clavePorDia(fecha, id),
     // Sin fecha no se puede preguntar por «hoy» sin arriesgarse a preguntar
     // por el día equivocado. Ver `usarFechaDeHoy`.
@@ -30,13 +30,14 @@ export function usarAgua() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('registros_agua')
-        .select('ml')
+        .select('id, ml, registrado_en')
         .eq('fecha_local', fecha)
+        .order('registrado_en', { ascending: false })
       if (error) throw new Error(error.message)
       // La suma se hace aquí y no en la base: son un puñado de filas al día, y
       // pedirlas sueltas deja la caché con lo necesario para deshacer un
       // registro más adelante sin volver a consultar.
-      return (data ?? []).reduce((total, fila) => total + fila.ml, 0)
+      return data ?? []
     },
   })
 
@@ -70,8 +71,12 @@ export function usarAgua() {
     onSuccess: () => clienteConsultas.invalidateQueries({ queryKey: clavePorDia(fecha, id) }),
   })
 
+  const registros = consulta.data ?? []
+
   return {
-    ml: consulta.data ?? 0,
+    ml: registros.reduce((total, fila) => total + fila.ml, 0),
+    /** Cuantos vasos van hoy. Sin esto no se puede decir si hay algo que deshacer. */
+    vasos: registros.length,
     objetivoMl: objetivo.data ?? OBJETIVO_AGUA_POR_DEFECTO_ML,
     cargando: consulta.isPending || !fecha,
     // El `id` de la fila se genera AQUÍ, en el dispositivo, no en la base: es
@@ -85,6 +90,22 @@ export function usarAgua() {
         id,
         fila: { id: nuevoId(), user_id: id, fecha_local: fecha, ml },
       })
+    },
+    /**
+     * Quita el ultimo vaso registrado.
+     *
+     * Sin esto, un toque de mas se queda para siempre: la app dejaba anadir
+     * agua y no quitarla, asi que un dedo torpe convertia el dia en 15 litros
+     * sin forma de corregirlo. Borra de verdad la fila en vez de restar otra
+     * negativa, porque un registro de -250 ml no significa nada y ensuciaria
+     * cualquier historico futuro.
+     */
+    deshacer: async () => {
+      const ultimo = registros[0]
+      if (!id || !fecha || !ultimo) return
+      const { error } = await supabase.from('registros_agua').delete().eq('id', ultimo.id)
+      if (error) throw new Error(error.message)
+      await clienteConsultas.invalidateQueries({ queryKey: clavePorDia(fecha, id) })
     },
     guardando: mutacion.isPending,
     errorAlGuardar: mutacion.isError ? 'No hemos podido guardar el agua. Inténtalo de nuevo.' : null,

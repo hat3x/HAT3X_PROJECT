@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons'
 import { Superficie } from '@/design/componentes/superficie'
 import { Texto } from '@/design/componentes/texto'
 import { useTema } from '@/design/proveedor'
+import { altoBarra, ALTO_BARRA_SIN_ARTE } from '@/design/alto-barra'
 
 // Disposición, no tema: cuánto mide el botón central y cuánto sobresale de la
 // barra. No hay token para esto porque no es «look», es geometría de esta barra.
@@ -22,25 +23,6 @@ const SOBRESALIENTE_MAS = 18
 // usuario ya lo lee. Se prefirió a ensanchar las pestañas de la izquierda:
 // eso centraba el botón pero dejaba «Hoy» y «Nutrición» separadas 176 px
 // frente a los 117 px de las otras, y se notaba.
-
-/**
- * Proporción del arte de la barra, para poder darle su altura exacta.
- *
- * Cuando la piel trae barra ilustrada, su alto NO puede ser los 49 pt de
- * siempre: los cinco huecos y el círculo central están dibujados a una
- * proporción concreta, y con cualquier otra altura la imagen se deforma y los
- * iconos dejan de caer dentro de sus huecos.
- */
-function proporcionBarra(fondo: ReturnType<typeof useTema>['superficie']['barraInferior']) {
-  if (fondo.tipo !== 'recurso' || fondo.recuadro !== null) return null
-  const fuente = fondo.fuente
-  if (typeof fuente === 'object' && fuente !== null && !Array.isArray(fuente)) {
-    const posible = fuente as { width?: number; height?: number }
-    if (posible.width && posible.height) return posible.width / posible.height
-  }
-  const resuelto = Image.resolveAssetSource?.(fuente)
-  return resuelto?.width && resuelto?.height ? resuelto.width / resuelto.height : null
-}
 
 function BotonAnadir() {
   const t = useTema()
@@ -73,14 +55,15 @@ export default function LayoutPestanas() {
   // Con arte, el alto sale de la proporción de la imagen; sin arte, se deja el
   // de react-navigation. Se suma el margen inferior del dispositivo porque la
   // barra va en `position: absolute` y nadie lo hace por ella.
-  const proporcion = proporcionBarra(t.superficie.barraInferior)
-  const altoBarra = proporcion ? width / proporcion + (margen?.bottom ?? 0) : undefined
+  const alto = altoBarra(t, width)
+  const conArte = alto !== ALTO_BARRA_SIN_ARTE
+  const altoTotal = conArte ? alto + (margen?.bottom ?? 0) : undefined
 
   // El contenido va DENTRO de los huecos del arte, que empiezan al 19% del alto
   // de la imagen y acaban al 79%. Sin este empujón, react-navigation coloca
   // icono y etiqueta pegados arriba y el icono queda cortado por el canto de la
   // barra: se ve la mitad de la taza y la mitad del sol.
-  const dentroDelHueco = altoBarra ? { paddingTop: (altoBarra - (margen?.bottom ?? 0)) * 0.14 } : null
+  const dentroDelHueco = conArte ? { paddingTop: alto * 0.14 } : null
 
   return (
     <Tabs
@@ -92,7 +75,7 @@ export default function LayoutPestanas() {
           position: 'absolute',
           borderTopWidth: 0,
           backgroundColor: 'transparent',
-          ...(altoBarra ? { height: altoBarra, paddingBottom: margen?.bottom ?? 0 } : null),
+          ...(altoTotal ? { height: altoTotal, paddingBottom: margen?.bottom ?? 0 } : null),
         },
         ...(dentroDelHueco ? { tabBarItemStyle: dentroDelHueco } : null),
         tabBarBackground: () => (

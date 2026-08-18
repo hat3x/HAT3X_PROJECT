@@ -1,5 +1,6 @@
 import { View, ScrollView, Pressable, StyleSheet, Image } from 'react-native'
 import { useContext } from 'react'
+import { useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import type { ImageSourcePropType } from 'react-native'
@@ -12,6 +13,7 @@ import { Anillo } from '@/design/componentes/anillo'
 import { Barra } from '@/design/componentes/barra'
 import { Boton } from '@/design/componentes/boton'
 import { useTema } from '@/design/proveedor'
+import { altoBarra } from '@/design/alto-barra'
 import { usarAgua } from '@/features/agua/usar-agua'
 import { usarEntrenamiento } from '@/features/entrenamiento/usar-entrenamiento'
 import { resumenEntrenamiento } from '@/dominio/entrenamiento'
@@ -49,16 +51,6 @@ function enLitros(ml: number): string {
 // alguien de un trago, no como se ve la app.
 const VASOS_ML = [250, 500] as const
 
-// Altura del contenido de la barra de pestañas (variante uikit, sin el
-// margen de seguridad del dispositivo): react-navigation la fija en 49pt y
-// le suma el margen inferior por su cuenta (ver
-// `node_modules/expo-router/build/react-navigation/bottom-tabs/views/BottomTabBar.js`,
-// `TABBAR_HEIGHT_UIKIT`). Se replica aquí, sumada al margen seguro, para que
-// la última tarjeta nunca quede tapada por la barra flotante — en vez de
-// `useBottomTabBarHeight`, que solo funciona dentro de un navegador de
-// pestañas real y obligaría a montar esta pantalla con `renderRouter` para
-// poder probarla, distinto de como se prueba el resto del suite.
-const ALTURA_CONTENIDO_BARRA = 49
 
 /**
  * Las medidas originales de una imagen empaquetada.
@@ -127,6 +119,7 @@ export default function Hoy() {
   const t = useTema()
   const router = useRouter()
   const margen = useContext(SafeAreaInsetsContext) ?? SIN_MARGEN
+  const { width: anchoPantalla } = useWindowDimensions()
   const agua = usarAgua()
   const entreno = usarEntrenamiento()
   const nutricion = usarNutricion()
@@ -207,7 +200,7 @@ export default function Hoy() {
         contentContainerStyle={{
           paddingHorizontal: t.espaciado[5],
           paddingTop: t.espaciado[3],
-          paddingBottom: margen.bottom + ALTURA_CONTENIDO_BARRA + t.espaciado[5],
+          paddingBottom: margen.bottom + altoBarra(t, anchoPantalla) + t.espaciado[5],
           gap: t.espaciado[5],
         }}
       >
@@ -328,6 +321,8 @@ export default function Hoy() {
           arte={t.decoracion.tarjetaAgua}
           acciones={VASOS_ML.map((ml) => () => agua.anadir(ml))}
           etiquetas={VASOS_ML.map((ml) => `Añadir ${ml} mililitros`)}
+          alMantener={agua.vasos > 0 ? agua.deshacer : undefined}
+          etiquetaMantener="Mantén pulsado para quitar el último vaso"
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View>
@@ -335,6 +330,16 @@ export default function Hoy() {
               <Texto variante="titulo" style={{ marginTop: t.espaciado[0] }}>
                 {agua.cargando ? '—' : `${enLitros(agua.ml)} / ${enLitros(agua.objetivoMl)} L`}
               </Texto>
+              {/* Solo donde cabe: la tarjeta ilustrada tiene altura fija —la de su
+                  arte— y una tercera linea se sale del marco. Es el precio de
+                  usar arte de alto fijo, y es preferible a que el aviso
+                  desborde. En la piel, el gesto queda anunciado por la etiqueta
+                  accesible de la tarjeta. */}
+              {agua.vasos > 0 && !t.decoracion.tarjetaAgua && (
+                <Texto variante="tenue" style={{ marginTop: t.espaciado[0] }}>
+                  Mantén pulsado para quitar
+                </Texto>
+              )}
             </View>
             <View style={{ flexDirection: 'row', gap: t.espaciado[1] }}>
               {/* Con arte, los botones ya están pintados en la tarjeta y sus
