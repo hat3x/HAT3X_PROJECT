@@ -1,7 +1,8 @@
-import { View, ScrollView, Pressable, StyleSheet } from 'react-native'
+import { View, ScrollView, Pressable, StyleSheet, Image } from 'react-native'
 import { useContext } from 'react'
 import { useRouter } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
+import type { ImageSourcePropType } from 'react-native'
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context'
 import { Texto } from '@/design/componentes/texto'
 import { Pantalla, SIN_MARGEN } from '@/design/componentes/pantalla'
@@ -58,6 +59,65 @@ const VASOS_ML = [250, 500] as const
 // poder probarla, distinto de como se prueba el resto del suite.
 const ALTURA_CONTENIDO_BARRA = 49
 
+/**
+ * Las medidas originales de una imagen empaquetada.
+ *
+ * `Image.resolveAssetSource` NO existe en React Native Web —revienta con «is
+ * not a function»—, y en web el `require` de una imagen ya devuelve un objeto
+ * con `width` y `height`. Se mira primero ahí y solo se llama al método cuando
+ * existe. Sin la proporción no se puede dar ancho sin deformar el arte, así que
+ * el último recurso es un 2:1, que es la forma de casi todos estos botones.
+ */
+function medidasDe(fuente: ImageSourcePropType): { width: number; height: number } {
+  if (typeof fuente === 'object' && fuente !== null && !Array.isArray(fuente)) {
+    const posible = fuente as { width?: number; height?: number }
+    if (posible.width && posible.height) return { width: posible.width, height: posible.height }
+  }
+  const resuelto = Image.resolveAssetSource?.(fuente)
+  if (resuelto?.width && resuelto?.height) return { width: resuelto.width, height: resuelto.height }
+  return { width: 2, height: 1 }
+}
+
+/**
+ * Un botón que ES una imagen, con su texto ya pintado dentro.
+ *
+ * Cuando la piel trae arte con la palabra dentro —«Registrar», «+250»— no se
+ * puede escribir encima: saldría el texto dos veces. Se dibuja la imagen y la
+ * etiqueta accesible lleva la palabra, para que un lector de pantalla la siga
+ * anunciando aunque en pantalla sea un dibujo.
+ *
+ * `alto` fijo y ancho por proporción del original: así el arte no se deforma
+ * aunque la fila donde vive cambie de tamaño.
+ */
+function BotonDeArte({ fuente, etiqueta, alto, alPulsar, deshabilitado }: {
+  fuente: ImageSourcePropType
+  etiqueta: string
+  alto: number
+  alPulsar: () => void
+  deshabilitado?: boolean
+}) {
+  const { width, height } = medidasDe(fuente)
+  return (
+    <Pressable
+      onPress={alPulsar}
+      disabled={deshabilitado}
+      accessibilityRole="button"
+      accessibilityLabel={etiqueta}
+      style={{ opacity: deshabilitado ? 0.5 : 1 }}
+    >
+      <Image
+        source={fuente}
+        style={{ height: alto, width: alto * (width / height) }}
+        resizeMode="contain"
+      />
+    </Pressable>
+  )
+}
+
+// Alto de los botones de arte del Home. Geometría, no tema.
+const ALTO_BOTON_ARTE = 44
+const LADO_ICONO_MACRO = 30
+
 // Geometría de esta lista, no del tema: no hay token de tamaño de icono en
 // `Tema`, igual que `LADO_MAS`/`SOBRESALIENTE_MAS` en el layout de pestañas.
 const TAMANO_ICONO_MISION = 16
@@ -76,9 +136,9 @@ export default function Hoy() {
 
   // Las tres columnas de macros, leidas de lo comido hoy y de los objetivos.
   const macros = [
-    { clave: 'proteina', etiqueta: 'Proteína', actual: nutricion.total.proteina_g, objetivo: nutricion.objetivos.proteina_g, color: t.color.proteina },
-    { clave: 'carbos', etiqueta: 'Carbos', actual: nutricion.total.carbos_g, objetivo: nutricion.objetivos.carbos_g, color: t.color.carbos },
-    { clave: 'grasas', etiqueta: 'Grasas', actual: nutricion.total.grasas_g, objetivo: nutricion.objetivos.grasas_g, color: t.color.grasas },
+    { clave: 'proteina', etiqueta: 'Proteína', actual: nutricion.total.proteina_g, objetivo: nutricion.objetivos.proteina_g, color: t.color.proteina, icono: t.decoracion.iconoProteina },
+    { clave: 'carbos', etiqueta: 'Carbos', actual: nutricion.total.carbos_g, objetivo: nutricion.objetivos.carbos_g, color: t.color.carbos, icono: t.decoracion.iconoCarbos },
+    { clave: 'grasas', etiqueta: 'Grasas', actual: nutricion.total.grasas_g, objetivo: nutricion.objetivos.grasas_g, color: t.color.grasas, icono: t.decoracion.iconoGrasas },
   ]
 
   // El score del dia. `diaEnCurso` va fijo a `true` porque este Home siempre
@@ -204,8 +264,17 @@ export default function Hoy() {
           </Pressable>
         )}
 
-        {/* 3. Nutrición */}
-        <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+        {/* 3. Nutrición. Cuando la piel trae marco propio, el contenido baja:
+            este arte lleva una cabecera dibujada («CAPSULE CORP.») y sin el
+            hueco el primer renglón se escribe justo encima de ella. */}
+        <Superficie
+          fondo={t.decoracion.tarjetaNutricion ?? t.superficie.tarjeta}
+          radio={t.radio.tarjeta}
+          style={{
+            padding: t.espaciado[4],
+            paddingTop: t.decoracion.tarjetaNutricion ? t.espaciado[7] : t.espaciado[4],
+          }}
+        >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <Texto variante="titulo">
               {enKcal(nutricion.total.kcal)} / {enKcal(nutricion.objetivos.kcal)}
@@ -225,6 +294,13 @@ export default function Hoy() {
           <View style={{ flexDirection: 'row', gap: t.espaciado[3] }}>
             {macros.map((macro) => (
               <View key={macro.clave} style={{ flex: 1 }}>
+                {macro.icono && (
+                  <Image
+                    source={macro.icono}
+                    style={{ width: LADO_ICONO_MACRO, height: LADO_ICONO_MACRO, marginBottom: t.espaciado[0] }}
+                    resizeMode="contain"
+                  />
+                )}
                 <Texto variante="etiqueta">{macro.etiqueta}</Texto>
                 <Texto style={{ marginTop: t.espaciado[0] }}>
                   {enGramos(macro.actual)}/{enGramos(macro.objetivo)}
@@ -244,7 +320,7 @@ export default function Hoy() {
         </Superficie>
 
         {/* 4. Agua */}
-        <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+        <Superficie fondo={t.decoracion.tarjetaAgua ?? t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View>
               <Texto variante="etiqueta">Agua</Texto>
@@ -253,15 +329,27 @@ export default function Hoy() {
               </Texto>
             </View>
             <View style={{ flexDirection: 'row', gap: t.espaciado[1] }}>
-              {VASOS_ML.map((ml) => (
-                <Boton
-                  key={ml}
-                  titulo={`+${ml}`}
-                  tono="secundario"
-                  deshabilitado={agua.cargando}
-                  alPulsar={() => agua.anadir(ml)}
-                />
-              ))}
+              {VASOS_ML.map((ml) => {
+                const arte = ml === 250 ? t.decoracion.botonAgua250 : t.decoracion.botonAgua500
+                return arte ? (
+                  <BotonDeArte
+                    key={ml}
+                    fuente={arte}
+                    etiqueta={`Añadir ${ml} mililitros`}
+                    alto={ALTO_BOTON_ARTE}
+                    deshabilitado={agua.cargando}
+                    alPulsar={() => agua.anadir(ml)}
+                  />
+                ) : (
+                  <Boton
+                    key={ml}
+                    titulo={`+${ml}`}
+                    tono="secundario"
+                    deshabilitado={agua.cargando}
+                    alPulsar={() => agua.anadir(ml)}
+                  />
+                )
+              })}
             </View>
           </View>
         </Superficie>
@@ -271,7 +359,7 @@ export default function Hoy() {
         )}
 
         {/* 5. Entrenamiento */}
-        <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+        <Superficie fondo={t.decoracion.tarjetaEntrenamiento ?? t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View style={{ flex: 1, paddingRight: t.espaciado[2] }}>
               <Texto variante="etiqueta">Entrenamiento</Texto>
@@ -279,16 +367,25 @@ export default function Hoy() {
                 {resumenEntrenamiento(entreno.cargando, entreno.deHoy)}
               </Texto>
             </View>
-            <Boton
-              titulo={entreno.deHoy.length > 0 ? 'Otro' : 'Registrar'}
-              tono="primario"
-              alPulsar={() => router.push('/registrar-entrenamiento')}
-            />
+            {t.decoracion.botonRegistrar ? (
+              <BotonDeArte
+                fuente={t.decoracion.botonRegistrar}
+                etiqueta="Registrar entrenamiento"
+                alto={ALTO_BOTON_ARTE}
+                alPulsar={() => router.push('/registrar-entrenamiento')}
+              />
+            ) : (
+              <Boton
+                titulo={entreno.deHoy.length > 0 ? 'Otro' : 'Registrar'}
+                tono="primario"
+                alPulsar={() => router.push('/registrar-entrenamiento')}
+              />
+            )}
           </View>
         </Superficie>
 
         {/* 6. Misión de hoy */}
-        <Superficie fondo={t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
+        <Superficie fondo={t.decoracion.tarjetaMision ?? t.superficie.tarjeta} radio={t.radio.tarjeta} style={{ padding: t.espaciado[4] }}>
           <Texto variante="etiqueta">Tu misión de hoy</Texto>
           <View style={{ marginTop: t.espaciado[3], gap: t.espaciado[2] }}>
             {pasos.map((item) => (

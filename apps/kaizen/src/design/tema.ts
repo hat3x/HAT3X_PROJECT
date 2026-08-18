@@ -90,9 +90,32 @@ export interface Tema {
 
   recetas: { barra: RecetaBarra; anillo: RecetaAnillo }
 
+  /**
+   * Arte por pieza. Todo opcional: `null` en las pieles que no lo usan, y
+   * entonces la pantalla cae al `superficie.tarjeta` genérico.
+   *
+   * Las tarjetas van como `Fondo` y no como imagen suelta para poder llevar su
+   * `recuadro` (nine-patch): así una sola imagen de 750 px sirve para cualquier
+   * ancho de pantalla sin deformar las esquinas ni el marco.
+   *
+   * Los botones van como imagen suelta porque su arte trae el texto YA pintado
+   * dentro —«Registrar», «+250»—, así que quien los use no debe escribir
+   * encima. Es la diferencia entre un fondo de botón y un botón entero.
+   */
   decoracion: {
-    cabecera: ImageSourcePropType | null
-    tarjetaEntrenamiento: ImageSourcePropType | null
-    tarjetaMision: ImageSourcePropType | null
+    cabecera: Fondo | null
+    tarjetaNutricion: Fondo | null
+    tarjetaAgua: Fondo | null
+    tarjetaEntrenamiento: Fondo | null
+    tarjetaMision: Fondo | null
+    barraCalorias: ImageSourcePropType | null
+    botonRegistrar: ImageSourcePropType | null
+    botonAgua250: ImageSourcePropType | null
+    botonAgua500: ImageSourcePropType | null
+    botonMas: ImageSourcePropType | null
+    iconoProteina: ImageSourcePropType | null
+    iconoCarbos: ImageSourcePropType | null
+    iconoGrasas: ImageSourcePropType | null
+    iconoAgua: ImageSourcePropType | null
   }
 }

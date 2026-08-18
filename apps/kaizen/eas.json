@@ -47,7 +47,8 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://hcytsframjrosugnjiat.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjeXRzZnJhbWpyb3N1Z25qaWF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTY3NjMsImV4cCI6MjEwMjU3Mjc2M30.8FsPFFfGpGl3w06rnZprmiASB2gV39f3yQX_GpJ6wtE"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjeXRzZnJhbWpyb3N1Z25qaWF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5OTY3NjMsImV4cCI6MjEwMjU3Mjc2M30.8FsPFFfGpGl3w06rnZprmiASB2gV39f3yQX_GpJ6wtE",
+        "KAIZEN_SKIN": "1"
       }
     }
   },

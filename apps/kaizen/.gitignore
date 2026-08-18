@@ -43,3 +43,8 @@ yarn-error.*
 
 # Capturas de pantalla generadas por scripts/captura.mjs
 capturas/
+
+# La piel personal y su arte: nunca entran en el repositorio ni, por tanto, en
+# el paquete publico. Ver src/design/temas/personal.ts y metro.config.js.
+assets/skins/
+src/design/temas/personal.skin.ts
