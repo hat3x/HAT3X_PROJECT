@@ -21,7 +21,7 @@ const OPCIONES = [
   { clave: 'rapida',   titulo: 'Entrada rápida',  icono: 'edit-3',      ruta: '/' },
   { clave: 'agua',     titulo: 'Agua',            icono: 'droplet',     ruta: '/' },
   { clave: 'entreno',  titulo: 'Entrenamiento',   icono: 'activity',    ruta: '/' },
-  { clave: 'peso',     titulo: 'Peso',            icono: 'bar-chart-2', ruta: '/' },
+  { clave: 'peso',     titulo: 'Peso',            icono: 'bar-chart-2', ruta: '/registrar-peso' },
 ] as const
 
 export default function Anadir() {

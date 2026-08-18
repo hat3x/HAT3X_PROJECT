@@ -3,7 +3,11 @@ import NetInfo from '@react-native-community/netinfo'
 import { QueryClient, onlineManager } from '@tanstack/react-query'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
 import { supabase } from './supabase'
-import { CLAVE_MUTACION_GUARDAR_PERFIL, CLAVE_MUTACION_ANADIR_AGUA } from './claves-mutacion'
+import {
+  CLAVE_MUTACION_GUARDAR_PERFIL,
+  CLAVE_MUTACION_ANADIR_AGUA,
+  CLAVE_MUTACION_GUARDAR_PESO,
+} from './claves-mutacion'
 
 onlineManager.setEventListener((setOnline) =>
   NetInfo.addEventListener((estado) => setOnline(!!estado.isConnected)),
@@ -79,6 +83,28 @@ export function crearClienteConsultas(): QueryClient {
       const { error } = await supabase
         .from('registros_agua')
         .upsert(fila, { onConflict: 'id', ignoreDuplicates: true })
+      if (error) throw new Error(error.message)
+    },
+  })
+
+  // Igual que el agua, con una diferencia: el conflicto se resuelve por
+  // `user_id,fecha_local` porque la tabla solo admite un peso por dia. Eso hace
+  // que reanudar sea seguro sin depender del `id`, y que pesarse dos veces la
+  // misma manana corrija el valor en vez de fallar.
+  clienteConsultas.setMutationDefaults(CLAVE_MUTACION_GUARDAR_PESO, {
+    mutationFn: async ({ id, fila }: { id: string; fila: Record<string, unknown> }) => {
+      const { data } = await supabase.auth.getSession()
+      const idActual = data.session?.user.id
+      if (!idActual) throw new Error('No hay sesion activa para reanudar este peso.')
+      if (idActual !== id) {
+        console.error(
+          '[kaizen] Peso descartado al reanudar: la sesion activa ya no es la que lo encolo.',
+        )
+        throw new Error('La sesion ha cambiado desde que se encolo este peso.')
+      }
+      const { error } = await supabase
+        .from('pesos')
+        .upsert(fila, { onConflict: 'user_id,fecha_local' })
       if (error) throw new Error(error.message)
     },
   })

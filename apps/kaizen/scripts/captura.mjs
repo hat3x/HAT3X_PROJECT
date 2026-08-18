@@ -35,6 +35,7 @@ const RUTAS_POR_DEFECTO = [
   '/coach',
   '/anadir',
   '/anadir-hueco',
+  '/registrar-peso',
   '/ajustes',
   '/borrar-cuenta',
   '/acceso',
@@ -129,6 +130,14 @@ const RESPUESTAS = {
   registros_agua: [{ ml: 250 }, { ml: 500 }, { ml: 250 }],
   // `.maybeSingle()` con `.limit(1)`: tambien objeto.
   objetivos: { agua_ml: 2500 },
+  // De mas nuevo a mas viejo, como los pide la consulta.
+  pesos: [
+    { fecha_local: '2026-08-18', kg: 78.4 },
+    { fecha_local: '2026-08-17', kg: 78.8 },
+    { fecha_local: '2026-08-15', kg: 79.1 },
+    { fecha_local: '2026-08-12', kg: 79.1 },
+    { fecha_local: '2026-08-09', kg: 80.3 },
+  ],
 }
 
 const rutas = process.argv.slice(2).length > 0 ? process.argv.slice(2) : RUTAS_POR_DEFECTO

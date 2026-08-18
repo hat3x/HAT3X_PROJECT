@@ -12,3 +12,5 @@
 export const CLAVE_MUTACION_GUARDAR_PERFIL = ['perfil', 'guardar'] as const
 
 export const CLAVE_MUTACION_ANADIR_AGUA = ['agua', 'anadir'] as const
+
+export const CLAVE_MUTACION_GUARDAR_PESO = ['peso', 'guardar'] as const
