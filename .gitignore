@@ -36,3 +36,6 @@ next-env.d.ts
 # Supabase CLI local state (project ref, pooler cache) — no versionar
 supabase/.temp/
 .env*
+
+# APK/keystore de la PWA (NO commitear: la keystore es secreta)
+apk/
