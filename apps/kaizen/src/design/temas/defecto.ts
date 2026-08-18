@@ -55,6 +55,7 @@ export const temaDefecto: Tema = {
   recetas: { barra: 'continua', anillo: 'liso' },
   decoracion: {
     cabecera: null,
+    anilloMarco: null,
     tarjetaNutricion: null,
     tarjetaAgua: null,
     tarjetaEntrenamiento: null,

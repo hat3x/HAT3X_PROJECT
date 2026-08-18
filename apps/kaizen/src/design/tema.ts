@@ -28,7 +28,12 @@ export type TarjetaIlustrada = {
 }
 
 export type RecetaBarra = 'continua' | 'segmentada'
-export type RecetaAnillo = 'liso' | 'medidor'
+/**
+ * `segmentado` es el medidor de la piel personal: 32 tramos con relleno
+ * parcial del ultimo, sobre un marco de arte. Sus medidas vienen dadas por el
+ * PNG del marco, asi que no se pueden inventar.
+ */
+export type RecetaAnillo = 'liso' | 'medidor' | 'segmentado'
 
 /**
  * Una mancha de color difusa del fondo. Varias juntas forman la «aurora».
@@ -124,6 +129,8 @@ export interface Tema {
    */
   decoracion: {
     cabecera: Fondo | null
+    /** El aro de arte que rodea al medidor. Solo lo usa la receta `segmentado`. */
+    anilloMarco: ImageSourcePropType | null
     tarjetaNutricion: TarjetaIlustrada | null
     tarjetaAgua: TarjetaIlustrada | null
     tarjetaEntrenamiento: TarjetaIlustrada | null

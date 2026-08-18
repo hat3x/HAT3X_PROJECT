@@ -225,7 +225,7 @@ export default function Hoy() {
 
         {/* 2. Kaizen Score */}
         <View style={{ alignItems: 'center' }}>
-          <Anillo progreso={score / 100}>
+          <Anillo progreso={score / 100} tamano={t.recetas.anillo === 'segmentado' ? 300 : 168}>
             <Texto variante="heroe">{score}</Texto>
             <Texto variante="etiqueta" style={{ marginTop: t.espaciado[0], textAlign: 'center' }}>
               Kaizen Score
