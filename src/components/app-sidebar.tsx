@@ -257,7 +257,7 @@ export function AppSidebar({
       {/* ════════════ Desktop rail (lg+) — Liquid Glass ════════════ */}
       <aside
         className={cn(
-          "cristal sticky top-0 z-10 hidden h-screen shrink-0 flex-col lg:flex",
+          "cristal sticky top-3 z-10 ml-3 hidden h-[calc(100dvh-1.5rem)] shrink-0 flex-col overflow-hidden rounded-2xl border border-border/60 shadow-lg lg:flex",
           mounted && "transition-[width] duration-300 ease-apple-out",
           collapsed ? "w-[4.75rem]" : "w-64",
         )}
