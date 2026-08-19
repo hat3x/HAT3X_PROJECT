@@ -439,11 +439,15 @@ export function DayGrid({
     () =>
       appointments.map((appointment) => {
         const startMin = agendaLocalMinutes(appointment.starts_at, timezone);
-        const durationMin =
-          appointment.service?.duration_minutes ??
+        // La tarjeta ocupa lo que dura la cita DE VERDAD (starts_at → ends_at),
+        // no la duración por defecto del servicio: una cita movida/acortada debe
+        // reflejar su hueco real, coherente con el texto de horas que ya muestra.
+        const durationMin = Math.max(
+          1,
           Math.round(
             (Date.parse(appointment.ends_at) - Date.parse(appointment.starts_at)) / 60000,
-          );
+          ),
+        );
         return { appointment, startMin, durationMin };
       }),
     [appointments, timezone],

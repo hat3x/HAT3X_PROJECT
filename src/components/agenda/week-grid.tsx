@@ -497,9 +497,12 @@ export function WeekGrid({
       const date = localDateInZone(timezone, new Date(appointment.starts_at));
       if (!weekDateSet.has(date)) continue;
       const startMin = agendaLocalMinutes(appointment.starts_at, timezone);
-      const durationMin =
-        appointment.service?.duration_minutes ??
-        Math.round((Date.parse(appointment.ends_at) - Date.parse(appointment.starts_at)) / 60000);
+      // Duración REAL de la cita (starts_at → ends_at), no la del servicio: una
+      // cita movida/acortada refleja su hueco real, como el texto de horas.
+      const durationMin = Math.max(
+        1,
+        Math.round((Date.parse(appointment.ends_at) - Date.parse(appointment.starts_at)) / 60000),
+      );
       rows.push({ appointment, date, startMin, durationMin });
     }
     return rows;
