@@ -91,8 +91,8 @@ const FALLBACK_WINDOW = { startMin: 8 * 60, endMin: 21 * 60 };
  * `TIMELINE_BASE` se usa como FALLBACK del `base` dinámico mientras no se ha
  * medido aún el contenedor con scroll (ver `viewportHeight` más abajo). */
 const TIMELINE_BASE = 1.35;
-const TIMELINE_MIN_CARD = 74;
-const TIMELINE_EXTRA = 40;
+const TIMELINE_MIN_CARD = 58;
+const TIMELINE_EXTRA = 26;
 /** Suelo legible del `base` DINÁMICO: nunca se comprime por debajo de esto
  * (~66px/hora) aunque el viewport sea muy bajo — el estirado elástico de
  * `buildDayTimeline` sigue ganando para las tarjetas cortas por encima de esto. */
