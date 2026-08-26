@@ -214,7 +214,10 @@
           "id": "PLACEHOLDER_CREDENTIALS_ID",
           "name": "Google Sheets OAuth2"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {

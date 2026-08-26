@@ -1,0 +1,63 @@
+{
+  "name": "Biodental — Derivar Ortodoncia",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "biodental-derivar-ortodoncia",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else if (raw.args !== undefined) {\n  args = typeof raw.args === 'string' ? JSON.parse(raw.args) : raw.args;\n} else {\n  args = raw;\n}\n\nconst nombre   = String(args.nombre   || '').trim();\nconst telefono = String(args.telefono || '').trim().replace(/\\D/g, '');\n\nif (!nombre) {\n  return [{ json: { error: 'nombre_requerido', derivado: false,\n    mensaje: 'No pude registrar la derivacion: falta el nombre del paciente.' }}];\n}\nif (!/^\\d{9}$/.test(telefono)) {\n  return [{ json: { error: 'telefono_invalido', derivado: false,\n    mensaje: 'El telefono no parece correcto. Me puedes repetir los nueve digitos?' }}];\n}\n\nreturn [{ json: { nombre, telefono } }];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "from": "Biodental",
+        "to": "=+34645574869",
+        "message": "=Ortodoncia - {{ $('Parsear Argumentos').first().json.nombre }} / {{ $('Parsear Argumentos').first().json.telefono }} - Ha llamado pidiendo ortodoncia. Llamale cuando puedas.",
+        "options": {}
+      },
+      "id": "twilio-node",
+      "name": "Twilio - Notificar Kristel",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "credentials": {
+        "twilioApi": { "id": "placeholder", "name": "placeholder" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"derivado\": true, \"mensaje\": \"Listo. Kristel te llamara en cuanto pueda.\" }",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 300]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
+    "Parsear Argumentos": { "main": [[{ "node": "Twilio - Notificar Kristel", "type": "main", "index": 0 }]] },
+    "Twilio - Notificar Kristel": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

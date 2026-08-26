@@ -1,0 +1,314 @@
+<meta charset="utf-8">
+<title>HAT3X — Presupuesto mensual Biodental — Junio 2026</title>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --violeta: #6600FF;
+    --naranja: #FF8800;
+    --tinta:   #0F1530;
+    --suave:   #6B7688;
+    --linea:   #E3E7EF;
+    --fondo:   #F7F8FB;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--tinta);
+    background: #fff;
+    margin: 0;
+    padding: 20mm 18mm;
+    max-width: 210mm;
+    margin-inline: auto;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Cabecera ---------- */
+  .cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 14px;
+    border-bottom: 3px solid var(--violeta);
+    margin-bottom: 22px;
+  }
+  .marca {
+    font-size: 26pt;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #8C2AFF, #FF9120);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    line-height: 1;
+  }
+  .marca-sub {
+    font-size: 8pt;
+    color: var(--suave);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .doc-tipo { text-align: right; }
+  .doc-tipo h1 {
+    font-size: 15pt;
+    font-weight: 700;
+    margin: 0 0 2px;
+    letter-spacing: -0.01em;
+  }
+  .doc-meta { font-size: 9pt; color: var(--suave); }
+  .doc-meta strong { color: var(--tinta); font-weight: 600; }
+
+  /* ---------- Partes ---------- */
+  .partes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .parte {
+    background: var(--fondo);
+    border: 1px solid var(--linea);
+    border-radius: 10px;
+    padding: 13px 15px;
+  }
+  .parte h2 {
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--violeta);
+    margin: 0 0 7px;
+    font-weight: 700;
+  }
+  .parte .nombre { font-weight: 700; font-size: 11pt; margin-bottom: 3px; }
+  .parte p { margin: 1px 0; font-size: 9.5pt; color: #47506A; }
+
+  /* ---------- Periodo ---------- */
+  .periodo {
+    background: linear-gradient(135deg, rgba(102,0,255,.06), rgba(255,136,0,.06));
+    border-left: 3px solid var(--naranja);
+    border-radius: 0 8px 8px 0;
+    padding: 11px 15px;
+    margin-bottom: 20px;
+    font-size: 10pt;
+  }
+  .periodo strong { font-weight: 700; }
+
+  /* ---------- Tabla ---------- */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  thead th {
+    background: var(--tinta);
+    color: #fff;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 600;
+    padding: 9px 12px;
+    text-align: left;
+  }
+  thead th:last-child { text-align: right; }
+  tbody td {
+    padding: 13px 12px;
+    border-bottom: 1px solid var(--linea);
+    vertical-align: top;
+  }
+  tbody td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
+  .concepto { font-weight: 600; margin-bottom: 3px; }
+  .detalle { font-size: 9pt; color: var(--suave); line-height: 1.45; }
+
+  .total-fila td {
+    padding-top: 14px;
+    border-bottom: none;
+    font-size: 13pt;
+    font-weight: 800;
+  }
+  .total-fila td:first-child {
+    text-align: right;
+    color: var(--suave);
+    font-size: 10pt;
+    font-weight: 600;
+  }
+  .total-importe { color: var(--violeta); }
+
+  /* ---------- Secciones ---------- */
+  h3.seccion {
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--violeta);
+    font-weight: 700;
+    margin: 24px 0 9px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--linea);
+  }
+  ul.alcance { margin: 0; padding-left: 17px; }
+  ul.alcance li { margin-bottom: 4px; font-size: 9.5pt; }
+
+  .uso { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .metrica {
+    background: var(--fondo);
+    border: 1px solid var(--linea);
+    border-radius: 9px;
+    padding: 12px;
+    text-align: center;
+  }
+  .metrica .cifra { font-size: 17pt; font-weight: 800; color: var(--violeta); line-height: 1.1; }
+  .metrica .etiqueta {
+    font-size: 8pt;
+    color: var(--suave);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 3px;
+  }
+
+  .nota {
+    background: #FFF9F0;
+    border: 1px solid #FFE0B8;
+    border-radius: 8px;
+    padding: 11px 14px;
+    font-size: 9pt;
+    color: #6B4A16;
+    margin-top: 16px;
+  }
+  .nota p { margin: 0 0 6px; }
+  .nota p:last-child { margin-bottom: 0; }
+
+  /* ---------- Pie ---------- */
+  .pie {
+    margin-top: 26px;
+    padding-top: 12px;
+    border-top: 1px solid var(--linea);
+    font-size: 8.5pt;
+    color: var(--suave);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Campos por rellenar */
+  .todo {
+    background: #FFF3CD;
+    border-bottom: 1.5px dashed #D9A400;
+    padding: 0 3px;
+    border-radius: 2px;
+    color: #7A5B00;
+    font-weight: 500;
+  }
+
+  @media print {
+    body { padding: 12mm 14mm; }
+    .todo { background: transparent; border-bottom: 1px solid #999; color: inherit; }
+  }
+  @page { size: A4; margin: 0; }
+</style>
+
+<div class="cabecera">
+  <div>
+    <div class="marca">HAT3X</div>
+    <div class="marca-sub">Inteligencia artificial aplicada a negocio</div>
+  </div>
+  <div class="doc-tipo">
+    <h1>Presupuesto mensual</h1>
+    <div class="doc-meta">
+      Nº <strong>BIO-2026-06</strong><br>
+      Fecha de emisión: <strong>30 de junio de 2026</strong>
+    </div>
+  </div>
+</div>
+
+<div class="partes">
+  <div class="parte">
+    <h2>Emisor</h2>
+    <div class="nombre">HAT3X <span class="todo">[razón social S.L.]</span></div>
+    <p>CIF: <span class="todo">[CIF]</span></p>
+    <p><span class="todo">[Dirección fiscal]</span></p>
+    <p>info@hat3x.com</p>
+  </div>
+  <div class="parte">
+    <h2>Cliente</h2>
+    <div class="nombre">Clínica Dental Biodental</div>
+    <p>CIF: <span class="todo">[CIF cliente]</span></p>
+    <p>Carretera Galapagar, 13</p>
+    <p>28270 Colmenarejo, Madrid</p>
+  </div>
+</div>
+
+<div class="periodo">
+  <strong>Periodo de servicio:</strong> 1 — 30 de junio de 2026 &nbsp;·&nbsp;
+  <strong>Servicio:</strong> Recepcionista IA «Sara» — agente de voz para gestión de citas
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:72%">Concepto</th>
+      <th>Importe</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+        <div class="concepto">Cuota mensual — Recepcionista IA «Sara»</div>
+        <div class="detalle">
+          Operación, mantenimiento y soporte del agente de voz que atiende las llamadas
+          entrantes de la clínica: gestión de citas (alta, modificación y cancelación),
+          información a pacientes, derivación de ortodoncia y confirmaciones por SMS.
+          Incluye alojamiento de la plataforma, consumo de telefonía y minutos de voz.
+        </div>
+      </td>
+      <td>290,00 €</td>
+    </tr>
+    <tr class="total-fila">
+      <td>Total del periodo</td>
+      <td class="total-importe">290,00 €</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 class="seccion">Servicio incluido en la cuota</h3>
+<ul class="alcance">
+  <li>Atención telefónica automatizada disponible de forma permanente, sin límite de llamadas simultáneas.</li>
+  <li>Gestión completa de la agenda: comprobación de disponibilidad real, creación, modificación y cancelación de citas sobre Google Calendar.</li>
+  <li>Registro de todas las citas en la hoja de control de la clínica.</li>
+  <li>Envío automático de SMS de confirmación al paciente tras cada cita creada.</li>
+  <li>Derivación de solicitudes de ortodoncia al responsable del tratamiento.</li>
+  <li>Mantenimiento correctivo, ajustes de horario y actualización de servicios.</li>
+  <li>Supervisión del funcionamiento y corrección de incidencias.</li>
+</ul>
+
+<h3 class="seccion">Actividad del periodo</h3>
+<div class="uso">
+  <div class="metrica">
+    <div class="cifra todo">[—]</div>
+    <div class="etiqueta">Llamadas atendidas</div>
+  </div>
+  <div class="metrica">
+    <div class="cifra todo">[—]</div>
+    <div class="etiqueta">Citas gestionadas</div>
+  </div>
+  <div class="metrica">
+    <div class="cifra todo">[—]</div>
+    <div class="etiqueta">Minutos de conversación</div>
+  </div>
+</div>
+
+<div class="nota">
+  <p>
+    <strong>Primer periodo facturable.</strong> El mes de mayo de 2026 se prestó como
+    periodo de prueba sin coste para la clínica.
+  </p>
+  <p>
+    <strong>Nota:</strong> el presente documento detalla el servicio prestado y su importe.
+    No tiene validez fiscal. La factura correspondiente se emite por separado.
+  </p>
+</div>
+
+<div class="pie">
+  <span>HAT3X · info@hat3x.com</span>
+  <span>Presupuesto BIO-2026-06 · Página 1 de 1</span>
+</div>
