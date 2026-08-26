@@ -18,11 +18,12 @@ Se aplican a **todas** las tareas:
 - **TypeScript estricto.** `strict: true`. Prohibido `any` y prohibido `@ts-ignore`.
 - **`src/dominio/` no importa React ni Supabase.** Ni directa ni indirectamente.
 - **Ninguna pantalla ni componente define un color, un radio, una fuente o un fondo por su cuenta.** Todo sale del tema.
-- **Todas las tablas llevan `user_id` y política RLS `user_id = auth.uid()`** para select, insert, update y delete. Sin excepciones.
+- **Toda tabla está acotada a un único dueño y tiene política RLS que lo impone** para select, insert, update y delete. Sin excepciones. La columna es `user_id` salvo en `perfiles`, cuya clave primaria `id` **es** el id del usuario (relación 1:1 con `auth.users`) y cuya política usa `id = auth.uid()`.
 - **Toda mutación lleva un `id` UUID generado en el cliente.**
 - **Valores por defecto:** `corte_dia` = 4 (04:00), `hora_silencio` = 22 (22:00).
 - **Dos perfiles de EAS Build:** `tienda` y `personal`. El directorio del skin personal está fuera del control de versiones.
 - Cada tarea termina con `npx tsc --noEmit` limpio y `npm test` en verde antes de comitear.
+- **El arnés de tests está clavado a estas versiones y no se sube ninguna sin comprobar las otras dos:** `jest-expo@57` está construido contra `jest@29` (no la 30), y `@testing-library/react-native` se queda en la **13.x** porque la 14 exige un peer llamado `test-renderer` que no existe en el árbol de Expo. La configuración de jest vive en `apps/kaizen/jest.config.js`, **no** en la clave `jest` de `package.json`; los tests de integración tienen la suya aparte en `jest.integracion.config.js` y se lanzan con `npm run test:integracion`.
 
 ---
 
@@ -216,6 +217,22 @@ describe('fechaLocal', () => {
     expect(fechaLocal(instante, 'America/Mexico_City', 4)).toBe('2026-08-17')
     expect(fechaLocal(instante, 'Pacific/Auckland', 4)).toBe('2026-08-18')
   })
+
+  // Los dos cambios de hora del año. Son el caso que rompe la implementación
+  // ingenua de restar horas al instante absoluto.
+  it('el cambio de hora de otoño no adelanta el día', () => {
+    // Madrid atrasa el reloj a las 03:00 CEST del 25-oct (01:00 UTC).
+    // 03:30 hora local del 25, ya en CET (+1), son las 02:30 UTC.
+    const instante = new Date('2026-10-25T02:30:00Z')
+    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-10-24')
+  })
+
+  it('el cambio de hora de primavera no atrasa el día', () => {
+    // Madrid adelanta el reloj a las 02:00 CET del 29-mar (01:00 UTC).
+    // 04:30 hora local del 29, ya en CEST (+2), son las 02:30 UTC.
+    const instante = new Date('2026-03-29T02:30:00Z')
+    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-03-29')
+  })
 })
 ```
 
@@ -235,20 +252,40 @@ Esperado: FALLA con «Cannot find module './dia'».
  *
  * Con corte a las 4, todo lo registrado entre las 00:00 y las 03:59 cuenta
  * como el día anterior.
+ *
+ * Se razona sobre el reloj de pared local y se mueve la fecha de calendario.
+ * La alternativa aparente —restar `corteHora` horas al instante absoluto y
+ * formatear— es incorrecta: en los dos cambios de hora del año la ventana
+ * desplazada cruza la transición y el desfase que se aplica al formatear ya
+ * no es el que regía en el instante original, así que el día sale corrido.
+ *
+ * No valida `corteHora`; se espera 0-12, que es lo que impone la base de datos.
  */
 export function fechaLocal(
   instante: Date,
   zonaHoraria: string,
   corteHora: number,
 ): string {
-  const desplazado = new Date(instante.getTime() - corteHora * 3_600_000)
-  const formateador = new Intl.DateTimeFormat('en-CA', {
+  const partes = new Intl.DateTimeFormat('en-CA', {
     timeZone: zonaHoraria,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  })
-  return formateador.format(desplazado)
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instante)
+
+  const valor = (tipo: Intl.DateTimeFormatPartTypes): number => {
+    const parte = partes.find((p) => p.type === tipo)
+    if (!parte) throw new Error(`El formateador no devolvió ${tipo}`)
+    return Number(parte.value)
+  }
+
+  const fecha = new Date(Date.UTC(valor('year'), valor('month') - 1, valor('day')))
+  if (valor('hour') < corteHora) {
+    fecha.setUTCDate(fecha.getUTCDate() - 1)
+  }
+  return fecha.toISOString().slice(0, 10)
 }
 ```
 
@@ -416,6 +453,21 @@ create table pesos (
 `supabase/migraciones/0002_rls.sql`:
 
 ```sql
+-- Conceder acceso de tabla al rol `authenticated` ANTES de activar RLS.
+--
+-- Las versiones recientes del CLI de Supabase no exponen automáticamente las
+-- tablas nuevas de `public` a los roles de la API. Sin estos GRANT el rol no
+-- tiene ningún privilegio sobre las tablas y toda consulta falla con
+-- «permission denied», pase lo que pase con las políticas.
+--
+-- GRANT y RLS son capas independientes: el GRANT decide si el rol puede tocar
+-- la tabla; la política decide qué filas ve una vez que puede.
+--
+-- A `anon` no se le concede nada: esta app exige sesión y los datos son
+-- categoría especial del RGPD.
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+
 alter table perfiles           enable row level security;
 alter table objetivos          enable row level security;
 alter table alimentos          enable row level security;
@@ -533,12 +585,81 @@ describe('aislamiento entre usuarios', () => {
 })
 ```
 
-- [ ] **Paso 7: Ejecutar y comprobar que pasa**
+- [ ] **Paso 7: Escribir el test estructural que cubre las diez tablas**
+
+El test anterior ejerce las cuatro operaciones a fondo, pero sobre **una** tabla. Las otras nueve quedarían sin red: si una tabla futura se crea sin `enable row level security`, **falla en abierto** —cualquier usuario autenticado ve las filas de todos— y nada lo detecta, porque la app «funciona» mientras la pruebe una sola persona. Un CRUD completo por tabla sería caro y repetitivo; esta comprobación estructural es barata y cierra justo ese escenario.
+
+Instalar el cliente de Postgres solo para pruebas y añadir `DATABASE_URL` a `.env.test` y a `.env.test.example`:
+
+```bash
+npm install --save-dev pg @types/pg
+```
+
+`pruebas/rls-todas-las-tablas.integracion.test.ts`:
+
+```ts
+import { Client } from 'pg'
+
+const TABLAS = [
+  'perfiles', 'objetivos', 'alimentos', 'comidas', 'comida_items',
+  'registros_agua', 'entrenamientos', 'habitos', 'habitos_registro', 'pesos',
+]
+
+let cliente: Client
+
+beforeAll(async () => {
+  cliente = new Client({ connectionString: process.env.DATABASE_URL })
+  await cliente.connect()
+})
+
+afterAll(async () => {
+  await cliente.end()
+})
+
+it('las diez tablas esperadas existen en public', async () => {
+  const { rows } = await cliente.query<{ tablename: string }>(
+    `select tablename from pg_tables where schemaname = 'public'`,
+  )
+  expect(rows.map((f) => f.tablename).sort()).toEqual([...TABLAS].sort())
+})
+
+it('ninguna tabla de public se queda sin RLS activado', async () => {
+  const { rows } = await cliente.query<{ tablename: string }>(
+    `select tablename from pg_tables
+      where schemaname = 'public' and rowsecurity = false`,
+  )
+  expect(rows.map((f) => f.tablename)).toEqual([])
+})
+
+it('ninguna tabla de public se queda sin política', async () => {
+  const { rows } = await cliente.query<{ tablename: string }>(
+    `select t.tablename from pg_tables t
+      where t.schemaname = 'public'
+        and not exists (
+          select 1 from pg_policies p
+           where p.schemaname = 'public' and p.tablename = t.tablename
+        )`,
+  )
+  expect(rows.map((f) => f.tablename)).toEqual([])
+})
+
+it('ninguna política concede acceso al rol anónimo', async () => {
+  const { rows } = await cliente.query<{ tablename: string; roles: string[] }>(
+    `select tablename, roles::text[] from pg_policies where schemaname = 'public'`,
+  )
+  const conAnon = rows.filter((f) => f.roles.includes('anon')).map((f) => f.tablename)
+  expect(conAnon).toEqual([])
+})
+```
+
+El primer test es el que hace que los otros tres no puedan volverse vacuos: sin él, borrar una tabla del esquema dejaría los tres siguientes en verde por no tener nada que comprobar.
+
+- [ ] **Paso 8: Ejecutar y comprobar que pasa**
 
 Ejecutar: `npm run test:integracion`
-Esperado: los cuatro tests PASAN. Si alguno falla, la política RLS de esa tabla está mal y **hay que arreglarla antes de seguir**.
+Esperado: los cuatro tests de aislamiento y los cuatro estructurales PASAN. Si alguno falla, la política RLS de esa tabla está mal y **hay que arreglarla antes de seguir**.
 
-- [ ] **Paso 8: Comitear**
+- [ ] **Paso 9: Comitear**
 
 ```bash
 git add apps/kaizen/supabase apps/kaizen/pruebas apps/kaizen/jest.integracion.config.js apps/kaizen/package.json
@@ -727,12 +848,74 @@ it('traduce el error de credenciales a un mensaje en español', async () => {
   expect(error).toBe('Correo o contraseña incorrectos.')
 })
 
-it('salir llama a signOut', async () => {
+it('salir devuelve error nulo y llama a signOut', async () => {
   signOut.mockResolvedValue({ error: null })
-  await salir()
+  await expect(salir()).resolves.toEqual({ error: null })
   expect(signOut).toHaveBeenCalled()
 })
+
+it('registrar traduce que el correo ya existe', async () => {
+  signUp.mockResolvedValue({ error: { code: 'email_exists', message: 'User already registered' } })
+  const { error } = await registrarConCorreo('a@b.c', 'clave')
+  expect(error).toBe('Ya existe una cuenta con ese correo.')
+})
+
+it('registrar da un consejo accionable si la contraseña es débil', async () => {
+  signUp.mockResolvedValue({ error: { code: 'weak_password', message: 'Password is too short' } })
+  const { error } = await registrarConCorreo('a@b.c', '123')
+  expect(error).toBe('La contraseña es demasiado corta. Usa al menos 6 caracteres.')
+})
+
+it('un error desconocido nunca deja pasar el texto en inglés', async () => {
+  signInWithPassword.mockResolvedValue({ error: { message: 'Some unmapped GoTrue failure' } })
+  const { error } = await entrarConCorreo('a@b.c', 'clave')
+  expect(error).toBe('No hemos podido completar la operación. Revisa los datos e inténtalo de nuevo.')
+})
+
+describe('entrarConApple', () => {
+  it('cancelar NO es un error', async () => {
+    signInAsync.mockRejectedValue({ code: 'ERR_REQUEST_CANCELED' })
+    await expect(entrarConApple()).resolves.toEqual({ error: null })
+  })
+
+  it('un fallo que no es cancelación sí avisa al usuario', async () => {
+    signInAsync.mockRejectedValue({ code: 'ERR_APPLE_AUTHENTICATION_UNAVAILABLE' })
+    const { error } = await entrarConApple()
+    expect(error).toBe('No hemos podido iniciar sesión con Apple. Prueba con tu correo.')
+  })
+
+  it('avisa si Apple no devuelve token', async () => {
+    signInAsync.mockResolvedValue({ identityToken: null })
+    const { error } = await entrarConApple()
+    expect(error).toBe('Apple no ha devuelto un token válido. Prueba con tu correo.')
+  })
+
+  it('un fallo de Supabase no se disfraza de cancelación', async () => {
+    signInAsync.mockResolvedValue({ identityToken: 'token-de-prueba' })
+    signInWithIdToken.mockResolvedValue({ error: { message: 'Network request failed' } })
+    const { error } = await entrarConApple()
+    expect(error).not.toBeNull()
+  })
+
+  it('con token válido y Supabase conforme, entra', async () => {
+    signInAsync.mockResolvedValue({ identityToken: 'token-de-prueba' })
+    signInWithIdToken.mockResolvedValue({ error: null })
+    await expect(entrarConApple()).resolves.toEqual({ error: null })
+  })
+})
 ```
+
+El mock del principio del fichero tiene que crecer para cubrir lo nuevo: añade `signUp` y `signInWithIdToken` al mock de `supabase.auth`, y mockea también el módulo de Apple:
+
+```ts
+const signInAsync = jest.fn()
+jest.mock('expo-apple-authentication', () => ({
+  signInAsync: (...a: unknown[]) => signInAsync(...a),
+  AppleAuthenticationScope: { FULL_NAME: 'full_name' },
+}))
+```
+
+Fíjate en el par de tests que importa de verdad: **cancelar devuelve `{ error: null }` y cualquier otro fallo devuelve un mensaje.** Si ese par no existe, nada impide que alguien «simplifique» el `catch` dentro de seis meses y vuelva a dejar el botón mudo.
 
 - [ ] **Paso 3: Ejecutar y comprobar que falla**
 
@@ -745,49 +928,97 @@ Esperado: FALLA con «Cannot find module './autenticacion'».
 
 ```ts
 import * as AppleAuthentication from 'expo-apple-authentication'
+import type { AuthError } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 
 export type Resultado = { error: string | null }
 
-const MENSAJES: Record<string, string> = {
+/** Código que devuelve Expo cuando la persona cierra el diálogo de Apple. */
+const CANCELADO = 'ERR_REQUEST_CANCELED'
+
+/**
+ * Se traduce por `code` cuando existe: los textos de GoTrue cambian entre
+ * versiones, los códigos no. El mapa por mensaje queda como red para las
+ * versiones que todavía no envían código.
+ */
+const POR_CODIGO: Record<string, string> = {
+  invalid_credentials: 'Correo o contraseña incorrectos.',
+  email_exists: 'Ya existe una cuenta con ese correo.',
+  user_already_exists: 'Ya existe una cuenta con ese correo.',
+  weak_password: 'La contraseña es demasiado corta. Usa al menos 6 caracteres.',
+  validation_failed: 'Revisa el correo: no tiene un formato válido.',
+  email_not_confirmed: 'Todavía no has confirmado tu correo. Mira tu bandeja de entrada.',
+  over_email_send_rate_limit: 'Has pedido demasiados correos seguidos. Espera un minuto.',
+}
+
+const POR_MENSAJE: Record<string, string> = {
   'Invalid login credentials': 'Correo o contraseña incorrectos.',
   'User already registered': 'Ya existe una cuenta con ese correo.',
 }
 
-function traducir(mensaje: string): string {
-  return MENSAJES[mensaje] ?? 'No hemos podido completar la operación. Inténtalo de nuevo.'
+function traducir(error: AuthError): string {
+  const porCodigo = error.code ? POR_CODIGO[error.code] : undefined
+  if (porCodigo) return porCodigo
+  const porMensaje = POR_MENSAJE[error.message]
+  if (porMensaje) return porMensaje
+  // Nunca «inténtalo de nuevo» a secas: reintentar lo mismo falla igual.
+  return 'No hemos podido completar la operación. Revisa los datos e inténtalo de nuevo.'
+}
+
+function esCancelacion(fallo: unknown): boolean {
+  return (
+    typeof fallo === 'object' &&
+    fallo !== null &&
+    'code' in fallo &&
+    (fallo as { code: unknown }).code === CANCELADO
+  )
 }
 
 export async function entrarConCorreo(correo: string, contrasena: string): Promise<Resultado> {
   const { error } = await supabase.auth.signInWithPassword({ email: correo, password: contrasena })
-  return { error: error ? traducir(error.message) : null }
+  return { error: error ? traducir(error) : null }
 }
 
 export async function registrarConCorreo(correo: string, contrasena: string): Promise<Resultado> {
   const { error } = await supabase.auth.signUp({ email: correo, password: contrasena })
-  return { error: error ? traducir(error.message) : null }
+  return { error: error ? traducir(error) : null }
 }
 
 export async function entrarConApple(): Promise<Resultado> {
+  let credencial: AppleAuthentication.AppleAuthenticationCredential
+
+  // El `try` envuelve SOLO el diálogo nativo. Si abarcase también la llamada a
+  // Supabase, un fallo de red se diagnosticaría como «el usuario canceló».
   try {
-    const credencial = await AppleAuthentication.signInAsync({
+    credencial = await AppleAuthentication.signInAsync({
       requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME],
     })
-    if (!credencial.identityToken) return { error: 'Apple no ha devuelto un token válido.' }
-    const { error } = await supabase.auth.signInWithIdToken({
-      provider: 'apple', token: credencial.identityToken,
-    })
-    return { error: error ? traducir(error.message) : null }
-  } catch {
-    return { error: null } // el usuario canceló
+  } catch (fallo) {
+    // Cancelar no es un fallo: cambió de opinión y no hay nada que decirle.
+    if (esCancelacion(fallo)) return { error: null }
+    // Cualquier otra cosa sí lo es: dispositivo sin Apple configurado, diálogo
+    // que revienta... Callarse aquí deja al usuario tocando un botón muerto.
+    return { error: 'No hemos podido iniciar sesión con Apple. Prueba con tu correo.' }
   }
+
+  if (!credencial.identityToken) {
+    return { error: 'Apple no ha devuelto un token válido. Prueba con tu correo.' }
+  }
+
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: 'apple',
+    token: credencial.identityToken,
+  })
+  return { error: error ? traducir(error) : null }
 }
 
 export async function salir(): Promise<Resultado> {
   const { error } = await supabase.auth.signOut()
-  return { error: error ? traducir(error.message) : null }
+  return { error: error ? traducir(error) : null }
 }
 ```
+
+> **Comprueba antes de escribir el código** que el `AuthError` de la versión instalada de `@supabase/supabase-js` expone `code`. Si no lo expusiera, quédate solo con el mapa por mensaje y anótalo como desviación: no inventes un campo que no existe.
 
 > **Google** se añade en esta misma tarea con `expo-auth-session` y `supabase.auth.signInWithIdToken({ provider: 'google', token })`, siguiendo el mismo patrón que Apple. Requiere dar de alta los IDs de cliente OAuth en Google Cloud y en el panel de Supabase; hasta que existan esas credenciales, el botón se deja fuera de la pantalla en lugar de mostrarse roto.
 
@@ -897,7 +1128,43 @@ export function crearClienteConsultas(): QueryClient {
 export const persistidor = createAsyncStoragePersister({ storage: AsyncStorage })
 ```
 
-- [ ] **Paso 5: Escribir el test de integración de idempotencia**
+- [ ] **Paso 5: Escribir el test unitario que sí llama a `insertarIdempotente`**
+
+El test de integración del paso siguiente prueba el mecanismo de Postgres, pero **reimplementa la llamada a mano y nunca pasa por la función**. Si alguien quitara `ignoreDuplicates` de `insertarIdempotente`, el comportamiento cambiaría de «descartar el segundo intento» a «sobrescribir con el segundo», el recuento de filas seguiría siendo uno, TypeScript no diría nada —es un valor, no una clave mal escrita— y ningún test se pondría rojo.
+
+`src/datos/mutacion.test.ts`, añadiendo al fichero:
+
+```ts
+import { insertarIdempotente } from './mutacion'
+
+const upsert = jest.fn()
+jest.mock('./supabase', () => ({
+  supabase: { from: (tabla: string) => ({ upsert: (...a: unknown[]) => upsert(tabla, ...a) }) },
+}))
+
+describe('insertarIdempotente', () => {
+  beforeEach(() => upsert.mockReset())
+
+  it('inserta descartando el duplicado, no sobrescribiéndolo', async () => {
+    upsert.mockResolvedValue({ error: null })
+    await insertarIdempotente('registros_agua', { id: 'abc', ml: 250 })
+    expect(upsert).toHaveBeenCalledWith(
+      'registros_agua',
+      { id: 'abc', ml: 250 },
+      { onConflict: 'id', ignoreDuplicates: true },
+    )
+  })
+
+  it('convierte el error de Supabase en una excepción', async () => {
+    upsert.mockResolvedValue({ error: { message: 'permission denied' } })
+    await expect(insertarIdempotente('pesos', { id: 'abc' })).rejects.toThrow('permission denied')
+  })
+})
+```
+
+El primer test es el que importa: fija `ignoreDuplicates: true` como parte del contrato. Sin él, la diferencia entre descartar y sobrescribir es invisible.
+
+- [ ] **Paso 6: Escribir el test de integración de idempotencia**
 
 `pruebas/idempotencia.integracion.test.ts`:
 
@@ -1032,6 +1299,10 @@ export interface Tema {
     textoTenue: string
     borde: string
     pista: string
+    // Sin esto, la primera pantalla que muestre un error escribe un rojo a
+    // mano y la regla del sistema de temas se rompe en su primer uso real.
+    peligro: string
+    sobrePeligro: string
     proteina: string
     carbos: string
     grasas: string
@@ -1052,7 +1323,19 @@ export interface Tema {
 
   fondo: { pantalla: Fondo; velo: string }
 
-  superficie: { tarjeta: Fondo; barraInferior: Fondo; desenfoque: number }
+  superficie: {
+    tarjeta: Fondo
+    barraInferior: Fondo
+    // El botón necesita `Fondo`, no solo un color: un skin con arte de botón
+    // ilustrado no cabe en `color.acento`, y sin esto la pantalla acabaría
+    // decidiendo a pelo entre imagen y color plano.
+    botonPrimario: Fondo
+    botonSecundario: Fondo
+    // La Tarea 10 construye el borrado de cuenta y necesita un botón
+    // destructivo; sin este campo lo escribiría a mano igual que el error.
+    botonPeligro: Fondo
+    desenfoque: number
+  }
 
   recetas: { barra: RecetaBarra; anillo: RecetaAnillo }
 
@@ -1081,6 +1364,8 @@ export const temaDefecto: Tema = {
     textoTenue: '#98A09A',
     borde: 'rgba(255,255,255,0.10)',
     pista: 'rgba(255,255,255,0.10)',
+    peligro: '#E2574C',
+    sobrePeligro: '#2A0A07',
     proteina: '#E8A87C',
     carbos: '#7EA8D9',
     grasas: '#D9B26F',
@@ -1102,6 +1387,9 @@ export const temaDefecto: Tema = {
   superficie: {
     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
     barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
+    botonPrimario: { tipo: 'color', valor: '#4ECB9C' },
+    botonSecundario: { tipo: 'color', valor: 'rgba(255,255,255,0.10)' },
+    botonPeligro: { tipo: 'color', valor: '#E2574C' },
     desenfoque: 22,
   },
   recetas: { barra: 'continua', anillo: 'liso' },
@@ -1128,6 +1416,8 @@ export const temaClaro: Tema = {
     textoTenue: '#6B726C',
     borde: 'rgba(0,0,0,0.10)',
     pista: 'rgba(0,0,0,0.08)',
+    peligro: '#C0392B',
+    sobrePeligro: '#FFFFFF',
     proteina: '#C97A45',
     carbos: '#4A7FBF',
     grasas: '#B08A3C',
@@ -1149,6 +1439,9 @@ export const temaClaro: Tema = {
   superficie: {
     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },
     barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },
+    botonPrimario: { tipo: 'color', valor: '#1E9E73' },
+    botonSecundario: { tipo: 'color', valor: 'rgba(0,0,0,0.06)' },
+    botonPeligro: { tipo: 'color', valor: '#C0392B' },
     desenfoque: 22,
   },
   recetas: { barra: 'continua', anillo: 'liso' },
@@ -1202,7 +1495,7 @@ git commit -m "feat(kaizen): contrato de temas tipado con tema oscuro y claro"
 - [ ] **Paso 1: Instalar dependencias**
 
 ```bash
-npx expo install expo-blur react-native-svg
+npx expo install expo-blur react-native-svg expo-linear-gradient
 ```
 
 - [ ] **Paso 2: Escribir los tests que fallan**
@@ -1246,7 +1539,61 @@ it('la barra no acepta progresos negativos', () => {
   envolver(<Barra progreso={-0.5} color="#4ECB9C" />)
   expect(screen.getByTestId('barra-relleno')).toHaveStyle({ width: '0%' })
 })
+
+it('la barra refleja un progreso intermedio', () => {
+  envolver(<Barra progreso={0.5} color="#4ECB9C" />)
+  expect(screen.getByTestId('barra-relleno')).toHaveStyle({ width: '50%' })
+})
+
+it('el anillo se dibuja y anuncia su progreso', () => {
+  envolver(<Anillo progreso={0.82}><Texto>82</Texto></Anillo>)
+  expect(screen.getByText('82')).toBeTruthy()
+  expect(screen.getByRole('progressbar').props.accessibilityValue.now).toBe(82)
+})
+
+it('un tema desconocido cae al tema por defecto en vez de romper', () => {
+  render(<ProveedorTema nombre="no-existe"><Texto>Hola</Texto></ProveedorTema>)
+  expect(screen.getByText('Hola')).toHaveStyle({ color: '#F4F5F2' })
+})
+
+// Las recetas alternativas no las activa ningún tema registrado, así que se
+// inyecta un tema a mano. Sin estos tests, la mitad del sistema de recetas
+// —justo la mitad que usará la piel personal— viajaría sin probar.
+describe('recetas que ningún tema registrado activa', () => {
+  function conReceta(recetas: Partial<Tema['recetas']>, nodo: React.ReactNode) {
+    const tema: Tema = { ...temaDefecto, recetas: { ...temaDefecto.recetas, ...recetas } }
+    return render(<ContextoTema.Provider value={tema}>{nodo}</ContextoTema.Provider>)
+  }
+
+  it('la barra segmentada enciende los segmentos, no encoge la barra', () => {
+    conReceta({ barra: 'segmentada' }, <Barra progreso={0.5} color="#4ECB9C" />)
+    expect(screen.getAllByTestId('segmento-lleno')).toHaveLength(5)
+    expect(screen.getAllByTestId('segmento-vacio')).toHaveLength(5)
+  })
+
+  // Contar segmentos NO basta: los diez siguen existiendo aunque estén
+  // comprimidos. La invariante que de verdad hay que fijar es que el
+  // contenedor no lleve ancho, porque basta añadírselo —sin reintroducir
+  // ningún envoltorio— para reproducir el bug con los contadores en verde.
+  it('el contenedor de segmentos nunca lleva ancho propio', () => {
+    conReceta({ barra: 'segmentada' }, <Barra progreso={0.5} color="#4ECB9C" />)
+    const contenedor = screen.getByTestId('barra-segmentos')
+    expect(StyleSheet.flatten(contenedor.props.style).width).toBeUndefined()
+  })
+
+  it('la barra anuncia su progreso a un lector de pantalla', () => {
+    conReceta({ barra: 'segmentada' }, <Barra progreso={0.4} color="#4ECB9C" />)
+    expect(screen.getByRole('progressbar').props.accessibilityValue.now).toBe(40)
+  })
+
+  it('el anillo medidor dibuja sus marcas de escala', () => {
+    const { UNSAFE_root } = conReceta({ anillo: 'medidor' }, <Anillo progreso={0.5} />)
+    expect(UNSAFE_root.findAllByType(Line)).toHaveLength(4)
+  })
+})
 ```
+
+Los imports que necesita el fichero de test: `ContextoTema` de `../proveedor`, `Anillo` de `./anillo`, `temaDefecto` de `../temas/defecto`, el tipo `Tema` de `../tema`, `Line` de `react-native-svg`, `StyleSheet` de `react-native`, y `render` de la librería de testing.
 
 - [ ] **Paso 3: Ejecutar y comprobar que falla**
 
@@ -1262,15 +1609,20 @@ import { createContext, useContext, type ReactNode } from 'react'
 import type { Tema } from './tema'
 import { TEMAS } from './temas/indice'
 
-const Contexto = createContext<Tema>(TEMAS.defecto!)
+/**
+ * Se exporta para que los tests puedan inyectar un tema construido a mano y
+ * ejercitar recetas que ningún tema registrado activa (barra segmentada,
+ * anillo medidor). Sin esto, esas ramas no tendrían forma de probarse.
+ */
+export const ContextoTema = createContext<Tema>(TEMAS.defecto!)
 
 export function ProveedorTema({ nombre, children }: { nombre: string; children: ReactNode }) {
   const tema = TEMAS[nombre] ?? TEMAS.defecto!
-  return <Contexto.Provider value={tema}>{children}</Contexto.Provider>
+  return <ContextoTema.Provider value={tema}>{children}</ContextoTema.Provider>
 }
 
 export function useTema(): Tema {
-  return useContext(Contexto)
+  return useContext(ContextoTema)
 }
 ```
 
@@ -1328,25 +1680,37 @@ export function Barra({ progreso, color, alto = 7 }:
   const t = useTema()
   const recortado = Math.min(1, Math.max(0, progreso))
 
+  // `accessible` no es opcional: sin él, React Native recorre los hijos en vez
+  // de tratar la vista como una unidad, y ni VoiceOver ni TalkBack llegan a
+  // anunciar el rol ni el valor. Las otras dos props quedarían inertes.
+  const accesibilidad = {
+    accessible: true,
+    accessibilityRole: 'progressbar' as const,
+    accessibilityValue: { min: 0, max: 100, now: Math.round(recortado * 100) },
+  }
+
   if (t.recetas.barra === 'segmentada') {
     const total = 10
     const llenos = Math.round(recortado * total)
+    // El contenedor ocupa el ancho completo y son los segmentos los que se
+    // encienden o se apagan. Encoger el contenedor al progreso comprimiría
+    // los diez dentro de esa fracción y dejaría el resto de la barra vacío.
     return (
-      <View style={{ flexDirection: 'row', gap: 3 }}>
-        <View testID="barra-relleno" style={{ width: `${recortado * 100}%`, flexDirection: 'row', gap: 3 }}>
-          {Array.from({ length: total }, (_, i) => (
-            <View key={i} style={{
-              flex: 1, height: alto, borderRadius: 2,
-              backgroundColor: i < llenos ? color : t.color.pista,
-            }} />
-          ))}
-        </View>
+      <View testID="barra-segmentos" {...accesibilidad} style={{ flexDirection: 'row', gap: 3 }}>
+        {Array.from({ length: total }, (_, i) => (
+          <View key={i} testID={i < llenos ? 'segmento-lleno' : 'segmento-vacio'}
+                style={{
+                  flex: 1, height: alto, borderRadius: 2,
+                  backgroundColor: i < llenos ? color : t.color.pista,
+                }} />
+        ))}
       </View>
     )
   }
 
   return (
-    <View style={{ height: alto, borderRadius: alto, backgroundColor: t.color.pista, overflow: 'hidden' }}>
+    <View {...accesibilidad}
+          style={{ height: alto, borderRadius: alto, backgroundColor: t.color.pista, overflow: 'hidden' }}>
       <View testID="barra-relleno"
             style={{ width: `${recortado * 100}%`, height: '100%', borderRadius: alto, backgroundColor: color }} />
     </View>
@@ -1361,29 +1725,51 @@ export function Barra({ progreso, color, alto = 7 }:
 ```tsx
 import { Pressable } from 'react-native'
 import { useTema } from '../proveedor'
+import { Superficie } from './superficie'
 import { Texto } from './texto'
 
-export function Boton({ titulo, alPulsar, tono = 'primario' }:
-  { titulo: string; alPulsar: () => void; tono?: 'primario' | 'secundario' }) {
+/**
+ * El fondo sale de `superficie.botonPrimario`/`botonSecundario`, no de un
+ * color: así un tema puede darle arte ilustrado al botón sin que esta
+ * pantalla ni ninguna otra tengan que enterarse.
+ */
+type Tono = 'primario' | 'secundario' | 'peligro'
+
+export function Boton({ titulo, alPulsar, tono = 'primario', deshabilitado = false }:
+  { titulo: string; alPulsar: () => void; tono?: Tono; deshabilitado?: boolean }) {
   const t = useTema()
-  const primario = tono === 'primario'
+  const fondos: Record<Tono, typeof t.superficie.botonPrimario> = {
+    primario: t.superficie.botonPrimario,
+    secundario: t.superficie.botonSecundario,
+    peligro: t.superficie.botonPeligro,
+  }
+  const colores: Record<Tono, string> = {
+    primario: t.color.sobreAcento,
+    secundario: t.color.texto,
+    peligro: t.color.sobrePeligro,
+  }
+
   return (
     <Pressable
       onPress={alPulsar}
       accessibilityRole="button"
-      style={{
-        paddingVertical: t.espaciado[1],
-        paddingHorizontal: t.espaciado[2],
-        borderRadius: t.radio.boton,
-        backgroundColor: primario ? t.color.acento : 'transparent',
-        borderWidth: primario ? 0 : 1,
-        borderColor: t.color.borde,
-        alignItems: 'center',
-      }}
+      disabled={deshabilitado}
+      accessibilityState={{ disabled: deshabilitado }}
+      style={{ opacity: deshabilitado ? 0.5 : 1 }}
     >
-      <Texto style={{ color: primario ? t.color.sobreAcento : t.color.texto, fontWeight: '700' }}>
-        {titulo}
-      </Texto>
+      <Superficie
+        fondo={fondos[tono]}
+        radio={t.radio.boton}
+        style={{
+          paddingVertical: t.espaciado[1],
+          paddingHorizontal: t.espaciado[2],
+          alignItems: 'center',
+        }}
+      >
+        <Texto style={{ color: colores[tono], fontWeight: t.tipografia.pesoTitular }}>
+          {titulo}
+        </Texto>
+      </Superficie>
     </Pressable>
   )
 }
@@ -1398,6 +1784,7 @@ Es la pieza que permite que un tema pinte una tarjeta con color plano y otro con
 ```tsx
 import { View, ImageBackground, type ViewStyle } from 'react-native'
 import { BlurView } from 'expo-blur'
+import { LinearGradient } from 'expo-linear-gradient'
 import type { ReactNode } from 'react'
 import type { Fondo } from '../tema'
 import { useTema } from '../proveedor'
@@ -1409,16 +1796,15 @@ export function Superficie({ fondo, radio, style, children }: {
   children?: ReactNode
 }) {
   const t = useTema()
-  const base: ViewStyle = {
-    borderRadius: radio,
-    borderWidth: 1,
-    borderColor: t.color.borde,
-    overflow: 'hidden',
-    ...style,
-  }
+
+  // El borde SOLO se dibuja sobre color y degradado. Cuando el fondo es arte,
+  // el marco lo pone la propia imagen: añadirle encima un borde algorítmico
+  // que el tema no puede apagar arruinaría cualquier skin ilustrado.
+  const base: ViewStyle = { borderRadius: radio, overflow: 'hidden', ...style }
+  const conBorde: ViewStyle = { ...base, borderWidth: 1, borderColor: t.color.borde }
 
   if (fondo.tipo === 'color') {
-    return <View style={[base, { backgroundColor: fondo.valor }]}>{children}</View>
+    return <View style={[conBorde, { backgroundColor: fondo.valor }]}>{children}</View>
   }
 
   if (fondo.tipo === 'recurso') {
@@ -1440,9 +1826,13 @@ export function Superficie({ fondo, radio, style, children }: {
     <BlurView
       intensity={t.superficie.desenfoque}
       tint={t.esquema === 'oscuro' ? 'dark' : 'light'}
-      style={base}
+      style={conBorde}
     >
-      <View style={{ backgroundColor: fondo.desde, flex: 1 }}>{children}</View>
+      {/* Degradado de verdad: pintar solo `desde` haría que el tema declarase
+          dos colores y la pantalla mostrase uno. */}
+      <LinearGradient colors={[fondo.desde, fondo.hasta]} style={{ flex: 1 }}>
+        {children}
+      </LinearGradient>
     </BlurView>
   )
 }
@@ -1471,7 +1861,11 @@ export function Anillo({ progreso, tamano = 168, grosor = 12, children }: {
   const vuelta = 2 * Math.PI * radio
 
   return (
-    <View style={{ width: tamano, height: tamano }}>
+    <View
+      style={{ width: tamano, height: tamano }}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(recortado * 100) }}
+    >
       <Svg width={tamano} height={tamano}>
         <Circle cx={centro} cy={centro} r={radio} fill="none"
                 stroke={t.color.pista} strokeWidth={grosor} />
@@ -1500,12 +1894,49 @@ export function Anillo({ progreso, tamano = 168, grosor = 12, children }: {
 }
 ```
 
-- [ ] **Paso 10: Ejecutar y comprobar que pasan**
+- [ ] **Paso 10: Implementar `Pantalla`**
+
+Sin esta pieza, `fondo.pantalla` es un campo que ambos temas rellenan y que **nadie usa**: el interruptor claro/oscuro no cambiaría el fondo de ninguna pantalla, y la app se vería sobre el blanco por defecto de React Native incluso con el tema oscuro activo.
+
+`src/design/componentes/pantalla.tsx`:
+
+```tsx
+import { View, type ViewStyle } from 'react-native'
+import type { ReactNode } from 'react'
+import { useTema } from '../proveedor'
+import { Superficie } from './superficie'
+
+/**
+ * Raíz de toda pantalla. Pinta el fondo del tema y su velo, para que ninguna
+ * pantalla tenga que saber de qué color es el suyo.
+ */
+export function Pantalla({ style, children }: { style?: ViewStyle; children?: ReactNode }) {
+  const t = useTema()
+  return (
+    <Superficie fondo={t.fondo.pantalla} radio={0} style={{ flex: 1 }}>
+      <View style={[{ flex: 1, backgroundColor: t.fondo.velo }, style]}>{children}</View>
+    </Superficie>
+  )
+}
+```
+
+Y su test, en `componentes.test.tsx`:
+
+```tsx
+it('la pantalla pinta el fondo del tema y no el del sistema', () => {
+  envolver(<Pantalla><Texto>Contenido</Texto></Pantalla>)
+  const fondo = temaDefecto.fondo.pantalla
+  const esperado = fondo.tipo === 'color' ? fondo.valor : ''
+  expect(JSON.stringify(screen.toJSON())).toContain(esperado)
+})
+```
+
+- [ ] **Paso 11: Ejecutar y comprobar que pasan**
 
 Ejecutar: `npm test -- componentes.test` → PASA
 Ejecutar: `npx tsc --noEmit` → sin errores
 
-- [ ] **Paso 11: Comitear**
+- [ ] **Paso 12: Comitear**
 
 ```bash
 git add apps/kaizen/src/design
@@ -1557,12 +1988,15 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { ProveedorSesion, useSesion } from '@/datos/sesion'
 import { crearClienteConsultas, persistidor } from '@/datos/cliente-consultas'
 import { ProveedorTema } from '@/design/proveedor'
+import { Pantalla } from '@/design/componentes/pantalla'
 
 const cliente = crearClienteConsultas()
 
 function Puerta() {
   const { sesion, cargando } = useSesion()
-  if (cargando) return null
+  // Nunca `null`: sin nada montado se ve el fondo por defecto de React Native
+  // —blanco— y en una app oscura eso es un fogonazo en cada arranque lento.
+  if (cargando) return <Pantalla />
   if (!sesion) return <Redirect href="/acceso" />
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -1574,7 +2008,14 @@ function Puerta() {
 
 export default function Raiz() {
   return (
-    <PersistQueryClientProvider client={cliente} persistOptions={{ persister: persistidor }}>
+    <PersistQueryClientProvider
+      client={cliente}
+      persistOptions={{ persister: persistidor }}
+      // Rehidratar NO reanuda nada por sí solo: `PersistQueryClientProvider`
+      // solo restaura el estado. Sin esta llamada, lo que registraste sin
+      // cobertura se guarda y no se envía jamás.
+      onSuccess={() => cliente.resumePausedMutations()}
+    >
       <ProveedorSesion>
         <ProveedorTema nombre="defecto">
           <Puerta />
@@ -1584,6 +2025,8 @@ export default function Raiz() {
   )
 }
 ```
+
+> **Aviso para quien escriba el bloque 1.** Una mutación persistida se serializa sin su función: al rehidratarse, TanStack Query la reconstruye con `mutationFn: undefined` y no tiene nada que ejecutar. Por eso **cada clave de mutación debe registrarse con `cliente.setMutationDefaults(clave, { mutationFn })` antes de que se restaure el estado**. En el bloque 0 no hay ninguna mutación de usuario todavía, así que no hay nada que registrar; en cuanto exista la primera —el vaso de agua— ese registro es obligatorio o la cola offline no reproduce nada.
 
 - [ ] **Paso 4: Implementar la pestaña Coach**
 
@@ -1619,6 +2062,11 @@ import { Superficie } from '@/design/componentes/superficie'
 import { Texto } from '@/design/componentes/texto'
 import { useTema } from '@/design/proveedor'
 
+// Disposición, no tema: cuánto mide el botón central y cuánto sobresale de la
+// barra. No hay token para esto porque no es «look», es geometría de esta barra.
+const LADO_MAS = 52
+const SOBRESALIENTE_MAS = 18
+
 function BotonAnadir() {
   const t = useTema()
   const router = useRouter()
@@ -1628,8 +2076,11 @@ function BotonAnadir() {
       accessibilityRole="button"
       accessibilityLabel="Añadir registro"
       style={{
-        width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
-        backgroundColor: t.color.acento, marginTop: -18,
+        width: LADO_MAS, height: LADO_MAS,
+        borderRadius: LADO_MAS / 2, // círculo: derivado, no un radio inventado
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: t.color.acento,
+        marginTop: -SOBRESALIENTE_MAS,
       }}
     >
       <Texto variante="titulo" style={{ color: t.color.sobreAcento }}>+</Texto>
@@ -1739,6 +2190,10 @@ export default function Acceso() {
   const [ocupado, setOcupado] = useState(false)
 
   async function ejecutar(accion: () => Promise<{ error: string | null }>) {
+    // Sin esta guarda, un segundo toque lanza otra petición: dos registros
+    // con el mismo correo devuelven «ya existe» justo después de haber
+    // funcionado, y el usuario ve un error tras algo que salió bien.
+    if (ocupado) return
     setOcupado(true)
     setError((await accion()).error)
     setOcupado(false)
@@ -1750,7 +2205,7 @@ export default function Acceso() {
   }
 
   return (
-    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5], gap: t.espaciado[2] }}>
+    <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5], gap: t.espaciado[2] }}>
       <Texto variante="titulo">Entrar en KAIZEN</Texto>
 
       <TextInput
@@ -1771,17 +2226,17 @@ export default function Acceso() {
         secureTextEntry
       />
 
-      {error && <Texto variante="tenue" style={{ color: '#E2574C' }}>{error}</Texto>}
+      {error && <Texto variante="tenue" style={{ color: t.color.peligro }}>{error}</Texto>}
 
-      <Boton titulo={ocupado ? 'Un momento…' : 'Entrar'}
+      <Boton titulo={ocupado ? 'Un momento…' : 'Entrar'} deshabilitado={ocupado}
              alPulsar={() => ejecutar(() => entrarConCorreo(correo, contrasena))} />
-      <Boton titulo="Crear cuenta" tono="secundario"
+      <Boton titulo="Crear cuenta" tono="secundario" deshabilitado={ocupado}
              alPulsar={() => ejecutar(() => registrarConCorreo(correo, contrasena))} />
       {Platform.OS === 'ios' && (
-        <Boton titulo="Continuar con Apple" tono="secundario"
+        <Boton titulo="Continuar con Apple" tono="secundario" deshabilitado={ocupado}
                alPulsar={() => ejecutar(entrarConApple)} />
       )}
-    </View>
+    </Pantalla>
   )
 }
 ```
@@ -1869,6 +2324,10 @@ Esperado: FALLA porque la función no existe.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 Deno.serve(async (peticion) => {
+  if (peticion.method !== 'POST') {
+    return new Response('Método no permitido', { status: 405 })
+  }
+
   const cabecera = peticion.headers.get('Authorization')
   if (!cabecera) return new Response('Falta autorización', { status: 401 })
 
@@ -1883,9 +2342,11 @@ Deno.serve(async (peticion) => {
   const id = data.user.id
 
   // Los objetos de Storage no se borran en cascada: hay que quitarlos a mano.
-  const { data: ficheros } = await admin.storage.from('fotos').list(id)
-  if (ficheros?.length) {
-    await admin.storage.from('fotos').remove(ficheros.map((f) => `${id}/${f.name}`))
+  const falloFotos = await borrarFotos(admin, id)
+  if (falloFotos) {
+    // No se borra el usuario si quedan ficheros: sin dueño en `auth.users`,
+    // esas fotos corporales quedarían huérfanas y nadie podría reclamarlas.
+    return new Response(`No se han podido borrar las fotos: ${falloFotos}`, { status: 500 })
   }
 
   const { error: errorBorrado } = await admin.auth.admin.deleteUser(id)
@@ -1893,11 +2354,53 @@ Deno.serve(async (peticion) => {
 
   return new Response('ok', { status: 200 })
 })
+
+/** `list` devuelve como mucho 100 objetos por llamada. */
+const LOTE = 100
+/** Tope de seguridad: 100 vueltas son 10.000 ficheros. Evita girar sin fin. */
+const VUELTAS_MAX = 100
+
+/**
+ * Borra en lotes hasta vaciar la carpeta del usuario. Devuelve el mensaje del
+ * fallo, o `null` si terminó limpio.
+ *
+ * Sin el bucle, alguien con más de 100 fotos —normal tras unos meses de uso
+ * diario— vería «cuenta borrada» y dejaría las demás huérfanas para siempre.
+ */
+async function borrarFotos(
+  admin: ReturnType<typeof createClient>,
+  id: string,
+): Promise<string | null> {
+  for (let vuelta = 0; vuelta < VUELTAS_MAX; vuelta++) {
+    const { data: ficheros, error } = await admin.storage
+      .from('fotos').list(id, { limit: LOTE })
+    if (error) return error.message
+    if (!ficheros || ficheros.length === 0) return null
+
+    const { error: errorBorrado } = await admin.storage
+      .from('fotos').remove(ficheros.map((f) => `${id}/${f.name}`))
+    if (errorBorrado) return errorBorrado.message
+
+    // Menos de un lote entero significa que ya no queda nada detrás.
+    if (ficheros.length < LOTE) return null
+  }
+  return `Quedan ficheros tras ${VUELTAS_MAX} lotes; se aborta sin borrar la cuenta.`
+}
 ```
 
 - [ ] **Paso 4: Ejecutar y comprobar que pasa**
 
 Ejecutar: `npm run test:integracion -- borrado` → PASA
+
+- [ ] **Paso 4bis: Los tres tests que faltan**
+
+Los tres cubren caminos que hoy solo están respaldados por lectura de código, y uno de ellos es el más frecuente en producción.
+
+**a) Borrar la cuenta de alguien que nunca subió una foto.** Es el caso común —las fotos son opcionales— y es el que rompería si `list` sobre una carpeta vacía devolviera error en vez de una lista vacía. En `borrado.integracion.test.ts`, un test igual al que ya existe pero **sin subir ningún fichero**: la cuenta tiene que borrarse igual, respuesta 200.
+
+**b) Más de un lote de fotos.** Sube **101** ficheros pequeños a la carpeta del usuario y comprueba que tras borrar la cuenta **no queda ninguno**. Es el test que fija la paginación: con la versión de una sola llamada, el fichero 101 sobrevive y este test se pone rojo. Sin él, la corrección no está protegida.
+
+**c) Las dos operaciones de escritura del bucket.** En `aislamiento.integracion.test.ts` ya se comprueba que B no puede **listar** ni **descargar** las fotos de A. Faltan las otras dos, que son las que ejercitan el `with check` de la política: que B no puede **subir** un fichero bajo la carpeta de A, y que B no puede **borrar** un fichero de A. Con solo las de lectura, romper el `with check` en un refactor dejaría la suite en verde.
 
 - [ ] **Paso 5: Crear la pantalla en el perfil**
 
@@ -1989,6 +2492,7 @@ export type Perfil = {
   zona_horaria: string
   corte_dia: number
   hora_silencio: number
+  tema: string
 }
 
 export function usarPerfil() {
@@ -2017,6 +2521,12 @@ export function usarPerfil() {
   return {
     perfil: consulta.data ?? null,
     guardar: (cambios: Partial<Perfil>) => mutacion.mutateAsync(cambios),
+    // Sin estos dos, un fallo al guardar es indistinguible de un éxito: la
+    // pantalla no tiene de dónde leerlo y el usuario cree que se guardó.
+    guardando: mutacion.isPending,
+    errorAlGuardar: mutacion.isError
+      ? 'No hemos podido guardar el cambio. Inténtalo de nuevo.'
+      : null,
   }
 }
 ```
@@ -2025,17 +2535,90 @@ export function usarPerfil() {
 
 Ejecutar: `npm test -- usar-perfil.test` → PASA
 
+- [ ] **Paso 4bis: Guardar y aplicar el tema elegido**
+
+Sin esto, el selector de tema de la pantalla de ajustes **no cambia nada**: no hay dónde guardar la elección y el proveedor está fijado a `"defecto"` a mano en el layout raíz.
+
+`supabase/migrations/0005_tema_del_perfil.sql`:
+
+```sql
+alter table perfiles
+  add column tema text not null default 'defecto';
+```
+
+Y el layout raíz deja de fijar el tema a mano. `src/app/_layout.tsx`, sustituyendo el `<ProveedorTema nombre="defecto">`:
+
+```tsx
+/**
+ * Lee el tema del perfil. Antes de iniciar sesión no hay perfil, así que cae
+ * al de por defecto — que es justo lo que debe verse en la pantalla de acceso.
+ */
+function ProveedorTemaDelPerfil({ children }: { children: ReactNode }) {
+  const { perfil } = usarPerfil()
+  return <ProveedorTema nombre={perfil?.tema ?? 'defecto'}>{children}</ProveedorTema>
+}
+```
+
+Va **dentro** de `ProveedorSesion` y del proveedor de consultas, porque necesita la sesión y la caché para leer el perfil.
+
 - [ ] **Paso 5: Implementar la pantalla de ajustes**
 
 `src/features/perfil/ajustes.tsx` — cuatro controles sobre `usarPerfil().guardar`, más el selector de tema y el acceso a borrar cuenta de la Tarea 10:
 
 - **Unidades** — métrico / imperial
-- **Zona horaria** — detectada con `Intl.DateTimeFormat().resolvedOptions().timeZone`, editable
+- **Zona horaria** — detectada con `Intl.DateTimeFormat().resolvedOptions().timeZone`, editable, y **validada antes de guardar** con el mismo mecanismo que después la consume:
+
+  ```ts
+  function esZonaValida(valor: string): boolean {
+    try {
+      new Intl.DateTimeFormat('en-CA', { timeZone: valor })
+      return true
+    } catch {
+      return false
+    }
+  }
+  ```
+
+  Si no es válida, se avisa y **no se guarda**. Validar con `Intl` y no contra una lista propia es deliberado: si `Intl` la acepta, `fechaLocal` funcionará con ella; si no, el cálculo del día entero se rompería en silencio. Hoy el campo es texto libre y «Europ/Madrid» se guarda sin decir nada, mientras que el corte de día está protegido por dos capas — una asimetría que no se sostiene, siendo los dos el fundamento del mismo cálculo
 - **Corte de día** — selector de 0 a 12, con el texto explicativo: «Lo que registres antes de esta hora contará como el día anterior.»
 - **Hora de silencio** — selector de 0 a 23, con el texto: «No te avisaremos después de esta hora.»
-- **Tema** — una fila por cada clave de `TEMAS`
+- **Tema** — una fila por cada clave de `TEMAS`, y al tocarla se llama a `guardar({ tema })`. El cambio tiene que verse **al instante** en la propia pantalla de ajustes: si hay que reiniciar la app para notarlo, está mal cableado
 
 Todo con los componentes de la Tarea 8. Ningún color escrito a mano.
+
+- [ ] **Paso 5bis: El test que protege el criterio central**
+
+El cambio de tema instantáneo es lo que esta tarea existe para entregar, y hoy no hay nada que se ponga rojo si alguien rompe la invalidación de caché, cambia la clave de consulta o desconecta el proveedor del cliente compartido.
+
+`src/features/perfil/tema-instantaneo.test.tsx`:
+
+```tsx
+// Prueba la cadena entera menos la red: guardar → invalidar → releer →
+// re-renderizar el proveedor → color nuevo en pantalla, sin remontar nada.
+it('cambiar el tema se ve al instante, sin reiniciar', async () => {
+  render(
+    <QueryClientProvider client={cliente}>
+      <ProveedorTemaDelPerfil><Sonda /></ProveedorTemaDelPerfil>
+    </QueryClientProvider>,
+  )
+
+  // Arranca con el tema oscuro guardado en el perfil.
+  await waitFor(() =>
+    expect(screen.getByText('sonda')).toHaveStyle({ color: temaDefecto.color.texto }))
+
+  // El perfil pasa a tener el tema claro y se guarda.
+  perfilFalso.tema = 'claro'
+  await act(() => guardarDesdeLaSonda({ tema: 'claro' }))
+
+  // Sin remontar: el mismo nodo tiene ya el color del tema claro.
+  await waitFor(() =>
+    expect(screen.getByText('sonda')).toHaveStyle({ color: temaClaro.color.texto }))
+})
+```
+
+`Sonda` es un componente mínimo que pinta un `Texto` y expone `guardar` de `usarPerfil`. El mock de `./supabase` devuelve `perfilFalso` al leer y lo muta al escribir, para que el refresco tras invalidar traiga el valor nuevo.
+
+**Verifica que puede fallar**: quita el `invalidateQueries` del `onSuccess` del hook, comprueba que el test se pone rojo, y devuélvelo. Si no se pone rojo, no está probando la cadena.
 
 - [ ] **Paso 6: Ejecutar la comprobación completa**
 
@@ -2056,7 +2639,7 @@ git commit -m "feat(kaizen): perfil y ajustes con zona horaria, corte de dia y t
 Los tests en verde no bastan (spec §14.3). Antes de dar el bloque por terminado:
 
 - [ ] **Recorrido manual en dispositivo.** Arrancar con `npm run dev` y abrir en Expo Go o en una build de desarrollo: crear una cuenta, salir, volver a entrar, recorrer las cinco pestañas, abrir la hoja del +, cerrarla, entrar en ajustes, **cambiar de tema oscuro a claro y comprobar que no queda ni un elemento con el color del tema anterior**, y borrar la cuenta.
-- [ ] **Prueba sin conexión.** Poner el móvil en modo avión, insertar un registro de agua desde una pantalla de prueba, reactivar la red y comprobar en Supabase que llegó **una sola** fila.
+- [ ] **La cola offline queda montada, pero sin tráfico — y hay que decirlo así.** Este bloque no construye ninguna mutación de usuario: el agua, las comidas y el resto son del bloque 1. La versión anterior de esta lista pedía «poner el móvil en modo avión y registrar un vaso de agua», que es una comprobación **imposible aquí** porque no existe esa pantalla ni esa mutación. Lo que sí se verifica en este bloque es que el proveedor está montado con su llamada a `resumePausedMutations()` y que el `tsc` y los tests pasan. **La prueba real de extremo a extremo —modo avión, registrar, reconectar, una sola fila— es el primer punto de la verificación del bloque 1**, con la primera mutación de verdad, y allí exige además comprobar que la app se ha cerrado y reabierto entre medias.
 - [ ] **Configurar los dos perfiles de EAS.** `eas.json` con `tienda` y `personal`, y `.gitignore` con el directorio del skin.
 - [ ] **Build real de EAS.** `eas build --profile tienda --platform ios`. Que `tsc` y los tests estén limpios no demuestra que la app compile para iOS.
 
