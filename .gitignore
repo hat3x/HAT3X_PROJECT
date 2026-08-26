@@ -23,3 +23,16 @@ dist/
 *-backup-*.json
 **/n8n/**/backup*.json
 **/n8n/*-export.json
+
+# Copias de seguridad de bases de datos de clientes.
+#
+# Son datos de pacientes: historiales, tratamientos, nombres. Categoria especial
+# del RGPD. Ademas pesan cientos de megas, y git no olvida: una vez dentro, el
+# repositorio queda inservible y el dato expuesto para siempre.
+#
+# Estas copias no viven en el repositorio. Van a almacenamiento cifrado aparte.
+**/base de datos copia/
+*.bak
+
+# Estado local de la CLI de Supabase (referencia al proyecto enlazado).
+**/supabase/.temp/
