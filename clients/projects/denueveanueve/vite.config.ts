@@ -18,12 +18,16 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "logo.png"],
+      includeAssets: ["favicon.ico", "pwa-icon.svg"],
+      // Manifest NEUTRO (white-label). Al ser build-time, el nombre y el icono NO
+      // pueden ser por-salón sin un build por salón o un manifest dinámico en
+      // servidor; el color de la barra sí sigue a la marca en runtime (meta
+      // theme-color en <SalonProvider>). Limitación documentada en docs/PWA.md.
       manifest: {
-        name: "De Nueve a Nueve",
-        short_name: "DeNueveANueve",
-        description: "Reserva tu cita, gestiona tu fidelidad y accede a tu Club Premium.",
-        theme_color: "#C8A97E",
+        name: "Salón · Reservas y fidelización",
+        short_name: "Salón",
+        description: "Reserva tu cita, gestiona tu fidelidad y accede a tu club.",
+        theme_color: "#0F0D0A",
         background_color: "#0F0D0A",
         display: "standalone",
         orientation: "portrait",
@@ -32,19 +36,14 @@ export default defineConfig(({ mode }) => ({
         lang: "es",
         icons: [
           {
-            src: "/logo.png",
-            sizes: "192x192",
-            type: "image/png",
+            src: "/pwa-icon.svg",
+            sizes: "any",
+            type: "image/svg+xml",
           },
           {
-            src: "/logo.png",
-            sizes: "512x512",
-            type: "image/png",
-          },
-          {
-            src: "/logo.png",
-            sizes: "512x512",
-            type: "image/png",
+            src: "/pwa-icon.svg",
+            sizes: "any",
+            type: "image/svg+xml",
             purpose: "maskable",
           },
         ],

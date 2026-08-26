@@ -1,3 +1,9 @@
+/**
+ * ⚠️ DISABLED — admin panel, not routed in Salon OS. Depends on the `api_keys`
+ * table (and `user_roles` for the admin guard), which do not exist in the current
+ * Supabase schema. Kept for reference. Re-enable: set FEATURES.admin = true in
+ * @/config/features and restore the /admin route + RequireAdmin in src/App.tsx.
+ */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -208,7 +214,7 @@ const ApiKeys = () => {
       <div className="px-6 py-6 max-w-3xl mx-auto space-y-4">
         {/* Info banner */}
         <div className="rounded-xl border border-gold/20 bg-gold/5 p-4 text-sm text-muted-foreground">
-          Las API keys dan acceso programático a la API de De Nueve a Nueve.
+          Las API keys dan acceso programático a la API del salón.
           Cada key solo se muestra <span className="text-foreground font-medium">una vez</span> al generarla. Guárdala en un lugar seguro.
         </div>
 

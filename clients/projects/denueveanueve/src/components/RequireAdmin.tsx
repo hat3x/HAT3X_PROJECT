@@ -1,3 +1,9 @@
+/**
+ * ⚠️ DISABLED — admin route guard, no longer used. Depends on the `user_roles`
+ * table (RBAC), which does not exist in the current Salon OS Supabase schema.
+ * Kept for reference. Re-enable together with the admin area: set FEATURES.admin
+ * = true in @/config/features and restore its usage on the /admin route in App.tsx.
+ */
 import { useEffect, useState, ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';

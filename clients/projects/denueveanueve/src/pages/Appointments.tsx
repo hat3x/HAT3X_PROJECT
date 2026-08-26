@@ -1,134 +1,280 @@
-import { useState, useEffect } from 'react';
+// Pantalla "Mis Citas" (autoservicio del cliente · Salón OS).
+//
+// Lista las citas del cliente autenticado leídas de public.appointments con la
+// política RLS SELF de solo lectura de sub-7 (solo ve las suyas). Toda la lógica de
+// datos vive en useAppointments (efectos) y en lib/appointments (transformación
+// pura); esta capa es SOLO presentación: pestañas próximas/historial y los tres
+// estados legibles que pide la subtarea —carga, vacío y error—.
+//
+// Sin acciones de escritura (cancelar/reprogramar): la política de sub-7 es de SOLO
+// LECTURA para el cliente. Reservar/cancelar desde la app, si algún día se abre, irá
+// por una RPC controlada (fuera del alcance de esta subtarea).
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, MapPin, Clock, MessageCircle, Star, Euro } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarDays,
+  CalendarPlus,
+  Clock,
+  Info,
+  RefreshCw,
+} from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '@/lib/i18n';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { motion } from 'framer-motion';
+import { useAppointments } from '@/hooks/useAppointments';
 import BottomNav from '@/components/BottomNav';
-import RescheduleDialog from '@/components/RescheduleDialog';
-import { useCustomer } from '@/hooks/useCustomer';
-import type { Tables } from '@/integrations/supabase/types';
+import {
+  formatDateParts,
+  formatDuration,
+  formatLongDate,
+  formatPrice,
+  formatTimeRange,
+  statusLabelKey,
+  STATUS_BADGE_CLASS,
+  type AppointmentTab,
+  type EnrichedAppointment,
+} from '@/lib/appointments';
 
-type Appointment = Tables<'appointments'>;
-type AppointmentService = Tables<'appointment_services'>;
+const TABS: readonly AppointmentTab[] = ['upcoming', 'history'];
 
-type EnrichedAppointment = Appointment & {
-  location_name?: string;
-  services_list: AppointmentService[];
+/** Contexto de formateo: locale de la app + zona horaria del salón (del catálogo). */
+interface Fmt {
+  locale: string;
+  timeZone: string | null;
+}
+
+// ── Tarjeta de una cita ──────────────────────────────────────────────────────────
+
+const AppointmentCard = ({
+  appointment,
+  fmt,
+  catalogPending,
+  index,
+  reduceMotion,
+}: {
+  appointment: EnrichedAppointment;
+  fmt: Fmt;
+  catalogPending: boolean;
+  index: number;
+  reduceMotion: boolean;
+}) => {
+  const { t } = useI18n();
+  const { day, month, weekday } = formatDateParts(appointment.starts_at, fmt);
+  const timeRange = formatTimeRange(appointment.starts_at, appointment.ends_at, fmt);
+  const duration = formatDuration(appointment.durationMinutes);
+  const price = formatPrice(appointment.price_cents, appointment.currency, fmt.locale);
+  // Título: el servicio; mientras el catálogo carga mostramos un placeholder en vez
+  // de un genérico que luego "salte" al nombre real. Sin catálogo → rótulo genérico.
+  const title = appointment.serviceName ?? (catalogPending ? null : t('appointments.generic'));
+
+  return (
+    <motion.li
+      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        delay: reduceMotion ? 0 : index * 0.05,
+        type: 'spring',
+        stiffness: 300,
+        damping: 30,
+      }}
+      className="rounded-2xl border border-border bg-card p-4"
+    >
+      {/* Fecha completa para lectores de pantalla (la regleta visual es decorativa). */}
+      <span className="sr-only">{formatLongDate(appointment.starts_at, fmt)}. </span>
+
+      <div className="flex gap-4">
+        {/* Regleta de fecha (decorativa) */}
+        <div
+          aria-hidden="true"
+          className="flex shrink-0 flex-col items-center justify-center rounded-xl bg-gold/10 px-3 py-2 ring-1 ring-gold/15"
+        >
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gold/70">
+            {weekday}
+          </span>
+          <span className="font-display text-2xl leading-none text-gold">{day}</span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gold/70">
+            {month}
+          </span>
+        </div>
+
+        {/* Contenido */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            {title === null ? (
+              <span className="mt-1 block h-4 w-32 animate-pulse rounded bg-muted" aria-hidden="true" />
+            ) : (
+              <h3 className="truncate font-display text-base text-foreground">{title}</h3>
+            )}
+            <span
+              className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${STATUS_BADGE_CLASS[appointment.status]}`}
+            >
+              {t(statusLabelKey(appointment.status))}
+            </span>
+          </div>
+
+          {appointment.professionalName && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {t('appointments.with')} {appointment.professionalName}
+            </p>
+          )}
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Clock size={12} aria-hidden="true" />
+              <time dateTime={appointment.starts_at}>{timeRange}</time>
+            </span>
+            {duration && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{duration}</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Pie: precio de la cita (snapshot guardado en la propia cita) */}
+      {appointment.price_cents > 0 && (
+        <div className="mt-3 flex items-center justify-end border-t border-border/60 pt-2.5">
+          <span className="text-sm font-semibold text-foreground">{price}</span>
+        </div>
+      )}
+    </motion.li>
+  );
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  CONFIRMED: 'bg-success/20 text-success',
-  RESCHEDULED: 'bg-warning/20 text-warning',
-  CANCELLED: 'bg-destructive/20 text-destructive',
-  COMPLETED: 'bg-muted text-muted-foreground',
-  NO_SHOW: 'bg-destructive/20 text-destructive',
+// ── Estados: carga / error / vacío ───────────────────────────────────────────────
+
+const LoadingSkeleton = () => {
+  const { t } = useI18n();
+  return (
+    <div role="status" aria-live="polite" className="space-y-3">
+      <span className="sr-only">{t('appointments.loadingLabel')}</span>
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="rounded-2xl border border-border bg-card p-4">
+          <div className="flex gap-4">
+            <div className="h-14 w-14 shrink-0 animate-pulse rounded-xl bg-muted" />
+            <div className="flex-1 space-y-2 py-1">
+              <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-1/3 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 };
+
+const ErrorState = ({ onRetry }: { onRetry: () => void }) => {
+  const { t } = useI18n();
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+        <AlertTriangle className="h-7 w-7 text-destructive" aria-hidden="true" />
+      </div>
+      <h2 className="mb-2 font-display text-xl text-foreground">{t('appointments.error.title')}</h2>
+      <p className="mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
+        {t('appointments.error.body')}
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-lg gradient-gold px-6 text-sm font-semibold text-primary-foreground shadow-gold transition-opacity hover:opacity-90"
+      >
+        <RefreshCw className="h-4 w-4" aria-hidden="true" />
+        {t('general.retry')}
+      </button>
+    </div>
+  );
+};
+
+// ── Aviso honesto: el servidor aún no permite la lectura self ─────────────────────
+//
+// La lista depende de una política/RPC RLS *self* en el servidor de Salón OS. Si ese
+// permiso NO está activo, la lectura se rechaza (permission denied) y aquí NO se abre
+// acceso amplio como parche desde el cliente: se avisa con honestidad (no un error de
+// red reintentable que confunda) y se ofrece reservar o reintentar. El detalle técnico
+// y la resolución (servidor, fuera de alcance de la app) viven en
+// docs/PENDIENTE-mis-citas-rls.md. Tono informativo (ámbar), no destructivo: no está
+// "roto", falta activar el permiso.
+const BlockedNotice = ({ onRetry, onBook }: { onRetry: () => void; onBook: () => void }) => {
+  const { t } = useI18n();
+  return (
+    <div role="status" aria-live="polite" className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-warning/10 ring-1 ring-warning/20">
+        <Info className="h-7 w-7 text-warning" aria-hidden="true" />
+      </div>
+      <h2 className="mb-2 font-display text-xl text-foreground">{t('appointments.blocked.title')}</h2>
+      <p className="mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
+        {t('appointments.blocked.body')}
+      </p>
+      <div className="flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={onBook}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg gradient-gold px-6 text-sm font-semibold text-primary-foreground shadow-gold transition-opacity hover:opacity-90"
+        >
+          <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+          {t('appointments.bookCta')}
+        </button>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          {t('general.retry')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const EmptyState = ({ tab, onBook }: { tab: AppointmentTab; onBook: () => void }) => {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-gold/10 ring-1 ring-gold/15">
+        <CalendarDays className="h-7 w-7 text-gold" aria-hidden="true" />
+      </div>
+      <p className="mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
+        {tab === 'upcoming' ? t('appointments.noUpcoming') : t('appointments.noHistory')}
+      </p>
+      {tab === 'upcoming' && (
+        <button
+          type="button"
+          onClick={onBook}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg gradient-gold px-6 text-sm font-semibold text-primary-foreground shadow-gold transition-opacity hover:opacity-90"
+        >
+          <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+          {t('appointments.bookCta')}
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ── Pantalla ─────────────────────────────────────────────────────────────────────
 
 const Appointments = () => {
   const navigate = useNavigate();
-  const { t } = useI18n();
-  const { customerId } = useCustomer();
+  const { t, locale } = useI18n();
+  const reduceMotion = useReducedMotion() ?? false;
+  const {
+    isLoading,
+    isError,
+    accessBlocked,
+    refetch,
+    upcoming,
+    history,
+    catalogPending,
+    timezone,
+  } = useAppointments();
 
-  const [tab, setTab] = useState<'upcoming' | 'history'>('upcoming');
-  const [appointments, setAppointments] = useState<EnrichedAppointment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  // Subscribe to realtime appointment changes to auto-refresh
-  useEffect(() => {
-    if (!customerId) return;
-    const channel = supabase
-      .channel(`appointments-${customerId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `customer_id=eq.${customerId}` }, () => {
-        setRefreshKey((k) => k + 1);
-      })
-      .subscribe();
-
-    // Fallback: refresh when user returns to the app (e.g. after showing QR to staff)
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') setRefreshKey((k) => k + 1);
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-
-    // Periodic poll every 15s as extra fallback
-    const interval = setInterval(() => setRefreshKey((k) => k + 1), 15000);
-
-    return () => {
-      supabase.removeChannel(channel);
-      document.removeEventListener('visibilitychange', onVisibility);
-      clearInterval(interval);
-    };
-  }, [customerId]);
-
-  useEffect(() => {
-    if (!customerId) return;
-    const loadAppointments = async () => {
-      setLoading(true);
-
-      const now = new Date().toISOString();
-      let query = supabase.from('appointments').select('*').eq('customer_id', customerId);
-
-      if (tab === 'upcoming') {
-        query = query.in('status', ['CONFIRMED', 'RESCHEDULED']).gte('start_at', now).order('start_at', { ascending: true });
-      } else {
-        query = query.in('status', ['COMPLETED', 'CANCELLED', 'NO_SHOW']).order('start_at', { ascending: false });
-      }
-
-      const { data } = await query;
-
-      if (data && data.length > 0) {
-        const aptIds = data.map((a) => a.id);
-        const locIds = [...new Set(data.map((a) => a.location_id))];
-
-        const [locsRes, servicesRes] = await Promise.all([
-          supabase.from('locations').select('id, name').in('id', locIds),
-          supabase.from('appointment_services').select('*').in('appointment_id', aptIds),
-        ]);
-
-        const locMap = new Map(locsRes.data?.map((l) => [l.id, l.name]) || []);
-        const svcMap = new Map<string, AppointmentService[]>();
-        (servicesRes.data || []).forEach((s) => {
-          const list = svcMap.get(s.appointment_id) || [];
-          list.push(s);
-          svcMap.set(s.appointment_id, list);
-        });
-
-        setAppointments(
-          data.map((a) => ({
-            ...a,
-            location_name: locMap.get(a.location_id) || '',
-            services_list: svcMap.get(a.id) || [],
-          }))
-        );
-      } else {
-        setAppointments([]);
-      }
-      setLoading(false);
-    };
-    loadAppointments();
-  }, [customerId, tab, refreshKey]);
-
-  const handleCancel = async (id: string) => {
-    if (!confirm(t('appointments.cancelConfirm'))) return;
-    await supabase.from('appointments').update({ status: 'CANCELLED' }).eq('id', id);
-    // Sync cancellation to Google Calendar
-    supabase.functions.invoke('gcal-sync-appointments', {
-      body: { action: 'delete', appointment_id: id },
-    }).catch((err) => console.warn('GCal delete sync failed (non-blocking):', err));
-    setAppointments((prev) => prev.filter((a) => a.id !== id));
-  };
-
-  const formatDate = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-  };
-  const formatTime = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  };
+  const [tab, setTab] = useState<AppointmentTab>('upcoming');
+  const active = tab === 'upcoming' ? upcoming : history;
+  const fmt: Fmt = { locale, timeZone: timezone };
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -136,119 +282,65 @@ const Appointments = () => {
         <h1 className="font-display text-3xl text-foreground">{t('appointments.title')}</h1>
       </div>
 
-      <div className="flex gap-1 mx-6 mb-4 rounded-lg bg-muted p-1">
-        {(['upcoming', 'history'] as const).map((t2) => (
-          <button key={t2} onClick={() => setTab(t2)} className={`flex-1 rounded-md py-2 text-xs font-medium transition-all ${tab === t2 ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`}>
-            {t(`appointments.${t2}`)}
-          </button>
-        ))}
+      {/* Pestañas */}
+      <div
+        role="tablist"
+        aria-label={t('appointments.title')}
+        className="mx-6 mb-4 flex gap-1 rounded-lg bg-muted p-1"
+      >
+        {TABS.map((tabKey) => {
+          const selected = tab === tabKey;
+          const count = tabKey === 'upcoming' ? upcoming.length : history.length;
+          return (
+            <button
+              key={tabKey}
+              type="button"
+              role="tab"
+              id={`tab-${tabKey}`}
+              aria-selected={selected}
+              aria-controls={`panel-${tabKey}`}
+              onClick={() => setTab(tabKey)}
+              className={`flex-1 rounded-md py-2 text-xs font-medium transition-all ${
+                selected ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'
+              }`}
+            >
+              {t(tabKey === 'upcoming' ? 'appointments.upcoming' : 'appointments.history')}
+              {!isLoading && !isError && count > 0 && (
+                <span className="ml-1.5 text-gold">{count}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="px-6 space-y-3">
-        {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />)}
-          </div>
-        ) : appointments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <CalendarDays className="mb-4 h-8 w-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mb-4">
-              {tab === 'upcoming' ? t('appointments.noUpcoming') : t('appointments.noHistory')}
-            </p>
-            {tab === 'upcoming' && (
-              <Button onClick={() => navigate('/book')} className="gradient-gold text-primary-foreground shadow-gold">
-                {t('appointments.bookFirst')}
-              </Button>
-            )}
-          </div>
+      {/* Panel de la pestaña activa */}
+      <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="px-6">
+        {isLoading ? (
+          <LoadingSkeleton />
+        ) : accessBlocked ? (
+          // El servidor rechazó la lectura self: aviso honesto, NUNCA acceso amplio.
+          <BlockedNotice onRetry={refetch} onBook={() => navigate('/book')} />
+        ) : isError ? (
+          <ErrorState onRetry={refetch} />
+        ) : active.length === 0 ? (
+          <EmptyState tab={tab} onBook={() => navigate('/book')} />
         ) : (
-          appointments.map((apt, i) => (
-            <motion.div key={apt.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{formatDate(apt.start_at)}</p>
-                  <p className="text-xs text-muted-foreground">{formatTime(apt.start_at)} — {formatTime(apt.end_at)}</p>
-                </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[apt.status] || ''}`}>
-                  {t(`appointments.status.${apt.status}`)}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
-                <MapPin size={12} /> {apt.location_name}
-              </div>
-
-              {/* Services */}
-              {apt.services_list.length > 0 && (
-                <div className="mb-2 space-y-1">
-                  {apt.services_list.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground">{s.service_name_snapshot || 'Servicio'}</span>
-                      <div className="flex items-center gap-2">
-                        {s.unit_price_snapshot && (
-                          <span className="text-muted-foreground">{Number(s.unit_price_snapshot).toFixed(2)} €</span>
-                        )}
-                        {s.points_snapshot && (
-                          <span className="text-gold">{s.points_snapshot} pts</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Totals */}
-              <div className="flex items-center gap-4 text-xs border-t border-border pt-2 mb-2">
-                {apt.estimated_total_price && (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Euro size={10} /> {Number(apt.estimated_total_price).toFixed(2)} €
-                  </span>
-                )}
-                {apt.estimated_total_duration && (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Clock size={10} /> {apt.estimated_total_duration} min
-                  </span>
-                )}
-                {apt.estimated_pending_points && !apt.points_awarded && ['CONFIRMED', 'RESCHEDULED'].includes(apt.status) && (
-                  <span className="flex items-center gap-1 text-gold">
-                    <Star size={10} /> {apt.estimated_pending_points} pts {t('appointments.pending')}
-                  </span>
-                )}
-                {apt.points_awarded && apt.final_total_points && (
-                  <span className="flex items-center gap-1 text-gold">
-                    <Star size={10} /> +{apt.final_total_points} pts
-                  </span>
-                )}
-              </div>
-
-              {tab === 'upcoming' && (
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => handleCancel(apt.id)} className="text-xs">
-                    {t('appointments.cancel')}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setRescheduleApt(apt)} className="text-xs text-gold border-gold/40 hover:bg-gold/10">
-                    {t('appointments.reschedule')}
-                  </Button>
-                  <Button size="sm" variant="ghost" className="text-xs text-muted-foreground" onClick={() => {}}>
-                    <MessageCircle size={14} /> {t('appointments.whatsappManage')}
-                  </Button>
-                </div>
-              )}
-            </motion.div>
-          ))
+          <ul className="space-y-3">
+            {active.map((appointment, i) => (
+              <AppointmentCard
+                key={appointment.id}
+                appointment={appointment}
+                fmt={fmt}
+                catalogPending={catalogPending}
+                index={i}
+                reduceMotion={reduceMotion}
+              />
+            ))}
+          </ul>
         )}
       </div>
 
       <BottomNav />
-
-      {rescheduleApt && (
-        <RescheduleDialog
-          appointment={rescheduleApt}
-          open={!!rescheduleApt}
-          onClose={() => setRescheduleApt(null)}
-          onRescheduled={() => setRefreshKey((k) => k + 1)}
-        />
-      )}
     </div>
   );
 };

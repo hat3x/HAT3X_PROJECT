@@ -1,1001 +1,682 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, Check, ChevronRight, CalendarDays, StickyNote, User, Scissors, Star, Zap } from 'lucide-react';
-import { useI18n } from '@/lib/i18n';
-import { useAuth } from '@/lib/auth';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { motion, AnimatePresence } from 'framer-motion';
+// Asistente de reserva del cliente sobre la API PÚBLICA de Salón OS.
+//
+// Flujo (una decisión por paso): servicio → profesional (concreto o «cualquiera») →
+// fecha → hueco → confirmar. Todo se apoya en el cliente HTTP tipado de la API pública
+// (@/lib/salon-os-api vía @/config/salon-os):
+//   · GET  bootstrap      → catálogo (servicios, profesionales, quién presta qué, TZ).
+//   · GET  availability   → huecos reservables de (servicio, fecha, profesional).
+//   · POST /              → crea la cita (estado pending) y devuelve su confirmación.
+//
+// ── El servidor manda; el cliente NO recalcula disponibilidad ───────────────────
+// Los `PublicSlot` llegan ya calculados por el servidor (horarios, duración del modelo
+// de 3 fases, solapes, lead-time y zona horaria). Aquí se CONSUMEN tal cual: sólo se
+// ordenan/deduplican para pintarlos (prepareSlots) y se formatea la hora en la zona del
+// salón. No hay ninguna aritmética de huecos en el cliente (a diferencia del legacy).
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CalendarDays,
+  Check,
+  Clock,
+  RefreshCw,
+  Scissors,
+  StickyNote,
+  User,
+  Users,
+} from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
+import { useI18n } from '@/lib/i18n';
+import { useCustomer } from '@/hooks/useCustomer';
+import { useSalonOsApi } from '@/config/salon-os';
+import type {
+  BookingConfirmation,
+  ProfessionalSelection,
+  PublicService,
+  PublicSlot,
+} from '@/lib/salon-os-api';
+import {
+  buildBookingCustomer,
+  classifyBookingError,
+  customerContactPrefill,
+  formatLocalDate,
+  isCustomerComplete,
+  isSlotTakenError,
+  prepareSlots,
+  professionalName,
+  professionalsForService,
+} from '@/lib/booking';
+import {
+  formatDuration,
+  formatLongDate,
+  formatPrice,
+  formatTime,
+  localeToBcp47,
+} from '@/lib/appointments';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Calendar } from '@/components/ui/calendar';
 import BottomNav from '@/components/BottomNav';
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction } from '@/components/ui/alert-dialog';
-import type { Tables } from '@/integrations/supabase/types';
 
-type Location = Tables<'locations'>;
-type Service = Tables<'services'>;
-type StaffMember = Tables<'staff_members'>;
-type ServiceCategory = Tables<'service_categories'>;
+const STEPS = ['service', 'professional', 'date', 'slot', 'confirm'] as const;
+type Step = (typeof STEPS)[number];
 
-type SalonSection = 'CABALLEROS' | 'SENORAS' | 'ESTETICA';
+/** Selección «cualquier profesional» (el servidor lo resuelve). */
+const ANY: ProfessionalSelection = 'any';
 
-// New order: location → section → services → staff → datetime → confirm
-const STEPS = ['location', 'section', 'services', 'staff', 'datetime', 'confirm'] as const;
-type Step = typeof STEPS[number];
-
-const FIRST_AVAILABLE_ID = '__first_available__';
-
-function getMadridOffset(dateStr: string): string {
-  const d = new Date(dateStr + 'T12:00:00Z');
-  const month = d.getUTCMonth();
-  if (month > 2 && month < 9) return '+02:00';
-  if (month < 2 || month > 9) return '+01:00';
-  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), month + 1, 0));
-  const lastSunday = lastDay.getUTCDate() - lastDay.getUTCDay();
-  if (month === 2) return d.getUTCDate() >= lastSunday ? '+02:00' : '+01:00';
-  return d.getUTCDate() < lastSunday ? '+02:00' : '+01:00';
+/** Contexto de formateo: locale de la app + zona horaria del salón (del catálogo). */
+interface Fmt {
+  locale: string;
+  timeZone: string | null;
 }
 
-const TIME_SLOTS = [
-'09:00', '09:10', '09:20', '09:30', '09:40', '09:50',
-'10:00', '10:10', '10:20', '10:30', '10:40', '10:50',
-'11:00', '11:10', '11:20', '11:30', '11:40', '11:50',
-'12:00', '12:10', '12:20', '12:30', '12:40', '12:50',
-'13:00', '13:10', '13:20', '13:30', '13:40', '13:50',
-'14:00', '14:10', '14:20', '14:30', '14:40', '14:50',
-'15:00', '15:10', '15:20', '15:30', '15:40', '15:50',
-'16:00', '16:10', '16:20', '16:30', '16:40', '16:50',
-'17:00', '17:10', '17:20', '17:30', '17:40', '17:50',
-'18:00', '18:10', '18:20', '18:30', '18:40', '18:50',
-'19:00', '19:10', '19:20', '19:30', '19:40', '19:50',
-'20:00', '20:10', '20:20', '20:30', '20:40', '20:50'];
+// ── Estados compartidos (carga / error) ──────────────────────────────────────────
 
+const CenteredSpinner = ({ label }: { label: string }) => (
+  <div role="status" aria-live="polite" className="flex flex-col items-center justify-center py-16">
+    <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <p className="text-sm text-muted-foreground">{label}</p>
+  </div>
+);
 
-const getClosingTime = (location: Location | null, date: Date | undefined): string | null => {
-  if (!location || !date) return null;
-  try {
-    const hours = location.hours_json as Record<string, any>;
-    if (!hours) return null;
-    const dayIndex = date.getDay();
-    const dayKeyMap: Record<number, string> = {
-      0: 'sunday', 1: 'weekdays', 2: 'weekdays', 3: 'wednesday',
-      4: 'weekdays', 5: 'weekdays', 6: 'saturday'
-    };
-    const dayKey = dayKeyMap[dayIndex];
-    const dayHours = hours[dayKey];
-    if (!dayHours || dayHours === null) return null;
-    if (typeof dayHours === 'object' && dayHours.close) return dayHours.close;
-    return null;
-  } catch {
-    return null;
-  }
+const ErrorState = ({ body, onRetry }: { body: string; onRetry: () => void }) => {
+  const { t } = useI18n();
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+        <AlertTriangle className="h-7 w-7 text-destructive" aria-hidden="true" />
+      </div>
+      <p className="mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">{body}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-lg gradient-gold px-6 text-sm font-semibold text-primary-foreground shadow-gold transition-opacity hover:opacity-90"
+      >
+        <RefreshCw className="h-4 w-4" aria-hidden="true" />
+        {t('general.retry')}
+      </button>
+    </div>
+  );
 };
 
-const formatLocalDate = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+// ── Tarjeta de opción seleccionable (servicio / profesional) ─────────────────────
 
-const calcPoints = (svc: Service) => svc.fixed_points || (svc.base_price ? Math.ceil(svc.base_price / 2) : 0);
+const OptionCard = ({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={selected}
+    className={`w-full rounded-xl border p-4 text-left transition-all ${
+      selected ? 'border-gold bg-gold/5' : 'border-border bg-card hover:border-gold/20'
+    }`}
+  >
+    {children}
+  </button>
+);
+
+// ── Pantalla ─────────────────────────────────────────────────────────────────────
 
 const BookAppointment = () => {
   const navigate = useNavigate();
-  const { t } = useI18n();
-  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { t, locale } = useI18n();
+  const reduceMotion = useReducedMotion() ?? false;
+  const queryClient = useQueryClient();
 
-  const [step, setStep] = useState<Step>('location');
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
-  const [selectedSection, setSelectedSection] = useState<SalonSection | null>(null);
-  const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
-  const [isFirstAvailable, setIsFirstAvailable] = useState(false);
-  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [selectedHour, setSelectedHour] = useState<string | null>(null);
-  const [selectedMinute, setSelectedMinute] = useState<string | null>(null);
+  // Cliente de la API pública ligado al salón actual (base de env + slug de runtime).
+  const api = useSalonOsApi();
+  const slug = api.slug;
+  const { customer } = useCustomer();
+
+  const [step, setStep] = useState<Step>('service');
+  const [service, setService] = useState<PublicService | null>(null);
+  const [professional, setProfessional] = useState<ProfessionalSelection | null>(null);
+  const [date, setDate] = useState<Date | undefined>(undefined);
+  const [slot, setSlot] = useState<PublicSlot | null>(null);
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [busySlots, setBusySlots] = useState<{start: string;end: string;}[]>([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [staffSchedules, setStaffSchedules] = useState<{entry_type: string;start_time: string | null;end_time: string | null;}[]>([]);
-  const [monthSchedules, setMonthSchedules] = useState<Record<string, string>>({});
-  const [hasActiveAppointment, setHasActiveAppointment] = useState(false);
-  const [checkingAppointment, setCheckingAppointment] = useState(true);
-
-  // For "first available" mode: track per-staff availability
-  const [allStaffBusySlots, setAllStaffBusySlots] = useState<Record<string, {start: string;end: string;}[]>>({});
-  const [allStaffSchedules, setAllStaffSchedules] = useState<Record<string, {entry_type: string;start_time: string | null;end_time: string | null;}[]>>({});
-  const [allStaffMonthSchedules, setAllStaffMonthSchedules] = useState<Record<string, Record<string, string>>>({});
-  // The staff member auto-assigned when "first available" finds a slot
-  const [autoAssignedStaff, setAutoAssignedStaff] = useState<StaffMember | null>(null);
+  const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
 
   const stepIndex = STEPS.indexOf(step);
 
-  // Check if user already has an active appointment
-  useEffect(() => {
-    if (!user) return;
-    const checkExisting = async () => {
-      setCheckingAppointment(true);
-      const { data: customer } = await supabase.
-      from('customers').
-      select('id').
-      eq('user_id', user.id).
-      single();
-      if (!customer) {setCheckingAppointment(false);return;}
-      const { data } = await supabase.
-      from('appointments').
-      select('id').
-      eq('customer_id', customer.id).
-      in('status', ['CONFIRMED', 'RESCHEDULED']).
-      limit(1);
-      setHasActiveAppointment((data?.length || 0) > 0);
-      setCheckingAppointment(false);
-    };
-    checkExisting();
-  }, [user]);
-
-  // Computed totals
-  const totals = useMemo(() => {
-    const duration = selectedServices.reduce((sum, s) => sum + (s.duration_min || 0), 0);
-    const points = selectedServices.reduce((sum, s) => sum + calcPoints(s), 0);
-    const phasedSvcs = selectedServices.filter((s) => s.application_min && s.exposure_min);
-    const hasPhases = phasedSvcs.length > 0;
-    if (hasPhases) {
-      const totalApp = phasedSvcs.reduce((sum, s) => sum + (s.application_min || 0), 0);
-      const maxExposure = Math.max(...phasedSvcs.map((s) => s.exposure_min || 0));
-      const totalPost = selectedServices.reduce((sum, s) => {
-        if (s.post_exposure_min) return sum + s.post_exposure_min;
-        if (!s.application_min) return sum + (s.duration_min || 0);
-        return sum;
-      }, 0);
-      const nonPhasedDur = selectedServices.
-      filter((s) => !s.application_min || !s.exposure_min).
-      filter((s) => !s.post_exposure_min).
-      reduce((sum, s) => sum + (s.duration_min || 0), 0);
-      return { duration, points, hasPhases: true, applicationMin: totalApp + nonPhasedDur, exposureMin: maxExposure, postMin: totalPost };
+  // Traduce el error de cualquier paso (bootstrap / disponibilidad / POST) a un mensaje
+  // LEGIBLE según su causa: hueco ocupado, datos inválidos, salón no disponible, red
+  // caída o servidor. Si no encaja en ningún caso conocido, usa el `fallbackKey` del
+  // paso. La clasificación es pura y testeada (classifyBookingError, en @/lib/booking).
+  const errorMessage = (error: unknown, fallbackKey: string): string => {
+    switch (classifyBookingError(error)) {
+      case 'slotTaken':
+        return t('book.errorSlotTaken');
+      case 'invalidData':
+        return t('book.errorInvalidData');
+      case 'salonUnavailable':
+        return t('book.errorSalonUnavailable');
+      case 'network':
+        return t('book.errorNetwork');
+      case 'server':
+        return t('book.errorServer');
+      default:
+        return t(fallbackKey);
     }
-    return { duration, points, hasPhases: false, applicationMin: 0, exposureMin: 0, postMin: 0 };
-  }, [selectedServices]);
-
-  useEffect(() => {
-    supabase.from('locations').select('*').then(({ data }) => {if (data) setLocations(data);});
-  }, []);
-
-  // Load staff & services when section is selected (needed for services step which now comes before staff)
-  useEffect(() => {
-    if (selectedLocation && selectedSection) {
-      supabase.
-      from('staff_members').
-      select('*').
-      eq('location_id', selectedLocation.id).
-      eq('section', selectedSection).
-      eq('active', true).
-      then(({ data }) => {if (data) setStaffMembers(data);});
-    }
-  }, [selectedLocation, selectedSection]);
-
-  useEffect(() => {
-    if (selectedLocation && selectedSection) {
-      Promise.all([
-      supabase.
-      from('services').
-      select('*').
-      eq('active', true).
-      eq('section', selectedSection).
-      or(`location_id.eq.${selectedLocation.id},location_id.is.null`),
-      supabase.from('service_categories').select('*').order('sort_order')]
-      ).then(([svcRes, catRes]) => {
-        if (svcRes.data) setServices(svcRes.data);
-        if (catRes.data) setCategories(catRes.data);
-      });
-    }
-  }, [selectedLocation, selectedSection]);
-
-  // Fetch monthly schedules for calendar (specific staff or all staff in first-available mode)
-  useEffect(() => {
-    if (isFirstAvailable && staffMembers.length > 0) {
-      // Fetch schedules for ALL staff in the section
-      const now = new Date();
-      const startDate = formatLocalDate(now);
-      const endDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 2, 0));
-      const staffIds = staffMembers.map((s) => s.id);
-      supabase.
-      from('employee_schedules').
-      select('staff_member_id, date, entry_type').
-      in('staff_member_id', staffIds).
-      gte('date', startDate).
-      lte('date', endDate).
-      then(({ data }) => {
-        const perStaff: Record<string, Record<string, string>> = {};
-        // Combined: a date is available if ANY staff has availability
-        const combined: Record<string, string> = {};
-        data?.forEach((e) => {
-          if (!perStaff[e.staff_member_id]) perStaff[e.staff_member_id] = {};
-          perStaff[e.staff_member_id][e.date] = e.entry_type;
-          if (e.entry_type === 'availability') combined[e.date] = 'availability';
-        });
-        setAllStaffMonthSchedules(perStaff);
-        setMonthSchedules(combined);
-      });
-      return;
-    }
-
-    if (!selectedStaff) {setMonthSchedules({});return;}
-    const now = new Date();
-    const startDate = formatLocalDate(now);
-    const endDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 2, 0));
-    supabase.
-    from('employee_schedules').
-    select('date, entry_type').
-    eq('staff_member_id', selectedStaff.id).
-    gte('date', startDate).
-    lte('date', endDate).
-    then(({ data }) => {
-      const map: Record<string, string> = {};
-      data?.forEach((e) => {map[e.date] = e.entry_type;});
-      setMonthSchedules(map);
-    });
-  }, [selectedStaff, isFirstAvailable, staffMembers]);
-
-  // Fetch staff schedule(s) for selected date
-  useEffect(() => {
-    if (!selectedDate) {setStaffSchedules([]);setAllStaffSchedules({});return;}
-    const dateStr = formatLocalDate(selectedDate);
-
-    if (isFirstAvailable && staffMembers.length > 0) {
-      const staffIds = staffMembers.map((s) => s.id);
-      supabase.
-      from('employee_schedules').
-      select('staff_member_id, entry_type, start_time, end_time').
-      in('staff_member_id', staffIds).
-      eq('date', dateStr).
-      then(({ data }) => {
-        const perStaff: Record<string, {entry_type: string;start_time: string | null;end_time: string | null;}[]> = {};
-        data?.forEach((e) => {
-          if (!perStaff[e.staff_member_id]) perStaff[e.staff_member_id] = [];
-          perStaff[e.staff_member_id].push({ entry_type: e.entry_type, start_time: e.start_time, end_time: e.end_time });
-        });
-        setAllStaffSchedules(perStaff);
-      });
-      return;
-    }
-
-    if (!selectedStaff) {setStaffSchedules([]);return;}
-    supabase.
-    from('employee_schedules').
-    select('entry_type, start_time, end_time').
-    eq('staff_member_id', selectedStaff.id).
-    eq('date', dateStr).
-    then(({ data }) => setStaffSchedules(data || []));
-  }, [selectedDate, selectedStaff, isFirstAvailable, staffMembers]);
-
-  // Fetch busy slots when date or staff changes
-  useEffect(() => {
-    if (!selectedDate) {setBusySlots([]);setAllStaffBusySlots({});return;}
-
-    if (isFirstAvailable && staffMembers.length > 0) {
-      const dateStr = formatLocalDate(selectedDate);
-      setLoadingSlots(true);
-      Promise.all(
-        staffMembers.map(async (member) => {
-          const { data, error } = await supabase.functions.invoke('gcal-sync-appointments', {
-            body: { action: 'check-availability', staff_member_id: member.id, date: dateStr }
-          });
-          return { staffId: member.id, slots: error ? [] : data?.busy_slots || [] };
-        })
-      ).then((results) => {
-        const map: Record<string, {start: string;end: string;}[]> = {};
-        results.forEach((r) => {map[r.staffId] = r.slots;});
-        setAllStaffBusySlots(map);
-        setLoadingSlots(false);
-      });
-      return;
-    }
-
-    if (!selectedStaff) {setBusySlots([]);return;}
-    const fetchBusySlots = async () => {
-      setLoadingSlots(true);
-      try {
-        const dateStr = formatLocalDate(selectedDate);
-        const { data, error } = await supabase.functions.invoke('gcal-sync-appointments', {
-          body: { action: 'check-availability', staff_member_id: selectedStaff.id, date: dateStr }
-        });
-        if (error) {setBusySlots([]);} else {setBusySlots(data?.busy_slots || []);}
-      } catch (err) {
-        console.error('Error fetching busy slots:', err);
-      } finally {
-        setLoadingSlots(false);
-      }
-    };
-    fetchBusySlots();
-  }, [selectedDate, selectedStaff, isFirstAvailable, staffMembers]);
-
-  const closingTime = useMemo(() => getClosingTime(selectedLocation, selectedDate), [selectedLocation, selectedDate]);
-
-  // Check if a time slot is available for a specific staff member
-  const isSlotAvailableForStaff = (slot: string, staffId: string, schedules: {entry_type: string;start_time: string | null;end_time: string | null;}[], busy: {start: string;end: string;}[]): boolean => {
-    if (!selectedDate) return true;
-    const availBlocks = schedules.filter((s) => s.entry_type === 'availability');
-    if (availBlocks.length === 0) return false;
-
-    const [sh, sm] = slot.split(':').map(Number);
-    const slotMinutes = sh * 60 + sm;
-    const totalDur = totals.duration || 30;
-    const endMinutes = slotMinutes + totalDur;
-
-    const fitsAnyBlock = availBlocks.some((block) => {
-      if (!block.start_time || !block.end_time) return false;
-      const [bsh, bsm] = block.start_time.substring(0, 5).split(':').map(Number);
-      const [beh, bem] = block.end_time.substring(0, 5).split(':').map(Number);
-      const blockStart = bsh * 60 + bsm;
-      const blockEnd = beh * 60 + bem;
-      return slotMinutes >= blockStart && endMinutes <= blockEnd;
-    });
-    if (!fitsAnyBlock) return false;
-
-    const dateStr = formatLocalDate(selectedDate);
-    const madridOffset = getMadridOffset(dateStr);
-    const slotStart = new Date(`${dateStr}T${slot}:00${madridOffset}`);
-    const fullEnd = new Date(slotStart.getTime() + (totals.duration || 30) * 60000);
-
-    if (closingTime) {
-      const closingDate = new Date(`${dateStr}T${closingTime}:00${madridOffset}`);
-      if (fullEnd > closingDate || slotStart >= closingDate) return false;
-    }
-
-    if (busy.length === 0) return true;
-
-    const newWindows: {start: Date;end: Date;}[] = [];
-    if (totals.hasPhases) {
-      const appEnd = new Date(slotStart.getTime() + totals.applicationMin * 60000);
-      newWindows.push({ start: slotStart, end: appEnd });
-      if (totals.postMin > 0) {
-        const postStart = new Date(appEnd.getTime() + totals.exposureMin * 60000);
-        const postEnd = new Date(postStart.getTime() + totals.postMin * 60000);
-        newWindows.push({ start: postStart, end: postEnd });
-      }
-    } else {
-      newWindows.push({ start: slotStart, end: fullEnd });
-    }
-
-    return !newWindows.some((win) =>
-    busy.some((b) => {
-      const busyStart = new Date(b.start);
-      const busyEnd = new Date(b.end);
-      return win.start < busyEnd && win.end > busyStart;
-    })
-    );
   };
 
-  // Standard slot availability check (for a specific selected staff)
-  const isSlotAvailable = (slot: string): boolean => {
-    if (!selectedStaff) return false;
-    return isSlotAvailableForStaff(slot, selectedStaff.id, staffSchedules, busySlots);
-  };
+  // 1) Catálogo público (servicios + profesionales + TZ). Cacheado junto a "Mis Citas".
+  const bootstrapQuery = useQuery({
+    queryKey: ['salon-bootstrap', slug],
+    queryFn: ({ signal }) => api.getBootstrap(signal),
+    staleTime: 1000 * 60 * 30,
+    gcTime: 1000 * 60 * 60,
+    retry: 1,
+  });
+  const bootstrap = bootstrapQuery.data ?? null;
+  const fmt: Fmt = { locale, timeZone: bootstrap?.salon.timezone ?? null };
 
-  // For first-available mode: check if a slot is available for ANY staff, return the first staff id that can do it
-  const findFirstAvailableStaffForSlot = (slot: string): StaffMember | null => {
-    for (const member of staffMembers) {
-      const schedules = allStaffSchedules[member.id] || [];
-      const busy = allStaffBusySlots[member.id] || [];
-      if (isSlotAvailableForStaff(slot, member.id, schedules, busy)) {
-        return member;
-      }
-    }
-    return null;
-  };
+  const dateStr = date ? formatLocalDate(date) : null;
 
-  const isSlotAvailableFirstAvailable = (slot: string): boolean => {
-    return findFirstAvailableStaffForSlot(slot) !== null;
-  };
+  // 2) Huecos reservables del servidor para (servicio, fecha, profesional). Se pintan
+  //    tal cual: prepareSlots sólo ordena y deduplica por hora (presentación).
+  const availabilityQuery = useQuery({
+    queryKey: ['availability', slug, service?.id, dateStr, professional],
+    queryFn: ({ signal }) =>
+      api.getAvailability(
+        { serviceId: service!.id, date: dateStr!, professionalId: professional! },
+        signal,
+      ),
+    enabled: !!service && !!dateStr && professional !== null,
+    staleTime: 1000 * 30,
+    retry: 1,
+  });
+  const slots = useMemo(() => prepareSlots(availabilityQuery.data ?? []), [availabilityQuery.data]);
 
-  // Group services by category
-  const servicesByCategory = useMemo(() => {
-    const map = new Map<string, {category: ServiceCategory;services: Service[];}>();
-    categories.forEach((cat) => {
-      const catServices = services.filter((s) => s.category_id === cat.id);
-      if (catServices.length > 0) map.set(cat.id, { category: cat, services: catServices });
-    });
-    const uncategorized = services.filter((s) => !s.category_id);
-    if (uncategorized.length > 0) {
-      map.set('uncategorized', { category: { id: 'uncategorized', name: t('book.otherCategory'), sort_order: 999, created_at: '' }, services: uncategorized });
-    }
-    return Array.from(map.values());
-  }, [services, categories]);
-
-  const handleConfirm = async () => {
-    if (!selectedLocation || !selectedDate || !selectedTime || !user) return;
-
-    const finalStaff = isFirstAvailable ? autoAssignedStaff : selectedStaff;
-    if (!finalStaff) return;
-
-    setLoading(true);
-    try {
-      const { data: customer } = await supabase.
-      from('customers').
-      select('id').
-      eq('user_id', user.id).
-      single();
-      if (!customer) throw new Error('Customer not found');
-
-      const dateStr = formatLocalDate(selectedDate);
-      const madridOffset = getMadridOffset(dateStr);
-      const startAt = new Date(`${dateStr}T${selectedTime}:00${madridOffset}`);
-      const bookingDuration = totals.duration > 0 ? totals.duration : 30;
-      const endAt = new Date(startAt.getTime() + bookingDuration * 60000);
-
-      // Final availability re-check
-      const { data: availabilityData, error: availabilityError } = await supabase.functions.invoke('gcal-sync-appointments', {
-        body: { action: 'check-availability', staff_member_id: finalStaff.id, date: dateStr }
-      });
-      if (availabilityError) throw new Error(t('book.errorAvailability'));
-
-      const newWindows: {start: Date;end: Date;}[] = [];
-      if (totals.hasPhases) {
-        const appEnd = new Date(startAt.getTime() + totals.applicationMin * 60000);
-        newWindows.push({ start: startAt, end: appEnd });
-        if (totals.postMin > 0) {
-          const postStart = new Date(appEnd.getTime() + totals.exposureMin * 60000);
-          const postEnd = new Date(postStart.getTime() + totals.postMin * 60000);
-          newWindows.push({ start: postStart, end: postEnd });
-        }
-      } else {
-        newWindows.push({ start: startAt, end: endAt });
-      }
-
-      const hasOverlap = newWindows.some((win) =>
-      (availabilityData?.busy_slots || []).some((busy: {start: string;end: string;}) => {
-        const busyStart = new Date(busy.start);
-        const busyEnd = new Date(busy.end);
-        return win.start < busyEnd && win.end > busyStart;
-      })
-      );
-
-      if (hasOverlap) {
+  // 3) Crear la reserva (POST). El cuerpo lleva EXACTAMENTE el contrato del servidor y
+  //    reserva con el profesional CONCRETO del hueco elegido (nunca "any" en el POST):
+  //    así se respeta el hueco que el servidor mostró, sin re-resolver «cualquiera».
+  const createBooking = useMutation({
+    mutationFn: () =>
+      api.createBooking({
+        serviceId: service!.id,
+        professionalId: slot!.professionalId,
+        startsAt: slot!.startsAt,
+        customer: buildBookingCustomer({
+          fullName,
+          phone,
+          email: customer?.email ?? undefined,
+          notes,
+        }),
+      }),
+    onSuccess: (conf) => {
+      setConfirmation(conf);
+      // La nueva cita (pending) debe aparecer al ir a "Mis Citas".
+      void queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    },
+    onError: (err) => {
+      if (isSlotTakenError(err)) {
+        // El hueco se ocupó entre ver y reservar: vuelve a huecos y recalcula.
         toast.error(t('book.errorSlotTaken'));
-        setSelectedTime(null);
-        return;
+        setSlot(null);
+        setStep('slot');
+        void availabilityQuery.refetch();
+      } else {
+        // Resto de casos (datos inválidos, salón no disponible, red caída, servidor):
+        // se queda en «confirmar» con un aviso legible y deja reintentar sin perder datos.
+        toast.error(errorMessage(err, 'book.errorBooking'));
       }
+    },
+  });
 
-      const { data: appointment, error } = await supabase.
-      from('appointments').
-      insert({
-        customer_id: customer.id,
-        location_id: selectedLocation.id,
-        staff_member_id: finalStaff.id,
-        start_at: startAt.toISOString(),
-        end_at: endAt.toISOString(),
-        customer_notes: notes || null,
-        estimated_total_price: null,
-        estimated_total_duration: bookingDuration,
-        estimated_pending_points: totals.points || null
-      }).
-      select().
-      single();
+  // Prellenado de contacto desde la ficha SELF del cliente (una vez, sin pisar lo
+  // tecleado). El teléfono sale NORMALIZADO (phone_e164) para que la reserva reutilice la
+  // MISMA ficha que el servidor ya enlazó por teléfono. Ver customerContactPrefill.
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || !customer) return;
+    prefilled.current = true;
+    const { fullName: prefillName, phone: prefillPhone } = customerContactPrefill(customer);
+    setFullName(prefillName);
+    setPhone(prefillPhone);
+  }, [customer]);
 
-      if (error) throw error;
-
-      if (appointment && selectedServices.length > 0) {
-        await supabase.from('appointment_services').insert(
-          selectedServices.map((s) => ({
-            appointment_id: appointment.id,
-            service_id: s.id,
-            service_name_snapshot: s.name,
-            price_type_snapshot: s.price_type,
-            unit_price_snapshot: s.base_price,
-            duration_minutes_snapshot: s.duration_min,
-            points_snapshot: calcPoints(s),
-            quantity: 1,
-            is_completed: false
-          }))
-        );
-      }
-
-      if (appointment?.staff_member_id) {
-        supabase.functions.invoke('gcal-sync-appointments', {
-          body: { action: 'create', appointment_id: appointment.id }
-        }).catch((err) => console.warn('GCal sync failed (non-blocking):', err));
-      }
-
-      setSuccess(true);
-    } catch (err) {
-      console.error('Booking error:', err);
-    } finally {
-      setLoading(false);
+  // Preselección de servicio vía ?serviceId= (enlace desde el catálogo). Una sola vez.
+  const preselected = useRef(false);
+  useEffect(() => {
+    if (preselected.current || !bootstrap) return;
+    const id = searchParams.get('serviceId');
+    if (!id) return;
+    const svc = bootstrap.services.find((s) => s.id === id);
+    if (svc) {
+      preselected.current = true;
+      setService(svc);
+      setStep('professional');
     }
-  };
+  }, [bootstrap, searchParams]);
 
-  const canNext = () => {
-    switch (step) {
-      case 'location':return !!selectedLocation;
-      case 'section':return !!selectedSection;
-      case 'services':return selectedServices.length > 0;
-      case 'staff':return !!selectedStaff || isFirstAvailable;
-      case 'datetime':return !!selectedDate && !!selectedTime;
-      case 'confirm':return true;
+  // ── Transiciones (cada selección resetea lo aguas abajo) ───────────────────────
+  const chooseService = (svc: PublicService) => {
+    setService(svc);
+    setProfessional(null);
+    setDate(undefined);
+    setSlot(null);
+    setStep('professional');
+  };
+  const chooseProfessional = (sel: ProfessionalSelection) => {
+    setProfessional(sel);
+    setDate(undefined);
+    setSlot(null);
+    setStep('date');
+  };
+  const chooseDate = (d: Date | undefined) => {
+    setDate(d);
+    setSlot(null);
+    if (d) setStep('slot');
+  };
+  const chooseSlot = (s: PublicSlot) => {
+    setSlot(s);
+    setStep('confirm');
+  };
+  const goBack = () => {
+    if (stepIndex <= 0) {
+      navigate(-1);
+      return;
     }
+    setStep(STEPS[stepIndex - 1]);
   };
 
-  const goNext = () => {const i = STEPS.indexOf(step);if (i < STEPS.length - 1) setStep(STEPS[i + 1]);};
-  const goPrev = () => {
-    const i = STEPS.indexOf(step);
-    if (i > 0) {
-      if (step === 'services') {setSelectedServices([]);}
-      if (step === 'staff') {setSelectedStaff(null);setIsFirstAvailable(false);setAutoAssignedStaff(null);}
-      if (step === 'section') {setSelectedSection(null);setSelectedStaff(null);setIsFirstAvailable(false);setSelectedServices([]);}
-      if (step === 'datetime') {setSelectedDate(undefined);setSelectedTime(null);setSelectedHour(null);setSelectedMinute(null);setAutoAssignedStaff(null);}
-      setStep(STEPS[i - 1]);
-    }
-  };
-
-  const toggleService = (service: Service) => {
-    setSelectedServices((prev) =>
-    prev.find((s) => s.id === service.id) ?
-    prev.filter((s) => s.id !== service.id) :
-    [...prev, service]
-    );
-  };
-
-  const handleSectionSelect = (section: SalonSection) => {
-    setSelectedSection(section);
-    setSelectedStaff(null);
-    setIsFirstAvailable(false);
-    setSelectedServices([]);
-  };
-
-  const handleStaffSelect = (member: StaffMember | null, firstAvailable: boolean) => {
-    setSelectedStaff(member);
-    setIsFirstAvailable(firstAvailable);
-    setAutoAssignedStaff(null);
-    setSelectedDate(undefined);
-    setSelectedTime(null);
-    setSelectedHour(null);
-    setSelectedMinute(null);
-  };
-
-  // When user selects a time in first-available mode, auto-assign the staff
-  const handleFirstAvailableTimeSelect = (time: string) => {
-    const staff = findFirstAvailableStaffForSlot(time);
-    setAutoAssignedStaff(staff);
-    setSelectedTime(time);
-  };
-
-  const finalStaffForDisplay = isFirstAvailable ? autoAssignedStaff : selectedStaff;
-
-  if (success) {
+  // ── Pantalla de éxito ──────────────────────────────────────────────────────────
+  if (confirmation) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 text-center pb-24">
-        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="mb-6 flex h-20 w-20 items-center justify-center rounded-full gradient-gold">
-          <Check className="h-10 w-10 text-primary-foreground" />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 pb-24 text-center">
+        <motion.div
+          initial={reduceMotion ? false : { scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+          className="mb-6 flex h-20 w-20 items-center justify-center rounded-full gradient-gold shadow-gold"
+        >
+          <Check className="h-10 w-10 text-primary-foreground" aria-hidden="true" />
         </motion.div>
-        <h1 className="font-display text-3xl text-foreground mb-2">{t('book.success')}</h1>
-        <p className="text-sm text-muted-foreground mb-2">{t('book.successDesc')}</p>
-        <div className="rounded-xl border border-gold/20 bg-gold/5 p-3 mb-6">
-          <p className="text-xs text-gold flex items-center gap-1.5">
-            <Star size={12} /> {t('book.pendingPointsNote')}: <span className="font-medium">{totals.points} pts</span>
-          </p>
+        <h1 className="mb-2 font-display text-3xl text-foreground">{t('book.success')}</h1>
+        <p className="mb-6 max-w-xs text-sm text-muted-foreground">{t('book.successDesc')}</p>
+
+        <div className="mb-4 w-full max-w-sm space-y-2 rounded-xl border border-border bg-card p-4 text-left">
+          <SummaryRow icon={<Scissors className="h-4 w-4 text-gold" />} label={t('book.service')} value={confirmation.serviceName} />
+          <SummaryRow icon={<User className="h-4 w-4 text-gold" />} label={t('book.staff')} value={confirmation.professionalName} />
+          <SummaryRow
+            icon={<CalendarDays className="h-4 w-4 text-gold" />}
+            label={t('book.dateTime')}
+            value={`${formatLongDate(confirmation.startsAt, fmt)} · ${formatTime(confirmation.startsAt, fmt)}`}
+          />
         </div>
-        <Button onClick={() => navigate('/appointments')} className="gradient-gold text-primary-foreground shadow-gold">
+
+        {/* La reserva se crea en estado «pending»: lo decimos claro para no prometer confirmación. */}
+        <p className="mb-8 flex w-full max-w-sm items-start gap-2 rounded-xl border border-gold/25 bg-gold/5 px-4 py-3 text-left text-xs leading-relaxed text-muted-foreground">
+          <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold" aria-hidden="true" />
+          <span>{t('book.successPending')}</span>
+        </p>
+
+        <Button
+          onClick={() => navigate('/appointments')}
+          className="gradient-gold text-primary-foreground shadow-gold hover:opacity-90"
+        >
           {t('book.goToAppointments')}
         </Button>
         <BottomNav />
-      </div>);
-
+      </div>
+    );
   }
 
-  return (
-    <div className="min-h-screen bg-background pb-48">
-      {/* Active appointment warning dialog */}
-      <AlertDialog open={hasActiveAppointment && !checkingAppointment}>
-        <AlertDialogContent className="max-w-sm mx-auto">
-          <AlertDialogHeader>
-            <div className="flex justify-center mb-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-warning/20">
-                <CalendarDays className="h-6 w-6 text-warning" />
-              </div>
-            </div>
-            <AlertDialogTitle className="text-center">{t('book.existingAppointment')}</AlertDialogTitle>
-            <AlertDialogDescription className="text-center">
-              {t('book.existingAppointmentDesc')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col gap-2 sm:flex-col">
-            <AlertDialogAction onClick={() => navigate('/appointments')} className="gradient-gold text-primary-foreground shadow-gold">
-              {t('book.goToMyAppointments')}
-            </AlertDialogAction>
-            <Button variant="ghost" onClick={() => navigate(-1)} className="text-muted-foreground">
-              {t('book.previous')}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+  // ── Datos derivados para los pasos «profesional» y «confirmar» ─────────────────
+  const serviceProfessionals =
+    bootstrap && service ? professionalsForService(bootstrap, service.id) : [];
+  const assignedProfessionalName =
+    bootstrap && slot
+      ? professionalName(bootstrap, slot.professionalId)
+      : bootstrap && professional && professional !== ANY
+        ? professionalName(bootstrap, professional)
+        : null;
+  const contactReady = isCustomerComplete({ fullName, phone });
 
-      {/* Header */}
+  return (
+    <div className="min-h-screen bg-background pb-28">
+      {/* Cabecera: volver + título + progreso */}
       <div className="px-6 pt-12 pb-4">
-        <button onClick={() => stepIndex > 0 ? goPrev() : navigate(-1)} className="mb-4 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft size={18} />
+        <button
+          type="button"
+          onClick={goBack}
+          className="mb-4 flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft size={18} aria-hidden="true" />
           <span className="text-sm">{stepIndex > 0 ? t('book.previous') : t('general.back')}</span>
         </button>
         <h1 className="font-display text-3xl text-foreground">{t('book.title')}</h1>
-        <p className="text-xs text-muted-foreground mt-1">{t('book.step')} {stepIndex + 1} {t('book.of')} {STEPS.length}</p>
-        <div className="mt-3 flex gap-1.5">
-          {STEPS.map((_, i) =>
-          <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i <= stepIndex ? 'gradient-gold' : 'bg-muted'}`} />
-          )}
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t('book.step')} {stepIndex + 1} {t('book.of')} {STEPS.length}
+        </p>
+        <div className="mt-3 flex gap-1.5" aria-hidden="true">
+          {STEPS.map((s, i) => (
+            <div
+              key={s}
+              className={`h-1 flex-1 rounded-full transition-colors ${i <= stepIndex ? 'gradient-gold' : 'bg-muted'}`}
+            />
+          ))}
         </div>
       </div>
 
       <AnimatePresence mode="wait">
-        <motion.div key={step} initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }} className="px-6 py-4">
-
-          {/* Step 1: Location */}
-          {step === 'location' &&
-          <div className="space-y-3">
-              <h2 className="text-lg font-display text-foreground mb-4">{t('book.selectLocation')}</h2>
-              {locations.map((loc) =>
-            <button key={loc.id} onClick={() => setSelectedLocation(loc)} className={`w-full rounded-xl border p-4 text-left transition-all ${selectedLocation?.id === loc.id ? 'border-gold bg-gold/5' : 'border-border bg-card hover:border-gold/20'}`}>
-                  <div className="flex items-center gap-3">
-                    <MapPin className={`h-5 w-5 ${selectedLocation?.id === loc.id ? 'text-gold' : 'text-muted-foreground'}`} />
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{loc.name}</p>
-                      <p className="text-xs text-muted-foreground">{loc.address}</p>
+        <motion.div
+          key={step}
+          initial={reduceMotion ? false : { opacity: 0, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={reduceMotion ? undefined : { opacity: 0, x: -24 }}
+          transition={{ duration: 0.2 }}
+          className="px-6 py-2"
+        >
+          {/* Paso 1 · Servicio */}
+          {step === 'service' && (
+            <section aria-label={t('book.selectService')} className="space-y-3">
+              <h2 className="mb-2 font-display text-lg text-foreground">{t('book.selectService')}</h2>
+              {bootstrapQuery.isPending ? (
+                <CenteredSpinner label={t('general.loading')} />
+              ) : bootstrapQuery.isError ? (
+                <ErrorState
+                  body={errorMessage(bootstrapQuery.error, 'book.loadError')}
+                  onRetry={() => void bootstrapQuery.refetch()}
+                />
+              ) : !bootstrap || bootstrap.services.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{t('book.noServices')}</p>
+              ) : (
+                bootstrap.services.map((svc) => (
+                  <OptionCard key={svc.id} selected={service?.id === svc.id} onClick={() => chooseService(svc)}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">{svc.name}</p>
+                        {svc.description && (
+                          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{svc.description}</p>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                          {svc.durationMinutes > 0 && (
+                            <span className="inline-flex items-center gap-1">
+                              <Clock size={11} aria-hidden="true" /> {formatDuration(svc.durationMinutes)}
+                            </span>
+                          )}
+                          {svc.priceCents > 0 && (
+                            <span className="font-medium text-gold">
+                              {formatPrice(svc.priceCents, svc.currency, locale)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {service?.id === svc.id && <Check className="mt-0.5 h-4 w-4 shrink-0 text-gold" aria-hidden="true" />}
                     </div>
-                    {selectedLocation?.id === loc.id && <Check className="ml-auto h-4 w-4 text-gold" />}
-                  </div>
-                </button>
-            )}
-            </div>
-          }
+                  </OptionCard>
+                ))
+              )}
+            </section>
+          )}
 
-          {/* Step 2: Section */}
-          {step === 'section' &&
-          <div className="space-y-3">
-              <h2 className="text-lg font-display text-foreground mb-4">{t('book.selectSection')}</h2>
-              {(['CABALLEROS', 'SENORAS', 'ESTETICA'] as SalonSection[]).map((section) =>
-            <button key={section} onClick={() => handleSectionSelect(section)} className={`w-full rounded-xl border p-5 text-left transition-all ${selectedSection === section ? 'border-gold bg-gold/5' : 'border-border bg-card hover:border-gold/20'}`}>
-                  <div className="flex items-center gap-4">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-full ${selectedSection === section ? 'gradient-gold' : 'bg-muted'}`}>
-                      <Scissors className={`h-5 w-5 ${selectedSection === section ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <p className="text-base font-medium text-foreground">
-                        {section === 'CABALLEROS' ? t('book.sectionMen') : section === 'SENORAS' ? t('book.sectionLadies') : t('book.sectionAesthetics')}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {section === 'CABALLEROS' ? t('book.sectionMenDesc') : section === 'SENORAS' ? t('book.sectionLadiesDesc') : t('book.sectionAestheticsDesc')}
-                      </p>
-                    </div>
-                    {selectedSection === section && <Check className="ml-auto h-4 w-4 text-gold" />}
-                  </div>
-                </button>
-            )}
-            </div>
-          }
+          {/* Paso 2 · Profesional (concreto o «cualquiera») */}
+          {step === 'professional' && (
+            <section aria-label={t('book.selectStaff')} className="space-y-3">
+              <h2 className="mb-2 font-display text-lg text-foreground">{t('book.selectStaff')}</h2>
 
-          {/* Step 3: Services (moved before staff) */}
-          {step === 'services' &&
-          <div className="space-y-4">
-              <h2 className="text-lg font-display text-foreground mb-2">{t('book.selectServices')}</h2>
-              {servicesByCategory.length === 0 ?
-            <p className="text-sm text-muted-foreground">{t('book.noServices')}</p> :
-
-            servicesByCategory.map(({ category, services: catServices }) =>
-            <div key={category.id}>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{category.name}</p>
-                    <div className="space-y-2">
-                      {catServices.map((svc) => {
-                  const isSelected = !!selectedServices.find((s) => s.id === svc.id);
-                  return (
-                    <button key={svc.id} onClick={() => toggleService(svc)} className={`w-full rounded-xl border p-3 text-left transition-all ${isSelected ? 'border-gold bg-gold/5' : 'border-border bg-card hover:border-gold/20'}`}>
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-foreground">{svc.name}</p>
-                                <div className="flex items-center gap-3 mt-1">
-                                  {svc.duration_min &&
-                            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                      <Clock size={10} /> {svc.duration_min} min
-                                    </span>
-                            }
-                                  <span className="flex items-center gap-1 text-[11px] text-gold">
-                                    <Star size={10} /> {calcPoints(svc)} pts
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 ml-2">
-                                {isSelected && <Check className="h-4 w-4 text-gold" />}
-                              </div>
-                            </div>
-                          </button>);
-
-                })}
-                    </div>
-                  </div>
-            )
-            }
-
-              {selectedServices.length > 0 &&
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-gold/20 bg-gold/5 p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground flex items-center gap-1.5"><Clock size={12} /> {t('book.totalDuration')}</span>
-                    <span className="text-foreground font-medium">{totals.duration} min</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gold flex items-center gap-1.5"><Star size={12} /> {t('book.pendingPoints')}</span>
-                    <span className="text-gold font-medium">{totals.points} pts</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">{t('book.pendingPointsNote')}</p>
-                </motion.div>
-            }
-            </div>
-          }
-
-          {/* Step 4: Staff (with "first available" option) */}
-          {step === 'staff' &&
-          <div className="space-y-3">
-              <h2 className="text-lg font-display text-foreground mb-4">{t('book.selectStaff')}</h2>
-
-              {/* First available option */}
-              <button
-              onClick={() => handleStaffSelect(null, true)}
-              className={`w-full rounded-xl border p-4 text-left transition-all ${isFirstAvailable ? 'border-gold bg-gold/5' : 'border-border bg-card hover:border-gold/20'}`}>
-              
+              <OptionCard selected={professional === ANY} onClick={() => chooseProfessional(ANY)}>
                 <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-full ${isFirstAvailable ? 'gradient-gold' : 'bg-muted'}`}>
-                    <Zap className={`h-5 w-5 ${isFirstAvailable ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                  <span
+                    className={`flex h-10 w-10 items-center justify-center rounded-full ${professional === ANY ? 'gradient-gold' : 'bg-muted'}`}
+                  >
+                    <Users className={`h-5 w-5 ${professional === ANY ? 'text-primary-foreground' : 'text-muted-foreground'}`} aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{t('book.anyProfessional')}</p>
+                    <p className="text-xs text-muted-foreground">{t('book.firstAvailableDesc')}</p>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{t('book.firstAvailable')}</p>
-                    
-                  </div>
-                  {isFirstAvailable && <Check className="ml-auto h-4 w-4 text-gold" />}
+                  {professional === ANY && <Check className="ml-auto h-4 w-4 text-gold" aria-hidden="true" />}
                 </div>
-              </button>
+              </OptionCard>
 
-              {staffMembers.length === 0 ?
-            <p className="text-sm text-muted-foreground">{t('book.noStaff')}</p> :
-            staffMembers.map((member) =>
-            <button key={member.id} onClick={() => handleStaffSelect(member, false)} className={`w-full rounded-xl border p-4 text-left transition-all ${!isFirstAvailable && selectedStaff?.id === member.id ? 'border-gold bg-gold/5' : 'border-border bg-card hover:border-gold/20'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-full ${!isFirstAvailable && selectedStaff?.id === member.id ? 'gradient-gold' : 'bg-muted'}`}>
-                      {member.avatar_url ?
-                  <img src={member.avatar_url} alt={member.name} className="h-10 w-10 rounded-full object-cover" /> :
+              {serviceProfessionals.length === 0 ? (
+                <p className="pt-2 text-xs text-muted-foreground">{t('book.anyProfessionalHint')}</p>
+              ) : (
+                serviceProfessionals.map((pro) => {
+                  const selected = professional === pro.id;
+                  return (
+                    <OptionCard key={pro.id} selected={selected} onClick={() => chooseProfessional(pro.id)}>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="flex h-10 w-10 items-center justify-center rounded-full"
+                          style={{ backgroundColor: pro.color ?? undefined }}
+                        >
+                          <User
+                            className={`h-5 w-5 ${pro.color ? 'text-white' : selected ? 'text-gold' : 'text-muted-foreground'}`}
+                            aria-hidden="true"
+                          />
+                        </span>
+                        <p className="text-sm font-medium text-foreground">{pro.fullName}</p>
+                        {selected && <Check className="ml-auto h-4 w-4 text-gold" aria-hidden="true" />}
+                      </div>
+                    </OptionCard>
+                  );
+                })
+              )}
+            </section>
+          )}
 
-                  <User className={`h-5 w-5 ${!isFirstAvailable && selectedStaff?.id === member.id ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                  }
-                    </div>
-                    <p className="text-sm font-medium text-foreground">{member.name}</p>
-                    {!isFirstAvailable && selectedStaff?.id === member.id && <Check className="ml-auto h-4 w-4 text-gold" />}
-                  </div>
-                </button>
-            )}
-            </div>
-          }
-
-          {/* Step 5: Date & Time */}
-          {step === 'datetime' &&
-          <div className="space-y-4">
-              <h2 className="text-lg font-display text-foreground mb-2">{t('book.selectDate')}</h2>
+          {/* Paso 3 · Fecha */}
+          {step === 'date' && (
+            <section aria-label={t('book.selectDate')} className="space-y-3">
+              <h2 className="mb-2 font-display text-lg text-foreground">{t('book.selectDate')}</h2>
               <div className="flex justify-center rounded-xl border border-border bg-card p-2">
                 <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(d) => {setSelectedDate(d);setSelectedTime(null);setSelectedHour(null);setSelectedMinute(null);setAutoAssignedStaff(null);}}
-                disabled={(date) => {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  if (date < today || date.getDay() === 0) return true;
-                  const ds = formatLocalDate(date);
-                  if (isFirstAvailable) {
-                    // A day is available if ANY staff has availability that day
-                    return monthSchedules[ds] !== 'availability';
-                  }
-                  if (selectedStaff) {
-                    return monthSchedules[ds] !== 'availability';
-                  }
-                  return false;
-                }}
-                className="text-foreground pointer-events-auto" />
-              
+                  mode="single"
+                  selected={date}
+                  onSelect={chooseDate}
+                  // Sólo se limita el pasado (server-authoritative para el resto): el
+                  // servidor decide si un día tiene huecos; aquí no se prejuzga.
+                  disabled={(d) => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    return d < today;
+                  }}
+                  className="pointer-events-auto text-foreground"
+                />
               </div>
-              {selectedDate &&
-            <div className="space-y-3">
-                  {loadingSlots &&
-              <p className="text-xs text-muted-foreground animate-pulse text-center">{t('book.checkingAvailability')}</p>
-              }
-                  {!loadingSlots && (() => {
-                const checkFn = isFirstAvailable ? isSlotAvailableFirstAvailable : isSlotAvailable;
-                const availableSlots = TIME_SLOTS.filter((s) => checkFn(s));
-                if (availableSlots.length === 0) {
-                  return <p className="text-sm text-muted-foreground text-center py-4">{t('book.noSlots')}</p>;
-                }
-                const availableHours = [...new Set(availableSlots.map((s) => s.substring(0, 2)))];
-                const availableMinutes = selectedHour ?
-                availableSlots.filter((s) => s.substring(0, 2) === selectedHour).map((s) => s.substring(3, 5)) :
-                [];
+              <p className="text-center text-xs text-muted-foreground">{t('book.dateHint')}</p>
+            </section>
+          )}
 
-                return (
-                  <div className="space-y-3">
-                        <div className="flex gap-3">
-                          <div className="flex-1">
-                            <label className="text-xs text-muted-foreground mb-1 block">Hora</label>
-                            <Select
-                          value={selectedHour || ''}
-                          onValueChange={(v) => {
-                            setSelectedHour(v);
-                            setSelectedMinute(null);
-                            setSelectedTime(null);
-                            setAutoAssignedStaff(null);
-                          }}>
-                          
-                              <SelectTrigger className="w-full border-border bg-card text-foreground">
-                                <SelectValue placeholder="HH" />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-64">
-                                {availableHours.map((h) =>
-                            <SelectItem key={h} value={h}>{parseInt(h, 10)}</SelectItem>
-                            )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <span className="flex items-end pb-2 text-lg font-semibold text-foreground">:</span>
-                          <div className="flex-1">
-                            <label className="text-xs text-muted-foreground mb-1 block">Min</label>
-                            <Select
-                          value={selectedMinute || ''}
-                          disabled={!selectedHour}
-                          onValueChange={(v) => {
-                            setSelectedMinute(v);
-                            const time = `${selectedHour}:${v}`;
-                            if (isFirstAvailable) {
-                              handleFirstAvailableTimeSelect(time);
-                            } else {
-                              setSelectedTime(time);
-                            }
-                          }}>
-                          
-                              <SelectTrigger className="w-full border-border bg-card text-foreground">
-                                <SelectValue placeholder="MM" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableMinutes.map((m) =>
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                            )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        {/* Show auto-assigned staff when first available */}
-                        {isFirstAvailable && autoAssignedStaff &&
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-gold/20 bg-gold/5 p-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-full gradient-gold">
-                                <User className="h-4 w-4 text-primary-foreground" />
-                              </div>
-                              <div>
-                                <p className="text-[11px] text-muted-foreground">Profesional asignado</p>
-                                <p className="text-sm font-medium text-foreground">{autoAssignedStaff.name}</p>
-                              </div>
-                            </div>
-                          </motion.div>
-                    }
-                      </div>);
-
-              })()}
+          {/* Paso 4 · Hueco (huecos del servidor, sin recálculo en cliente) */}
+          {step === 'slot' && (
+            <section aria-label={t('book.selectSlot')} className="space-y-4">
+              <h2 className="font-display text-lg text-foreground">{t('book.selectSlot')}</h2>
+              {date && (
+                <p className="text-sm capitalize text-muted-foreground">
+                  {date.toLocaleDateString(localeToBcp47(locale), {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                  })}
+                </p>
+              )}
+              {availabilityQuery.isPending ? (
+                <CenteredSpinner label={t('book.checkingAvailability')} />
+              ) : availabilityQuery.isError ? (
+                <ErrorState
+                  body={errorMessage(availabilityQuery.error, 'book.errorAvailability')}
+                  onRetry={() => void availabilityQuery.refetch()}
+                />
+              ) : slots.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="mb-4 text-sm text-muted-foreground">{t('book.noSlots')}</p>
+                  <Button variant="outline" onClick={() => setStep('date')} className="border-gold/40 text-gold hover:bg-gold/10">
+                    {t('book.pickAnotherDate')}
+                  </Button>
                 </div>
-            }
-            </div>
-          }
+              ) : (
+                <div role="listbox" aria-label={t('book.selectSlot')} className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {slots.map((s) => {
+                    const selected = slot?.startsAt === s.startsAt;
+                    return (
+                      <button
+                        key={s.startsAt}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        onClick={() => chooseSlot(s)}
+                        className={`rounded-lg border py-2.5 text-sm font-medium transition-all ${
+                          selected
+                            ? 'border-gold bg-gold/10 text-gold'
+                            : 'border-border bg-card text-foreground hover:border-gold/30'
+                        }`}
+                      >
+                        {formatTime(s.startsAt, fmt)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
 
-          {/* Step 6: Confirm */}
-          {step === 'confirm' &&
-          <div className="space-y-4">
-              <h2 className="text-lg font-display text-foreground mb-4">{t('book.confirm')}</h2>
+          {/* Paso 5 · Confirmar (datos de contacto + POST) */}
+          {step === 'confirm' && service && slot && (
+            <section aria-label={t('book.confirm')} className="space-y-4">
+              <h2 className="mb-1 font-display text-lg text-foreground">{t('book.confirm')}</h2>
 
-              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <MapPin className="h-4 w-4 text-gold" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('appointments.location')}</p>
-                    <p className="text-sm text-foreground">{selectedLocation?.name}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Scissors className="h-4 w-4 text-gold" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('book.section')}</p>
-                    <p className="text-sm text-foreground">
-                      {selectedSection === 'CABALLEROS' ? t('book.sectionMen') : selectedSection === 'SENORAS' ? t('book.sectionLadies') : t('book.sectionAesthetics')}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <User className="h-4 w-4 text-gold" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('book.staff')}</p>
-                    <p className="text-sm text-foreground">{finalStaffForDisplay?.name}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CalendarDays className="h-4 w-4 text-gold" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('appointments.date')}</p>
-                    <p className="text-sm text-foreground">{selectedDate?.toLocaleDateString()} — {selectedTime}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Services breakdown */}
-              <div className="rounded-xl border border-border bg-card p-4">
-                <p className="text-xs text-muted-foreground mb-2">{t('appointments.services')}</p>
-                <div className="space-y-2">
-                  {selectedServices.map((s) =>
-                <div key={s.id} className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-foreground">{s.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{s.duration_min ? `${s.duration_min} min` : ''}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] text-gold">{calcPoints(s)} pts</p>
-                      </div>
-                    </div>
+              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+                <SummaryRow
+                  icon={<Scissors className="h-4 w-4 text-gold" />}
+                  label={t('book.service')}
+                  value={service.name}
+                  sub={service.durationMinutes > 0 ? formatDuration(service.durationMinutes) : undefined}
+                />
+                <SummaryRow
+                  icon={<User className="h-4 w-4 text-gold" />}
+                  label={t('book.staff')}
+                  value={assignedProfessionalName ?? t('book.anyProfessional')}
+                  sub={professional === ANY ? t('book.assignedProfessional') : undefined}
+                />
+                <SummaryRow
+                  icon={<CalendarDays className="h-4 w-4 text-gold" />}
+                  label={t('book.dateTime')}
+                  value={`${formatLongDate(slot.startsAt, fmt)} · ${formatTime(slot.startsAt, fmt)}`}
+                />
+                {service.priceCents > 0 && (
+                  <SummaryRow
+                    icon={<span className="text-xs font-bold text-gold">€</span>}
+                    label={t('book.total')}
+                    value={formatPrice(service.priceCents, service.currency, locale)}
+                  />
                 )}
+              </div>
+
+              {/* Datos de contacto (prellenados de la ficha; editables) */}
+              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  {t('book.contactDetails')}
+                </p>
+                <div className="space-y-1.5">
+                  <label htmlFor="book-name" className="text-xs text-muted-foreground">{t('book.fullName')}</label>
+                  <Input
+                    id="book-name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder={t('book.fullName')}
+                    autoComplete="name"
+                  />
                 </div>
-                <div className="border-t border-border mt-3 pt-3 space-y-1">
-                  <div className="flex justify-between text-sm font-medium">
-                    <span className="text-muted-foreground">{t('book.totalDuration')}</span>
-                    <span className="text-foreground">{totals.duration} min</span>
-                  </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="book-phone" className="text-xs text-muted-foreground">{t('auth.phone')}</label>
+                  <Input
+                    id="book-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder={t('auth.phone')}
+                    autoComplete="tel"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="book-notes" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <StickyNote size={13} aria-hidden="true" /> {t('book.notes')}
+                  </label>
+                  <Textarea
+                    id="book-notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder={t('book.notesPlaceholder')}
+                    className="bg-background"
+                  />
                 </div>
               </div>
 
-              {/* Pending points callout */}
-              <div className="rounded-xl border border-gold/20 bg-gold/5 p-3">
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-gold" />
-                  <div>
-                    <p className="text-sm font-medium text-gold">{totals.points} {t('book.pointsToEarn')}</p>
-                    <p className="text-[10px] text-muted-foreground">{t('book.pendingPointsNote')}</p>
-                  </div>
+              {createBooking.isError && !isSlotTakenError(createBooking.error) && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3.5"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                  <p className="text-sm leading-relaxed text-destructive">
+                    {errorMessage(createBooking.error, 'book.errorBooking')}
+                  </p>
                 </div>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <StickyNote size={14} /> {t('book.notes')}
-                </label>
-                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('book.notesPlaceholder')} className="bg-card border-border" />
-              </div>
-
-              <Button onClick={handleConfirm} disabled={loading} className="w-full gradient-gold text-primary-foreground shadow-gold hover:opacity-90">
-                {loading ? t('general.loading') : t('book.confirmBooking')}
+              <Button
+                onClick={() => createBooking.mutate()}
+                disabled={!contactReady || createBooking.isPending}
+                className="w-full gradient-gold text-primary-foreground shadow-gold hover:opacity-90 disabled:opacity-40"
+              >
+                {createBooking.isPending ? t('general.loading') : t('book.confirmBooking')}
               </Button>
-            </div>
-          }
+              {!contactReady && (
+                <p className="text-center text-xs text-muted-foreground">{t('book.missingContact')}</p>
+              )}
+            </section>
+          )}
         </motion.div>
       </AnimatePresence>
 
-      {/* Next button */}
-      {step !== 'confirm' &&
-      <div className="fixed bottom-[7rem] left-0 right-0 px-6 z-40">
-          <Button onClick={goNext} disabled={!canNext()} className="w-full gradient-gold text-primary-foreground shadow-gold hover:opacity-90 disabled:opacity-40">
-            {t('book.next')} <ChevronRight size={16} />
-          </Button>
-        </div>
-      }
-
       <BottomNav />
-    </div>);
-
+    </div>
+  );
 };
+
+// ── Fila de resumen (icono · etiqueta · valor) ───────────────────────────────────
+
+const SummaryRow = ({
+  icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+}) => (
+  <div className="flex items-center gap-3">
+    <span className="flex h-6 w-6 shrink-0 items-center justify-center" aria-hidden="true">
+      {icon}
+    </span>
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="truncate text-sm text-foreground">
+        {value}
+        {sub && <span className="ml-2 text-xs text-muted-foreground">{sub}</span>}
+      </p>
+    </div>
+  </div>
+);
 
 export default BookAppointment;

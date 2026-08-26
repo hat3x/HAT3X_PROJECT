@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
+import { useSalon } from '@/lib/salon-context';
+import { detectPhoneVerificationResumption } from '@/lib/registration-flow';
 import { Button } from '@/components/ui/button';
-import { CalendarPlus, Star, Crown, Tag, ChevronRight, Gift, Clock, MapPin } from 'lucide-react';
+import { CalendarPlus, Star, Crown, Tag, ChevronRight, Gift, Clock, MapPin, PartyPopper, ArrowRight, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import BottomNav from '@/components/BottomNav';
-import logoImg from '@/assets/logo.png';
+import SalonWordmark from '@/components/SalonWordmark';
+import { FEATURES } from '@/config/features';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Appointment = Tables<'appointments'> & { location_name?: string };
@@ -25,17 +28,35 @@ const Home = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
+  // salon_id y nombre derivados del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId, name: salonName } = useSalon();
   const [loading, setLoading] = useState(true);
   const [points, setPoints] = useState(0);
   const [visits, setVisits] = useState(0);
-  const [isClubMember, setIsClubMember] = useState(false);
   const [nextAppointment, setNextAppointment] = useState<Appointment | null | undefined>(undefined);
   const [couponStatus, setCouponStatus] = useState<'active' | 'used' | 'expired' | null>(null);
 
-  const rawName = user?.user_metadata?.first_name || 'Cliente';
-  const firstName = rawName
-    .toLowerCase()
-    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+  // Reanudación (sub-6): si la sesión indica cuenta creada pero teléfono SIN confirmar,
+  // ofrecemos —sin bloquear— terminar la verificación en el MISMO paso de OTP (vía /register,
+  // que se auto-reanuda), en vez de dejar una cuenta a medias. La decisión es pura (mira solo
+  // la sesión) y el aviso es descartable por sesión para que sea un empujón amable, no una regañina.
+  const resumption = detectPhoneVerificationResumption(user);
+  const [resumeDismissed, setResumeDismissed] = useState(() =>
+    Boolean(user && sessionStorage.getItem(`dn9n9-resume-dismissed-${user.id}`))
+  );
+  const showResume = resumption.kind === 'resume' && !resumeDismissed;
+  const dismissResume = () => {
+    setResumeDismissed(true);
+    if (user) sessionStorage.setItem(`dn9n9-resume-dismissed-${user.id}`, '1');
+  };
+
+  // Salón OS usa `full_name` (no first_name/last_name). El saludo muestra el
+  // primer nombre; caemos a los metadatos de auth hasta que carga la ficha.
+  const formatName = (raw: string) =>
+    raw.trim().split(/\s+/)[0].toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
+  const [greetingName, setGreetingName] = useState<string>(() =>
+    formatName((user?.user_metadata?.first_name as string) || 'Cliente')
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -43,38 +64,39 @@ const Home = () => {
       setLoading(true);
       const { data: customer } = await supabase
         .from('customers')
-        .select('id')
+        .select('id, full_name')
         .eq('user_id', user.id)
-        .single();
+        .eq('salon_id', salonId)
+        .maybeSingle();
       if (!customer) { setLoading(false); return; }
+
+      if (customer.full_name) setGreetingName(formatName(customer.full_name));
 
       const now = new Date().toISOString();
 
-      const [accountRes, subRes, aptRes, couponRes] = await Promise.all([
+      const [accountRes, aptRes, couponRes] = await Promise.all([
         supabase
           .from('loyalty_accounts')
           .select('points_balance, visits_total')
           .eq('customer_id', customer.id)
-          .single(),
-        supabase
-          .from('subscriptions')
-          .select('status')
-          .eq('customer_id', customer.id)
-          .in('status', ['ACTIVE', 'CANCELLED_END_OF_PERIOD'])
+          .eq('salon_id', salonId)
           .maybeSingle(),
         supabase
           .from('appointments')
           .select('*, locations(name)')
           .eq('customer_id', customer.id)
-          .in('status', ['CONFIRMED', 'RESCHEDULED'])
-          .gte('start_at', now)
-          .order('start_at', { ascending: true })
+          .in('status', ['pending', 'confirmed'])
+          .gte('starts_at', now)
+          .order('starts_at', { ascending: true })
           .limit(1)
           .maybeSingle(),
         supabase
           .from('welcome_coupons')
           .select('status, expires_at')
           .eq('customer_id', customer.id)
+          .eq('salon_id', salonId)
+          .eq('status', 'ACTIVE')
+          .gt('expires_at', now)
           .maybeSingle(),
       ]);
 
@@ -82,26 +104,21 @@ const Home = () => {
         setPoints(accountRes.data.points_balance);
         setVisits(accountRes.data.visits_total);
       }
-      setIsClubMember(!!subRes.data);
 
       if (aptRes.data) {
-        const apt = aptRes.data as Appointment & { locations: { name: string } | null };
+        const apt = aptRes.data as unknown as Appointment & { locations: { name: string } | null };
         setNextAppointment({ ...apt, location_name: apt.locations?.name });
       } else {
         setNextAppointment(null);
       }
 
-      if (couponRes.data) {
-        const c = couponRes.data;
-        if (c.status === 'USED') setCouponStatus('used');
-        else if (c.expires_at && new Date(c.expires_at) < new Date()) setCouponStatus('expired');
-        else setCouponStatus('active');
-      }
+      // La query ya filtra a cupones ACTIVE y no expirados: si hay fila, está vigente.
+      setCouponStatus(couponRes.data ? 'active' : null);
 
       setLoading(false);
     };
     load();
-  }, [user]);
+  }, [user, salonId]);
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -112,18 +129,58 @@ const Home = () => {
           <div>
             <p className="text-sm text-muted-foreground">{t('home.greeting')},</p>
             <div className="flex items-center gap-1.5">
-              <h1 className="font-display text-xl text-foreground">{firstName}</h1>
-              {isClubMember && (
-                <Crown className="h-4 w-4 text-gold" />
-              )}
+              <h1 className="font-display text-xl text-foreground">{greetingName}</h1>
             </div>
           </div>
-          <img src={logoImg} alt="denueveanueve" className="h-5 w-auto opacity-70" />
+          <SalonWordmark
+            imgClassName="h-5 w-auto opacity-70"
+            textClassName="font-display text-base text-foreground opacity-70"
+          />
         </div>
       </div>
 
-      {/* Premium Banner */}
-      {isClubMember && (
+      {/* Reanudación del registro (sub-6): empujón cálido y DESCARTABLE para terminar la
+          verificación del teléfono que quedó a medias, en vez de una cuenta inservible. Al
+          tocar "Terminar" vamos a /register, que detecta la sesión y auto-abre el MISMO paso
+          de OTP. Solo aparece si el teléfono sigue sin confirmar (detección pura de sesión). */}
+      {showResume && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 px-6"
+        >
+          <div className="relative overflow-hidden rounded-2xl border border-gold/25 bg-gradient-to-br from-gold/12 via-gold/5 to-transparent p-4">
+            <button
+              type="button"
+              onClick={dismissResume}
+              aria-label={t('auth.resume.dismiss')}
+              className="absolute right-3 top-3 text-muted-foreground/60 transition-colors hover:text-foreground"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <div className="flex items-start gap-3 pr-6">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold/15">
+                <PartyPopper className="h-5 w-5 text-gold" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{t('auth.resume.homeTitle')}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{t('auth.resume.homeBody')}</p>
+                <button
+                  type="button"
+                  onClick={() => navigate('/register')}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg gradient-gold px-4 py-2 text-xs font-semibold text-primary-foreground shadow-gold transition-opacity hover:opacity-90"
+                >
+                  {t('auth.resume.cta')}
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Premium Banner — disabled: depends on `subscriptions` (see @/config/features) */}
+      {FEATURES.subscriptions && (
         <div className="px-6 mb-4">
           <motion.button
             initial={{ opacity: 0, y: -10 }}
@@ -133,7 +190,7 @@ const Home = () => {
           >
             <Crown className="h-5 w-5 text-primary-foreground" />
             <span className="font-display text-base text-primary-foreground tracking-wide">
-              de<span className="opacity-90">nueve</span>a<span className="opacity-90">nueve</span> Premium
+              {salonName} Premium
             </span>
           </motion.button>
         </div>
@@ -183,12 +240,12 @@ const Home = () => {
           ) : nextAppointment ? (
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">
-                {new Date(nextAppointment.start_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                {new Date(nextAppointment.starts_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
               </p>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Clock size={11} />
-                  {new Date(nextAppointment.start_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(nextAppointment.starts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
                 </span>
                 {nextAppointment.location_name && (
                   <span className="flex items-center gap-1">
@@ -258,34 +315,39 @@ const Home = () => {
           )}
         </motion.div>
 
-        {/* Quick actions */}
-        <div className={`grid ${isClubMember ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
-          {!isClubMember && (
-            <motion.div
-              custom={3}
-              variants={cardVariants}
-              initial="hidden"
-              animate="visible"
-              onClick={() => navigate('/club')}
-              className="cursor-pointer rounded-xl border border-border bg-card p-4 transition-colors hover:border-gold/20"
-            >
-              <Crown className="mb-2 h-5 w-5 text-gold" />
-              <p className="text-sm font-medium text-foreground">{t('home.club')}</p>
-            </motion.div>
-          )}
+        {/* Quick actions — disabled: Club needs `subscriptions`, Promos needs `campaigns`
+            (see @/config/features). Each card renders only when its flag is on. */}
+        {(FEATURES.subscriptions || FEATURES.promos) && (
+          <div className="grid grid-cols-2 gap-3">
+            {FEATURES.subscriptions && (
+              <motion.div
+                custom={3}
+                variants={cardVariants}
+                initial="hidden"
+                animate="visible"
+                onClick={() => navigate('/club')}
+                className="cursor-pointer rounded-xl border border-border bg-card p-4 transition-colors hover:border-gold/20"
+              >
+                <Crown className="mb-2 h-5 w-5 text-gold" />
+                <p className="text-sm font-medium text-foreground">{t('home.club')}</p>
+              </motion.div>
+            )}
 
-          <motion.div
-            custom={4}
-            variants={cardVariants}
-            initial="hidden"
-            animate="visible"
-            onClick={() => navigate('/promos')}
-            className="cursor-pointer rounded-xl border border-border bg-card p-4 transition-colors hover:border-gold/20"
-          >
-            <Tag className="mb-2 h-5 w-5 text-gold" />
-            <p className="text-sm font-medium text-foreground">{t('home.promos')}</p>
-          </motion.div>
-        </div>
+            {FEATURES.promos && (
+              <motion.div
+                custom={4}
+                variants={cardVariants}
+                initial="hidden"
+                animate="visible"
+                onClick={() => navigate('/promos')}
+                className="cursor-pointer rounded-xl border border-border bg-card p-4 transition-colors hover:border-gold/20"
+              >
+                <Tag className="mb-2 h-5 w-5 text-gold" />
+                <p className="text-sm font-medium text-foreground">{t('home.promos')}</p>
+              </motion.div>
+            )}
+          </div>
+        )}
       </div>
 
       <BottomNav />

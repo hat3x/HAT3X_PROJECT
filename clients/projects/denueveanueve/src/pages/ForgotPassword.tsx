@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/lib/i18n';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth, mapAuthError } from '@/lib/auth';
+import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +13,9 @@ import { toast } from 'sonner';
 const ForgotPassword = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { resetPassword } = useAuth();
+  // Nombre del salón resuelto en runtime (white-label): sustituye al wordmark fijo.
+  const { name: salonName } = useSalon();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
@@ -19,12 +23,10 @@ const ForgotPassword = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
-    });
+    const { error } = await resetPassword(email);
     setLoading(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(t(mapAuthError(error)));
     } else {
       setSent(true);
     }
@@ -60,7 +62,7 @@ const ForgotPassword = () => {
         ) : (
           <>
             <h1 className="mb-1 font-display text-3xl text-foreground">{t('auth.resetPassword')}</h1>
-            <p className="mb-8 text-sm text-muted-foreground">de<span className="text-gold">nueve</span>a<span className="text-gold">nueve</span></p>
+            <p className="mb-8 text-sm text-muted-foreground">{salonName}</p>
             <p className="mb-6 text-sm text-muted-foreground">{t('auth.resetPasswordDesc')}</p>
 
             <form onSubmit={handleSubmit} className="space-y-5">

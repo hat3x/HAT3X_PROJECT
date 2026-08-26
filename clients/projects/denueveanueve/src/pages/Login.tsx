@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/lib/i18n';
-import { useAuth } from '@/lib/auth';
+import { useAuth, mapAuthError } from '@/lib/auth';
+import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +14,8 @@ const Login = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { signIn } = useAuth();
+  // Nombre del salón resuelto en runtime (white-label): sustituye al wordmark fijo.
+  const { name: salonName } = useSalon();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,7 +27,7 @@ const Login = () => {
     const { error } = await signIn(email, password);
     setLoading(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(t(mapAuthError(error)));
     } else {
       navigate('/home');
     }
@@ -41,7 +44,7 @@ const Login = () => {
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <h1 className="mb-1 font-display text-3xl text-foreground">{t('auth.login')}</h1>
-        <p className="mb-8 text-sm text-muted-foreground">de<span className="text-gold">nueve</span>a<span className="text-gold">nueve</span></p>
+        <p className="mb-8 text-sm text-muted-foreground">{salonName}</p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">

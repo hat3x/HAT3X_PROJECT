@@ -1,3 +1,8 @@
+/**
+ * ⚠️ DISABLED — only used by the Club/Premium subscription flow, which is not
+ * routed in Salon OS (depends on the `subscriptions` table). Kept for reference.
+ * Re-enable together with Club via FEATURES.subscriptions in @/config/features.
+ */
 import { useState } from 'react';
 import { useStripe, useElements, PaymentElement } from '@stripe/react-stripe-js';
 import { Button } from '@/components/ui/button';

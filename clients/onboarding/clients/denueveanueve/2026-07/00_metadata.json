@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-23T00:00:00Z",
+  "generated_by": "HAT3X Onboarding Coordinator (skill onboarding-hat3x)",
+  "acuerdo_tipo": "piloto / acuerdo familiar (no cliente comercial estándar)",
+  "client": {
+    "nombre": "De Nueve a Nueve",
+    "nombre_legal": "[POR CONFIRMAR — razón social / autónomo de De Nueve a Nueve]",
+    "nombre_slug": "denueveanueve",
+    "contacto": "[POR CONFIRMAR — persona de contacto]",
+    "email": "[POR CONFIRMAR — email de contacto]",
+    "telefono": "[POR CONFIRMAR]",
+    "direccion": "Collado Villalba y Alpedrete (Madrid) — direcciones exactas por confirmar",
+    "sector": "Peluquería y centro de estética",
+    "tamano": "micropyme"
+  },
+  "project": {
+    "nombre": "Salón OS — Plataforma de gestión integral (piloto)",
+    "tipo_servicio": "mixto (implantación de plataforma SaaS + apps de marca blanca + backend de recepcionista de voz como complemento)",
+    "responsable_hat3x": "Jose Miguel González Domingo",
+    "responsable_cliente": "[POR CONFIRMAR]",
+    "soporte_contacto": "info@hat3x.com",
+    "fecha_inicio": "2026-07-11",
+    "fecha_fin": "2026-08-31"
+  },
+  "comercial": {
+    "modelo": "piloto",
+    "implantacion": "0 € — cubierta por la aportación actual del cliente (suscripción de herramientas de trabajo de HAT3X); no se factura",
+    "suscripcion_piloto": "99 €/mes (Gestión + TPV/Facturación + Fidelización + Apps de marca blanca)",
+    "suscripcion_con_voz": "149 €/mes al activar la Recepcionista IA (+ consumo variable de minutos/SMS)",
+    "permanencia": "12 meses; a partir del mes 13, revisión pactada a tarifa reducida (~199 €/mes)",
+    "inicio_facturacion": "go-live (arranque real tras el despliegue), a mes vencido",
+    "contraprestacion_no_monetaria": "caso de éxito (nombre, logo, testimonio), feedback estructurado y referencias",
+    "valores_referencia_informativos_no_facturables": {
+      "implantacion_estandar": "1.600 €",
+      "suscripcion_estandar": "~267 €/mes",
+      "coste_desarrollo_producto": "~59.000 € (inversión de HAT3X en producto propio reutilizable)"
+    }
+  },
+  "portal": {
+    "provisioned": false,
+    "url": "https://portal.hat3x.com",
+    "username": "[POR CONFIRMAR — se provisiona por canal seguro]",
+    "activation_method": "manual",
+    "estimated_provision_date": "2026-08-31"
+  },
+  "output": {
+    "destination": "clients/onboarding/clients/denueveanueve/2026-07/",
+    "documents_generated": [
+      "01_carta_bienvenida.md",
+      "02_resumen_ejecutivo.md",
+      "03_roadmap_proyecto.md",
+      "04_propuesta_presupuesto.md",
+      "05_contrato_base.md",
+      "06_guia_portal_cliente.md",
+      "07_acceso_portal_cliente.md",
+      "08_checklist_arranque_interno.md",
+      "09_indice_paquete_onboarding.md",
+      "00_metadata.json"
+    ],
+    "client_facing_documents": [
+      "01_carta_bienvenida.md",
+      "02_resumen_ejecutivo.md",
+      "03_roadmap_proyecto.md",
+      "04_propuesta_presupuesto.md",
+      "05_contrato_base.md",
+      "06_guia_portal_cliente.md",
+      "07_acceso_portal_cliente.md",
+      "09_indice_paquete_onboarding.md"
+    ],
+    "internal_only_documents": [
+      "08_checklist_arranque_interno.md"
+    ],
+    "bootstrap_mode": false,
+    "templates_modified": false
+  },
+  "assumptions": [
+    "Acuerdo de piloto / familiar: la implantación es 0 € (cubierta por la aportación actual del cliente) y la contraprestación del piloto es no monetaria (caso de éxito, feedback y referencias). No se ha convertido en un precio.",
+    "Los valores de referencia (implantación 1.600 €, suscripción ~267 €/mes, desarrollo ~59.000 €) se incluyen como dato informativo/transparencia en la propuesta y el contrato, dejando explícito que NO se facturan a De Nueve a Nueve.",
+    "El tipo de servicio del input ('mixto') se ha redactado como 'servicio mixto — implantación de la plataforma SaaS Salón OS y desarrollo de apps de marca blanca (con backend de recepcionista de voz IA como complemento)' para legibilidad, manteniendo el término 'mixto'.",
+    "Responsable HAT3X = Jose Miguel González Domingo (fundador de HAT3X). Soporte = info@hat3x.com. No estaban en el input; se aplican según la instrucción de la tarea.",
+    "Las duraciones y fechas de fase del roadmap son estimaciones dentro del período 11-jul a 31-ago-2026 y pueden ajustarse en el seguimiento. El go-live se estima el 31 de agosto de 2026.",
+    "La jurisdicción del input ('España — Madrid') se ha aplicado como ley española y fuero de los tribunales de Madrid en el contrato.",
+    "El plazo de confidencialidad aplicado en el contrato es de 2 años (plantilla base), ya que el input no especifica un plazo distinto.",
+    "Se ha añadido en el contrato una nota sobre la validación fiscal del módulo Veri*factu por gestoría y la limitación de responsabilidad asociada, derivada de las restricciones y riesgos del propio input; requiere revisión legal y fiscal antes de la firma."
+  ],
+  "missing_data": [
+    {
+      "campo": "cliente.nombre_legal (razón social / autónomo)",
+      "impacto": "Alto — necesario para la propuesta, el contrato y las firmas",
+      "accion": "Solicitar la razón social o el nombre del autónomo real de De Nueve a Nueve antes de la firma. NO inventar."
+    },
+    {
+      "campo": "cliente.contacto (persona de contacto)",
+      "impacto": "Alto — aparece en carta, contrato y firmas",
+      "accion": "Confirmar la persona de contacto real. NO inventar."
+    },
+    {
+      "campo": "cliente.email",
+      "impacto": "Alto — necesario para el contrato y el envío del paquete",
+      "accion": "Solicitar el email de contacto real antes del envío. NO inventar."
+    },
+    {
+      "campo": "cliente.telefono",
+      "impacto": "Medio — necesario para el contrato",
+      "accion": "Solicitar el teléfono real antes de la firma. NO inventar."
+    },
+    {
+      "campo": "cliente.direccion (direcciones exactas de las 2 sedes)",
+      "impacto": "Medio — Collado Villalba y Alpedrete confirmadas a nivel municipio; faltan direcciones exactas",
+      "accion": "Confirmar las direcciones postales exactas de ambas sedes en el kickoff"
+    },
+    {
+      "campo": "proyecto.responsable_cliente",
+      "impacto": "Alto — interlocutor/aprobador de entregables en resumen, roadmap, contrato y guía del portal",
+      "accion": "Designar al responsable del cliente antes del kickoff"
+    },
+    {
+      "campo": "portal_cliente.username",
+      "impacto": "Medio — se provisiona por canal seguro",
+      "accion": "Asignar el usuario al crear la cuenta; enviar credenciales por canal seguro (nunca en texto plano)"
+    },
+    {
+      "campo": "contrato.cargo_representante_cliente",
+      "impacto": "Bajo — necesario para el bloque de firmas del contrato",
+      "accion": "Confirmar el cargo del firmante del cliente antes de la firma"
+    }
+  ],
+  "warnings": [
+    "El portal del cliente NO está provisionado (provisioned = false). Las credenciales no deben enviarse hasta que el acceso esté activo; siempre por canal seguro y nunca en texto plano. Fecha estimada de provisión: 31 de agosto de 2026.",
+    "El contrato incluye la leyenda de borrador obligatoria en cabecera y pie. No eliminar ni modificar esta leyenda.",
+    "Facturación Veri*factu: el módulo requiere validación por una gestoría antes de su uso real. No facturar en real hasta el visto bueno. La responsabilidad fiscal frente a la Administración corresponde al cliente.",
+    "Los datos [POR CONFIRMAR] (razón social, contacto, email, teléfono, responsable, usuario del portal) corresponden a una persona/empresa real y NO se han inventado. Se dejan como placeholder visible y deben confirmarse antes de la firma.",
+    "El acuerdo es un piloto/acuerdo familiar: la implantación es 0 € y la contraprestación es no monetaria. El acuerdo se ha dejado EXPLÍCITO por escrito (no tácito) para proteger la relación."
+  ],
+  "quality_checks": {
+    "tono_hat3x_aplicado": true,
+    "leyenda_borrador_contrato": true,
+    "nota_verifactu_gestoria_incluida": true,
+    "placeholders_sin_resolver_registrados": true,
+    "indice_lista_documentos_cliente": true,
+    "checklist_marcado_interno": true,
+    "checklist_refleja_estado_real": true,
+    "metadata_json_valido": true,
+    "password_real_simulada": false,
+    "plantillas_base_modificadas": false,
+    "consistencia_nombre_fechas_precio": true
+  }
+}
