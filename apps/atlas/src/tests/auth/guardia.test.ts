@@ -77,7 +77,19 @@ describe("rutas que el guardia no toca", () => {
     expect(decidirRuta(dentro, "/api/silenciar")).toBeNull();
   });
 
-  // Que sea pública no abre todo /api: mañana habrá endpoints que sí exijan sesión.
+  // El descubridor lo despierta pg_cron a través de pg_net, que no trae cookie
+  // ninguna. Sin esto el guardia lo manda a /login, pg_net recibe un 307 y la
+  // pasada no ocurre NUNCA — dejando `descubrimientos` vacía, que es la señal
+  // que MANTENIMIENTO.md atribuye a otra causa. Su autorización es
+  // ATLAS_CRON_KEY, igual que la de silenciar es la firma del token.
+  it("el descubridor entra sin sesión, que es como llega pg_cron", () => {
+    expect(decidirRuta(sinSesion, "/api/descubrir")).toBeNull();
+    expect(decidirRuta(sinFactor, "/api/descubrir")).toBeNull();
+    expect(decidirRuta(factorPendiente, "/api/descubrir")).toBeNull();
+    expect(decidirRuta(dentro, "/api/descubrir")).toBeNull();
+  });
+
+  // Que sean públicas no abre todo /api: mañana habrá endpoints que sí exijan sesión.
   it("no abre el resto de /api por el camino", () => {
     expect(decidirRuta(sinSesion, "/api/otra-cosa")).toBe("/login");
   });

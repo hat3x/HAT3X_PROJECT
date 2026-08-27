@@ -150,6 +150,16 @@ select atlas_disparar_descubridor();
 
 **Nunca da de baja por su cuenta lo que no ve.** Si el censo falla, la pasada se anota y no toca la vigilancia: pausar por un error de red es exactamente el daño que este módulo existe para evitar.
 
+Para reproducirlo entero en local sin tocar el Kairos de verdad, `scripts/prueba-descubridor.ts` monta uno de mentira sobre la misma base — con su RPC, su `revoke` y la credencial cifrada de verdad:
+
+```bash
+npx tsx scripts/prueba-descubridor.ts            # lo monta
+# luego, en SQL:  select atlas_disparar_descubridor();
+npx tsx scripts/prueba-descubridor.ts --limpiar  # retira el lado Kairos
+```
+
+Limpia siempre al terminar: la tabla `salons` que crea vive en el esquema `public` de Atlas, y si se queda, el siguiente `npm run tipos` la mete en `src/types/supabase.ts`.
+
 ---
 
 ## «De repente varias páginas dan 404 o ChunkLoadError»
