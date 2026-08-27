@@ -24,6 +24,10 @@ describe("executeTask", () => {
       publish: vi.fn(async () => {}),
       insertCheckpoint: vi.fn(async () => {}),
       prepareWorkspaceFn: vi.fn(async () => ({ dir: "C:/tmp", branch: "hat3x/HAT3X-001" })),
+      // Sin esto la prueba llamaba a Supabase de verdad: el nombre decia
+      // "injected deps" pero quedaba este hueco. En local pasaba porque la
+      // llamada real respondia; en CI agotaba el limite de 5 s.
+      loadCompletedSubtasks: vi.fn(async () => new Set<string>()),
       maxConcurrent: 4,
     })
     expect(r.completed).toEqual(["A"])
