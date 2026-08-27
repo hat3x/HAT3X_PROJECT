@@ -24,8 +24,16 @@ export const RUTAS_ABIERTAS = ["/login", "/alta-2fa", "/verificar"] as const;
  *
  * `/api/silenciar` se pulsa desde una notificación del sistema, a veces con la
  * app cerrada. Su autorización es la firma del token, no la cookie.
+ *
+ * `/api/descubrir` la despierta pg_cron a través de pg_net, que no manda cookie
+ * ninguna. Rebotarla a /login le devolvería un 307 y la reconciliación no
+ * ocurriría nunca, sin ruido, porque pg_net no se lo cuenta a nadie. Su
+ * autorización es ATLAS_CRON_KEY.
+ *
+ * «Públicas» no quiere decir abiertas: quiere decir que quien las autoriza no es
+ * la cookie. Las dos comprueban su propia credencial antes de tocar nada.
  */
-export const RUTAS_PUBLICAS = ["/api/silenciar"] as const;
+export const RUTAS_PUBLICAS = ["/api/silenciar", "/api/descubrir"] as const;
 
 export function decidirRuta(estado: EstadoSesion, rutaActual: string): string | null {
   if ((RUTAS_PUBLICAS as readonly string[]).includes(rutaActual)) return null;
