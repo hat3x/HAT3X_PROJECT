@@ -42,6 +42,41 @@ Van separadas a propósito: comprobar servicios no debe quedarse esperando a un 
 
 Al abrirse y al cerrarse, y cada suceso tiene su propio candado: `notificada_en` y `recuperacion_notificada_en`. Con un solo sello la recuperación no se enviaba nunca — la fila seguía marcada de la apertura. Si tocas `src/lib/alertas/pendientes.ts`, es esto lo que estás tocando.
 
+## Quién se vigila se decide solo
+
+Los salones de Kairos se dan de alta desde su panel, que escribe directo en su base. Cualquier lista mantenida a mano en Atlas nace caducada, así que no la hay: cada hora el **descubridor** compara el censo de Kairos con lo que Atlas vigila y mueve la diferencia.
+
+```
+pg_cron (cada hora, al minuto 23)
+   │
+   └── atlas_disparar_descubridor()  ── pg_net ──▶  POST /api/descubrir
+                                                        │
+                        censo de Kairos (RPC atlas_list_salons)  vs  checks de hoy
+                                                        │
+                             alta lo nuevo · PAUSA lo que ya no está · reactiva lo que vuelve
+```
+
+**Lo que importa no es dar de alta lo nuevo, sino pausar lo que desaparece.** Por HTTP, un cliente dado de baja y uno caído devuelven el mismo 404: sin censo, Atlas alertaría de cada baja legítima para siempre.
+
+De ahí sale la regla que gobierna el módulo entero: **si el censo no llega, no se toca nada**. Un censo vacío casi siempre significa que la llamada falló —red, permisos, Kairos caído—, no que HAT3X se haya quedado sin clientes. Pausarlo todo dejaría a Atlas ciego justo cuando algo va mal.
+
+Nada se borra nunca. El tenant que sale del censo se pausa y conserva su historial de incidencias y de uptime; si vuelve, se reactiva el mismo check y la serie continúa donde estaba.
+
+Este corre en la aplicación y no en una Edge Function, al revés que el vigía. Descifra la clave de servicio de Kairos, y aquí `usarCredencial` ya deja rastro de cada apertura en `credencial_usos`; en Deno habría que reimplementar el cifrado y ese registro. Se paga que una pasada se pierda si Vercel está caído — asumible, porque el vigía sigue vigilando por su cuenta y la reconciliación se recupera sola a la hora siguiente. El vigía no podría permitírselo: él tiene que funcionar precisamente cuando lo demás no funciona.
+
+Cada pasada queda escrita en `descubrimientos`, salga bien o mal. Sin eso, uno que llevara semanas fallando no se notaría: pg_net recibe el error y no se lo cuenta a nadie.
+
+**Qué hay que dejar preparado**, una sola vez:
+
+| Dónde | Qué |
+|---|---|
+| Supabase de **Kairos** | Pegar [`supabase/kairos/atlas_list_salons.sql`](./supabase/kairos/atlas_list_salons.sql) en su editor SQL |
+| Atlas → Proyectos | Un proyecto con slug `kairos`, y en su ficha un enlace de tipo `supabase` con la URL del Supabase de Kairos |
+| Atlas → Ajustes → Llavero | Una credencial `Supabase` / `service_role` **atada a ese proyecto**, con la clave de servicio de Kairos |
+| Entorno + base | `ATLAS_CRON_KEY`, y el mismo valor en `app.atlas_cron_key`, junto a `app.atlas_web_url` |
+
+Si falta alguna, la pasada no revienta: lo anota en `descubrimientos` diciendo cuál falta y dónde ponerla. Eso lo decide `src/lib/descubrir/ajustes.ts`.
+
 ## Arrancar en local
 
 Hace falta Docker en marcha.
@@ -110,6 +145,7 @@ src/
 │   ├── auth/        El guardia: qué ruta corresponde a cada estado de sesión
 │   ├── cripto/      AES-256-GCM sobre WebCrypto (no node:crypto — Deno tiene que poder usarlo)
 │   ├── db/          Consultas y acciones de servidor, separadas a propósito (ver abajo)
+│   ├── descubrir/   El censo de Kairos: leerlo, decidir qué mover y aplicarlo
 │   ├── incidencias/ La máquina de estados
 │   └── tema/        Dos temas × cinco paletas, en tokens CSS
 ├── middleware.ts   El guardia. Su `matcher` deja fuera el manifiesto y el service worker
@@ -117,6 +153,7 @@ src/
 
 supabase/
 ├── functions/      vigia y avisar. Corren en Deno, NO en Node
+├── kairos/         SQL para OTRA base: la RPC del censo. No la aplica la CLI
 └── migrations/     Se aplican en orden. Nunca se editan una vez aplicadas
 ```
 
