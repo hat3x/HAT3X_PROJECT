@@ -429,6 +429,36 @@ export type Database = {
           },
         ]
       }
+      descubrimientos: {
+        Row: {
+          altas: number
+          ejecutado_en: string
+          error: string | null
+          id: number
+          ok: boolean
+          pausados: number
+          reactivados: number
+        }
+        Insert: {
+          altas?: number
+          ejecutado_en?: string
+          error?: string | null
+          id?: number
+          ok: boolean
+          pausados?: number
+          reactivados?: number
+        }
+        Update: {
+          altas?: number
+          ejecutado_en?: string
+          error?: string | null
+          id?: number
+          ok?: boolean
+          pausados?: number
+          reactivados?: number
+        }
+        Relationships: []
+      }
       enlaces: {
         Row: {
           etiqueta: string
@@ -472,6 +502,7 @@ export type Database = {
           check_id: string
           id: string
           notificada_en: string | null
+          recuperacion_notificada_en: string | null
           servicio_id: string
           severidad: string
           silenciada_hasta: string | null
@@ -484,6 +515,7 @@ export type Database = {
           check_id: string
           id?: string
           notificada_en?: string | null
+          recuperacion_notificada_en?: string | null
           servicio_id: string
           severidad: string
           silenciada_hasta?: string | null
@@ -496,6 +528,7 @@ export type Database = {
           check_id?: string
           id?: string
           notificada_en?: string | null
+          recuperacion_notificada_en?: string | null
           servicio_id?: string
           severidad?: string
           silenciada_hasta?: string | null
@@ -907,9 +940,12 @@ export type Database = {
     }
     Functions: {
       atlas_consolidar_retencion: { Args: never; Returns: undefined }
+      atlas_disparar_avisos: { Args: never; Returns: undefined }
+      atlas_disparar_descubridor: { Args: never; Returns: undefined }
       atlas_disparar_vigia: { Args: never; Returns: undefined }
       atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
       atlas_es_propietario: { Args: never; Returns: boolean }
+      atlas_podar_descubrimientos: { Args: never; Returns: undefined }
       atlas_ve_cliente: { Args: { c: string }; Returns: boolean }
       atlas_ve_proyecto: { Args: { p: string }; Returns: boolean }
     }

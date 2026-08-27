@@ -105,6 +105,53 @@ En local la URL es la de dentro de Docker: `http://kong:8000/functions/v1`. Y la
 
 ---
 
+## «Kairos tiene un salón nuevo y Atlas no lo vigila»
+
+O al revés: se dio de baja un cliente y Atlas sigue alertando de su 404. Lo resuelve el descubridor, que pasa **cada hora al minuto 23**. Si lleva más de eso sin moverse, mira lo que dejó escrito:
+
+```sql
+select ejecutado_en, ok, altas, pausados, reactivados, error
+from descubrimientos order by ejecutado_en desc limit 10;
+```
+
+Esa tabla es el diagnóstico entero. Casos por orden de frecuencia:
+
+| Qué pone en `error` | Qué pasa |
+|---|---|
+| `Kairos respondió 404 a atlas_list_salons` | La RPC no está desplegada. Pega [`supabase/kairos/atlas_list_salons.sql`](./supabase/kairos/atlas_list_salons.sql) en el editor SQL **de Kairos**, no en el de Atlas |
+| `Kairos respondió 401` o `403` | La credencial del llavero no es la `service_role` de Kairos, o Kairos la rotó. Rótala también aquí |
+| `La respuesta no es una lista de salones` | Algo devolvió HTML o un contrato distinto — normalmente un proxy, o una URL equivocada en el enlace del proyecto |
+| `No hay ningún proyecto con slug «kairos»` | Falta el proyecto en Atlas. De él cuelgan los checks de cada salón |
+| `…no tiene ningún enlace de tipo «supabase»` | Falta la URL del Supabase de Kairos en la ficha del proyecto |
+| `No hay en el llavero una credencial «Supabase / service_role»…` | Falta la clave, o está guardada sin atar al proyecto `kairos` |
+
+**Si la tabla está vacía**, no es que fallen las pasadas: es que no se dispara ninguna. Igual que el vigía, y con el mismo tipo de causa:
+
+```sql
+select current_setting('app.atlas_web_url', true),
+       current_setting('app.atlas_cron_key', true) is not null;
+select * from cron.job where jobname = 'atlas-descubrir';
+```
+
+Nulos → `atlas_disparar_descubridor()` avisa con un `raise warning` y se calla. Se arreglan **como `supabase_admin`**:
+
+```sql
+alter database postgres set app.atlas_web_url  = '<url pública de Atlas>';
+alter database postgres set app.atlas_cron_key = '<mismo valor que ATLAS_CRON_KEY>';
+```
+
+Si los dos valores están y aun así no hay filas, el que no responde es Vercel: mira en `net._http_response` qué devolvió la ruta. Un **401** ahí significa que `app.atlas_cron_key` y `ATLAS_CRON_KEY` no coinciden.
+
+Para no esperar a la siguiente hora, dispárala a mano:
+
+```sql
+select atlas_disparar_descubridor();
+```
+
+**Nunca da de baja por su cuenta lo que no ve.** Si el censo falla, la pasada se anota y no toca la vigilancia: pausar por un error de red es exactamente el daño que este módulo existe para evitar.
+
+---
+
 ## «De repente varias páginas dan 404 o ChunkLoadError»
 
 Si la app funcionaba y de golpe unas rutas cargan y otras no —con
@@ -194,6 +241,7 @@ select atlas_consolidar_retencion();
 | Semana | Mirar `notificaciones` por `ok = false`: un canal roto no se nota hasta que hace falta |
 | Mes | Confirmar que llega el latido a healthchecks.io, si está dado de alta |
 | Mes | Revisar `credencial_usos`: quién ha descifrado qué |
+| Mes | Mirar `descubrimientos` por `ok = false`: un descubridor roto no se nota hasta que un cliente nuevo lleva semanas sin vigilar |
 | Trimestre | Comprobar el tamaño de la base |
 
 ---
