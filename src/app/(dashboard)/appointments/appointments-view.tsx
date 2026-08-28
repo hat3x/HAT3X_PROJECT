@@ -25,7 +25,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { WaitlistMatchesDialog } from "@/components/agenda/waitlist-matches-dialog";
 import { localDateInZone, weekdayOfLocalDate, zonedWallTimeToUtc } from "@/lib/booking/timezone";
+import type { FreedSlot } from "@/lib/booking/waitlist";
 import {
   useAppointments,
   useDeleteAppointment,
@@ -112,6 +114,12 @@ export function AppointmentsView({
     open: boolean;
     appointment: AppointmentWithDetails | null;
   }>({ open: false, appointment: null });
+  /**
+   * Hueco que acaba de quedar libre tras cancelar. Al fijarlo se abre el
+   * diálogo con quién de la lista de espera encaja. `null` mientras no haya
+   * ninguno.
+   */
+  const [freedSlot, setFreedSlot] = useState<FreedSlot | null>(null);
   const [rescheduleState, setRescheduleState] = useState<{
     open: boolean;
     appointment: AppointmentWithDetails | null;
@@ -298,6 +306,11 @@ export function AppointmentsView({
   }
 
   function confirmCancel(): void {
+    // La cita se busca ANTES de cancelar: después, la lista se invalida y la
+    // fila puede desaparecer de `appointmentsQuery`, y con ella el hueco que
+    // acabamos de liberar.
+    const cancelada = appointmentsQuery.data?.find((a) => a.id === cancelState.appointmentId);
+
     statusMutation.mutate(
       {
         id: cancelState.appointmentId,
@@ -305,7 +318,20 @@ export function AppointmentsView({
         reason: cancelState.reason || undefined,
       },
       {
-        onSuccess: () => setCancelState({ open: false, appointmentId: "", reason: "" }),
+        onSuccess: () => {
+          setCancelState({ open: false, appointmentId: "", reason: "" });
+          // Aquí es donde la lista de espera vale de algo: hasta ahora, cancelar
+          // dejaba un sillón parado y a nadie sabiendo que había sitio.
+          if (cancelada) {
+            setFreedSlot({
+              startsAt: cancelada.starts_at,
+              endsAt: cancelada.ends_at,
+              timeZone: timezone,
+              serviceId: cancelada.service_id,
+              professionalId: cancelada.professional_id,
+            });
+          }
+        },
       },
     );
   }
@@ -564,6 +590,18 @@ export function AppointmentsView({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Quién de la lista de espera encaja en el hueco recién liberado. Se
+          abre solo al cancelar; el resto del tiempo `freedSlot` es null y el
+          componente no pinta nada. */}
+      <WaitlistMatchesDialog
+        salonId={salonId}
+        slot={freedSlot}
+        open={freedSlot !== null}
+        onOpenChange={(open) => {
+          if (!open) setFreedSlot(null);
+        }}
+      />
 
       {/* Dialog de borrado (hard delete) */}
       <Dialog
