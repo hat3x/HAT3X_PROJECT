@@ -46,7 +46,7 @@ async function resolveLineInputs(
   // Factura de una venta ya registrada: se leen sus líneas de BD (fuente fiable).
   const { data: sale, error: saleError } = await supabase
     .from("pos_sales")
-    .select("id, customer_id")
+    .select("id, customer_id, migrated_from")
     .eq("id", values.saleId)
     .eq("salon_id", salonId)
     .maybeSingle();
@@ -55,6 +55,16 @@ async function resolveLineInputs(
   }
   if (sale === null) {
     return { error: "La venta indicada no existe o no es accesible" };
+  }
+  // Venta traída de un volcado histórico: su documento fiscal ya lo emitió el
+  // sistema anterior. Facturarla aquí gastaría un número de la serie de Kairos
+  // para duplicar algo que ya existe, y con fecha de hoy. Se para ANTES de
+  // emitir, porque un número consumido no se recupera sin dejar hueco.
+  if (sale.migrated_from != null) {
+    return {
+      error:
+        "Esta venta es histórico importado del sistema anterior, que ya emitió su factura. No se puede volver a facturar desde Kairos.",
+    };
   }
 
   const { data: saleLines, error: linesError } = await supabase

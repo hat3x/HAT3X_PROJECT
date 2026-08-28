@@ -197,6 +197,20 @@ export type ImageModality =
   | "scan_stl";
 
 /**
+ * Estado de una entrada de la lista de espera (espejo del enum
+ * public.waitlist_status). `esperando` → `avisado` → `agendado` | `descartado`.
+ */
+export type WaitlistStatus = "esperando" | "avisado" | "agendado" | "descartado";
+
+/**
+ * Cómo captura la imagen un equipo (espejo del enum public.imaging_adapter).
+ * De universal a específico: `carpeta` funciona con cualquier aparato que sepa
+ * exportar a disco; `twain` cubre la mayoría de sensores intraorales; `dicom`,
+ * los OPG y CBCT; `sdk`, la integración propietaria donde compense.
+ */
+export type ImagingAdapter = "carpeta" | "twain" | "dicom" | "sdk";
+
+/**
  * Estado de una receta/prescripción (espejo del enum public.prescription_status).
  * Borrador → emitida → revocada; INMUTABLE tras emitir (trigger
  * `prescription_guard`, migración 20260801140000_prescriptions.sql).
@@ -1841,6 +1855,120 @@ export interface Database {
           },
         ];
       };
+      waitlist_entry: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          /** `null` = le vale cualquier servicio. */
+          service_id: string | null;
+          /** `null` = le da igual el profesional. */
+          professional_id: string | null;
+          /** 0=domingo … 6=sábado. Vacío = cualquier día. */
+          weekdays: number[];
+          /** Hora local del salón, `HH:MM:SS`. `null` = sin límite. */
+          from_time: string | null;
+          to_time: string | null;
+          priority: number;
+          notes: string | null;
+          status: WaitlistStatus;
+          expires_at: string | null;
+          notified_at: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          service_id?: string | null;
+          professional_id?: string | null;
+          weekdays?: number[];
+          from_time?: string | null;
+          to_time?: string | null;
+          priority?: number;
+          notes?: string | null;
+          status?: WaitlistStatus;
+          expires_at?: string | null;
+          notified_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          customer_id?: string;
+          service_id?: string | null;
+          professional_id?: string | null;
+          weekdays?: number[];
+          from_time?: string | null;
+          to_time?: string | null;
+          priority?: number;
+          notes?: string | null;
+          status?: WaitlistStatus;
+          expires_at?: string | null;
+          notified_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "waitlist_entry_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      salon_imaging_device: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          adapter: ImagingAdapter;
+          /** Ajustes propios del adaptador; su forma la valida `imagingDeviceSchema`. */
+          settings: Record<string, unknown>;
+          modality: ImageModality;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          name: string;
+          adapter: ImagingAdapter;
+          settings?: Record<string, unknown>;
+          modality: ImageModality;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          salon_id?: string;
+          name?: string;
+          adapter?: ImagingAdapter;
+          settings?: Record<string, unknown>;
+          modality?: ImageModality;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "salon_imaging_device_salon_id_fkey";
+            columns: ["salon_id"];
+            isOneToOne: false;
+            referencedRelation: "salons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       schedule_exceptions: {
         Row: {
           id: string;
@@ -2226,6 +2354,9 @@ export interface Database {
           // 20260810100000_restauracion_orders. FK compuesta
           // pos_sales_order_id_fkey (order_id, salon_id) → orders (id, salon_id).
           order_id: string | null;
+          // Referencia en el sistema de origen si la venta viene de un volcado
+          // historico (migracion 20260828140000). NULL en las ventas de Kairos.
+          migrated_from: string | null;
         };
         Insert: {
           id?: string;
@@ -2246,6 +2377,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           order_id?: string | null;
+          migrated_from?: string | null;
         };
         Update: {
           id?: string;
@@ -2266,6 +2398,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           order_id?: string | null;
+          migrated_from?: string | null;
         };
         Relationships: [
           {
@@ -3720,6 +3853,12 @@ export interface Database {
           status: ConsentStatus;
           signed_at: string | null;
           signed_by_patient: string | null;
+          /** Trazo firmado (SVG) en `patient-media`. NULL en los firmados antes de A2. */
+          signature_path: string | null;
+          /** SHA-256 hex del contenido firmado. Ver `@/lib/dental/consent-seal`. */
+          signature_hash: string | null;
+          signed_ip: string | null;
+          signed_device: string | null;
           witnessed_by: string | null;
           revoked_at: string | null;
           revoked_by: string | null;
@@ -3741,6 +3880,10 @@ export interface Database {
           status?: ConsentStatus; // default 'pending'
           signed_at?: string | null;
           signed_by_patient?: string | null;
+          signature_path?: string | null;
+          signature_hash?: string | null;
+          signed_ip?: string | null;
+          signed_device?: string | null;
           witnessed_by?: string | null;
           revoked_at?: string | null;
           revoked_by?: string | null;
@@ -3762,6 +3905,10 @@ export interface Database {
           status?: ConsentStatus;
           signed_at?: string | null;
           signed_by_patient?: string | null;
+          signature_path?: string | null;
+          signature_hash?: string | null;
+          signed_ip?: string | null;
+          signed_device?: string | null;
           witnessed_by?: string | null;
           revoked_at?: string | null;
           revoked_by?: string | null;
@@ -4164,6 +4311,20 @@ export interface Database {
        * owner/manager. `p_installments` es un array de {seq, dueDate,
        * amountCents} calculado en la app. Devuelve el id del plan creado.
        */
+      /**
+       * Guarda puerto y token del agente de captura en
+       * `salons.settings->imaging_agent`, FUSIONANDO con `||` para no pisar el
+       * resto de ajustes (`single_resource` y compañía). Exige rol
+       * owner/manager. Ver migración 20260828130000_imaging_agent_settings.sql.
+       */
+      set_salon_imaging_agent: {
+        Args: {
+          p_salon_id: string;
+          p_port: number;
+          p_token: string;
+        };
+        Returns: undefined;
+      };
       create_ortho_payment_plan: {
         Args: {
           p_salon_id: string;
@@ -4309,6 +4470,16 @@ export type Consent = Tables<"consents">;
 export type ConsentInsert = TablesInsert<"consents">;
 export type PatientImage = Tables<"patient_images">;
 export type PatientImageInsert = TablesInsert<"patient_images">;
+
+// Equipos de captura de imagen por salón. El equipo lo elige CADA CLÍNICA: no
+// hay fabricante cableado, sino adaptadores configurables (ver A1a del roadmap).
+export type SalonImagingDevice = Tables<"salon_imaging_device">;
+export type SalonImagingDeviceInsert = TablesInsert<"salon_imaging_device">;
+
+// Lista de espera: a quién llamar cuando queda un hueco libre. NULL significa
+// "me da igual", no "sin datos" (ver la migración 20260828120000_waitlist.sql).
+export type WaitlistEntry = Tables<"waitlist_entry">;
+export type WaitlistEntryInsert = TablesInsert<"waitlist_entry">;
 
 // Recetas / prescripciones (odontología) — cabecera (prescription) + renglones
 // de medicación (prescription_item). INMUTABLE tras emitir (trigger BD).
