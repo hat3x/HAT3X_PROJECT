@@ -1,67 +1,61 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, MapPin, Bell, MessageCircle, LogOut, Globe, ChevronRight, Shield, Trash2, Key } from 'lucide-react';
+import { User, Bell, LogOut, Globe, ChevronRight, Shield, Key } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
+import { useSalon } from '@/lib/salon-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
 import BottomNav from '@/components/BottomNav';
+import { FEATURES } from '@/config/features';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Customer = Tables<'customers'>;
-type Location = Tables<'locations'>;
 
 const Profile = () => {
   const navigate = useNavigate();
   const { t, locale, setLocale } = useI18n();
   const { user, signOut } = useAuth();
+  // salon_id derivado del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId } = useSalon();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
 
-  // Form state
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  // Form state — Salón OS usa `full_name` (un solo campo) y `marketing_consent`.
+  const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [preferredLocationId, setPreferredLocationId] = useState<string | null>(null);
   const [marketingConsent, setMarketingConsent] = useState(false);
-  const [whatsappConsent, setWhatsappConsent] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     const load = async () => {
       setLoading(true);
-      const [custRes, locRes, roleRes] = await Promise.all([
-        supabase.from('customers').select('*').eq('user_id', user.id).single(),
-        supabase.from('locations').select('*'),
-        supabase.from('user_roles').select('role').eq('user_id', user.id).eq('role', 'admin').maybeSingle(),
-      ]);
+      // Lectura self del cliente (user_id = auth.uid()) dentro del salón.
+      const { data: c } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('salon_id', salonId)
+        .maybeSingle();
 
-      if (custRes.data) {
-        const c = custRes.data;
+      if (c) {
         setCustomer(c);
-        setFirstName(c.first_name);
-        setLastName(c.last_name);
-        setPhone(c.phone);
-        setEmail(c.email);
-        setPreferredLocationId(c.preferred_location_id);
-        setMarketingConsent(!!c.consent_marketing_at);
-        setWhatsappConsent(!!c.consent_whatsapp_at);
+        setFullName(c.full_name ?? '');
+        setPhone(c.phone ?? '');
+        setEmail(c.email ?? '');
+        setMarketingConsent(c.marketing_consent);
       }
-      setLocations(locRes.data || []);
-      setIsAdmin(!!roleRes.data);
       setLoading(false);
     };
     load();
-  }, [user]);
+  }, [user, salonId]);
 
   const handleSave = async () => {
     if (!customer) return;
@@ -69,16 +63,14 @@ const Profile = () => {
     const { error } = await supabase
       .from('customers')
       .update({
-        first_name: firstName,
-        last_name: lastName,
-        phone,
-        email,
-        preferred_location_id: preferredLocationId,
-        consent_marketing_at: marketingConsent ? new Date().toISOString() : null,
-        consent_whatsapp_at: whatsappConsent ? new Date().toISOString() : null,
+        full_name: fullName.trim(),
+        phone: phone.trim() || null,
+        email: email.trim() || null,
+        marketing_consent: marketingConsent,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', customer.id);
+      .eq('id', customer.id)
+      .eq('salon_id', salonId);
 
     setSaving(false);
     if (!error) {
@@ -118,7 +110,7 @@ const Profile = () => {
             <User className="h-8 w-8 text-gold" />
           </div>
           <div>
-            <p className="text-lg font-medium text-foreground">{firstName} {lastName}</p>
+            <p className="text-lg font-medium text-foreground">{fullName}</p>
             <p className="text-xs text-muted-foreground">{email}</p>
           </div>
         </div>
@@ -127,29 +119,9 @@ const Profile = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
           <h3 className="text-sm font-medium text-foreground">{t('profile.personalInfo')}</h3>
           <div className="space-y-2">
-            <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={t('auth.name')} className="bg-card border-border" />
-            <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t('auth.surname')} className="bg-card border-border" />
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={t('profile.fullName')} className="bg-card border-border" />
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('auth.phone')} className="bg-card border-border" />
             <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('auth.email')} className="bg-card border-border" />
-          </div>
-        </motion.div>
-
-        {/* Preferred location */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-3">
-          <h3 className="text-sm font-medium text-foreground">{t('profile.preferredLocation')}</h3>
-          <div className="space-y-2">
-            {locations.map((loc) => (
-              <button
-                key={loc.id}
-                onClick={() => setPreferredLocationId(loc.id)}
-                className={`w-full rounded-xl border p-3 text-left flex items-center gap-3 transition-all ${
-                  preferredLocationId === loc.id ? 'border-gold bg-gold/5' : 'border-border bg-card'
-                }`}
-              >
-                <MapPin size={16} className={preferredLocationId === loc.id ? 'text-gold' : 'text-muted-foreground'} />
-                <span className="text-sm text-foreground">{loc.name}</span>
-              </button>
-            ))}
           </div>
         </motion.div>
 
@@ -163,13 +135,6 @@ const Profile = () => {
                 <span className="text-sm text-foreground">{t('profile.marketingConsent')}</span>
               </div>
               <Switch checked={marketingConsent} onCheckedChange={setMarketingConsent} />
-            </div>
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <MessageCircle size={16} className="text-muted-foreground" />
-                <span className="text-sm text-foreground">{t('profile.whatsappConsent')}</span>
-              </div>
-              <Switch checked={whatsappConsent} onCheckedChange={setWhatsappConsent} />
             </div>
           </div>
         </motion.div>
@@ -198,8 +163,8 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Admin panel */}
-        {isAdmin && (
+        {/* Admin panel — disabled: needs `user_roles` (RBAC) + `api_keys` (see @/config/features) */}
+        {FEATURES.admin && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="space-y-3">
             <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
               <Shield size={14} className="text-gold" /> Administración

@@ -1,3 +1,9 @@
+/**
+ * ⚠️ DISABLED — not routed in Salon OS. Depends on the `subscriptions` table,
+ * which does not exist in the current Supabase schema. Kept for reference.
+ * Re-enable: set FEATURES.subscriptions = true in @/config/features and restore
+ * the /premium route in src/App.tsx (see the checklist there).
+ */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Crown, ArrowLeft, Check, X, Loader2, Scissors, Palette, CalendarCheck, Gift, Sparkles, PartyPopper, Tag, Ticket } from 'lucide-react';

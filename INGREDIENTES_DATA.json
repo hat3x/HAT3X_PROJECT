@@ -1,0 +1,1105 @@
+{
+ "ingredientes": [
+  {
+   "nombre": "Aceite de oliva",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Aceitunas",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Atún",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Bacon ahumado",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Calamar",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Carne de burger",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Carrillera",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Cebolla crujiente",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Cheddar",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Chocolate",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Chorizo",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Cookie / Montycookie",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Guacamole",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Huevo hilado",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Jamón Gran Reserva",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Jamón cocido",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Kétchup",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Lechuga",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Lomo al ajillo",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Mantequilla",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Mayonesa",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Maíz",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Mojo picón",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Mostaza",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Mostaza y miel",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Mozzarella / Mozzamix",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Nachos TexMex",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Orégano",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Patatas paja",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Pepperoni",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Picatostes",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Pintxo donostiarra",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Pollo",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Pollo Kebab",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Pulled pork",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Queso gorgonzola",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Queso madurado",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Salchicha / Hot dog",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Salmón ahumado",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Salsa 100M",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Salsa BBQ",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Salsa alioli",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Salsa brava",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Salsa pomodoro / pizza",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Sirope",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Tomate",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Torreznos",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Tortilla de patatas",
+   "tipo": "ingrediente"
+  },
+  {
+   "nombre": "Pan clásico 100M",
+   "tipo": "pan"
+  },
+  {
+   "nombre": "Pan piadina",
+   "tipo": "pan"
+  },
+  {
+   "nombre": "Pan perrito",
+   "tipo": "pan"
+  },
+  {
+   "nombre": "Pan burguer",
+   "tipo": "pan"
+  },
+  {
+   "nombre": "Pan pizza",
+   "tipo": "pan"
+  },
+  {
+   "nombre": "Pan gourmet",
+   "tipo": "pan"
+  }
+ ],
+ "mapa": [
+  {
+   "producto_id": "906e0d32-514a-497e-ab7f-e8aab7d294a1",
+   "ings": [
+    "Jamón Gran Reserva",
+    "Aceite de oliva",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "ec1daa64-fe8c-4577-bd9d-b9c2caab15eb",
+   "ings": [
+    "Lomo al ajillo",
+    "Salsa 100M",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "96a3e6ec-7ef4-4728-b8c9-b5eb481bbd89",
+   "ings": [
+    "Jamón Gran Reserva",
+    "Mantequilla",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "ddedcc4f-52f0-4822-9cfc-3f91b3628eae",
+   "ings": [
+    "Queso madurado",
+    "Tortilla de patatas",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "842051dd-4258-48ca-a8fb-75790b96cf46",
+   "ings": [
+    "Bacon ahumado",
+    "Tortilla de patatas",
+    "Salsa alioli",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "137762f1-a9af-4995-ac37-09f3039c070f",
+   "ings": [
+    "Tomate",
+    "Tortilla de patatas",
+    "Mayonesa",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "e7fe4826-9d87-49c0-a12f-2b5fc4b5b1c3",
+   "ings": [
+    "Tortilla de patatas",
+    "Mojo picón",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "9f5c8955-0a6f-46de-9eee-339e781ffb32",
+   "ings": [
+    "Patatas paja",
+    "Tortilla de patatas",
+    "Salsa 100M",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "63ff3035-de8a-4e89-970f-75a072d0000b",
+   "ings": [
+    "Cebolla crujiente",
+    "Tortilla de patatas",
+    "Salsa BBQ",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "9c63103a-85d8-4c6d-82dd-ae01ee1db33c",
+   "ings": [
+    "Queso madurado",
+    "Pollo",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "cbd014ba-cacf-4c58-b3e3-0b8fd3140064",
+   "ings": [
+    "Tomate",
+    "Mojo picón",
+    "Pollo",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "35780bf2-ba87-4aab-9022-76462f693ec9",
+   "ings": [
+    "Patatas paja",
+    "Mostaza y miel",
+    "Mostaza",
+    "Pollo",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "7ac4eb03-ddc5-4564-a469-26625c9f3187",
+   "ings": [
+    "Tomate",
+    "Tortilla de patatas",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "c8ce0abb-4065-4fde-9140-9698fea4e906",
+   "ings": [
+    "Bacon ahumado",
+    "Mayonesa",
+    "Pollo",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "364dea74-5c6a-4105-add9-c2d998263971",
+   "ings": [
+    "Patatas paja",
+    "Salsa BBQ",
+    "Pollo",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "644b3c21-6c97-4ab4-adc6-65970d49582c",
+   "ings": [
+    "Tomate",
+    "Pollo Kebab",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "00aaa3f5-d456-4888-90f2-9af79a4d97d6",
+   "ings": [
+    "Cheddar",
+    "Pollo Kebab",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "28ae3c11-118b-498d-aca9-3357b1f13838",
+   "ings": [
+    "Tomate",
+    "Salsa 100M",
+    "Pollo Kebab",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "3af6a4a7-75c4-490f-b946-1c850a6825b3",
+   "ings": [
+    "Patatas paja",
+    "Salsa BBQ",
+    "Pollo Kebab",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "224b1c68-363c-41c0-8305-016bf072ea9d",
+   "ings": [
+    "Bacon ahumado",
+    "Mayonesa",
+    "Pollo Kebab",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "e5a8ea3d-8170-466e-98b4-a76b3c7a5b4a",
+   "ings": [
+    "Pulled pork",
+    "Cheddar",
+    "Salsa BBQ",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "c79476fd-ecf5-4ae6-92cd-6eb83a37ecfe",
+   "ings": [
+    "Pulled pork",
+    "Bacon ahumado",
+    "Salsa BBQ",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "6d08d59f-9f1d-4491-97b3-d6a1b06eecde",
+   "ings": [
+    "Pulled pork",
+    "Salsa brava",
+    "Salsa BBQ",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "d7c50310-e454-4404-be02-754c1988fcdc",
+   "ings": [
+    "Pulled pork",
+    "Salsa BBQ",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "7cc8b7f3-96ac-46d6-b367-d66e9214c022",
+   "ings": [
+    "Pulled pork",
+    "Patatas paja",
+    "Salsa BBQ",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "4b255da6-5282-4f97-82eb-44867c315f84",
+   "ings": [
+    "Pulled pork",
+    "Cebolla crujiente",
+    "Salsa BBQ",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "87eb3feb-3cda-469b-b50a-476ae2958f09",
+   "ings": [
+    "Lomo al ajillo",
+    "Queso madurado",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "adafa435-c758-459d-8947-33e6db42b979",
+   "ings": [
+    "Lomo al ajillo",
+    "Queso gorgonzola",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "c4462867-d5e8-4e20-99f0-7ba0d2c9fbf1",
+   "ings": [
+    "Lomo al ajillo",
+    "Mojo picón",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "d0e2fe8a-bb50-4457-a811-d68745684a82",
+   "ings": [
+    "Lomo al ajillo",
+    "Tomate",
+    "Patatas paja",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "69e8c475-9e89-4fdb-9088-1db06d71fa0f",
+   "ings": [
+    "Lomo al ajillo",
+    "Tomate",
+    "Mayonesa",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "a38bbe7f-3e1d-41f1-9536-deff52e6bb62",
+   "ings": [
+    "Lomo al ajillo",
+    "Bacon ahumado",
+    "Salsa alioli",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "ee74bece-1ddc-4081-ba44-ac1b170f40f0",
+   "ings": [
+    "Calamar",
+    "Salsa alioli",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "26dede17-cefe-47c5-af86-29d9d4ff2598",
+   "ings": [
+    "Calamar",
+    "Salsa 100M",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "a81195b3-bfdd-4bc2-8ff7-f30d8f5fc8f9",
+   "ings": [
+    "Salsa alioli",
+    "Pollo",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "87dd8e71-ff5c-4844-904c-fb961853ee52",
+   "ings": [
+    "Calamar",
+    "Guacamole",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "0a63f815-2167-4503-a066-d6711e541066",
+   "ings": [
+    "Calamar",
+    "Mayonesa",
+    "Salsa brava",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "f3231fe3-77f3-4706-92ad-faffd0d64174",
+   "ings": [
+    "Calamar",
+    "Tomate",
+    "Mayonesa",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "d5150d12-0ca1-414d-b218-bdcc7d770322",
+   "ings": [
+    "Bacon ahumado",
+    "Tomate",
+    "Mayonesa",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "f5405fc0-1135-4c30-95e5-ee1fa000933f",
+   "ings": [
+    "Bacon ahumado",
+    "Cebolla crujiente",
+    "Salsa 100M",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "1ea46501-8f24-4f29-aa49-41a1bb4efc94",
+   "ings": [
+    "Bacon ahumado",
+    "Queso gorgonzola",
+    "Tomate",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "51d7da56-327e-4f11-b3b3-744c6635b274",
+   "ings": [
+    "Bacon ahumado",
+    "Patatas paja",
+    "Mayonesa",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "56f17569-b462-4277-b094-b92181a38349",
+   "ings": [
+    "Bacon ahumado",
+    "Queso madurado",
+    "Tomate",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "277a70f2-0b7e-4a00-a0da-419fde4722fd",
+   "ings": [
+    "Jamón Gran Reserva",
+    "Mantequilla",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "693beddb-f114-43e0-8a46-a7ac88939f4d",
+   "ings": [
+    "Jamón Gran Reserva",
+    "Tomate",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "0c8a97fe-1dd7-479f-b921-debce7947f64",
+   "ings": [
+    "Carrillera",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "3884b64d-bc2c-4db9-a6bd-294f59546632",
+   "ings": [
+    "Jamón Gran Reserva",
+    "Tomate",
+    "Patatas paja",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "dd174978-c820-4697-8c78-dde1770b0697",
+   "ings": [
+    "Jamón Gran Reserva",
+    "Tortilla de patatas",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "a4b5ca74-f2a8-4ccd-bded-0c420a9274cc",
+   "ings": [
+    "Carrillera",
+    "Salsa alioli",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "fddc818b-3cb6-439e-b27d-8c232e47401b",
+   "ings": [
+    "Carrillera",
+    "Patatas paja",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "2e1af3d4-1daa-4de6-b7ff-006517f8c1f4",
+   "ings": [
+    "Carrillera",
+    "Tomate",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "abe002ab-0bb7-4490-b6d9-698521c5a8f0",
+   "ings": [
+    "Carrillera",
+    "Cebolla crujiente",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "838e3af8-207f-4915-9c40-23b93fb274ad",
+   "ings": [
+    "Carrillera",
+    "Bacon ahumado",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "e753bed8-b812-422a-ae26-65c705dbe77f",
+   "ings": [
+    "Torreznos",
+    "Mayonesa",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "3dbc1c48-7272-4786-9f9a-09e53b46a008",
+   "ings": [
+    "Torreznos",
+    "Salsa alioli",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "ba47c903-c7a9-4e60-bb0b-40f63a71062a",
+   "ings": [
+    "Torreznos",
+    "Salsa 100M",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "c76789f6-fa58-4872-9673-99da7bfea286",
+   "ings": [
+    "Calamar",
+    "Mayonesa",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "ab422183-cad6-48b4-93ac-c0fd4774aa9d",
+   "ings": [
+    "Salmón ahumado",
+    "Queso gorgonzola",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "c05668a3-c4b3-406f-88fe-f23ea685aa5f",
+   "ings": [
+    "Salmón ahumado",
+    "Tomate",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "498817a4-9aa1-4a8f-8df8-ceb2fb6235cd",
+   "ings": [
+    "Salmón ahumado",
+    "Mostaza y miel",
+    "Mostaza",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "6f378ec8-adea-43ea-b208-707c14b9cc9f",
+   "ings": [
+    "Salmón ahumado",
+    "Guacamole",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "12fc8394-752a-414b-b4b0-706fadca9873",
+   "ings": [
+    "Chorizo",
+    "Salsa brava",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "7cf2cc3f-7272-4774-88a8-0835e174b549",
+   "ings": [
+    "Chorizo",
+    "Queso gorgonzola",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "0bbf4dcb-acdf-4d95-a162-65c0f16cedfc",
+   "ings": [
+    "Chorizo",
+    "Salsa BBQ",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "49855721-8476-4a5a-8eea-ff426d3cdd9b",
+   "ings": [
+    "Chorizo",
+    "Guacamole",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "58fc8105-8d8f-4e28-aeed-2ef90a6ac544",
+   "ings": [
+    "Chocolate",
+    "Cookie / Montycookie",
+    "Sirope"
+   ]
+  },
+  {
+   "producto_id": "d6e2e2dd-9009-4499-8abd-11d5698da299",
+   "ings": [
+    "Chocolate",
+    "Cookie / Montycookie",
+    "Sirope"
+   ]
+  },
+  {
+   "producto_id": "5c5e0dad-bc34-43cc-806b-a1a0b36d7bc0",
+   "ings": [
+    "Salsa BBQ",
+    "Pollo Kebab",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "fcd35c4a-a83a-4e73-bc07-aa7a8def3240",
+   "ings": [
+    "Chocolate",
+    "Cookie / Montycookie",
+    "Sirope"
+   ]
+  },
+  {
+   "producto_id": "cfc0ad28-a960-4042-8e60-c5808a857d4a",
+   "ings": [
+    "Jamón cocido",
+    "Mozzarella / Mozzamix",
+    "Pan piadina"
+   ]
+  },
+  {
+   "producto_id": "30b0b6b4-49a9-433c-acb3-dcca3b343da6",
+   "ings": [
+    "Pepperoni",
+    "Mozzarella / Mozzamix",
+    "Pan piadina"
+   ]
+  },
+  {
+   "producto_id": "5f3a0d17-3c1b-4414-bbac-469567c60972",
+   "ings": [
+    "Mozzarella / Mozzamix",
+    "Tomate",
+    "Orégano",
+    "Pollo",
+    "Pan piadina"
+   ]
+  },
+  {
+   "producto_id": "571f0127-1ed7-46ab-bef9-a20e2169673c",
+   "ings": [
+    "Jamón Gran Reserva",
+    "Mozzarella / Mozzamix",
+    "Orégano",
+    "Pan piadina"
+   ]
+  },
+  {
+   "producto_id": "a263f2a4-dcb9-4e9f-87a1-3164fa86fda7",
+   "ings": [
+    "Jamón cocido",
+    "Queso madurado",
+    "Tomate",
+    "Pan piadina"
+   ]
+  },
+  {
+   "producto_id": "2934e265-3f24-4d54-9951-87634cba8ef1",
+   "ings": [
+    "Salchicha / Hot dog",
+    "Mayonesa",
+    "Kétchup",
+    "Pan perrito"
+   ]
+  },
+  {
+   "producto_id": "a35003c0-dc79-41c6-9a3b-16809866a2de",
+   "ings": [
+    "Salchicha / Hot dog",
+    "Cebolla crujiente",
+    "Mojo picón",
+    "Pan perrito"
+   ]
+  },
+  {
+   "producto_id": "8deff937-6814-4083-bc5b-bcb193a6dde9",
+   "ings": [
+    "Salchicha / Hot dog",
+    "Cheddar",
+    "Guacamole",
+    "Pan perrito"
+   ]
+  },
+  {
+   "producto_id": "5caba67b-6e41-41da-8b44-d90f8c7b4b60",
+   "ings": [
+    "Salchicha / Hot dog",
+    "Patatas paja",
+    "Salsa alioli",
+    "Pan perrito"
+   ]
+  },
+  {
+   "producto_id": "ebc46a0a-1ce8-4bee-b47f-a7c21db6958a",
+   "ings": [
+    "Bacon ahumado",
+    "Queso madurado",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "23370cf3-bc72-4622-84c9-133c79ca44c8",
+   "ings": [
+    "Salchicha / Hot dog",
+    "Cebolla crujiente",
+    "Salsa 100M",
+    "Pan perrito"
+   ]
+  },
+  {
+   "producto_id": "573c8ec6-8ed0-4e29-bd74-7ca2440a9099",
+   "ings": [
+    "Carne de burger",
+    "Queso madurado",
+    "Tomate",
+    "Mayonesa",
+    "Pan burguer"
+   ]
+  },
+  {
+   "producto_id": "8b5c98b3-30ec-4072-b7b5-07d077614490",
+   "ings": [
+    "Carne de burger",
+    "Queso madurado",
+    "Mojo picón",
+    "Pan burguer"
+   ]
+  },
+  {
+   "producto_id": "d6f3ed5d-c2fd-4eac-a0d5-4b03e81a9e33",
+   "ings": [
+    "Bacon ahumado",
+    "Carne de burger",
+    "Guacamole",
+    "Pan burguer"
+   ]
+  },
+  {
+   "producto_id": "93f248ec-4eb9-4d69-9324-9547400d43f5",
+   "ings": [
+    "Bacon ahumado",
+    "Carne de burger",
+    "Cheddar",
+    "Pan burguer"
+   ]
+  },
+  {
+   "producto_id": "88a18085-695c-4c26-85ff-33dfd50116b4",
+   "ings": [
+    "Carne de burger",
+    "Pepperoni",
+    "Queso madurado",
+    "Pan burguer"
+   ]
+  },
+  {
+   "producto_id": "1cc2a304-f57b-455d-9173-46b9026399e2",
+   "ings": [
+    "Bacon ahumado",
+    "Mozzarella / Mozzamix",
+    "Cebolla crujiente",
+    "Salsa BBQ",
+    "Pan pizza"
+   ]
+  },
+  {
+   "producto_id": "7e3cb970-e2c9-4a70-8642-5c25197beb93",
+   "ings": [
+    "Mozzarella / Mozzamix",
+    "Orégano",
+    "Salsa pomodoro / pizza",
+    "Pollo Kebab",
+    "Pan pizza"
+   ]
+  },
+  {
+   "producto_id": "570ff8d2-0928-4f0d-adcf-f9281e6d4171",
+   "ings": [
+    "Queso madurado",
+    "Queso gorgonzola",
+    "Mozzarella / Mozzamix",
+    "Orégano",
+    "Pan pizza"
+   ]
+  },
+  {
+   "producto_id": "97a20932-b006-4290-a5ba-ec5b2898a557",
+   "ings": [
+    "Pulled pork",
+    "Mozzarella / Mozzamix",
+    "Cebolla crujiente",
+    "Salsa BBQ",
+    "Pan pizza"
+   ]
+  },
+  {
+   "producto_id": "c6da2092-3ebd-4517-bff8-7a535301d6e5",
+   "ings": [
+    "Torreznos",
+    "Salsa brava",
+    "Pan clásico 100M"
+   ]
+  },
+  {
+   "producto_id": "e53775c3-dd39-4492-9f0e-bbc96d7a4acc",
+   "ings": [
+    "Pepperoni",
+    "Mozzarella / Mozzamix",
+    "Orégano",
+    "Salsa pomodoro / pizza",
+    "Pan pizza"
+   ]
+  },
+  {
+   "producto_id": "b0aa5548-6ae5-4a6b-a246-db746bf3cbe5",
+   "ings": [
+    "Tomate",
+    "Tortilla de patatas",
+    "Mayonesa",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "6f70aecd-d846-4e0f-99f7-2a7c2769eff6",
+   "ings": [
+    "Salmón ahumado",
+    "Huevo hilado",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "7783c5f7-c718-4787-9553-a6469a160687",
+   "ings": [
+    "Salmón ahumado",
+    "Pintxo donostiarra",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "b21dd16b-916f-4bc3-b337-c3bb25b04d9e",
+   "ings": [
+    "Atún",
+    "Pintxo donostiarra",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "246454b5-dd05-4f2a-8352-154f4f089d07",
+   "ings": [
+    "Pintxo donostiarra",
+    "Huevo hilado",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "e6321585-0005-405a-89c9-2b99797a0eb3",
+   "ings": [
+    "Jamón cocido",
+    "Queso madurado",
+    "Mantequilla",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "00433736-3a93-44ba-baa9-bf3b5935a9f0",
+   "ings": [
+    "Jamón cocido",
+    "Queso madurado",
+    "Tomate",
+    "Mayonesa",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "0d03dcaf-f85c-4f8d-ad95-c4398194c383",
+   "ings": [
+    "Atún",
+    "Tomate",
+    "Mayonesa",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "82a6b202-1aff-4b55-a3fb-8d258f8d0879",
+   "ings": [
+    "Atún",
+    "Huevo hilado",
+    "Mayonesa",
+    "Pan gourmet"
+   ]
+  },
+  {
+   "producto_id": "3d61ba4a-c009-4d0c-bd74-aa20ea5720e4",
+   "ings": [
+    "Lechuga",
+    "Pollo",
+    "Tomate",
+    "Queso madurado",
+    "Aceitunas",
+    "Picatostes",
+    "Salsa alioli"
+   ]
+  },
+  {
+   "producto_id": "bd45575b-709f-4f36-9e97-00c313cdb71f",
+   "ings": [
+    "Lechuga",
+    "Pollo Kebab",
+    "Tomate",
+    "Maíz",
+    "Aceitunas",
+    "Nachos TexMex",
+    "Mostaza y miel"
+   ]
+  }
+ ]
+}

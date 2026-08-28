@@ -1,6 +1,6 @@
 $content = Get-Content 'ekis-workflow-v7-minimal.json' -Raw -Encoding UTF8
 $headers = @{
-    'X-N8N-API-KEY' = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjIiLCJpYXQiOjE3NDMxODc0MzksImV4cCI6MTc0NjY5NTQzOX0.g6jR-uM-FBkl-vRz7C78KfUxQDhIz14OaHq3bHk66Qs'
+    'X-N8N-API-KEY' = $env:N8N_API_KEY
     'Content-Type' = 'application/json'
 }
 

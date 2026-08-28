@@ -1,3 +1,9 @@
+/**
+ * ⚠️ DISABLED — not routed in Salon OS. Depends on the `campaigns` table,
+ * which does not exist in the current Supabase schema. Kept for reference.
+ * Re-enable: set FEATURES.promos = true in @/config/features and restore the
+ * /promos route in src/App.tsx (see the checklist there).
+ */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Tag, CalendarPlus, MessageCircle, Clock } from 'lucide-react';

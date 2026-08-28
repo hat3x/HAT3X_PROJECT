@@ -31,5 +31,19 @@
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "src/pages/_deferred",
+    // Pantallas deshabilitadas (sin backend en Salón OS) — ver @/config/features.
+    // Se mantienen en src/pages para su futura re-integración pero referencian
+    // tablas aún inexistentes (subscriptions/campaigns/user_roles/api_keys), así
+    // que quedan fuera del typecheck igual que _deferred. No entran al bundle:
+    // App.tsx no las importa (rutas redirigidas por feature flag). Al re-activar
+    // una capacidad, quítala de aquí además de seguir el checklist de features.ts.
+    "src/pages/Club.tsx",
+    "src/pages/PremiumBenefits.tsx",
+    "src/pages/Promos.tsx",
+    "src/pages/admin",
+    "src/components/RequireAdmin.tsx"
   ]
 }

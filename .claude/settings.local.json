@@ -4,7 +4,6 @@
       "Bash(ls /c/Users/josem/Desktop/HAT3X/CLAUDE/HAT3X/*.zip)",
       "Bash(unzip -l files.zip)",
       "Bash(unzip -o files.zip -d extracted_temp/)",
-      "Bash(curl -s -X GET \"https://hat3xia.app.n8n.cloud/api/v1/workflows/QTEkPUTUb4lLI6Tm\" -H \"X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkMzIxMjMzOC0xN2NhLTQzODgtYWVlNC01NjJmMGE2Njc0ZGQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiNTA0M2IwYTMtNjI5MS00NDhmLThhMzQtMWMyNjBjZTJiN2NkIiwiaWF0IjoxNzc0OTEyNDI1fQ.Oq_KdJjwsUyUwT588VjLqbkkKBvuXEoxkDoBh_WkZ58\")",
       "Bash(findstr /i \"documentId\")",
       "Bash(findstr /i \"spreadsheet\")",
       "Bash(python -c \"import sys, json; data = json.load\\(sys.stdin\\); nodes = [n for n in data.get\\(''''nodes'''', []\\) if n.get\\(''''type''''\\) == ''''n8n-nodes-base.googleSheets'''']; print\\(json.dumps\\(nodes[:2], indent=2, ensure_ascii=False\\)\\)\")",
@@ -116,7 +115,16 @@
       "PowerShell(Copy-Item \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\\\\src\\\\assets\\\\monty-celebrating.png\" \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\\\\src\\\\assets\\\\monty-cooking.png\")",
       "PowerShell(Copy-Item \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\\\\src\\\\assets\\\\monty-celebrating.png\" \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\\\\src\\\\assets\\\\monty-mascot.png\")",
       "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; cd \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\"; npm run build 2>&1 | Select-String -Pattern \"monty-euromania|built in|error\" | Select-Object -First 5)",
-      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; cd \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\"; npm run build 2>&1 | Select-String -Pattern \"built in|error\" | Select-Object -First 3)"
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;$env:PATH\"; cd \"c:\\\\Users\\\\casta\\\\Desktop\\\\Hat3x Project\\\\HAT3X_PROJECT\\\\clients\\\\projects\\\\100-montaditos\\\\montadito-magic-flow\"; npm run build 2>&1 | Select-String -Pattern \"built in|error\" | Select-Object -First 3)",
+      "Bash(npm run *)",
+      "Bash(ls -la \"C:/Users/josem/.claude/projects/c--Users-josem-Desktop-HAT3X-CLAUDE-HAT3X/\" 2>/dev/null | head -50)",
+      "Read(//c/Users/josem/.claude/projects/c--Users-josem-Desktop-HAT3X-CLAUDE-HAT3X/**)",
+      "Bash(python deploy_kairos.py)",
+      "Bash(mkdir -p \"c:/Users/josem/Desktop/HAT3X/CLAUDE/HAT3X/clients/projects/mtdi/propuesta\" && echo \"carpeta creada\" && ls -la \"c:/Users/josem/Desktop/HAT3X/CLAUDE/HAT3X/clients/projects/mtdi\")",
+      "Read(//c/Users/josem/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/brainstorming/**)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\josem\\Desktop\\HAT3X\\CLAUDE\\HAT3X\\clients\\projects\\mtdi"
     ]
   }
 }

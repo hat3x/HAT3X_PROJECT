@@ -1,6 +1,11 @@
 const https = require('https');
 
-const N8N_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkMzIxMjMzOC0xN2NhLTQzODgtYWVlNC01NjJmMGE2Njc0ZGQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiODFiY2M3NDktZjFjYy00MzM4LWI5ODQtOWNlYWZjMmRiYWNkIiwiaWF0IjoxNzc2NjcwOTMyfQ.DeYI6CEkuOFKcb-ndkVWNsoGPSA1V3VJNh2DvwgLF88';
+const N8N_KEY = process.env.N8N_API_KEY;
+if (!N8N_KEY) {
+  console.error('Falta N8N_API_KEY. Exportala antes de ejecutar este script:');
+  console.error('  export N8N_API_KEY="..."   (o $env:N8N_API_KEY="..." en PowerShell)');
+  process.exit(1);
+}
 const RETELL_KEY = 'key_554800de967c68158133e2a0b932';
 const LLM_ID = 'llm_c32d7ba946504725c5370078a095';
 

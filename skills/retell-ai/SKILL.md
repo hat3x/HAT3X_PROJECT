@@ -16,6 +16,47 @@ Nosotros configuramos el agente; Retell gestiona toda la infraestructura de llam
 | **Call** | Instancia de una llamada (inbound o outbound) |
 | **Webhook** | Notificaciones de eventos de llamada a tu servidor |
 | **Concurrency** | Número de llamadas simultáneas permitidas |
+| **Version** | Cada agente tiene un borrador y una versión publicada. Las llamadas usan la **publicada** |
+
+---
+
+## Publicar cambios — OBLIGATORIO
+
+`update-agent` y `update-retell-llm` tocan **solo el borrador**. El número de teléfono
+está atado al `agent_id` sin versión fija, así que las llamadas entrantes sirven la
+versión *publicada*. Si no publicas, el cambio no existe en producción. Síntoma
+clásico: «sigue exactamente igual que antes» tras editar por API.
+
+⚠️ El endpoint antiguo `POST /publish-agent/{agent_id}` quedó **deprecado el
+2026-07-20** y dejará de funcionar. El nuevo exige el número de versión en el cuerpo,
+así que son dos pasos:
+
+```bash
+# 1. Leer qué versión es el borrador
+curl https://api.retellai.com/get-agent/agent_xxx \
+  -H "Authorization: Bearer $RETELL_API_KEY"
+# -> { "agent_name": "...", "version": 31, "is_published": false }
+
+# 2. Publicar esa versión
+curl -X POST https://api.retellai.com/publish-agent-version/agent_xxx \
+  -H "Authorization: Bearer $RETELL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"version": 31}'
+```
+
+`version` es obligatorio: sin él la API responde 400. Si mandas una versión que no
+existe responde 404. Tras publicar, el borrador avanza al número siguiente con
+`is_published: false` — eso es normal, no significa que haya cambios pendientes.
+
+Script listo para usar (lee la clave del `.env` y encadena los dos pasos):
+`clients/projects/biodental/biodental-voz-2026-04/publish-agent.js`
+
+```bash
+node publish-agent.js [agent_id]
+```
+
+Para agentes de chat, el endpoint viejo `POST /publish-chat-agent/{agent_id}` se
+unifica en el mismo `publish-agent-version`.
 
 ---
 

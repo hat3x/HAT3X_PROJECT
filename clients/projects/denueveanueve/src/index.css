@@ -6,7 +6,8 @@
 
 @layer base {
   :root {
-    /* denueveanueve brand: gold on dark, luxury salon aesthetic */
+    /* Tema por defecto (white-label): oro sobre oscuro, estética de salón premium.
+       Se re-tinta en runtime con el color de marca del salón (ver salon-theme.ts). */
     --background: 30 10% 6%;
     --foreground: 40 20% 90%;
 

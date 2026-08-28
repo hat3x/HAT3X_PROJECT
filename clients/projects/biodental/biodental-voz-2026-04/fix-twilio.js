@@ -1,5 +1,10 @@
 const https = require('https');
-const N8N_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkMzIxMjMzOC0xN2NhLTQzODgtYWVlNC01NjJmMGE2Njc0ZGQiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiNDRiNGRiNDMtZTkwYy00NjU3LTlmODEtM2FlNTA5ZmM5ZDM4IiwiaWF0IjoxNzgxMTA3OTk2fQ.ABeU_jd3EWPg0MTa3rN30_LKmmH_4KXQcgE77LNhXoY';
+const N8N_KEY = process.env.N8N_API_KEY;
+if (!N8N_KEY) {
+  console.error('Falta N8N_API_KEY. Exportala antes de ejecutar este script:');
+  console.error('  export N8N_API_KEY="..."   (o $env:N8N_API_KEY="..." en PowerShell)');
+  process.exit(1);
+}
 
 function api(method, path, body) {
   return new Promise((resolve, reject) => {

@@ -2,12 +2,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { I18nProvider } from "@/lib/i18n";
+import { SalonProvider } from "@/lib/salon-context";
 import { AuthProvider } from "@/lib/auth";
 import RequireAuth from "@/components/RequireAuth";
-import RequireAdmin from "@/components/RequireAdmin";
 import PinOverlay from "@/components/PinOverlay";
+import { FEATURES } from "@/config/features";
 import { lazy, Suspense } from "react";
 
 // Eagerly loaded — needed immediately on any entry point
@@ -23,12 +24,11 @@ const BookAppointment = lazy(() => import("./pages/BookAppointment"));
 const Appointments = lazy(() => import("./pages/Appointments"));
 const Loyalty = lazy(() => import("./pages/Loyalty"));
 const Profile = lazy(() => import("./pages/Profile"));
-const Club = lazy(() => import("./pages/Club"));
-const Promos = lazy(() => import("./pages/Promos"));
 const ServiceCatalog = lazy(() => import("./pages/ServiceCatalog"));
-const PremiumBenefits = lazy(() => import("./pages/PremiumBenefits"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const ApiKeys = lazy(() => import("./pages/admin/ApiKeys"));
+// Disabled while their backend is missing in Salon OS — see @/config/features.
+// Club, PremiumBenefits, Promos and admin/ApiKeys stay in src/pages/ but are not
+// routed. Legacy paths below redirect to /home until the flags are turned on.
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -48,7 +48,8 @@ const queryClient = new QueryClient({
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <I18nProvider>
-      <AuthProvider>
+      <SalonProvider>
+        <AuthProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -67,16 +68,27 @@ const App = () => (
                 <Route path="/appointments" element={<RequireAuth><Appointments /></RequireAuth>} />
                 <Route path="/loyalty" element={<RequireAuth><Loyalty /></RequireAuth>} />
                 <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-                <Route path="/club" element={<RequireAuth><Club /></RequireAuth>} />
-                <Route path="/premium" element={<RequireAuth><PremiumBenefits /></RequireAuth>} />
-                <Route path="/promos" element={<RequireAuth><Promos /></RequireAuth>} />
-                <Route path="/admin/api-keys" element={<RequireAdmin><ApiKeys /></RequireAdmin>} />
+                {/* Disabled features (no Salon OS backend yet) — see @/config/features.
+                    Legacy paths redirect to /home so old links/bookmarks don't 404. */}
+                {!FEATURES.subscriptions && (
+                  <>
+                    <Route path="/club" element={<Navigate to="/home" replace />} />
+                    <Route path="/premium" element={<Navigate to="/home" replace />} />
+                  </>
+                )}
+                {!FEATURES.promos && (
+                  <Route path="/promos" element={<Navigate to="/home" replace />} />
+                )}
+                {!FEATURES.admin && (
+                  <Route path="/admin/*" element={<Navigate to="/home" replace />} />
+                )}
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </BrowserRouter>
         </TooltipProvider>
-      </AuthProvider>
+        </AuthProvider>
+      </SalonProvider>
     </I18nProvider>
   </QueryClientProvider>
 );

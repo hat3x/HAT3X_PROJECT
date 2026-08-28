@@ -16,21 +16,28 @@ const hora     = String(args.hora     || '').trim();
 function durFor(servicio) {
   const s = String(servicio || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const TABLA = [
-    [/blanqueamiento/, 60],
+    [/blanqueamiento|estetica|carilla|diseno.*sonrisa/, 60],
     [/endodoncia/, 60],
     [/implante|cirugia/, 60],
+    [/sedacion/, 60],
+    [/domicilio/, 60],
     [/limpieza/, 45],
     [/empaste/, 45],
     [/prostodoncia|protesis|corona|puente/, 45],
     [/periodoncia|encia/, 45],
     [/extracc/, 30],
-    [/ortodoncia/, 30],
+    [/ortodoncia|alineador|bracket/, 30],
+    [/odontopediatria|nino|infantil/, 30],
+    [/diagnostic|escaneo|radiografia/, 30],
     [/revis|general|consulta/, 30],
   ];
   for (const [re, min] of TABLA) if (re.test(s)) return min;
   return 30;
 }
 const duracion = durFor(servicio);
+
+// Endodoncia: solo la realiza el especialista (Nicolás), que viene los martes por la mañana
+const esEndodoncia = /endodoncia/.test(String(servicio).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
 
 // Convierte hora local España a UTC correcto (servidor n8n es UTC)
 function spainToUTC(dateStr, timeStr) {
@@ -50,39 +57,71 @@ const localInicio = new Date(fechaInicio.toLocaleString('en-US', { timeZone: 'Eu
 const localFin    = new Date(fechaFin.toLocaleString('en-US',    { timeZone: 'Europe/Madrid' }));
 const diaSemana   = localInicio.getDay();
 
-const HORARIOS = {
-  1: { inicio: 9 * 60 + 30, fin: 19 * 60 },
-  2: { inicio: 9 * 60 + 30, fin: 19 * 60 },
-  3: { inicio: 9 * 60 + 30, fin: 14 * 60 },
-  4: { inicio: 9 * 60 + 30, fin: 19 * 60 },
-  5: { inicio: 9 * 60 + 30, fin: 14 * 60 },
-  6: { inicio: 9 * 60 + 30, fin: 14 * 60 }
+// Horario de verano — sesiones por día (minutos desde medianoche)
+const SESIONES = {
+  1: [{ inicio: 10*60, fin: 14*60 }, { inicio: 17*60, fin: 20*60 }], // Lunes
+  2: [{ inicio: 10*60, fin: 14*60 }],                                  // Martes
+  3: [{ inicio: 10*60, fin: 20*60 }],                                  // Miércoles (continuo)
+  4: [{ inicio: 10*60, fin: 14*60 }],                                  // Jueves
+  5: [{ inicio: 10*60, fin: 14*60 }],                                  // Viernes
+  // Sábado y domingo: cerrado
 };
 
-const horarioDia = HORARIOS[diaSemana];
+// Cierres puntuales (festivos, asuntos propios). Formato YYYY-MM-DD, hora Madrid.
+const DIAS_CERRADOS = ['2026-08-03'];
+if (DIAS_CERRADOS.includes(fecha)) {
+  return [{ json: {
+    error: 'dia_cerrado_excepcional', disponible: false,
+    mensaje: 'Ese día la clínica está cerrada excepcionalmente. ¿Te viene bien otro día y lo miramos?'
+  }}];
+}
 
-if (!horarioDia) {
+const sesiones = SESIONES[diaSemana];
+
+if (!sesiones) {
+  const esSabado = diaSemana === 6;
   return [{ json: {
     error: 'dia_cerrado', disponible: false,
-    mensaje: 'Los domingos la clínica está cerrada. Abrimos de lunes a viernes, y algún sábado al mes.'
+    mensaje: esSabado
+      ? 'Los sábados no abrimos en verano. ¿Le viene bien algún día entre semana?'
+      : 'Los domingos la clínica está cerrada. Abrimos de lunes a viernes.'
   }}];
 }
 
 const horaReqMin = localInicio.getHours() * 60 + localInicio.getMinutes();
 const horaFinMin = localFin.getHours()    * 60 + localFin.getMinutes();
 
-if (horaReqMin < horarioDia.inicio) {
+// Verificar que la cita entera cabe en alguna sesión
+const enSesion = sesiones.some(s => horaReqMin >= s.inicio && horaFinMin <= s.fin);
+
+if (!enSesion) {
+  if (horaReqMin < sesiones[0].inicio) {
+    return [{ json: {
+      error: 'fuera_horario', disponible: false,
+      mensaje: 'Esa hora es antes de que abramos. Empezamos a las diez de la mañana.'
+    }}];
+  }
+  // Entre sesiones (descanso de mediodía — solo aplica en días con horario partido)
+  if (sesiones.length > 1 && horaReqMin >= sesiones[0].fin && horaReqMin < sesiones[1].inicio) {
+    return [{ json: {
+      error: 'descanso', disponible: false,
+      mensaje: 'De dos a cinco de la tarde estamos cerrados. ¿Le viene bien a primera hora de la mañana o a partir de las cinco?'
+    }}];
+  }
+  const ultima = sesiones[sesiones.length - 1];
+  const cierreTexto = ultima.fin === 14*60 ? 'las dos de la tarde' : ultima.fin === 20*60 ? 'las ocho de la tarde' : 'las ' + Math.floor(ultima.fin/60) + ':' + String(ultima.fin%60).padStart(2,'0');
   return [{ json: {
     error: 'fuera_horario', disponible: false,
-    mensaje: 'Esa hora es antes de que abramos. Empezamos a atender a las nueve y media.'
+    mensaje: 'Esa hora no nos da tiempo antes del cierre. Los ' + diasSemana[diaSemana] + ' cerramos a ' + cierreTexto + '.'
   }}];
 }
 
-if (horaFinMin > horarioDia.fin) {
-  const esMediodia = horarioDia.fin === 14 * 60;
+// Endodoncia solo los martes (día 2), cuando está el especialista Nicolás.
+// Otros días: derivar a la clínica para confirmar según agenda del especialista.
+if (esEndodoncia && diaSemana !== 2) {
   return [{ json: {
-    error: 'fuera_horario', disponible: false,
-    mensaje: 'Esa hora no nos da tiempo antes del cierre. Los ' + diasSemana[diaSemana] + ' cerramos a las ' + (esMediodia ? 'dos de la tarde' : 'siete de la tarde') + '.'
+    error: 'endodoncia_solo_martes', disponible: false,
+    mensaje: 'Las endodoncias las hace nuestro especialista, que viene los martes por la mañana. ¿Te viene bien un martes? Si necesitas otro día, te pongo en contacto con la clínica para confirmarlo.'
   }}];
 }
 

@@ -5,11 +5,13 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useI18n } from '@/lib/i18n';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
+import { useSalon } from '@/lib/salon-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import BottomNav from '@/components/BottomNav';
 import type { Tables } from '@/integrations/supabase/types';
 
-type LoyaltyAccount = Tables<'loyalty_accounts'>;
+// Sólo leemos los campos de saldo/visitas que muestra la pantalla.
+type LoyaltyAccount = Pick<Tables<'loyalty_accounts'>, 'points_balance' | 'visits_total' | 'last_visit_at'>;
 type PointsMovement = Tables<'points_movements'>;
 type Reward = Tables<'rewards'>;
 type WelcomeCoupon = Tables<'welcome_coupons'>;
@@ -32,6 +34,8 @@ const Loyalty = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user } = useAuth();
+  // salon_id derivado del salón resuelto en runtime (no de VITE_SALON_ID).
+  const { id: salonId } = useSalon();
 
   const [tab, setTab] = useState<'overview' | 'movements' | 'rewards'>('overview');
   const [account, setAccount] = useState<LoyaltyAccount | null>(null);
@@ -43,21 +47,26 @@ const Loyalty = () => {
   const [showCode, setShowCode] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
   const [qrFullscreen, setQrFullscreen] = useState(false);
-  const [pendingPoints, setPendingPoints] = useState(0);
 
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Get customer id and qr_token once
+  // Get customer id and qr_token once (lectura self: user_id = auth.uid() dentro del salón)
   useEffect(() => {
     if (!user) return;
-    supabase.from('customers').select('id, qr_token').eq('user_id', user.id).single().then(({ data }) => {
-      if (data) {
-        setCustomerId(data.id);
-        setQrToken(data.qr_token);
-      }
-    });
-  }, [user]);
+    supabase
+      .from('customers')
+      .select('id, qr_token')
+      .eq('user_id', user.id)
+      .eq('salon_id', salonId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setCustomerId(data.id);
+          setQrToken(data.qr_token);
+        }
+      });
+  }, [user, salonId]);
 
   // Realtime: listen for loyalty_accounts and appointments changes to auto-refresh
   useEffect(() => {
@@ -95,13 +104,41 @@ const Loyalty = () => {
     if (!customerId) return;
     const load = async () => {
       setLoading(true);
+      const nowIso = new Date().toISOString();
 
-      const [loyaltyRes, movementsRes, rewardsRes, couponRes, pendingRes] = await Promise.all([
-        supabase.from('loyalty_accounts').select('*').eq('customer_id', customerId).single(),
-        supabase.from('points_movements').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(50),
-        supabase.from('rewards').select('*').eq('customer_id', customerId).order('created_at', { ascending: false }),
-        supabase.from('welcome_coupons').select('*').eq('customer_id', customerId).single(),
-        supabase.from('appointments').select('estimated_pending_points').eq('customer_id', customerId).in('status', ['CONFIRMED', 'RESCHEDULED']).gte('start_at', new Date().toISOString()),
+      // Todas las lecturas van filtradas por salon_id (mono-salón) además del
+      // customer_id, coherente con las FKs compuestas (customer_id, salon_id).
+      // Cupones y premios: sólo los vigentes (activos/disponibles y no expirados).
+      const [loyaltyRes, movementsRes, rewardsRes, couponRes] = await Promise.all([
+        supabase
+          .from('loyalty_accounts')
+          .select('points_balance, visits_total, last_visit_at')
+          .eq('customer_id', customerId)
+          .eq('salon_id', salonId)
+          .maybeSingle(),
+        supabase
+          .from('points_movements')
+          .select('*')
+          .eq('customer_id', customerId)
+          .eq('salon_id', salonId)
+          .order('created_at', { ascending: false })
+          .limit(50),
+        supabase
+          .from('rewards')
+          .select('*')
+          .eq('customer_id', customerId)
+          .eq('salon_id', salonId)
+          .eq('status', 'AVAILABLE')
+          .gt('expires_at', nowIso)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('welcome_coupons')
+          .select('*')
+          .eq('customer_id', customerId)
+          .eq('salon_id', salonId)
+          .eq('status', 'ACTIVE')
+          .gt('expires_at', nowIso)
+          .maybeSingle(),
       ]);
 
       setAccount(loyaltyRes.data);
@@ -109,13 +146,10 @@ const Loyalty = () => {
       setRewards(rewardsRes.data || []);
       setCoupon(couponRes.data);
 
-      const total = (pendingRes.data || []).reduce((sum, a) => sum + (a.estimated_pending_points || 0), 0);
-      setPendingPoints(total);
-
       setLoading(false);
     };
     load();
-  }, [customerId, refreshKey]);
+  }, [customerId, refreshKey, salonId]);
 
   const REWARD_STATUS_COLOR: Record<string, string> = {
     AVAILABLE: 'text-success',
@@ -209,21 +243,6 @@ const Loyalty = () => {
               <p className="text-xs text-muted-foreground">{t('loyalty.visits')}</p>
             </div>
           </div>
-
-          {/* Pending points banner */}
-          {pendingPoints > 0 && (
-            <div className="mx-6 mb-4 rounded-xl border border-gold/20 bg-gold/5 p-3">
-              <div className="flex items-center gap-2">
-                <Clock size={14} className="text-gold" />
-                <div>
-                  <p className="text-sm text-gold font-medium">
-                    {pendingPoints} {t('loyalty.pendingPoints')}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">{t('loyalty.pendingPointsDesc')}</p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Milestones */}
           <div className="px-6 mb-4">

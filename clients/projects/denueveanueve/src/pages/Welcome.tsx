@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import logoImg from '@/assets/logo.png';
+import SalonWordmark from '@/components/SalonWordmark';
 
 const Welcome = () => {
   const navigate = useNavigate();
@@ -30,14 +30,16 @@ const Welcome = () => {
           {t('welcome.title')}
         </motion.p>
 
-        {/* Logo */}
-        <motion.img
-          src={logoImg}
-          alt="denueveanueve"
+        {/* Marca del salón resuelto en runtime (logo o, si no hay, su nombre). */}
+        <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.4, duration: 0.6 }}
-          className="mb-8 h-8 w-auto" />
+          className="mb-8">
+          <SalonWordmark
+            imgClassName="h-8 w-auto"
+            textClassName="font-display text-3xl text-foreground" />
+        </motion.div>
 
         
 

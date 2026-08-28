@@ -12,23 +12,37 @@
       "name": "Retell Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const raw = $('Retell Webhook').first().json.body || $('Retell Webhook').first().json;\nconst event = raw.event || '';\nif (event !== 'call_ended' && event !== 'call_analyzed') {\n  return [{ json: { skip: true } }];\n}\nconst analysis = raw.call_analysis || {};\nconst now = new Date().toISOString().replace('T',' ').substring(0,19);\nreturn [{ json: {\n  skip: false,\n  ID: raw.call_id || '',\n  Fecha_llamada: now,\n  Duración_seg: raw.duration_seconds || 0,\n  Resumen: analysis.call_summary || '',\n  Sentimiento: analysis.user_sentiment || 'Neutral',\n  Exitosa: analysis.call_successful ? 'TRUE' : 'FALSE',\n  Call_ID: raw.call_id || ''\n}}];"
+        "jsCode": "const raw = $('Retell Webhook').first().json.body || $('Retell Webhook').first().json;\nconst event = raw.event || '';\n\n// Solo registramos en call_analyzed: llega una vez por llamada y trae el análisis.\n// Devolver [] evita que el nodo de Sheets se ejecute — nada de filas vacías ni duplicados.\nif (event !== 'call_analyzed') return [];\n\nconst call     = raw.call || raw;\nconst analysis = call.call_analysis || raw.call_analysis || {};\n\n// Duración: usar el dato explícito si viene, si no calcularla de las marcas de tiempo\nlet seg = 0;\nif      (call.duration_ms)      seg = Math.round(call.duration_ms / 1000);\nelse if (call.duration_seconds) seg = Math.round(call.duration_seconds);\nelse if (call.end_timestamp && call.start_timestamp)\n  seg = Math.round((call.end_timestamp - call.start_timestamp) / 1000);\n\n// Fecha de la llamada en hora de España\nconst inicio = call.start_timestamp ? new Date(call.start_timestamp) : new Date();\nconst madrid = new Date(inicio.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\nconst p = n => String(n).padStart(2, '0');\nconst fecha = madrid.getFullYear() + '-' + p(madrid.getMonth() + 1) + '-' + p(madrid.getDate()) +\n              ' ' + p(madrid.getHours()) + ':' + p(madrid.getMinutes()) + ':' + p(madrid.getSeconds());\n\nreturn [{ json: {\n  ID:              call.call_id || '',\n  Fecha_llamada:   fecha,\n  'Duración_seg':  seg,\n  Resumen:         analysis.call_summary   || '',\n  Sentimiento:     analysis.user_sentiment || 'Neutral',\n  Exitosa:         analysis.call_successful ? 'TRUE' : 'FALSE',\n  Call_ID:         call.call_id || '',\n}}];\n"
       },
       "id": "parse-node",
       "name": "Parsear Evento Retell",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "append",
-        "documentId": { "__rl": true, "value": "={{ $env.BIODENTAL_SHEETS_ID }}", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "Llamadas", "mode": "name" },
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.BIODENTAL_SHEETS_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Llamadas",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -47,33 +61,76 @@
       "name": "Google Sheets - Guardar Llamada",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [440, 300],
+      "position": [
+        440,
+        300
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "PLACEHOLDER_CREDENTIALS_ID",
           "name": "Google Sheets OAuth2"
         }
       },
-      "continueOnFail": true
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "{\"ok\": true}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "respond-node",
       "name": "Responder OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     }
   ],
   "connections": {
-    "Retell Webhook": { "main": [[{ "node": "Parsear Evento Retell", "type": "main", "index": 0 }]] },
-    "Parsear Evento Retell": { "main": [[{ "node": "Google Sheets - Guardar Llamada", "type": "main", "index": 0 }]] },
-    "Google Sheets - Guardar Llamada": { "main": [[{ "node": "Responder OK", "type": "main", "index": 0 }]] }
+    "Retell Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parsear Evento Retell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Evento Retell": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Guardar Llamada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Guardar Llamada": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }

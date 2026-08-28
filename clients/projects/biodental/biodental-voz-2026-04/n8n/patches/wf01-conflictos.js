@@ -1,14 +1,18 @@
 const input   = $('Parsear Argumentos').first().json;
 const eventos = $('Google Calendar - Consultar Hueco').all();
 
-const HORARIOS = {
-  1: { inicio: 9 * 60 + 30, fin: 19 * 60 },
-  2: { inicio: 9 * 60 + 30, fin: 19 * 60 },
-  3: { inicio: 9 * 60 + 30, fin: 14 * 60 },
-  4: { inicio: 9 * 60 + 30, fin: 19 * 60 },
-  5: { inicio: 9 * 60 + 30, fin: 14 * 60 },
-  6: { inicio: 9 * 60 + 30, fin: 14 * 60 }
+// Horario de verano — sesiones por día (minutos desde medianoche)
+const SESIONES = {
+  1: [{ inicio: 10*60, fin: 14*60 }, { inicio: 17*60, fin: 20*60 }], // Lunes
+  2: [{ inicio: 10*60, fin: 14*60 }],                                  // Martes
+  3: [{ inicio: 10*60, fin: 20*60 }],                                  // Miércoles (continuo)
+  4: [{ inicio: 10*60, fin: 14*60 }],                                  // Jueves
+  5: [{ inicio: 10*60, fin: 14*60 }],                                  // Viernes
+  // Sábado y domingo: cerrado
 };
+
+// Cierres puntuales (festivos, asuntos propios). Formato YYYY-MM-DD, hora Madrid.
+const DIAS_CERRADOS = ['2026-08-03'];
 
 const newStart = new Date(input.fechaInicio);
 const newEnd   = new Date(input.fechaFin);
@@ -31,12 +35,14 @@ function siguienteHueco(desde, eventos) {
 
   for (let i = 0; i < 336; i++) {
     const local = toMadrid(candidato);
+    const fechaCand = local.getFullYear() + '-' + String(local.getMonth()+1).padStart(2,'0') + '-' + String(local.getDate()).padStart(2,'0');
     const dia = local.getDay();
-    const h = HORARIOS[dia];
-    if (h) {
+    const sesiones = SESIONES[dia];
+    if (sesiones && !DIAS_CERRADOS.includes(fechaCand)) {
       const minCand = local.getHours() * 60 + local.getMinutes();
       const minFin  = minCand + durMin;
-      if (minCand >= h.inicio && minFin <= h.fin) {
+      const enSesion = sesiones.some(s => minCand >= s.inicio && minFin <= s.fin);
+      if (enSesion) {
         const candEnd = new Date(candidato.getTime() + durMin * 60000);
         const conflicto = eventos.some(ev => {
           const evStart = new Date(ev.start?.dateTime || ev.start?.date + 'T00:00:00Z');

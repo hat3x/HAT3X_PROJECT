@@ -12,35 +12,68 @@
       "name": "Retell Tool Call",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const ahora = new Date();\n// Fecha/hora en zona horaria Europe/Madrid\nconst madridDate = new Date(ahora.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\n\nconst anio = madridDate.getFullYear();\nconst mes = String(madridDate.getMonth() + 1).padStart(2, '0');\nconst dia = String(madridDate.getDate()).padStart(2, '0');\nconst horas = String(madridDate.getHours()).padStart(2, '0');\nconst minutos = String(madridDate.getMinutes()).padStart(2, '0');\n\nconst fecha = `${anio}-${mes}-${dia}`;\nconst hora = `${horas}:${minutos}`;\n\nconst diasSemana = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\nconst diaSemana = diasSemana[madridDate.getDay()];\nconst mesTexto = meses[madridDate.getMonth()];\nconst fechaTexto = `${diaSemana} ${madridDate.getDate()} de ${mesTexto} de ${anio}`;\n\nreturn [{ json: {\n  fecha,\n  hora,\n  diaSemana,\n  fechaTexto,\n  timestamp: ahora.toISOString()\n}}];"
+        "jsCode": "// Fecha/hora actuales en Europe/Madrid + mañana y pasado mañana ya calculados,\n// para que el modelo no tenga que hacer aritmética de días (fuente de errores).\nconst ahora  = new Date();\nconst madrid = new Date(ahora.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));\n\nconst dias  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];\nconst meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];\nconst p2 = n => String(n).padStart(2, '0');\n\n// Ancla a mediodía UTC para sumar días sin problemas de horario/DST.\n// Date.UTC normaliza el desbordamiento de día (p. ej. 31 + 1 -> mes siguiente).\nfunction diaInfo(y, m, d) {\n  const a = new Date(Date.UTC(y, m, d, 12));\n  const yy = a.getUTCFullYear(), mm = a.getUTCMonth(), dd = a.getUTCDate();\n  return {\n    fecha: yy + '-' + p2(mm + 1) + '-' + p2(dd),\n    diaSemana: dias[a.getUTCDay()],\n    texto: dias[a.getUTCDay()] + ' ' + dd + ' de ' + meses[mm],\n  };\n}\n\nconst Y = madrid.getFullYear(), M = madrid.getMonth(), D = madrid.getDate();\nconst hoy = diaInfo(Y, M, D);\nconst man = diaInfo(Y, M, D + 1);\nconst pas = diaInfo(Y, M, D + 2);\n\nconst hora = p2(madrid.getHours()) + ':' + p2(madrid.getMinutes());\n\nreturn [{ json: {\n  // Campos planos (compatibilidad con lo anterior)\n  fecha: hoy.fecha,\n  hora,\n  diaSemana: hoy.diaSemana,\n  fechaTexto: hoy.texto + ' de ' + Y,\n  // Fechas relativas ya resueltas — usar directamente, sin sumar días\n  hoy:           { fecha: hoy.fecha, diaSemana: hoy.diaSemana, texto: hoy.texto },\n  manana:        { fecha: man.fecha, diaSemana: man.diaSemana, texto: man.texto },\n  pasado_manana: { fecha: pas.fecha, diaSemana: pas.diaSemana, texto: pas.texto },\n  timestamp: ahora.toISOString(),\n}}];\n"
       },
       "id": "today-node",
       "name": "Calcular Fecha Madrid",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify($json) }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "respond-node",
       "name": "Responder a Retell",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     }
   ],
   "connections": {
-    "Retell Tool Call": { "main": [[{ "node": "Calcular Fecha Madrid", "type": "main", "index": 0 }]] },
-    "Calcular Fecha Madrid": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+    "Retell Tool Call": {
+      "main": [
+        [
+          {
+            "node": "Calcular Fecha Madrid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Fecha Madrid": {
+      "main": [
+        [
+          {
+            "node": "Responder a Retell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {}
 }
