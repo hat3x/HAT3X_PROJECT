@@ -11,6 +11,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 import { getConsentTemplate } from "@/lib/dental/consents";
+import { consentFingerprint } from "@/lib/dental/consent-seal";
+import type { SignatureStroke } from "@/lib/dental/signature";
 import type { MemberRole, SalonSector } from "@/types/database";
 
 const { getActiveSalonMock, getActiveMembershipMock, fromMock, getUserMock, storageFromMock } =
@@ -49,6 +51,37 @@ const SALON_ID = "00000000-0000-0000-0000-000000000000";
 const CUSTOMER_ID = "11111111-1111-1111-1111-111111111111";
 const CONSENT_ID = "22222222-2222-2222-2222-222222222222";
 const IMAGE_ID = "33333333-3333-3333-3333-333333333333";
+
+/**
+ * Rúbrica válida: doce puntos con recorrido, la forma que deja una firma real
+ * capturada en la tableta. Los umbrales viven en `consent-signature.test.ts`.
+ */
+const RUBRICA: SignatureStroke[] = [
+  [
+    { x: 10, y: 40, p: 0.3, t: 0 },
+    { x: 18, y: 22, p: 0.6, t: 16 },
+    { x: 26, y: 48, p: 0.7, t: 32 },
+    { x: 34, y: 20, p: 0.8, t: 48 },
+    { x: 42, y: 50, p: 0.7, t: 64 },
+    { x: 51, y: 24, p: 0.6, t: 80 },
+  ],
+  [
+    { x: 8, y: 55, p: 0.4, t: 140 },
+    { x: 24, y: 52, p: 0.5, t: 156 },
+    { x: 40, y: 54, p: 0.5, t: 172 },
+    { x: 58, y: 50, p: 0.4, t: 188 },
+    { x: 70, y: 53, p: 0.3, t: 204 },
+    { x: 78, y: 51, p: 0.2, t: 220 },
+  ],
+];
+
+/** Un toque con el dedo: no es una firma. */
+const TOQUE: SignatureStroke[] = [
+  [
+    { x: 30, y: 30, p: 0.5, t: 0 },
+    { x: 31, y: 30, p: 0.5, t: 12 },
+  ],
+];
 
 function consentRow(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
   return {
@@ -112,11 +145,21 @@ function membership(role: MemberRole): void {
   getActiveMembershipMock.mockResolvedValue({ salonId: SALON_ID, role });
 }
 
-/** Chain de Supabase encadenable y "then-able": resuelve `result` sin importar qué se encadene. */
-function chain(result: { data: unknown; error: unknown }): Record<string, unknown> {
+/**
+ * Chain de Supabase encadenable y "then-able": resuelve `result` sin importar
+ * qué se encadene. `onUpdate`, si se pasa, recibe el payload de `.update()`:
+ * es la única forma de afirmar QUÉ se escribe, y no solo que se escribió.
+ */
+function chain(
+  result: { data: unknown; error: unknown },
+  onUpdate?: (payload: unknown) => void,
+): Record<string, unknown> {
   const c: Record<string, unknown> = {};
   c.insert = vi.fn(() => c);
-  c.update = vi.fn(() => c);
+  c.update = vi.fn((payload: unknown) => {
+    onUpdate?.(payload);
+    return c;
+  });
   c.delete = vi.fn(() => c);
   c.select = vi.fn(() => c);
   c.eq = vi.fn(() => c);
@@ -131,9 +174,12 @@ function chain(result: { data: unknown; error: unknown }): Record<string, unknow
  * (consumidos en orden de llamada; se repite el último si se agotan). Permite
  * simular la misma tabla devolviendo filas distintas en llamadas sucesivas
  * (p.ej. `consents`: primero el fetch del estado actual, luego el UPDATE).
+ *
+ * `onUpdate` se propaga a cada chain para poder inspeccionar lo que se escribe.
  */
 function fromSequence(
   results: Record<string, Array<{ data: unknown; error: unknown }>>,
+  onUpdate?: (payload: unknown) => void,
 ): (table: string) => Record<string, unknown> {
   const counters: Record<string, number> = {};
   return (table: string) => {
@@ -144,7 +190,7 @@ function fromSequence(
     const idx = counters[table] ?? 0;
     counters[table] = idx + 1;
     const result = list[Math.min(idx, list.length - 1)] as { data: unknown; error: unknown };
-    return chain(result);
+    return chain(result, onUpdate);
   };
 }
 
@@ -172,7 +218,7 @@ describe("gate de escritura del expediente clínico", () => {
     salon("peluqueria");
     membership("owner");
 
-    const result = await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez" });
+    const result = await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez", strokes: RUBRICA });
 
     expect(result.ok).toBe(false);
     expect(fromMock).not.toHaveBeenCalled();
@@ -285,6 +331,157 @@ describe("createConsent", () => {
 // (c) signConsent / revokeConsent — respetan canSignConsent/canRevokeConsent
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// (c-bis) signConsent — la firma es un TRAZO, no un nombre tecleado (A2)
+// ---------------------------------------------------------------------------
+
+describe("signConsent — firma manuscrita", () => {
+  it("un toque no es una firma: rechaza sin tocar la BD ni Storage", async () => {
+    salon("odontologia");
+    membership("staff");
+
+    const result = await signConsent(CONSENT_ID, {
+      signedByPatient: "Juan Pérez",
+      strokes: TOQUE,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(storageFromMock).not.toHaveBeenCalled();
+  });
+
+  it("sella con el contenido LEÍDO DE BD, no con lo que mande el cliente", async () => {
+    salon("odontologia");
+    membership("staff");
+
+    // El consentimiento guardado dice una cosa…
+    const existing = consentRow({
+      status: "pending",
+      title: "Consentimiento para exodoncia",
+      body: "Texto realmente guardado en la base de datos.",
+      template_version: "v3",
+    });
+    const updated = consentRow({ status: "signed" });
+
+    const uploadMock = vi.fn(async () => ({ data: { path: "x" }, error: null }));
+    storageFromMock.mockReturnValue({ upload: uploadMock });
+
+    const updateSpy = vi.fn();
+    fromMock.mockImplementation(
+      fromSequence({
+        consents: [
+          { data: existing, error: null },
+          { data: updated, error: null },
+        ],
+      }, updateSpy),
+    );
+
+    await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez", strokes: RUBRICA });
+
+    // …y el sello tiene que corresponder a ESE contenido. Si se calculara con
+    // lo que envía el navegador, quien firma podría sellar un texto distinto
+    // del que hay guardado, y el sello no probaría nada.
+    const esperado = consentFingerprint({
+      title: "Consentimiento para exodoncia",
+      body: "Texto realmente guardado en la base de datos.",
+      templateVersion: "v3",
+    });
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ signature_hash: esperado }),
+    );
+  });
+
+  it("guarda el trazo en patient-media y referencia su ruta en la fila", async () => {
+    salon("odontologia");
+    membership("staff");
+
+    const existing = consentRow({ status: "pending" });
+    const updated = consentRow({ status: "signed" });
+
+    const uploadMock = vi.fn(async () => ({ data: { path: "x" }, error: null }));
+    storageFromMock.mockReturnValue({ upload: uploadMock });
+
+    const updateSpy = vi.fn();
+    fromMock.mockImplementation(
+      fromSequence({
+        consents: [
+          { data: existing, error: null },
+          { data: updated, error: null },
+        ],
+      }, updateSpy),
+    );
+
+    await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez", strokes: RUBRICA });
+
+    expect(storageFromMock).toHaveBeenCalledWith("patient-media");
+    const ruta = `${SALON_ID}/${CUSTOMER_ID}/consent-${CONSENT_ID}.svg`;
+    expect(uploadMock).toHaveBeenCalledWith(ruta, expect.anything(), expect.anything());
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ signature_path: ruta }),
+    );
+  });
+
+  it("archiva también el PDF sellado y lo referencia en document_uri", async () => {
+    salon("odontologia");
+    membership("staff");
+
+    const existing = consentRow({ status: "pending" });
+    const updated = consentRow({ status: "signed" });
+
+    const uploadMock = vi.fn(async () => ({ data: { path: "x" }, error: null }));
+    storageFromMock.mockReturnValue({ upload: uploadMock });
+
+    const updateSpy = vi.fn();
+    fromMock.mockImplementation(
+      fromSequence(
+        {
+          consents: [
+            { data: existing, error: null },
+            { data: updated, error: null },
+          ],
+        },
+        updateSpy,
+      ),
+    );
+
+    await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez", strokes: RUBRICA });
+
+    // El PDF es el documento que se archiva y el que se imprime si alguien lo
+    // reclama; sin `document_uri` la firma existiría solo dentro de la app.
+    const pdf = `${SALON_ID}/${CUSTOMER_ID}/consent-${CONSENT_ID}.pdf`;
+    expect(uploadMock).toHaveBeenCalledWith(pdf, expect.anything(), expect.anything());
+    expect(updateSpy).toHaveBeenCalledWith(expect.objectContaining({ document_uri: pdf }));
+  });
+
+  it("si el trazo no se puede guardar, NO marca el consentimiento como firmado", async () => {
+    salon("odontologia");
+    membership("staff");
+
+    const existing = consentRow({ status: "pending" });
+    const uploadMock = vi.fn(async () => ({
+      data: null,
+      error: { message: "bucket no disponible" },
+    }));
+    storageFromMock.mockReturnValue({ upload: uploadMock });
+
+    const updateSpy = vi.fn();
+    fromMock.mockImplementation(
+      fromSequence({ consents: [{ data: existing, error: null }] }, updateSpy),
+    );
+
+    const result = await signConsent(CONSENT_ID, {
+      signedByPatient: "Juan Pérez",
+      strokes: RUBRICA,
+    });
+
+    // Un consentimiento marcado como firmado cuyo trazo se perdió es peor que
+    // uno sin firmar: aparenta prueba donde no la hay.
+    expect(result.ok).toBe(false);
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("signConsent", () => {
   it("(c) pending ⇒ firma: status 'signed', signed_at y signed_by_patient", async () => {
     salon("odontologia");
@@ -297,6 +494,11 @@ describe("signConsent", () => {
       signed_by_patient: "Juan Pérez",
     });
 
+    // Firmar archiva el trazo en Storage antes de marcar la fila (A2).
+    storageFromMock.mockReturnValue({
+      upload: vi.fn(async () => ({ data: { path: "x" }, error: null })),
+    });
+
     fromMock.mockImplementation(
       fromSequence({
         consents: [
@@ -306,7 +508,7 @@ describe("signConsent", () => {
       }),
     );
 
-    const result = await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez" });
+    const result = await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez", strokes: RUBRICA });
 
     expect(result).toEqual({ ok: true, data: updated });
   });
@@ -321,7 +523,7 @@ describe("signConsent", () => {
       throw new Error(`tabla inesperada: ${table}`);
     });
 
-    const result = await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez" });
+    const result = await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez", strokes: RUBRICA });
 
     expect(result.ok).toBe(false);
   });
@@ -336,7 +538,7 @@ describe("signConsent", () => {
       throw new Error(`tabla inesperada: ${table}`);
     });
 
-    const result = await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez" });
+    const result = await signConsent(CONSENT_ID, { signedByPatient: "Juan Pérez", strokes: RUBRICA });
 
     expect(result.ok).toBe(false);
   });

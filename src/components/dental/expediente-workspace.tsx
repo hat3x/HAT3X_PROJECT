@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { CaptureButton } from "@/components/dental/capture-button";
 import { UploadImageForm } from "@/components/dental/upload-image-form";
 import { useConsents, useCreateConsent } from "@/hooks/use-consents";
 import { usePatientImages } from "@/hooks/use-patient-images";
@@ -165,6 +166,11 @@ export function ExpedienteWorkspace({
               images={imagesQuery.data ?? []}
             />
           )}
+          {/* Capturar del equipo va ANTES de la subida manual: cuando hay
+              agente, es el gesto habitual, y subir un fichero a mano pasa a ser
+              la excepción. Si no hay agente, este componente no pinta nada y la
+              pantalla queda exactamente como estaba. */}
+          <CaptureButton salonId={salonId} customerId={customerId} />
           <UploadImageForm salonId={salonId} customerId={customerId} />
         </div>
       )}

@@ -14,11 +14,13 @@ import {
 } from "lucide-react";
 
 import { deleteConsent } from "@/app/(dashboard)/expediente/actions";
+import { SignaturePad } from "@/components/dental/signature-pad";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useRevokeConsent, useSignConsent } from "@/hooks/use-consents";
+import { isMeaningfulSignature, type SignatureStroke } from "@/lib/dental/signature";
 import {
   CONSENT_STATUS_LABELS,
   CONSENT_TYPE_LABELS,
@@ -94,28 +96,40 @@ export function ConsentList({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [signingId, setSigningId] = useState<string | null>(null);
   const [signName, setSignName] = useState("");
+  const [signStrokes, setSignStrokes] = useState<SignatureStroke[]>([]);
 
   function handleStartSign(consentId: string) {
     setActionError(null);
     setSigningId(consentId);
     setSignName("");
+    setSignStrokes([]);
   }
 
   function handleCancelSign() {
     setSigningId(null);
     setSignName("");
+    setSignStrokes([]);
   }
 
   function handleConfirmSign(consentId: string) {
     const trimmed = signName.trim();
     if (trimmed === "") return;
+    // Misma comprobación que hace el servidor: el botón ya está deshabilitado,
+    // pero no se confía en el estado de un botón para decidir si hay firma.
+    if (!isMeaningfulSignature(signStrokes)) return;
     setActionError(null);
     signMutation.mutate(
-      { consentId, signedByPatient: trimmed },
+      {
+        consentId,
+        signedByPatient: trimmed,
+        strokes: signStrokes,
+        device: typeof navigator === "undefined" ? undefined : navigator.userAgent,
+      },
       {
         onSuccess: () => {
           setSigningId(null);
           setSignName("");
+          setSignStrokes([]);
         },
         onError: (err: unknown) => {
           setActionError(err instanceof Error ? err.message : "Error al firmar el consentimiento.");
@@ -217,7 +231,7 @@ export function ConsentList({
 
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 {isSigning ? (
-                  <>
+                  <div className="flex w-full flex-col gap-2">
                     <Input
                       aria-label="Nombre del paciente que firma"
                       placeholder="Nombre del paciente"
@@ -225,24 +239,31 @@ export function ConsentList({
                       onChange={(e) => setSignName(e.target.value)}
                       className="h-8 w-48 text-xs"
                     />
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="gap-1.5"
-                      disabled={signMutation.isPending || signName.trim() === ""}
-                      onClick={() => handleConfirmSign(consent.id)}
-                    >
-                      {signMutation.isPending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                      )}
-                      Confirmar firma
-                    </Button>
-                    <Button type="button" size="sm" variant="ghost" onClick={handleCancelSign}>
-                      Cancelar
-                    </Button>
-                  </>
+                    <SignaturePad onChange={setSignStrokes} disabled={signMutation.isPending} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={
+                          signMutation.isPending ||
+                          signName.trim() === "" ||
+                          !isMeaningfulSignature(signStrokes)
+                        }
+                        onClick={() => handleConfirmSign(consent.id)}
+                      >
+                        {signMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                        Confirmar firma
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" onClick={handleCancelSign}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
                 ) : (
                   <>
                     {canSignConsent(consent.status) && (

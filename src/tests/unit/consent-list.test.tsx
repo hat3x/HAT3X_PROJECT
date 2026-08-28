@@ -67,6 +67,10 @@ function consent(overrides: Partial<Consent> & { id: string }): Consent {
     status: "pending",
     signed_at: null,
     signed_by_patient: null,
+    signature_path: null,
+    signature_hash: null,
+    signed_ip: null,
+    signed_device: null,
     witnessed_by: null,
     revoked_at: null,
     revoked_by: null,
@@ -160,7 +164,7 @@ describe("ConsentList · estados, badges y acciones", () => {
     expect(within(card).queryByRole("button", { name: "Borrar" })).toBeNull();
   });
 
-  it("al firmar con un nombre, llama a useSignConsent con {consentId, signedByPatient}", () => {
+  it("el nombre solo NO firma: sin trazo no se llama a useSignConsent (A2)", () => {
     renderList([PENDING]);
     const card = consentCard("Consentimiento general");
 
@@ -170,11 +174,10 @@ describe("ConsentList · estados, badges y acciones", () => {
     fireEvent.change(input, { target: { value: "Ana Pérez" } });
     fireEvent.click(within(card).getByRole("button", { name: "Confirmar firma" }));
 
-    expect(m.sign.mutate).toHaveBeenCalledTimes(1);
-    expect(m.sign.mutate).toHaveBeenCalledWith(
-      { consentId: "consent-1", signedByPatient: "Ana Pérez" },
-      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
-    );
+    // Antes de A2 esto firmaba. Un nombre tecleado es una anotación, no una
+    // firma: sin trazo el botón queda bloqueado y la mutación no se dispara.
+    expect(within(card).getByRole("button", { name: "Confirmar firma" })).toBeDisabled();
+    expect(m.sign.mutate).not.toHaveBeenCalled();
   });
 
   it("el botón de confirmar firma está deshabilitado sin nombre", () => {
@@ -184,5 +187,14 @@ describe("ConsentList · estados, badges y acciones", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Firmar" }));
 
     expect(within(card).getByRole("button", { name: "Confirmar firma" })).toBeDisabled();
+  });
+
+  it("ofrece el lienzo de firma al iniciar la firma", () => {
+    renderList([PENDING]);
+    const card = consentCard("Consentimiento general");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Firmar" }));
+
+    expect(within(card).getByLabelText("Firma del paciente")).toBeInTheDocument();
   });
 });

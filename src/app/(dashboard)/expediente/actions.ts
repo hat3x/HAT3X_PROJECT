@@ -22,7 +22,15 @@
  * `20260801110000_consents_images.sql`); el acceso es SIEMPRE vía signed URL
  * (`signImageUrls`), nunca `getPublicUrl` (el bucket no es público).
  */
+import { buildConsentPdf } from "@/lib/dental/consent-pdf";
+import { consentFingerprint } from "@/lib/dental/consent-seal";
 import { getConsentTemplate, canRevokeConsent, canSignConsent, isImageModality } from "@/lib/dental/consents";
+import {
+  isMeaningfulSignature,
+  signatureBounds,
+  strokesToSvgPath,
+  type SignatureStroke,
+} from "@/lib/dental/signature";
 import { getActiveMembership, getActiveSalon } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -66,7 +74,9 @@ const SIGNED_URL_TTL_SECONDS = 3600;
 
 async function assertExpedienteAccess(
   requiredRoles: readonly MemberRole[] = WRITE_ROLES,
-): Promise<{ ok: true; salonId: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; salonId: string; salonName: string } | { ok: false; error: string }
+> {
   const salon = await getActiveSalon();
   if (salon === null) {
     return { ok: false, error: ERROR_NO_SALON };
@@ -80,7 +90,9 @@ async function assertExpedienteAccess(
     return { ok: false, error: ERROR_ROLE };
   }
 
-  return { ok: true, salonId: salon.id };
+  // `salonName` va en la cabecera del PDF del consentimiento; el resto de
+  // llamantes lo ignoran sin enterarse.
+  return { ok: true, salonId: salon.id, salonName: salon.name };
 }
 
 // ---------------------------------------------------------------------------
@@ -139,14 +151,49 @@ export async function createConsent(input: CreateConsentInput): Promise<ActionRe
 // ---------------------------------------------------------------------------
 
 export interface SignConsentInput {
+  /** Nombre con el que el paciente se identifica al firmar. */
   signedByPatient: string;
+  /** Trazo capturado en la tableta. Sin él no hay firma. */
+  strokes: SignatureStroke[];
+  /** Dispositivo desde el que se firmó, para el registro (`navigator.userAgent`). */
+  device?: string;
+}
+
+/** Envuelve el trazo en un SVG autónomo, que es lo que se archiva. */
+function signatureSvg(strokes: SignatureStroke[]): string {
+  const bounds = signatureBounds(strokes);
+  // `isMeaningfulSignature` ya garantiza que hay puntos; el fallback existe
+  // solo para no depender de ese orden desde aquí.
+  const { minX, minY, maxX, maxY } = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  const pad = 4;
+  const width = maxX - minX + pad * 2;
+  const height = maxY - minY + pad * 2;
+
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX - pad} ${minY - pad} ${width} ${height}">`,
+    `<path d="${strokesToSvgPath(strokes)}" fill="none" stroke="#111" stroke-width="1.6"`,
+    ` stroke-linecap="round" stroke-linejoin="round"/>`,
+    `</svg>`,
+  ].join("");
 }
 
 /**
- * Firma un consentimiento (`'pending' → 'signed'`), fijando `signed_at` y
- * `signed_by_patient`. Verifica {@link canSignConsent} sobre el estado ACTUAL
- * leído de BD antes de escribir (el trigger `consents_guard_signed` es la
- * última línea de defensa, pero aquí devolvemos un mensaje legible).
+ * Firma un consentimiento (`'pending' → 'signed'`) con una firma MANUSCRITA.
+ *
+ * Verifica {@link canSignConsent} sobre el estado ACTUAL leído de BD antes de
+ * escribir (el trigger `consents_guard_signed` es la última línea de defensa,
+ * pero aquí devolvemos un mensaje legible).
+ *
+ * Tres decisiones que sostienen el valor probatorio de la firma:
+ *
+ *  1. **El trazo es obligatorio.** Un nombre tecleado es una anotación, no una
+ *     firma. Se rechaza ANTES de tocar la BD.
+ *  2. **El sello se calcula con el contenido leído de BD**, nunca con lo que
+ *     manda el navegador: quien firma controla su navegador, así que un sello
+ *     sobre contenido enviado por el cliente no probaría nada.
+ *  3. **Primero se archiva el trazo, después se marca como firmado.** Un
+ *     consentimiento marcado como firmado cuyo trazo se perdió es peor que uno
+ *     sin firmar: aparenta prueba donde no la hay.
  */
 export async function signConsent(
   consentId: string,
@@ -154,6 +201,13 @@ export async function signConsent(
 ): Promise<ActionResult<Consent>> {
   const access = await assertExpedienteAccess();
   if (!access.ok) return { ok: false, error: access.error };
+
+  if (!isMeaningfulSignature(input.strokes)) {
+    return {
+      ok: false,
+      error: "La firma está vacía o es demasiado breve. Pide al paciente que firme de nuevo.",
+    };
+  }
 
   const supabase = createClient();
 
@@ -173,19 +227,83 @@ export async function signConsent(
     };
   }
 
+  // Archivar el trazo ANTES de marcar nada (decisión 3).
+  const signaturePath = `${access.salonId}/${existing.customer_id}/consent-${consentId}.svg`;
+  const { error: uploadError } = await supabase.storage
+    .from(PATIENT_MEDIA_BUCKET)
+    .upload(signaturePath, new Blob([signatureSvg(input.strokes)], { type: "image/svg+xml" }), {
+      contentType: "image/svg+xml",
+      upsert: false,
+    });
+
+  if (uploadError !== null) {
+    return { ok: false, error: `No se pudo guardar la firma: ${uploadError.message}` };
+  }
+
+  // Sello sobre el contenido GUARDADO (decisión 2).
+  const signatureHash = consentFingerprint({
+    title: existing.title,
+    body: existing.body,
+    templateVersion: existing.template_version,
+  });
+
+  const signedAt = new Date().toISOString();
+
+  // El PDF sellado: el documento que se archiva y el que se imprime si alguien
+  // lo reclama. Lleva dentro el texto firmado, el trazo y el sello, para poder
+  // comprobarlo sin abrir la aplicación.
+  const documentPath = `${access.salonId}/${existing.customer_id}/consent-${consentId}.pdf`;
+  const pdf = await buildConsentPdf({
+    title: existing.title,
+    body: existing.body,
+    templateVersion: existing.template_version,
+    signedByPatient: input.signedByPatient,
+    signedAt,
+    signatureHash,
+    salonName: access.salonName,
+    strokes: input.strokes,
+  });
+
+  // La copia a un `Uint8Array` propio no es ceremonia: `pdf-lib` devuelve un
+  // array cuyo buffer TypeScript tipa como `ArrayBufferLike`, que no encaja en
+  // `BlobPart`. Copiarlo deja un buffer concreto y evita el cast.
+  const { error: pdfError } = await supabase.storage
+    .from(PATIENT_MEDIA_BUCKET)
+    .upload(documentPath, new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), {
+      contentType: "application/pdf",
+      upsert: false,
+    });
+
+  if (pdfError !== null) {
+    // Igual que con el trazo: si no se puede archivar el documento, la firma no
+    // se da por hecha. Se retira el trazo ya subido para no dejar restos.
+    await supabase.storage.from(PATIENT_MEDIA_BUCKET).remove([signaturePath]);
+    return { ok: false, error: `No se pudo archivar el consentimiento: ${pdfError.message}` };
+  }
+
   const { data, error } = await supabase
     .from("consents")
     .update({
       status: "signed",
-      signed_at: new Date().toISOString(),
+      signed_at: signedAt,
       signed_by_patient: input.signedByPatient,
+      signature_path: signaturePath,
+      signature_hash: signatureHash,
+      signed_device: input.device ?? null,
+      document_uri: documentPath,
     })
     .eq("id", consentId)
     .eq("salon_id", access.salonId)
     .select()
     .single();
 
-  if (error !== null) return { ok: false, error: error.message };
+  if (error !== null) {
+    // La fila no quedó firmada: retirar el trazo y el PDF huérfanos para no
+    // dejar basura en el bucket ni documentos que aparenten una firma que no
+    // existe en la ficha.
+    await supabase.storage.from(PATIENT_MEDIA_BUCKET).remove([signaturePath, documentPath]);
+    return { ok: false, error: error.message };
+  }
   return { ok: true, data };
 }
 
