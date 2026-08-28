@@ -323,11 +323,20 @@ async function loadProfessionalDayInputs(
     throw new BookingError(500, "Error al cargar la disponibilidad.");
   }
 
-  // Horario de clínica: FALLA EN ABIERTO. Si la consulta falla (p. ej. la tabla aún
-  // no existe en un despliegue en curso) o el salón no tiene horario de clínica
-  // configurado (0 filas), se pasa `undefined` → el motor ignora la intersección y
-  // usa solo el horario del profesional (comportamiento previo, sin romper nada).
-  const salonRows = salonHoursRes.error ? [] : salonHoursRes.data ?? [];
+  // Horario de clínica: FALLA EN CERRADO. Hay que distinguir DOS cosas que antes se
+  // confundían, porque no significan lo mismo:
+  //
+  //   · la consulta FALLA → no sabemos si la clínica está abierta. Seguir sin la
+  //     intersección ofrecería huecos con la clínica cerrada (es lo que dejó dar citas
+  //     un lunes por la tarde en Biodental). Ante la duda se corta: 500. Un "no puedo
+  //     comprobarlo ahora" es recuperable; una cita a puerta cerrada, no.
+  //   · el salón NO tiene horario (0 filas) → dato conocido y legítimo: ese salón no usa
+  //     horario de clínica. Se pasa `undefined` y el motor usa solo el del profesional
+  //     (retrocompatibilidad de los salones anteriores a `salon_opening_hours`).
+  if (salonHoursRes.error) {
+    throw new BookingError(500, "Error al cargar el horario de la clínica.");
+  }
+  const salonRows = salonHoursRes.data ?? [];
   const salonSchedules = salonRows.length > 0 ? salonRows : undefined;
 
   const busy: BusyInterval[] = (blocksRes.data ?? []).map((b) =>
