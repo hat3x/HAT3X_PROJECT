@@ -15,7 +15,7 @@ interface Props {
 
 const CATEGORY_BG: Record<string, { bg: string; text: string }> = {
   Montaditos:   { bg: 'bg-[#962d1e]', text: 'text-white' },
-  MontyAhorro:  { bg: 'bg-[#C9B99A]', text: 'text-[#2D2926]' },
+  MontyRuedas:  { bg: 'bg-[#C9B99A]', text: 'text-[#2D2926]' },
   Ensaladas:    { bg: 'bg-[#2D6A4F]', text: 'text-white' },
   Aperitivos:   { bg: 'bg-[#B8C5D0]', text: 'text-[#2D2926]' },
   Raciones:     { bg: 'bg-[#D4A59A]', text: 'text-[#2D2926]' },

@@ -7,9 +7,11 @@ import ensaladasImg   from '@/assets/secciones/ensaladas.png';
 
 export const SECTION_IMAGES: Record<string, string> = {
   Montaditos:  montaditosImg,
-  MontyAhorro: montyahorroImg,
+  MontyRuedas: montyahorroImg,
   Bebidas:     bebidasImg,
   Aperitivos:  aperitivosImg,
   Raciones:    racionesImg,
   Ensaladas:   ensaladasImg,
+  Promociones: '/assets/img/promos/boton-promociones.png',
+  Desayunos:   '/assets/img/desayunos/boton-desayunos.png',
 };

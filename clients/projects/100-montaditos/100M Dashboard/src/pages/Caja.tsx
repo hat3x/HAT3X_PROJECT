@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase, type EstadoPedido } from "@/lib/supabase";
 import { useStaffLocal } from "@/lib/staff-local";
+import { playBeep, unlockAudio } from "@/lib/beep";
 import { StaffHeader } from "@/components/StaffHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,8 +40,17 @@ interface ItemLite {
   cantidad: number;
   precio_unitario: number;
   destino: "cocina" | "bebidas";
-  producto: { nombre: string } | null;
+  variante: string | null;
+  combo_grupo: string | null;
+  producto: { nombre: string; numero: string | null } | null;
 }
+
+/** Nº de carta + nombre + variante (ej. "#13 Pulled pork BBQ · Jarra Sancho"). */
+const itemLabel = (it: ItemLite): string => {
+  const num = it.producto?.numero ? `#${it.producto.numero} ` : "";
+  const v = it.variante ? it.variante.replace(/\n/g, " · ") : "";
+  return num + (it.producto?.nombre ?? "—") + (v ? ` · ${v}` : "");
+};
 
 const ESTADO_VARIANT: Record<EstadoPedido, { label: string; cls: string }> = {
   pendiente: { label: "Pendiente", cls: "bg-amber-500 text-white" },
@@ -51,10 +61,20 @@ const ESTADO_VARIANT: Record<EstadoPedido, { label: string; cls: string }> = {
   cancelado: { label: "Cancelado", cls: "bg-muted text-muted-foreground" },
 };
 
+// Inicio del día de HOY en Europe/Madrid (instante UTC), independiente de la
+// zona horaria configurada en la tablet — así los pedidos del día no "desaparecen".
 const startOfDayIso = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  const now = new Date();
+  const ymd = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(now); // YYYY-MM-DD
+  for (const off of ['+02:00', '+01:00']) {
+    const cand = new Date(`${ymd}T00:00:00${off}`);
+    const back = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(cand);
+    if (back === `${ymd} 00:00`) return cand.toISOString();
+  }
+  return new Date(`${ymd}T00:00:00+01:00`).toISOString();
 };
 
 const isActivo = (e: EstadoPedido | null) =>
@@ -64,6 +84,85 @@ const isActivo = (e: EstadoPedido | null) =>
 // Fallback defensivo: si llegara nulo, asume cocina.
 const effectiveDestino = (it: ItemLite): "cocina" | "bebidas" =>
   it.destino === "bebidas" ? "bebidas" : "cocina";
+
+/** Texto de una PARTE de combo: solo la variante (cae al nombre si no hay). */
+const partLabel = (it: ItemLite): string => {
+  const v = it.variante ? it.variante.replace(/\n/g, " · ") : "";
+  return v || it.producto?.nombre || "—";
+};
+
+interface ComboGroup {
+  grupo: string;
+  nombre: string;
+  cantidad: number;
+  cocina: ItemLite[];
+  bebidas: ItemLite[];
+}
+
+/**
+ * Agrupa las líneas de un pedido: las de un mismo combo (comparten combo_grupo)
+ * se juntan en UN bloque con su nombre y sus partes repartidas por estación
+ * (comida→cocina, café/zumo→barra). El resto de líneas quedan "sueltas".
+ */
+const groupItems = (
+  its: ItemLite[],
+): { combos: ComboGroup[]; looseCocina: ItemLite[]; looseBebidas: ItemLite[] } => {
+  const byGrupo = new Map<string, ItemLite[]>();
+  const loose: ItemLite[] = [];
+  for (const it of its) {
+    if (it.combo_grupo) {
+      const arr = byGrupo.get(it.combo_grupo) ?? [];
+      arr.push(it);
+      byGrupo.set(it.combo_grupo, arr);
+    } else {
+      loose.push(it);
+    }
+  }
+  const combos: ComboGroup[] = [];
+  byGrupo.forEach((lines, grupo) => {
+    const cocina = lines.filter((l) => effectiveDestino(l) === "cocina");
+    const bebidas = lines.filter((l) => effectiveDestino(l) === "bebidas");
+    // El nombre del combo lo da la línea de barra (lleva el nombre del combo);
+    // si faltara, la línea de mayor precio.
+    const header =
+      bebidas[0] ??
+      [...lines].sort((a, b) => Number(b.precio_unitario) - Number(a.precio_unitario))[0];
+    combos.push({
+      grupo,
+      nombre: header?.producto?.nombre ?? "Combo",
+      cantidad: header?.cantidad ?? 1,
+      cocina,
+      bebidas,
+    });
+  });
+  return {
+    combos,
+    looseCocina: loose.filter((l) => effectiveDestino(l) === "cocina"),
+    looseBebidas: loose.filter((l) => effectiveDestino(l) === "bebidas"),
+  };
+};
+
+/** Bloque de un combo agrupado: título + partes marcadas por estación. */
+const ComboBlock = ({ c }: { c: ComboGroup }) => (
+  <>
+    <div className="group-label" style={{ textTransform: "none" }}>
+      🧩 {c.cantidad > 1 ? `${c.cantidad}× ` : ""}
+      {c.nombre}
+    </div>
+    <ul className="items">
+      {c.cocina.map((it) => (
+        <li key={it.id}>
+          <span>🍳 {partLabel(it)}</span>
+        </li>
+      ))}
+      {c.bebidas.map((it) => (
+        <li key={it.id}>
+          <span>🍺 {partLabel(it)}</span>
+        </li>
+      ))}
+    </ul>
+  </>
+);
 
 const Caja = () => {
   const localId = useStaffLocal((s) => s.local?.id ?? null);
@@ -102,7 +201,7 @@ const Caja = () => {
       const { data: its } = await supabase
         .from("pedido_items")
         .select(
-          "id, pedido_id, cantidad, precio_unitario, destino, producto:menu_productos(nombre)",
+          "id, pedido_id, cantidad, precio_unitario, destino, variante, combo_grupo, producto:menu_productos(nombre, numero)",
         )
         .in("pedido_id", ids);
       const grouped: Record<string, ItemLite[]> = {};
@@ -121,26 +220,40 @@ const Caja = () => {
   useEffect(() => {
     if (!localId) return;
     loadPedidos();
-    const ch = supabase
-      .channel(`caja-pedidos-${localId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "pedidos",
-          filter: `local_id=eq.${localId}`,
-        },
-        () => loadPedidos(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pedido_items" },
-        () => loadPedidos(),
-      )
-      .subscribe();
+
+    // Respaldo por polling: si el WebSocket Realtime no entrega eventos (RLS,
+    // red del APK, etc.), refrescamos cada 5s para que los pedidos nuevos
+    // aparezcan solos sin tener que salir y volver a entrar.
+    const poll = setInterval(loadPedidos, 5000);
+
+    let ch: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      ch = supabase
+        .channel(`caja-pedidos-${localId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "pedidos",
+            filter: `local_id=eq.${localId}`,
+          },
+          () => loadPedidos(),
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "pedido_items" },
+          () => loadPedidos(),
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn("[realtime] no disponible en caja, se usa polling", e);
+    }
     return () => {
-      supabase.removeChannel(ch);
+      clearInterval(poll);
+      if (ch) {
+        try { supabase.removeChannel(ch); } catch { /* ignore */ }
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localId]);
@@ -157,8 +270,12 @@ const Caja = () => {
   );
 
   const stats = useMemo(() => {
-    const total = pedidos.length;
-    const ingresos = pedidos.reduce((s, p) => s + Number(p.total), 0);
+    // Solo cuentan los pedidos PAGADOS de verdad (estado ni 'pendiente_pago' ni
+    // 'cancelado'): así "Ingresos"/"Ticket medio"/"Pedidos hoy" no incluyen pagos
+    // abandonados ni cancelados (que antes inflaban los ingresos).
+    const pagados = pedidos.filter((p) => p.estado !== "pendiente_pago" && p.estado !== "cancelado");
+    const total = pagados.length;
+    const ingresos = pagados.reduce((s, p) => s + Number(p.total), 0);
     const ticket = total ? ingresos / total : 0;
     const pendientes = pedidos.filter(
       (p) => isActivo(p.estado_cocina) || isActivo(p.estado_bebidas),
@@ -191,6 +308,30 @@ const Caja = () => {
       ),
     [pedidos],
   );
+
+  // 🔔 Pitido al llegar un pedido NUEVO a "Por ticar". No suena en la carga
+  // inicial (solo cuando aparece un id que no estaba antes).
+  const seenRef = useRef<Set<string>>(new Set());
+  const beepInitRef = useRef(false);
+  useEffect(() => {
+    if (loading) return;
+    const ids = porTicar.map((p) => p.id);
+    if (!beepInitRef.current) {
+      seenRef.current = new Set(ids);
+      beepInitRef.current = true;
+      return;
+    }
+    const hayNuevos = ids.some((id) => !seenRef.current.has(id));
+    seenRef.current = new Set(ids);
+    if (hayNuevos) playBeep();
+  }, [porTicar, loading]);
+
+  // Desbloquea el audio del WebView de Android al primer toque del usuario.
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
 
   const ticarPedido = async (p: Pedido) => {
     const patch: Record<string, string> = { updated_at: new Date().toISOString() };
@@ -229,123 +370,76 @@ const Caja = () => {
   const detailItems = detailId ? items[detailId] ?? [] : [];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <StaffHeader title="Caja · Dashboard del día" subtitle={format(new Date(), "EEEE d 'de' MMMM yyyy")} />
-      <main className="mx-auto max-w-[1800px] space-y-6 p-6">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <StatCard icon={<ShoppingBag />} label="Pedidos hoy" value={stats.total.toString()} />
-          <StatCard icon={<Euro />} label="Ingresos" value={`${stats.ingresos.toFixed(2)} €`} />
-          <StatCard icon={<Receipt />} label="Ticket medio" value={`${stats.ticket.toFixed(2)} €`} />
-          <StatCard
-            icon={<Clock />}
-            label="Activos / Listos / Entreg."
-            value={`${stats.pendientes} · ${stats.listos} · ${stats.entregados}`}
-          />
+      <main className="mx-auto max-w-[1800px] space-y-6 px-4 pb-10 pt-4">
+        <div className="stats">
+          <StatCard label="Pedidos hoy" value={stats.total.toString()} />
+          <StatCard label="Ingresos" value={`${stats.ingresos.toFixed(2)} €`} />
+          <StatCard label="Ticket medio" value={`${stats.ticket.toFixed(2)} €`} />
+          <StatCard label="Activos · Listos · Entreg." value={`${stats.pendientes} · ${stats.listos} · ${stats.entregados}`} />
         </div>
 
         {/* POR TICAR: pedidos del cliente que aún no han pasado por caja */}
-        <Card className="border-amber-500/50 bg-amber-50/40 dark:bg-amber-950/10">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Receipt className="h-5 w-5 text-amber-600" />
-              Por ticar ({porTicar.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {porTicar.length === 0 && (
-              <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                Sin pedidos pendientes de ticar
-              </div>
-            )}
-            {porTicar.map((p) => {
-              const its = items[p.id] ?? [];
-              const cocinaIts = its.filter((it) => effectiveDestino(it) === "cocina");
-              const bebidaIts = its.filter((it) => effectiveDestino(it) === "bebidas");
-              const cocinaPend = p.estado_cocina === "pendiente";
-              const bebidaPend = p.estado_bebidas === "pendiente";
-              return (
-                <Card key={`t-${p.id}`} className="border-l-4 border-l-amber-500 p-3">
-                  <div className="mb-2 flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl font-bold">#{p.numero_pedido}</span>
-                        <Badge className="bg-amber-500 text-white">Por ticar</Badge>
-                        <TipoBadge tipo={p.tipo} />
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {format(new Date(p.created_at), "HH:mm")}
-                      </div>
-                    </div>
-                    <div className="text-sm font-semibold">{Number(p.total).toFixed(2)} €</div>
-                  </div>
-                  <div className="mb-3 grid gap-2 sm:grid-cols-2">
-                    {cocinaIts.length > 0 && (
-                      <div>
-                        <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-orange-700">
-                          <ChefHat className="h-3 w-3" /> Cocina
-                          {cocinaPend && <Badge className="ml-1 bg-amber-500 text-white">Por ticar</Badge>}
-                        </div>
-                        <ul className="text-sm">
-                          {cocinaIts.map((it) => (
-                            <li key={it.id}>
-                              <span className="font-bold">{it.cantidad}×</span> {it.producto?.nombre ?? "—"}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {bebidaIts.length > 0 && (
-                      <div>
-                        <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-sky-700">
-                          <GlassWater className="h-3 w-3" /> Bebidas
-                          {bebidaPend && <Badge className="ml-1 bg-amber-500 text-white">Por ticar</Badge>}
-                        </div>
-                        <ul className="text-sm">
-                          {bebidaIts.map((it) => (
-                            <li key={it.id}>
-                              <span className="font-bold">{it.cantidad}×</span> {it.producto?.nombre ?? "—"}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                  {p.notas && (
-                    <div className="mb-2 rounded-md bg-muted p-2 text-xs italic">📝 {p.notas}</div>
+        <h2 className="b-sec">🧾 Por ticar ({porTicar.length})</h2>
+        {porTicar.length === 0 && <div className="empty">Sin pedidos pendientes de ticar</div>}
+        <div className="grid2">
+          {porTicar.map((p) => {
+            const its = items[p.id] ?? [];
+            const { combos, looseCocina, looseBebidas } = groupItems(its);
+            const cocinaPend = p.estado_cocina === "pendiente";
+            const bebidaPend = p.estado_bebidas === "pendiente";
+            return (
+              <div key={`t-${p.id}`} className="order glass warn">
+                <div className="head">
+                  <span className="num">#{p.numero_pedido}</span>
+                  <span className="badge amber">Por ticar</span>
+                  {p.tipo === "cocina" && <span className="badge cocina">Cocina</span>}
+                  {p.tipo === "bebidas" && <span className="badge beb">Bebidas</span>}
+                  {p.tipo === "mixto" && <span className="badge">Mixto</span>}
+                  <span className="total" style={{ marginLeft: "auto" }}>{Number(p.total).toFixed(2)} €</span>
+                </div>
+                <div className="time">⏱ {format(new Date(p.created_at), "HH:mm")}</div>
+                {combos.map((c) => (
+                  <ComboBlock key={c.grupo} c={c} />
+                ))}
+                {looseCocina.length > 0 && (
+                  <>
+                    <div className="group-label">🍳 Cocina {cocinaPend && "· por ticar"}</div>
+                    <ul className="items">
+                      {looseCocina.map((it) => (
+                        <li key={it.id}><span className="qty">{it.cantidad}×</span><span>{itemLabel(it)}</span></li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {looseBebidas.length > 0 && (
+                  <>
+                    <div className="group-label">🍺 Bebidas/Aperitivos {bebidaPend && "· por ticar"}</div>
+                    <ul className="items">
+                      {looseBebidas.map((it) => (
+                        <li key={it.id}><span className="qty">{it.cantidad}×</span><span>{itemLabel(it)}</span></li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {p.notas && <div className="group-label" style={{ textTransform: "none" }}>📝 {p.notas}</div>}
+                <div className="actions">
+                  {cocinaPend && bebidaPend && (
+                    <button className="btn primary" onClick={() => ticarPedido(p)}>✓ Ticar todo y enviar</button>
                   )}
-                  <div className="flex flex-wrap gap-2">
-                    {cocinaPend && bebidaPend && (
-                      <Button size="sm" onClick={() => ticarPedido(p)}>
-                        <Check className="h-4 w-4" /> Ticar todo y enviar
-                      </Button>
-                    )}
-                    {cocinaPend && (
-                      <Button
-                        size="sm"
-                        variant={cocinaPend && bebidaPend ? "outline" : "default"}
-                        onClick={() => ticarSeccion(p, "cocina")}
-                      >
-                        <ChefHat className="h-4 w-4" /> Ticar y enviar a cocina
-                      </Button>
-                    )}
-                    {bebidaPend && (
-                      <Button
-                        size="sm"
-                        variant={cocinaPend && bebidaPend ? "outline" : "default"}
-                        onClick={() => ticarSeccion(p, "bebidas")}
-                      >
-                        <GlassWater className="h-4 w-4" /> Ticar y enviar a bebidas
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" onClick={() => setDetailId(p.id)}>
-                      Ver
-                    </Button>
-                  </div>
-                </Card>
-              );
-            })}
-          </CardContent>
-        </Card>
+                  {cocinaPend && (
+                    <button className="btn primary" onClick={() => ticarSeccion(p, "cocina")}>🍳 Ticar a cocina</button>
+                  )}
+                  {bebidaPend && (
+                    <button className="btn primary" onClick={() => ticarSeccion(p, "bebidas")}>🍺 Ticar a bebidas</button>
+                  )}
+                  <button className="btn ghost" onClick={() => setDetailId(p.id)}>Ver</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* BEBIDAS */}
@@ -353,7 +447,7 @@ const Caja = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <GlassWater className="h-5 w-5 text-sky-600" />
-                Bebidas ({bebidaActivos.length})
+                Bebidas/Aperitivos ({bebidaActivos.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -452,7 +546,7 @@ const Caja = () => {
                     <TableHead>Hora</TableHead>
                     <TableHead>Productos</TableHead>
                     <TableHead>Cocina</TableHead>
-                    <TableHead>Bebidas</TableHead>
+                    <TableHead>Bebidas/Aperitivos</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -482,7 +576,7 @@ const Caja = () => {
                                   <ul>
                                     {cocinaIts.map((it) => (
                                       <li key={it.id}>
-                                        <span className="font-bold">{it.cantidad}×</span> {it.producto?.nombre ?? "—"}
+                                        <span className="font-bold">{it.cantidad}×</span> {itemLabel(it)}
                                       </li>
                                     ))}
                                   </ul>
@@ -491,12 +585,12 @@ const Caja = () => {
                               {bebidaIts.length > 0 && (
                                 <div>
                                   <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-sky-700">
-                                    <GlassWater className="h-3 w-3" /> Bebidas
+                                    <GlassWater className="h-3 w-3" /> Bebidas/Aperitivos
                                   </div>
                                   <ul>
                                     {bebidaIts.map((it) => (
                                       <li key={it.id}>
-                                        <span className="font-bold">{it.cantidad}×</span> {it.producto?.nombre ?? "—"}
+                                        <span className="font-bold">{it.cantidad}×</span> {itemLabel(it)}
                                       </li>
                                     ))}
                                   </ul>
@@ -567,7 +661,7 @@ const Caja = () => {
                       <li key={it.id} className="flex items-center justify-between py-2">
                         <div>
                           <span className="font-bold">{it.cantidad}×</span>{" "}
-                          <span>{it.producto?.nombre ?? "—"}</span>
+                          <span>{itemLabel(it)}</span>
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {(it.cantidad * Number(it.precio_unitario)).toFixed(2)} €
@@ -596,7 +690,7 @@ const TipoBadge = ({ tipo }: { tipo: TipoPedido }) => {
   if (tipo === "bebidas")
     return (
       <Badge variant="outline" className="border-sky-500 text-sky-700">
-        <GlassWater className="mr-1 h-3 w-3" /> Bebidas
+        <GlassWater className="mr-1 h-3 w-3" /> Bebidas/Aperitivos
       </Badge>
     );
   if (tipo === "cocina")
@@ -627,96 +721,54 @@ const SeccionTicket = ({
   onAction: (estado: EstadoPedido) => void;
   onView: () => void;
 }) => {
-  const borderCls = accent === "sky" ? "border-l-sky-500" : "border-l-orange-500";
   const estado = seccion === "cocina" ? pedido.estado_cocina : pedido.estado_bebidas;
   const v = estado ? ESTADO_VARIANT[estado] : null;
+  const isOk = estado === "listo";
 
   const renderActions = () => {
     if (seccion === "bebidas") {
       if (estado === "pendiente" || estado === "recibido")
-        return (
-          <Button size="sm" className="flex-1" onClick={() => onAction("preparando")}>
-            Comenzar
-          </Button>
-        );
+        return <button className="btn primary" onClick={() => onAction("preparando")}>Comenzar</button>;
       if (estado === "preparando")
-        return (
-          <Button size="sm" className="flex-1" onClick={() => onAction("listo")}>
-            <Check className="h-4 w-4" /> Listo
-          </Button>
-        );
+        return <button className="btn primary" onClick={() => onAction("listo")}>Entregar</button>;
       if (estado === "listo")
-        return (
-          <Button size="sm" className="flex-1" onClick={() => onAction("entregado")}>
-            Entregar
-          </Button>
-        );
-    } else {
-      // cocina: caja sólo entrega
-      if (estado === "listo")
-        return (
-          <Button size="sm" className="flex-1" onClick={() => onAction("entregado")}>
-            Entregar
-          </Button>
-        );
+        return <button className="btn primary" onClick={() => onAction("entregado")}>Entregado</button>;
+    } else if (estado === "listo") {
+      return <button className="btn primary" onClick={() => onAction("entregado")}>Entregado</button>;
     }
     return null;
   };
 
   return (
-    <Card className={`border-l-4 ${borderCls} p-3`}>
-      <div className="mb-2 flex items-start justify-between">
-        <div>
-          <div className="text-2xl font-bold">#{pedido.numero_pedido}</div>
-          <div className="text-xs text-muted-foreground">
-            {format(new Date(pedido.created_at), "HH:mm")}
-            {pedido.tipo === "mixto" && (
-              <Badge variant="outline" className="ml-2 border-purple-500 text-purple-700">
-                Mixto
-              </Badge>
-            )}
-          </div>
-        </div>
-        <div className="text-right">
-          {v && <Badge className={v.cls}>{v.label}</Badge>}
-          <div className="mt-1 text-sm font-semibold">{Number(pedido.total).toFixed(2)} €</div>
-        </div>
+    <div className={`order glass ${isOk ? "ok" : accent === "sky" ? "" : "warn"}`}>
+      <div className="head">
+        <span className="num">#{pedido.numero_pedido}</span>
+        {v && <span className={`badge ${seccion === "bebidas" ? "beb" : "cocina"}`}>{v.label}</span>}
+        <span className="total" style={{ marginLeft: "auto" }}>{Number(pedido.total).toFixed(2)} €</span>
       </div>
-      <ul className="mb-2 space-y-0.5 text-sm">
+      <ul className="items">
         {items.map((it) => (
           <li key={it.id}>
-            <span className="font-bold">{it.cantidad}×</span> {it.producto?.nombre}
+            <span className="qty">{it.cantidad}×</span>
+            <span>{itemLabel(it)}</span>
           </li>
         ))}
-        {items.length === 0 && (
-          <li className="text-xs italic text-muted-foreground">Sin items en esta sección</li>
-        )}
+        {items.length === 0 && <li style={{ color: "var(--b-dim)", fontStyle: "italic", fontSize: "13px" }}>Sin items en esta sección</li>}
       </ul>
-      {pedido.notas && (
-        <div className="mb-2 rounded-md bg-muted p-2 text-xs italic">📝 {pedido.notas}</div>
-      )}
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={onView}>
-          Ver
-        </Button>
+      {pedido.notas && <div className="group-label" style={{ textTransform: "none" }}>📝 {pedido.notas}</div>}
+      <div className="actions">
         {renderActions()}
+        <button className="btn ghost" onClick={onView}>Ver</button>
       </div>
-    </Card>
+    </div>
   );
 };
 
-const StatCard = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
-  <Card>
-    <CardContent className="flex items-center gap-4 p-5">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary [&>svg]:h-5 [&>svg]:w-5">
-        {icon}
-      </div>
-      <div>
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-        <div className="text-xl font-bold">{value}</div>
-      </div>
-    </CardContent>
-  </Card>
+const StatCard = ({ label, value }: { icon?: React.ReactNode; label: string; value: string }) => (
+  <div className="stat glass">
+    <div className="k">{label}</div>
+    <div className="v">{value}</div>
+  </div>
 );
 
 export default Caja;

@@ -1,11 +1,13 @@
 -- Reemplaza la función del trigger con el secreto incrustado directamente
 -- (SECURITY DEFINER garantiza que solo el propietario de la función puede ejecutarla)
 CREATE OR REPLACE FUNCTION notify_order_listo()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
-  v_secret CONSTANT TEXT := '496a45dc9ea62505b01b2bc287d68c5aec3fc71445e12b0ef47c24a8845d849a';
+  v_secret TEXT;  -- se lee de public.app_secrets (nunca hardcodeado en el repo)
   v_fired  BOOLEAN := FALSE;
 BEGIN
+  SELECT value INTO v_secret FROM public.app_secrets WHERE key = 'push_notify_secret';
+
   IF NEW.estado_cocina  = 'listo' AND OLD.estado_cocina  IS DISTINCT FROM 'listo' THEN v_fired := TRUE; END IF;
   IF NEW.estado_bebidas = 'listo' AND OLD.estado_bebidas IS DISTINCT FROM 'listo' THEN v_fired := TRUE; END IF;
   IF NEW.estado         = 'listo' AND OLD.estado         IS DISTINCT FROM 'listo' THEN v_fired := TRUE; END IF;

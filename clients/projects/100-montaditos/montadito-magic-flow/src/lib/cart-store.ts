@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface CartItemAllergen {
   codigo: string;
@@ -16,11 +17,19 @@ export interface CartItem {
   /** Human-readable variant label shown in the cart (e.g. 'Jarra Quijote'). */
   variantLabel?: string;
   nombre: string;
+  /** Número del producto en la carta (ej. "13", "B5"). Se muestra en cesta y chat. */
+  numero?: string | null;
   precio: number;
   cantidad: number;
   foto_url: string | null;
   contiene_alcohol?: boolean;
   alergenos?: CartItemAllergen[];
+  /** Para MontyRuedas: montaditos que la componen (ej. "#86 Hot dog…"). Se envía a cocina en `variante`. */
+  componentes?: string[];
+  /** Fuerza el destino de la línea (caja/cocina). Si no se indica, se decide por la categoría. */
+  destino?: 'bebidas' | 'cocina';
+  /** Promo compuesta: ración incluida que debe llegar A COCINA como línea aparte a 0€. */
+  extraCocina?: { producto_id: string; label?: string | null };
 }
 
 interface CartStore {
@@ -47,7 +56,9 @@ const getSessionId = () => {
   return id;
 };
 
-export const useCartStore = create<CartStore>((set, get) => ({
+export const useCartStore = create<CartStore>()(
+  persist(
+    (set, get) => ({
   items: [],
   localId: null,
   mesaId: null,
@@ -80,7 +91,18 @@ export const useCartStore = create<CartStore>((set, get) => ({
   total: () => get().items.reduce((sum, i) => sum + i.precio * i.cantidad, 0),
   itemCount: () => get().items.reduce((sum, i) => sum + i.cantidad, 0),
   hasAlcohol: () => get().items.some((i) => i.contiene_alcohol),
-}));
+    }),
+    {
+      name: 'monty-cart',
+      // Persistimos solo el contenido del carrito; sessionId se regenera por sesión.
+      partialize: (state) => ({
+        items: state.items,
+        localId: state.localId,
+        mesaId: state.mesaId,
+      }),
+    }
+  )
+);
 
 // Alcohol age-gate store (sólo se muestra una vez por sesión)
 interface AgeGateStore {

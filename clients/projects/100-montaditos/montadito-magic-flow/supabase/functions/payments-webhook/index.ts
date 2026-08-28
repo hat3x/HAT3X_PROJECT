@@ -103,7 +103,9 @@ Deno.serve(async (req) => {
         stripe_payment_id: paymentId,
       })
       .eq("id", pedidoId)
-      .eq("estado", "pendiente_pago");
+      // Un pago confirmado SIEMPRE reactiva el pedido, aunque el cron lo hubiera
+      // cancelado por tardar >15 min en pagar (si no, se pierde un pedido pagado).
+      .in("estado", ["pendiente_pago", "cancelado"]);
     if (error) console.error("update pedido error", error);
   }
 

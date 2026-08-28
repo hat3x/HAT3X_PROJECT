@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { supabase } from "@/integrations/supabase/client";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Inyecta el session_id del cliente como header en todas las llamadas a PostgREST
 // para que las RLS puedan validar que el cliente solo accede a SUS pedidos.
@@ -17,4 +18,8 @@ try {
   console.warn("No se pudo inyectar x-session-id", e);
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);

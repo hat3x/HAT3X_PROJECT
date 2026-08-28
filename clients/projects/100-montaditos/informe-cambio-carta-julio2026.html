@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Informe de cambios · Cambio de carta julio 2026 · 100 Montaditos Móstoles</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root{
+    --ink:#1b1815;
+    --ink-soft:#4d453e;
+    --dim:#867c73;
+    --paper:#ffffff;
+    --surface:#f7f3ed;
+    --line:#e6ded3;
+    --line-hard:#d5c9ba;
+    --brand:#c4122f;
+    --brand-soft:#fdeef0;
+    --value:#14724a;
+    --value-soft:#e8f4ee;
+    --warn:#a5690a;
+    --warn-soft:#fbf0dd;
+    --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--paper)}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    font-size:10pt;
+    line-height:1.5;
+    font-variant-numeric:tabular-nums;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+  .page{
+    width:210mm;height:297mm;
+    padding:15mm 16mm 12mm;
+    display:flex;flex-direction:column;
+    page-break-after:always;position:relative;
+  }
+  .page:last-child{page-break-after:auto}
+
+  .brandbar{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:2.5px solid var(--ink);padding-bottom:7px}
+  .logo{font-size:15pt;font-weight:800;letter-spacing:-.02em}
+  .logo span{color:var(--brand)}
+  .kicker{font-size:7.5pt;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+
+  h1{font-size:22pt;line-height:1.1;letter-spacing:-.035em;font-weight:800;margin-top:12px}
+  .lede{font-size:10.5pt;color:var(--ink-soft);margin-top:5px}
+  .refline{display:flex;gap:20px;margin-top:8px;font-size:8.5pt;color:var(--dim)}
+  .refline b{color:var(--ink-soft);font-weight:600}
+
+  h2{font-size:8pt;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);
+     display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  h3{font-size:11pt;font-weight:800;color:var(--ink);letter-spacing:-.01em;margin-bottom:3px}
+
+  section{margin-top:14px}
+  .p{font-size:9.3pt;color:var(--ink-soft);line-height:1.46}
+  .p b{color:var(--ink)}
+
+  .block{margin-top:10px;padding:9px 13px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+  .block + .block{margin-top:7px}
+  .block .tag{display:inline-block;font-size:7pt;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+    padding:2px 7px;border-radius:20px;margin-bottom:5px}
+  .tag.new{background:var(--value-soft);color:var(--value)}
+  .tag.fix{background:var(--brand-soft);color:var(--brand)}
+  .tag.chg{background:#e7edf7;color:#2b4d8f}
+  ul{margin:5px 0 0 0;padding-left:16px}
+  li{font-size:9pt;color:var(--ink-soft);line-height:1.42;margin-bottom:2px}
+  li b{color:var(--ink)}
+
+  .list{display:flex;flex-direction:column;gap:5px}
+  .item{display:flex;gap:9px;font-size:9.3pt;color:var(--ink-soft);line-height:1.42}
+  .item::before{content:"";flex:none;width:5px;height:5px;border-radius:50%;background:var(--ink);margin-top:6px}
+
+  table{width:100%;border-collapse:collapse;font-size:8.6pt}
+  th,td{text-align:left;padding:4.6px 9px;border-bottom:1px solid var(--line)}
+  thead th{font-size:7pt;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
+    font-weight:800;background:var(--surface);border-bottom:1px solid var(--line-hard)}
+  tbody tr:last-child td{border-bottom:0}
+  .tbl{border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:8px}
+  td.r,th.r{text-align:right;white-space:nowrap}
+
+  .pending{margin-top:8px;background:var(--warn-soft);border-left:3px solid var(--warn);
+    padding:9px 13px;font-size:9pt;color:#5c4108;border-radius:0 7px 7px 0}
+  .pending b{color:var(--ink)}
+  .okbox{margin-top:8px;background:var(--value-soft);border-left:3px solid var(--value);
+    padding:9px 13px;font-size:9pt;color:#0f4d33;border-radius:0 7px 7px 0}
+  .okbox b{color:var(--ink)}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+  .kpi{background:var(--surface);border-radius:9px;padding:9px 11px;border:1px solid var(--line)}
+  .kpi .v{font-size:16pt;font-weight:800;letter-spacing:-.03em;line-height:1;color:var(--brand)}
+  .kpi .k{font-size:7pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-top:4px}
+
+  .close{margin-top:auto;padding-top:12px;border-top:2.5px solid var(--ink);
+    display:flex;justify-content:space-between;align-items:flex-end;gap:20px}
+  .close .msg{font-size:9.5pt;color:var(--ink-soft);max-width:105mm}
+  .close .msg b{color:var(--ink)}
+  .sign{text-align:right;font-size:8.5pt;color:var(--dim);flex:none}
+  .sign .who{font-size:11pt;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+  .pagenum{position:absolute;bottom:8mm;right:16mm;font-size:7.5pt;color:var(--dim);letter-spacing:.08em}
+</style>
+</head>
+<body>
+
+<!-- PÁGINA 1 -->
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">Informe de cambios</div>
+  </div>
+
+  <h1>Cambio de carta<br>julio 2026 — informe técnico</h1>
+  <p class="lede">100 Montaditos Móstoles — todo lo revisado, corregido y añadido a raíz del comunicado de Restalia del 30 de julio de 2026. Con las ilustraciones integradas y la app <b>ya en producción</b>.</p>
+  <div class="refline">
+    <span><b>Fecha del informe</b> 3 de agosto de 2026</span>
+    <span><b>Referencia</b> HX-100M-MOS-04</span>
+    <span><b>Relacionado con</b> HX-100M-MOS-02 / MOS-03</span>
+  </div>
+
+  <section>
+    <h2>Resumen</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="v">38</div><div class="k">Montaditos renombrados</div></div>
+      <div class="kpi"><div class="v">51</div><div class="k">Piezas gráficas trabajadas</div></div>
+      <div class="kpi"><div class="v">8</div><div class="k">Promociones nuevas</div></div>
+      <div class="kpi"><div class="v">100</div><div class="k">Montaditos auditados</div></div>
+    </div>
+    <p class="p" style="margin-top:9px">
+      Restalia publicó un cambio de carta obligatorio para todos los locales, con fecha de aplicación el 30 de julio:
+      renombra 38 montaditos, cambia precios, añade y retira productos, cambia el cubicaje de las jarras y lanza una
+      campaña de 8 promociones nuevas a 5 €. Este informe recoge, apartado por apartado, todo lo revisado y cambiado
+      en la app — incluida la <b>integración de todas las ilustraciones nuevas</b> y una <b>auditoría final de los 100
+      montaditos</b>.
+    </p>
+  </section>
+
+  <section>
+    <h2>1 · Sincronización de la carta</h2>
+    <div class="block">
+      <span class="tag chg">Actualizado</span>
+      <p class="p">
+        Se compararon los <b>100 montaditos</b> uno a uno contra el comunicado oficial. Resultado: <b>38 montaditos
+        renombrados</b> con su descripción de ingredientes correcta, <b>8 precios de bebidas</b> actualizados y
+        <b>26 fichas de alérgenos</b> recalculadas para los montaditos afectados.
+      </p>
+      <ul>
+        <li>Productos <b>nuevos</b> (entran): Rabas de calamar, Oreja en salsa picantona, Patatas gajo, Aceituna
+          Manzanilla, Aceituna sin hueso, Sirope de chocolate blanco, Montycookie doble chocolate.</li>
+        <li>Productos <b>retirados</b> (salen): Calamarcitos, Sirope caramelo toffee, tostada "Crema de queso y
+          mermelada" (confirmado contigo antes de desactivarla).</li>
+      </ul>
+    </div>
+    <div class="block">
+      <span class="tag fix">Corrección</span>
+      <p class="p">
+        Los 38 renombres rompieron <b>32 imágenes de producto</b>, porque el mapeo de fotos usa el nombre exacto como
+        clave. Se revisaron una a una y se corrigieron con un script que evita colisiones (no sobrescribir una foto que
+        seguía siendo válida para otro producto).
+      </p>
+    </div>
+  </section>
+
+  <div class="pagenum">1 / 6</div>
+</div>
+
+<!-- PÁGINA 2 -->
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">100 Montaditos Móstoles · HX-100M-MOS-04</div>
+  </div>
+
+  <section style="margin-top:16px">
+    <h2>2 · Desayunos</h2>
+    <div class="block">
+      <span class="tag new">Nuevo</span>
+      <p class="p">
+        Entra el combo <b>"Desayuno Dulce"</b> (café + 1 MontyCookie a elegir) sustituyendo al antiguo
+        "Desayuno MontyGourmet", con su propio selector de MontyCookie y su banner, dentro de la franja de 10:00 a 12:00.
+        El banner se afinó para quedar <b>idéntico al del Desayuno Clásico</b> (mismo recuadro, mismo tamaño, fondo
+        transparente).
+      </p>
+    </div>
+    <div class="block">
+      <span class="tag new">Nuevo</span>
+      <p class="p">
+        Dentro de los desayunos ahora se elige primero <b>Café o Infusión</b> (cada uno con su imagen) y, si eliges
+        café, aparecen las opciones de café (Solo, Cortado, Con leche, Bombón + descafeinado). Coherente con la carta
+        ("Café o Té").
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Café e Infusiones</h2>
+    <div class="block">
+      <span class="tag chg">Cambio de comportamiento</span>
+      <p class="p">
+        La sección "Café e Infusiones" estaba restringida a después de las 17:00. Se ha <b>activado a cualquier hora</b>,
+        quitando esa restricción en la base de datos y en el código.
+      </p>
+    </div>
+    <div class="block">
+      <span class="tag new">Nuevo</span>
+      <p class="p">
+        Al pedir "Café" se abre un selector con las <b>4 variantes</b> (Solo, Cortado, Con leche, Bombón) más un
+        interruptor de <b>descafeinado</b>. Implementado tanto en la carta normal como en el chat de Monty.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · Aceitunas</h2>
+    <div class="block">
+      <span class="tag new">Nuevo</span>
+      <p class="p">
+        La carta desdobla "Aceitunas" en <b>de la abuela</b> y <b>manzanilla</b> (1 €). Se añadió el selector de sabor
+        en la carta y en el chat de Monty, igual que ya existía para las Gildas.
+      </p>
+    </div>
+    <div class="block">
+      <span class="tag fix">Corrección</span>
+      <p class="p">
+        Se detectó un bug real: el sistema que decide el icono de bebidas confundía "manzanilla" con la infusión de
+        manzanilla. Se corrigió antes de publicar, con una entrada exacta para "Aceitunas manzanilla".
+      </p>
+    </div>
+  </section>
+
+  <div class="pagenum">2 / 6</div>
+</div>
+
+<!-- PÁGINA 3 -->
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">100 Montaditos Móstoles · HX-100M-MOS-04</div>
+  </div>
+
+  <section style="margin-top:16px">
+    <h2>5 · Promociones — 8 combos nuevos de 5 €</h2>
+    <div class="block">
+      <span class="tag chg">Sustitución</span>
+      <p class="p">
+        Se desactivó la promo <b>"Salséo"</b> (2 Jarras Quijote + Nachos, 8 €) — ya no está en la carta nueva. El código
+        se mantiene desactivado, no borrado.
+      </p>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Combo</th><th class="r">Precio</th></tr></thead>
+        <tbody>
+          <tr><td>Jarra Quijote + Cucurucho de patatas + Monty a elegir</td><td class="r">5 €</td></tr>
+          <tr><td>Montadito Clásico + 2 Especiales a elegir</td><td class="r">5 €</td></tr>
+          <tr><td>2 Jarras Quijote + Aceitunas a elegir</td><td class="r">5 €</td></tr>
+          <tr><td>2 Jarras Sancho</td><td class="r">5 €</td></tr>
+          <tr><td>2 "Para picar" a elegir (de los de 2,50 €)</td><td class="r">5 €</td></tr>
+          <tr><td>Coca-Cola + Montadito Especial + Aceitunas a elegir</td><td class="r">5 €</td></tr>
+          <tr><td>Montadito Clásico + Especial + MontyCookie a elegir</td><td class="r">5 €</td></tr>
+          <tr><td>Jarra Sancho + Cucurucho de patatas + Gilda a elegir</td><td class="r">5 €</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="block">
+      <span class="tag new">Nuevo — estructura</span>
+      <p class="p">
+        La sección se montó como <b>botón propio</b>: al entrar en Promociones ves el banner grande de "Promociones 5 €"
+        y, al pulsarlo, se abren las <b>8 promociones en rejilla</b> (cada una con su banner). Cada combo tiene su
+        asistente paso a paso para elegir jarra, montadito o sabor. Todas las jarras admiten premium (+0,50 €).
+      </p>
+    </div>
+    <div class="block">
+      <span class="tag fix">Corrección</span>
+      <p class="p">
+        Un mecanismo interno de seguridad de la base de datos forzaba el precio de la línea al del producto real cuando
+        hay variante: si se hubiera usado el montadito elegido dentro del combo, habría falseado la Analítica de ventas.
+        Se corrigió antes de publicar, con el mismo mecanismo a coste 0 que ya usan los desayunos. También se limpiaron
+        las <b>esquinas negras</b> de los banners y se ajustaron tamaños para que las tarjetas queden simétricas.
+      </p>
+    </div>
+  </section>
+
+  <div class="pagenum">3 / 6</div>
+</div>
+
+<!-- PÁGINA 4 -->
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">100 Montaditos Móstoles · HX-100M-MOS-04</div>
+  </div>
+
+  <section style="margin-top:16px">
+    <h2>6 · Ilustraciones — integradas y afinadas</h2>
+    <div class="block">
+      <span class="tag new">Nuevo</span>
+      <p class="p">
+        Llegaron las ilustraciones nuevas y se <b>integraron todas</b> en la app con las mismas reglas de siempre:
+        fondo transparente, tamaño uniforme (1254×1254) y contorno consistente. Se procesaron <b>28 montaditos</b>
+        nuevos/renombrados y <b>12 banners</b> (Desayuno Dulce, botón Desayunos, botón Promociones, banner 5 € y los
+        8 combos).
+      </p>
+    </div>
+    <div class="block">
+      <span class="tag fix">Corrección — no coincidía la ilustración con los ingredientes</span>
+      <p class="p">Revisando la carta con la app, se detectaron y corrigieron varias ilustraciones que no correspondían:</p>
+      <ul>
+        <li><b>#10 Lomo al ajillo</b> — llevaba una salsa naranja que no era; ilustración nueva y contorno negro reforzado.</li>
+        <li><b>#16 Tortilla, cebolla crujiente y salsa alioli</b> — la ilustración llevaba salsa BBQ; se recoloreó a alioli.</li>
+        <li><b>#22 Pollo kebab, patatas paja y salsa BBQ</b> — faltaba imagen; añadida.</li>
+        <li><b>#26 Atún, mayonesa y tomate</b> — mostraba la ilustración del MontyGourmet #98; ahora cada uno con la suya.</li>
+        <li><b>#94 Pintxo Donostiarra y cebolla crujiente</b> — ilustración equivocada; sustituida por la correcta.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>7 · Analítica (nuevo panel)</h2>
+    <div class="block">
+      <span class="tag new">Nuevo</span>
+      <p class="p">
+        Panel de Analítica para la app de Caja: ventas por franja horaria, productos más vendidos, gráfico por categoría
+        y mapa de calor día × hora. Acceso protegido por un PIN de 6 dígitos que solo conoces tú y que hay que reintroducir
+        cada vez.
+      </p>
+    </div>
+    <div class="block">
+      <span class="tag chg">Simplificación</span>
+      <p class="p">
+        El Histórico se simplificó para mostrar solo la tabla de tickets — el análisis vive ahora únicamente en Analítica.
+      </p>
+    </div>
+  </section>
+
+  <div class="pagenum">4 / 6</div>
+</div>
+
+<!-- PÁGINA 5 -->
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">100 Montaditos Móstoles · HX-100M-MOS-04</div>
+  </div>
+
+  <section style="margin-top:16px">
+    <h2>8 · Nombres y precios afinados</h2>
+    <div class="list">
+      <div class="item"><span>Nombres ajustados para coincidir <b>exactamente con la carta impresa</b> (#16, #26, #41) y re-sincronizadas sus imágenes.</span></div>
+      <div class="item"><span><b>MontyCookies (#68–70)</b> corregidas a <b>1,80 €</b> (estaban a 2,00 €).</span></div>
+      <div class="item"><span>Pantalla de inicio compactada: "¿Qué te apetece hoy?" en una sola línea y el resto de elementos subidos.</span></div>
+      <div class="item"><span>Limpieza de nombres de producto y retirada de la tostada descatalogada.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>9 · Auditoría final de la carta</h2>
+    <div class="okbox">
+      <b>Revisión completa carta ↔ app.</b> Se comprobaron los <b>100 montaditos</b> uno a uno: todos disponibles
+      (uno por número, sin huecos ni duplicados), todos con imagen y con los precios por sección correctos
+      (De la casa 1,10 · Clásicos 1,40 · Imprescindibles 1,60 · Especiales 1,80 · Monty* 2,00). El resto de secciones
+      (Aperitivos, Para picar, Raciones, Ensaladas, Bebidas, MontyRuedas) también sin nada que falte.
+    </div>
+  </section>
+
+  <section>
+    <h2>10 · Documentos entregados</h2>
+    <div class="tbl">
+      <table>
+        <tbody>
+          <tr><td><b>informe-cambio-carta-julio2026.pdf</b></td><td>Este informe.</td></tr>
+          <tr><td><b>presupuesto-cambio-carta-julio2026.pdf</b></td><td>Horas invertidas en el cambio de carta, desglosadas por bloque.</td></tr>
+          <tr><td><b>factura-julio-mostoles.pdf</b></td><td>Cuota de mantenimiento — 60 €/mes (HX-100M-MOS-02).</td></tr>
+          <tr><td><b>checklist-ilustraciones.pdf</b></td><td>Detalle de ilustraciones a encargar al proveedor gráfico.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="pagenum">5 / 6</div>
+</div>
+
+<!-- PÁGINA 6 -->
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">100 Montaditos Móstoles · HX-100M-MOS-04</div>
+  </div>
+
+  <section style="margin-top:16px">
+    <h2>11 · Etiqueta "NUEVO" en la carta</h2>
+    <div class="block">
+      <span class="tag new">Nuevo</span>
+      <p class="p">
+        Los productos nuevos de la carta ahora muestran una etiqueta <b>"NUEVO" en rojo</b>, para que el cliente vea de
+        un vistazo cuáles son las novedades. Se marcaron exactamente los <b>31 montaditos nuevos</b> que indica el
+        comunicado (páginas 5–6), ni uno más: De la casa (6, 8, 9, 10), Clásicos (14, 18, 24, 25, 26), Imprescindibles
+        (29, 35, 39–47), Especiales (50, 54, 57, 61, 66, 67) y los nuevos de Cookies, MontyDina, Perro, Burger y Gourmet
+        (68, 75, 79, 85, 94). De paso se corrigió el marcado anterior, que señalaba de más algunos MontyCookies y MontyDinas.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>12 · Monty, al día</h2>
+    <div class="block">
+      <span class="tag new">Nuevo</span>
+      <p class="p">
+        El asistente <b>Monty</b> se ha "entrenado" con todos los cambios: lee la carta en vivo (nombres, precios,
+        MontyCookies a 1,80 €, aceitunas…) y se le añadió el conocimiento fijo de café/infusión en desayunos, los tipos
+        de café y las variantes de aceitunas. Su función se <b>desplegó en producción</b>.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>13 · Estabilidad y pulido</h2>
+    <div class="block">
+      <span class="tag fix">Corrección</span>
+      <p class="p">
+        <b>"Congelado de pulsaciones":</b> la app se quedaba a veces sin responder a los toques (se podía hacer scroll,
+        pero no pulsar) hasta recargar. Era un fallo conocido de la librería de ventanas emergentes, que dejaba la
+        pantalla bloqueada al cerrar un diálogo. Se añadió un <b>guardián auto-reparable</b> que lo detecta y lo arregla
+        solo en menos de un segundo — ya no hay que recargar.
+      </p>
+    </div>
+    <div class="block">
+      <span class="tag fix">Corrección</span>
+      <p class="p">
+        En los combos de promociones, los montaditos a elegir salían desordenados; ahora aparecen <b>ordenados por número</b>.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Estado</h2>
+    <div class="okbox">
+      <b>La app ya está EN PRODUCCIÓN.</b> Se publicó la versión nueva (carta, ilustraciones, promociones, desayunos) y
+      se quitó el modo mantenimiento; verificado que la web sirve la versión nueva y no el cartel de "ahora vuelvo".
+    </div>
+    <div class="pending">
+      <b>Único pendiente:</b> encargar al proveedor gráfico los <b>6 iconos de ingredientes nuevos</b> para la sección
+      Agotados de la app de Caja/Cocina.
+    </div>
+  </section>
+
+  <div class="close">
+    <div class="msg">
+      <b>Gracias por confiar en HAT3X.</b><br>
+      Cualquier duda sobre algún cambio concreto, hablamos cuando quieras.
+    </div>
+    <div class="sign">
+      <div class="who">HAT3X</div>
+      Consultoría de IA<br>
+      info@hat3x.com
+    </div>
+  </div>
+
+  <div class="pagenum">6 / 6</div>
+</div>
+
+</body>
+</html>

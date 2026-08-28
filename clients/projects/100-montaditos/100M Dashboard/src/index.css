@@ -8,16 +8,22 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 30 20% 98%;
-    --foreground: 222 30% 12%;
+    /* ===== Tema "Brasa" (glassmorphism cálido) ===== */
+    --brasa-bg:
+      radial-gradient(1100px 700px at 10% -10%, #ffe4c4 0%, transparent 55%),
+      radial-gradient(900px 700px at 115% 5%, #ffd0c0 0%, transparent 50%),
+      linear-gradient(160deg, #f4ead9 0%, #ecd6c2 100%);
 
-    --card: 0 0% 100%;
-    --card-foreground: 222 30% 12%;
+    --background: 33 38% 86%;
+    --foreground: 26 24% 13%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 30% 12%;
+    --card: 40 60% 99%;
+    --card-foreground: 26 24% 13%;
 
-    --primary: 24 95% 53%;
+    --popover: 40 60% 99%;
+    --popover-foreground: 26 24% 13%;
+
+    --primary: 351 82% 39%;
     --primary-foreground: 0 0% 100%;
 
     --status-recibido: 217 91% 60%;
@@ -29,23 +35,38 @@ All colors MUST be HSL.
     --timer-warning: 38 92% 50%;
     --timer-late: 0 84% 60%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 30 34% 90%;
+    --secondary-foreground: 26 24% 13%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 30 30% 90%;
+    --muted-foreground: 26 16% 42%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 23 72% 56%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 75% 48%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 28 30% 82%;
+    --input: 28 30% 82%;
+    --ring: 351 82% 39%;
 
-    --radius: 0.5rem;
+    --radius: 1.5rem;
+
+    /* Variables del sistema "Brasa" (mockup) */
+    --b-accent: #b3122a;
+    --b-accent2: #e07b3e;
+    --b-dim: #7c6a5c;
+    --b-glass: rgba(255, 252, 247, 0.5);
+    --b-glass2: rgba(255, 253, 250, 0.72);
+    --b-stroke: rgba(255, 255, 255, 0.7);
+    --b-hair: rgba(80, 50, 30, 0.1);
+    --b-shadow: 0 12px 40px rgba(120, 70, 40, 0.16);
+    --b-chip: rgba(120, 70, 40, 0.07);
+    --b-text: #2a201a;
+    --r-lg: 26px;
+    --r-md: 18px;
+    --r-sm: 12px;
 
     --sidebar-background: 0 0% 98%;
 
@@ -109,6 +130,132 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background: var(--brasa-bg) fixed;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
 }
+
+/* ===== Brasa: superficies glass ===== */
+@layer components {
+  /* Degradado cálido en los contenedores de página (y opaco/legible en diálogos) */
+  .bg-background {
+    background: var(--brasa-bg) !important;
+  }
+  /* Tarjetas glass estilo iOS: translúcidas, desenfoque fuerte, borde blanco fino, sombra suave */
+  .bg-card {
+    background-color: hsl(var(--card) / 0.55) !important;
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+    border-color: rgba(255, 255, 255, 0.7) !important;
+    box-shadow: 0 12px 40px rgba(120, 70, 40, 0.16);
+  }
+  /* Botones primarios con degradado rojo→naranja (como el mockup) */
+  .bg-primary {
+    background-image: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent))) !important;
+    box-shadow: 0 8px 18px hsl(var(--primary) / 0.28);
+  }
+}
+
+/* ===================== Sistema de diseño "Brasa" (del mockup) ===================== */
+.glass{
+  background:var(--b-glass);
+  backdrop-filter:blur(22px) saturate(160%);
+  -webkit-backdrop-filter:blur(22px) saturate(160%);
+  border:1px solid var(--b-stroke);
+  border-radius:var(--r-lg);
+  box-shadow:var(--b-shadow);
+}
+
+/* secciones */
+.b-sec{font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--b-dim);
+  margin:22px 6px 12px;display:flex;align-items:center;gap:8px}
+
+/* stat cards */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.stat{padding:18px 20px;border-radius:var(--r-md)}
+.stat .k{font-size:12px;color:var(--b-dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.stat .v{font-size:30px;font-weight:800;letter-spacing:-.03em;margin-top:6px;color:var(--b-text)}
+.stat .v small{font-size:15px;font-weight:600;color:var(--b-dim)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+
+/* order card */
+.order{padding:16px 18px;border-radius:var(--r-md);margin-bottom:14px;position:relative;overflow:hidden;color:var(--b-text)}
+.order::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--b-accent);opacity:.85}
+.order.warn::before{background:var(--b-accent2)}
+.order.ok::before{background:#34c759}
+.order .head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.num{font-size:30px;font-weight:850;letter-spacing:-.03em;line-height:1;color:var(--b-text)}
+.badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:.02em;display:inline-block}
+.badge.amber{background:rgba(255,159,10,.16);color:#d98300}
+.badge.cocina{background:rgba(255,90,40,.14);color:#e0561f}
+.badge.beb{background:rgba(0,140,220,.14);color:#0a84c4}
+.badge.green{background:rgba(52,199,89,.16);color:#28a745}
+.time{font-size:12px;color:var(--b-dim);font-weight:600}
+.total{font-size:17px;font-weight:800;letter-spacing:-.02em;color:var(--b-text)}
+ul.items{list-style:none;display:flex;flex-direction:column;gap:5px;margin:6px 0 12px;padding:0}
+ul.items li{display:flex;align-items:center;gap:10px;font-size:14px}
+.qty{font-weight:800;color:var(--b-accent)}
+.nchip{font-size:11px;font-weight:800;min-width:30px;text-align:center;padding:2px 6px;border-radius:8px;background:var(--b-chip);color:var(--b-dim)}
+.group-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--b-dim);margin:6px 0 2px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* botones */
+.btn{appearance:none;border:0;font:inherit;font-weight:700;font-size:13px;padding:10px 16px;border-radius:13px;cursor:pointer;transition:.15s;color:var(--b-text)}
+.btn:active{transform:scale(.96)}
+.btn.primary{background:linear-gradient(135deg,var(--b-accent),var(--b-accent2));color:#fff;box-shadow:0 8px 18px rgba(179,18,42,.28)}
+.btn.ghost{background:var(--b-chip);color:var(--b-text)}
+.btn.danger{background:rgba(255,69,58,.14);color:#e0301f}
+.empty{padding:28px;text-align:center;color:var(--b-dim);font-size:14px;border:1px dashed var(--b-hair);border-radius:var(--r-md)}
+
+/* cocina KDS */
+.kds{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:900px){.kds{grid-template-columns:1fr}}
+.kcol{padding:10px}
+.kcol h3{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:6px 8px 12px;display:flex;align-items:center;justify-content:space-between;color:var(--b-dim)}
+.kcol h3 .count{background:var(--b-chip);border-radius:999px;padding:2px 9px;font-size:12px}
+.ticket{padding:14px 16px;border-radius:var(--r-md);margin-bottom:12px;color:var(--b-text)}
+.timer{font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px}
+.t-fresh{background:rgba(52,199,89,.16);color:#28a745}
+.t-warn{background:rgba(255,159,10,.16);color:#d98300}
+.t-late{background:rgba(255,69,58,.16);color:#e0301f}
+
+/* login */
+.login-wrap{display:flex;justify-content:center;padding:48px 0 20px}
+.login-card{width:400px;max-width:92%;padding:40px 34px;text-align:center}
+.login-logo{width:64px;height:64px;border-radius:20px;margin:0 auto 18px;display:grid;place-items:center;font-size:30px;color:#fff;background:linear-gradient(135deg,var(--b-accent),var(--b-accent2));box-shadow:0 12px 26px rgba(179,18,42,.4)}
+.login-title{font-size:34px;font-weight:850;letter-spacing:-.03em;color:var(--b-text)}
+.login-sub{color:var(--b-dim);margin:6px 0 24px;font-size:15px}
+.login-btn{width:100%;padding:16px;font-size:16px;border-radius:16px}
+
+/* search + chips agotados */
+.searchbar{display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:var(--r-md);margin-bottom:6px}
+.searchbar input{flex:1;border:0;background:transparent;font:inherit;font-size:15px;color:var(--b-text);outline:none}
+.searchbar input::placeholder{color:var(--b-dim)}
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px}
+.chip{display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:14px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--b-hair);background:var(--b-glass2);transition:.15s;color:var(--b-text)}
+.chip:active{transform:scale(.97)}
+.chip .ic{font-size:18px;width:24px;text-align:center}
+.chip .ok{margin-left:auto;color:#34c759;font-weight:800}
+.chip.off{background:rgba(255,69,58,.14);border-color:rgba(255,69,58,.3);color:#e0301f}
+.chip.off .txt{text-decoration:line-through;opacity:.85}
+.chip.off .ic{filter:grayscale(1) opacity(.6)}
+.chip.off .ban{margin-left:auto;font-weight:800}
+
+/* histórico */
+.filters{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border-radius:var(--r-md);margin-bottom:14px}
+.chart{padding:16px 18px;border-radius:var(--r-md);margin-bottom:14px}
+.chart .ct{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--b-dim);margin-bottom:12px}
+.bars{display:flex;align-items:flex-end;gap:9px;height:120px}
+.bar{flex:1;border-radius:8px 8px 0 0;background:linear-gradient(var(--b-accent2),var(--b-accent));opacity:.9}
+.table-card{padding:0;overflow:hidden}
+table.hist{width:100%;border-collapse:collapse;font-size:13px;color:var(--b-text)}
+table.hist th{text-align:left;padding:12px 16px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--b-dim);border-bottom:1px solid var(--b-hair)}
+table.hist td{padding:11px 16px;border-bottom:1px solid var(--b-hair)}
+table.hist td.n{font-weight:800}
+
+/* Separacion nº pedido / timer en tickets de cocina */
+.ticket .head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px}

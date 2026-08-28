@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>La app de 100 Montaditos Móstoles · Proceso y horas · HAT3X</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root{
+    --ink:#1b1815;
+    --ink-soft:#4d453e;
+    --dim:#867c73;
+    --paper:#ffffff;
+    --surface:#f7f3ed;
+    --line:#e6ded3;
+    --line-hard:#d5c9ba;
+    --brand:#c4122f;
+    --brand-soft:#fdeef0;
+    --value:#14724a;
+    --value-soft:#e8f4ee;
+    --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--paper)}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    font-size:10.3pt;
+    line-height:1.5;
+    font-variant-numeric:tabular-nums;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+  .page{
+    width:210mm;min-height:297mm;
+    padding:15mm 16mm 12mm;
+    display:flex;flex-direction:column;
+    position:relative;
+  }
+  .brandbar{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:2.5px solid var(--ink);padding-bottom:7px}
+  .logo{font-size:15pt;font-weight:800;letter-spacing:-.02em}
+  .logo span{color:var(--brand)}
+  .kicker{font-size:7.5pt;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+
+  h1{font-size:20pt;line-height:1.08;letter-spacing:-.035em;font-weight:800;margin-top:10px}
+  .lede{font-size:10pt;color:var(--ink-soft);margin-top:4px}
+  .refline{display:flex;gap:18px;margin-top:7px;font-size:8.5pt;color:var(--dim);flex-wrap:wrap}
+  .refline b{color:var(--ink-soft);font-weight:600}
+
+  h2{font-size:8pt;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);
+     display:flex;align-items:center;gap:9px;margin-bottom:7px}
+  h2::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  section{margin-top:12px}
+
+  .feat{display:grid;grid-template-columns:1fr 1fr;gap:5px 22px}
+  .f{display:flex;gap:9px;font-size:9.3pt;color:var(--ink-soft);line-height:1.4}
+  .f .ck{flex:none;width:14px;height:14px;border-radius:50%;background:var(--value-soft);
+    border:1px solid #a9d4bd;position:relative;margin-top:2px}
+  .f .ck::after{content:"";position:absolute;left:4px;top:1.5px;width:3.5px;height:7px;
+    border:solid var(--value);border-width:0 1.9px 1.9px 0;transform:rotate(43deg)}
+  .f b{color:var(--ink)}
+
+  table{width:100%;border-collapse:collapse;font-size:8.7pt}
+  th,td{text-align:left;padding:4.8px 10px;border-bottom:1px solid var(--line)}
+  thead th{font-size:7.2pt;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
+    font-weight:800;background:var(--surface);border-bottom:1px solid var(--line-hard)}
+  td.r,th.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:0}
+  .tbl{border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  tfoot td{background:var(--surface);font-weight:800;border-top:1.5px solid var(--line-hard)}
+  tr.sub td{background:#fbf8f3;font-weight:800;color:var(--ink);font-size:8pt;
+    text-transform:uppercase;letter-spacing:.04em;border-top:1px solid var(--line)}
+  tr.sub td.r{color:var(--ink-soft)}
+
+  .rate{margin-top:7px;background:var(--surface);border-left:3px solid var(--brand);
+    padding:7px 13px;font-size:8.6pt;color:var(--ink-soft);border-radius:0 7px 7px 0}
+  .rate b{color:var(--ink)}
+
+  .totalbox{margin-top:10px;border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+  .totalbox .top{background:var(--ink);color:#fff;padding:6px 16px;
+    font-size:7.5pt;font-weight:800;letter-spacing:.15em;text-transform:uppercase}
+  .totalbox .body{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .totalbox .fig{font-size:30pt;font-weight:800;letter-spacing:-.04em;line-height:1;color:var(--brand)}
+  .totalbox .fig small{font-size:12pt;color:var(--dim);font-weight:700}
+  .totalbox .note{text-align:right;font-size:9pt;color:var(--ink-soft);max-width:82mm;line-height:1.35}
+  .totalbox .note b{color:var(--ink)}
+
+  .close{margin-top:auto;padding-top:12px;border-top:2.5px solid var(--ink);
+    display:flex;justify-content:space-between;align-items:flex-end;gap:20px}
+  .close .msg{font-size:9.5pt;color:var(--ink-soft);max-width:110mm}
+  .close .msg b{color:var(--ink)}
+  .sign{text-align:right;font-size:8.5pt;color:var(--dim);flex:none}
+  .sign .who{font-size:11pt;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="brandbar">
+    <div class="logo">HAT<span>3</span>X</div>
+    <div class="kicker">Proyecto · resumen y horas</div>
+  </div>
+
+  <h1>La app de 100 Montaditos Móstoles<br>el proyecto en horas</h1>
+  <p class="lede">Resumen del trabajo invertido en crear y evolucionar la app de pedidos y su app de Caja/Cocina, de principio a fin.</p>
+  <div class="refline">
+    <span><b>Fecha</b> 4 de agosto de 2026</span>
+    <span><b>Referencia</b> HX-100M-MOS-05</span>
+    <span><b>Relacionado con</b> MOS-01 / 02 / 03 / 04</span>
+  </div>
+
+  <section>
+    <h2>Qué se ha construido</h2>
+    <div class="feat">
+      <div class="f"><span class="ck"></span><span><b>App de pedidos</b> (PWA instalable): carta completa —100 montaditos + aperitivos, raciones, ensaladas y bebidas—, carrito, alérgenos y control de agotados.</span></div>
+      <div class="f"><span class="ck"></span><span><b>Pago con tarjeta y Apple Pay</b> integrado, con confirmación de pedido y conciliación automática.</span></div>
+      <div class="f"><span class="ck"></span><span><b>App de Caja y Cocina</b> sincronizadas en tiempo real, instalable en tablet con aviso sonoro de pedido nuevo.</span></div>
+      <div class="f"><span class="ck"></span><span><b>Monty</b>, el asistente con inteligencia artificial que ayuda a elegir y pedir.</span></div>
+      <div class="f"><span class="ck"></span><span><b>Promociones, desayunos y selectores</b> (café, aceitunas, gildas, MontyRuedas, combos 5 €…).</span></div>
+      <div class="f"><span class="ck"></span><span><b>Panel de Analítica e Histórico</b> de ventas por hora, día y mes.</span></div>
+      <div class="f"><span class="ck"></span><span><b>Backend completo</b>: base de datos, seguridad (RLS) y funciones en la nube (pagos, webhooks, notificaciones, Monty).</span></div>
+      <div class="f"><span class="ck"></span><span><b>Modo mantenimiento, PWA y avisos push</b>, y compatibilidad con la campaña Euromanía.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>El proceso, en horas</h2>
+    <div class="tbl">
+      <table>
+        <thead>
+          <tr><th>Fase</th><th class="r">Horas</th></tr>
+        </thead>
+        <tbody>
+          <tr class="sub"><td>Fase 1 · Creación de la app (diseño, desarrollo e iteración)</td><td class="r">500,0 h</td></tr>
+          <tr><td>Diseño, construcción e iteración de las dos apps (cliente + Caja/Cocina), pagos con tarjeta y Apple Pay, Monty (IA), Analítica y backend completo, hasta el lanzamiento a producción</td><td class="r">500,0 h</td></tr>
+
+          <tr class="sub"><td>Fase 2 · Cambio de carta julio 2026 (ver HX-100M-MOS-03)</td><td class="r">70,8 h</td></tr>
+          <tr><td>Sincronización y auditoría de la carta, café/aceitunas, desayunos, 8 promociones de 5 €, integración de todas las ilustraciones, Analítica, etiqueta "NUEVO", entreno de Monty y salida a producción</td><td class="r">70,8 h</td></tr>
+        </tbody>
+        <tfoot>
+          <tr><td>Total de horas invertidas en el proyecto</td><td class="r">570,8 h</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="rate">
+      Las <b>~500 h de la Fase 1</b> cubren toda la construcción, iteración y pruebas de la app hasta el lanzamiento;
+      las de la <b>Fase 2</b> están desglosadas en el documento HX-100M-MOS-03. La cuota mensual de mantenimiento
+      (60 €/mes) es aparte y cubre el día a día de ambas apps.
+    </div>
+  </section>
+
+  <div class="totalbox">
+    <div class="top">El proyecto de un vistazo</div>
+    <div class="body">
+      <div class="fig">570,8 <small>horas</small></div>
+      <div class="note"><b>Dos apps, pagos, IA y backend, de cero a producción.</b> Entregada por <b>250 €</b> (precio simbólico de lanzamiento) más una cuota de <b>60 €/mes</b> — muy por debajo de su valor real.</div>
+    </div>
+  </div>
+
+  <div class="close">
+    <div class="msg">
+      <b>Gracias por confiar en HAT3X desde el primer día.</b><br>
+      Cualquier duda sobre este resumen, hablamos cuando quieras.
+    </div>
+    <div class="sign">
+      <div class="who">HAT3X</div>
+      Consultoría de IA<br>
+      info@hat3x.com
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

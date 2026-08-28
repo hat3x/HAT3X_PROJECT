@@ -88,7 +88,9 @@ export function CartSheet({ open, onClose, onCheckout, isCheckingOut = false }: 
                 </div>
               ) : (
                 items.map((item) => {
-                  const itemImage = getDrinkImage(item.nombre, item.foto_url);
+                  // Prioriza la imagen ya resuelta del propio item (evita coger un montadito
+                  // homónimo, p.ej. la tostada "Jamón Gran Reserva y tomate"). Si falta, resuelve por nombre.
+                  const itemImage = item.foto_url ?? getDrinkImage(item.nombre, null);
 
                   return (
                     <motion.div
@@ -108,8 +110,20 @@ export function CartSheet({ open, onClose, onCheckout, isCheckingOut = false }: 
                         />
                       )}
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-display font-bold text-sm truncate">{item.nombre}</h4>
+                        <h4 className="font-display font-bold text-sm truncate">
+                          {item.numero && (
+                            <span className="text-muted-foreground font-mono mr-1">#{item.numero}</span>
+                          )}
+                          {item.nombre}
+                        </h4>
                         <p className="text-gold text-sm font-semibold">{item.precio.toFixed(2)} €</p>
+                        {item.componentes && item.componentes.length > 0 && (
+                          <ul className="mt-1 space-y-0.5">
+                            {item.componentes.map((c, ci) => (
+                              <li key={ci} className="text-[11px] text-muted-foreground leading-tight">· {c}</li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         <button

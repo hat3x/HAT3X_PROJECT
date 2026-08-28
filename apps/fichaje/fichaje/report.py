@@ -1,0 +1,107 @@
+import csv
+from dataclasses import dataclass, field
+from .models import TotalCliente, Bloque
+from .clients import INTERNO
+from .timeutil import epoch_min, desde_epoch_min
+
+@dataclass
+class Reporte:
+    totales: list
+    jornada_min: int
+    facturable_min: int
+    bloques: list
+    rango: tuple
+    por_dia: list = field(default_factory=list)
+
+def _arrastre(m, orden_acts):
+    # candidatos "previa": actividades cuyo fin <= m; nos quedamos con las de fin mas reciente (empate incluido)
+    prev_acts = [a for a in orden_acts if epoch_min(a.fin) <= m]
+    if prev_acts:
+        max_fin = max(epoch_min(a.fin) for a in prev_acts)
+        return sorted({a.cliente for a in prev_acts if epoch_min(a.fin) == max_fin})
+    # si no hay previa, la siguiente: actividades cuyo inicio >= m; empate incluido
+    next_acts = [a for a in orden_acts if epoch_min(a.inicio) >= m]
+    if next_acts:
+        min_inicio = min(epoch_min(a.inicio) for a in next_acts)
+        return sorted({a.cliente for a in next_acts if epoch_min(a.inicio) == min_inicio})
+    return [INTERNO]
+
+def _por_dia(minuto_cliente, tz):
+    """Agrupa la asignacion de minutos de jornada (minuto_cliente, sin solape) por
+    fecha LOCAL (tz) — misma fuente que _bloques, coherente con ella."""
+    por_fecha = {}
+    for m, c in minuto_cliente.items():
+        fecha = desde_epoch_min(m, tz).date().isoformat()
+        entrada = por_fecha.setdefault(fecha, {"fecha": fecha, "jornada_min": 0, "clientes": {}})
+        entrada["jornada_min"] += 1
+        entrada["clientes"][c] = entrada["clientes"].get(c, 0) + 1
+    return [por_fecha[f] for f in sorted(por_fecha)]
+
+def _bloques(minuto_cliente, tz):
+    if not minuto_cliente:
+        return []
+    out = []
+    ms = sorted(minuto_cliente)
+    ini = prev = ms[0]; cli = minuto_cliente[ms[0]]
+    for m in ms[1:]:
+        if m == prev + 1 and minuto_cliente[m] == cli:
+            prev = m
+        else:
+            out.append(Bloque(cli, desde_epoch_min(ini, tz), desde_epoch_min(prev + 1, tz), "mix"))
+            ini = prev = m; cli = minuto_cliente[m]
+    out.append(Bloque(cli, desde_epoch_min(ini, tz), desde_epoch_min(prev + 1, tz), "mix"))
+    return out
+
+def facturar(ventanas, actividades, reg, tarifas, tz, tarifa_defecto=None):
+    acts_min = {}
+    for a in actividades:
+        # [inicio, fin) exclusivo, consistente con ventanas — pero un run degenerado
+        # (inicio==fin, un solo evento) se acolcha a minimo 1 minuto para no perderse.
+        fin_m = max(epoch_min(a.fin), epoch_min(a.inicio) + 1)
+        for m in range(epoch_min(a.inicio), fin_m):
+            acts_min.setdefault(m, []).append(a.cliente)
+    orden_acts = sorted(actividades, key=lambda a: a.inicio)
+
+    jornada = set()
+    bill = {}
+    minuto_cliente = {}
+    for v in sorted(ventanas, key=lambda v: v.inicio):
+        for m in range(epoch_min(v.inicio), epoch_min(v.fin)):  # [inicio, fin)
+            jornada.add(m)
+            activos = acts_min.get(m)
+            if not activos:
+                activos = _arrastre(m, orden_acts)
+            for c in set(activos):
+                bill[c] = bill.get(c, 0) + 1
+            minuto_cliente[m] = sorted(set(activos))[0]
+
+    tot = []
+    for c, mins in sorted(bill.items(), key=lambda kv: -kv[1]):
+        tarifa = (tarifas.get(c) or {}).get("tarifa_eur_h")
+        if tarifa is None:
+            tarifa = tarifa_defecto
+        imp = round(mins / 60 * tarifa, 2) if tarifa is not None else None
+        tot.append(TotalCliente(c, mins, {}, imp))
+
+    rango = (min((v.inicio for v in ventanas), default=None),
+             max((v.fin for v in ventanas), default=None))
+    return Reporte(tot, len(jornada), sum(bill.values()), _bloques(minuto_cliente, tz), rango,
+                   _por_dia(minuto_cliente, tz))
+
+def exportar_csv(rep, path):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["cliente", "minutos", "horas", "importe"])
+        for tc in rep.totales:
+            w.writerow([tc.cliente, tc.minutos, round(tc.minutos / 60, 2),
+                        "" if tc.importe is None else tc.importe])
+
+def exportar_csv_bloques(rep, path):
+    """CSV por bloque (una fila por tramo atribuido), separado del resumen por cliente."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["fecha", "cliente", "inicio", "fin", "minutos", "origen"])
+        for b in rep.bloques:
+            minutos = round((b.fin - b.inicio).total_seconds() / 60)
+            w.writerow([b.inicio.date().isoformat(), b.cliente, b.inicio.isoformat(),
+                        b.fin.isoformat(), minutos, b.origen])
