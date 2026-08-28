@@ -4,6 +4,28 @@
 
 **Objetivo:** poner los cimientos de Atlas. Al terminar: el proyecto compila y despliega, el esquema completo existe con RLS probada contra Postgres real, el llavero cifra y descifra, la capa de datos consulta con tipos, y **entras con doble factor**. Las pantallas de gestión llegan en el plan siguiente.
 
+> ## ✅ EJECUTADO — 2026-08-15
+>
+> Las 9 tareas están hechas en la rama `feature/atlas`, once commits. Verificación de salida pasada: **54 tests verdes**, `typecheck` limpio, `next build` compilando, **100 % de cobertura en líneas y funciones**, 83,56 % en ramas, cero `any` en `src/lib` y ningún `"use client"` importando de `lib/db` ni `lib/cripto`.
+>
+> **Pendiente:** la comprobación manual del segundo factor (punto 5 de la verificación de salida), que exige un dispositivo real.
+>
+> **Nueve desviaciones respecto a lo escrito aquí**, todas necesarias y todas explicadas en sus commits:
+>
+> | # | Qué | Por qué |
+> |---|---|---|
+> | 1 | `tailwindcss` fijado a `^3.4` | La v4 usa `@import "tailwindcss"`; el CSS de la Tarea 2 está en sintaxis v3 |
+> | 2 | `vitest.config.ts` → **`.mts`** | `vite-tsconfig-paths` v5 es ESM-only y falla al cargarse con `require` |
+> | 3 | `Uint8Array<ArrayBuffer>` en el llavero | TS 5.9 hizo el tipo genérico; WebCrypto rechaza `SharedArrayBuffer` |
+> | 4 | **`GRANT` explícito en las 18 tablas** | RLS filtra *filas*; antes hace falta permiso sobre la *tabla*, y las migraciones propias no lo reciben solas |
+> | 5 | **`atlas_ve_cliente()` como `SECURITY DEFINER`** | `clientes_ver` leía `contratos`, cuya lectura está revocada. El test de RLS **no lo detectó** |
+> | 6 | Usuarios de test con **Admin API** | `INSERT` en `auth.users` deja el registro sin su fila en `auth.identities`; GoTrue no puede iniciar sesión |
+> | 7 | `fileParallelism: false` | Los ficheros de test comparten la base local y se pisaban entre sí |
+> | 8 | Clientes «anónimos» con `storageKey` propio | `createClient` hereda sesión por `localStorage`, compartido en jsdom |
+> | 9 | `+3` tests de propagación de errores | Para subir la cobertura de rama por encima del umbral |
+>
+> Las lecciones 4 a 8 están recogidas en el plan [1A-2](./2026-08-15-atlas-1a2-gestion.md), que ya viene corregido.
+
 **Alcance:** tareas 1 a 9. El bloque 1A se ejecuta en **dos documentos** porque uno solo sería inejecutable:
 
 | Documento | Tareas | Deja funcionando |

@@ -1,0 +1,22 @@
+node_modules/
+.next/
+# Caché apartada al depurar: sigue siendo generada, nunca se versiona.
+.next-roto-*/
+out/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Variables reales — NUNCA se versionan. La plantilla es .env.example.
+#
+# Se ignora todo y se rescata la plantilla, en vez de listar variantes: con
+# `.env*.local` una copia .env.local.bak quedaba a la vista de git, y ahí dentro
+# están la clave maestra, la de firma, la privada de VAPID y la service_role.
+.env*
+!.env.example
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/

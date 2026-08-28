@@ -26,6 +26,17 @@ Además, propias de este plan:
 - **Un secreto descifrado nunca llega al navegador.** En pantalla solo aparece `enmascarar(...)`.
 - Toda escritura pasa por una acción de servidor que **vuelve a comprobar el permiso**. RLS es la red de seguridad, no la única defensa.
 
+## Lecciones de la ejecución del plan 1A
+
+Estas seis cosas se descubrieron **ejecutando** el plan anterior. Van aquí porque volverán a morder en este.
+
+1. **`GRANT` y RLS son cosas distintas.** RLS filtra *filas*; antes hace falta permiso sobre la *tabla*. Las tablas creadas por migraciones propias **no lo reciben solas**. Si añades una tabla en este plan, concédele permisos en su migración, o el síntoma será `permission denied for table …`, que no apunta a la causa.
+2. **Una política RLS no puede leer una tabla revocada.** `clientes_ver` consultaba `contratos` y reventaba. La solución es una función `SECURITY DEFINER` — así nació `atlas_ve_cliente()`. Mismo patrón si escribes políticas nuevas.
+3. **`INSERT` en `auth.users` NO crea un usuario que pueda iniciar sesión.** Deja el registro sin su fila en `auth.identities` y GoTrue falla con «Database error querying schema». **Los usuarios que vayan a autenticarse se crean con `admin.auth.admin.createUser({ email, password, email_confirm: true })`** usando la `service_role` local. Para tests que solo necesitan la fila (esquema, RLS), el `INSERT` directo sigue valiendo.
+4. **Los ficheros de test comparten la base local.** `fileParallelism: false` ya está puesto en `vitest.config.mts`. Además, **ningún aserto debe suponer una base vacía**: filtra siempre por las entidades que crea el propio test.
+5. **`createClient` hereda sesión por `localStorage`, que en jsdom es compartido.** Un cliente pensado como anónimo recogerá la sesión de otro test sin que se note. Para crear uno realmente sin sesión hacen falta `persistSession: false`, `autoRefreshToken: false` y un `storageKey` propio.
+6. **El entorno real difiere del plan en tres puntos ya corregidos:** Tailwind fijado a `^3.4` (la v4 cambia la sintaxis), `vitest.config.mts` en lugar de `.ts` (`vite-tsconfig-paths` v5 es ESM-only) y `Uint8Array<ArrayBuffer>` en el llavero (TS 5.9 hizo el tipo genérico).
+
 ## Interfaces heredadas del plan 1A
 
 Estas ya existen. No se reimplementan.
@@ -186,27 +197,38 @@ import type { Database } from "@/types/supabase";
 const URL_API = "http://127.0.0.1:54321";
 const ANON =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+const SERVICE =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
 const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
 let pg: Client;
 let id = "";
 let sb: ReturnType<typeof createClient<Database>>;
+let admin: ReturnType<typeof createClient<Database>>;
 
 beforeAll(async () => {
   pg = new Client({ connectionString: URL_PG });
   await pg.connect();
-  const { rows } = await pg.query(
-    `INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
-                             email_confirmed_at)
-     VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000000',
-             'authenticated','authenticated','perfil@atlas.test',
-             crypt('contrasena-de-prueba', gen_salt('bf')), now()) RETURNING id`
-  );
-  id = rows[0].id as string;
+
+  // Con la Admin API, NO con INSERT en auth.users: la inserción directa deja el
+  // registro sin su fila en auth.identities y GoTrue falla al iniciar sesión
+  // con «Database error querying schema». Ver «Lecciones», punto 3.
+  admin = createClient<Database>(URL_API, SERVICE, {
+    auth: { persistSession: false },
+  });
+  const creado = await admin.auth.admin.createUser({
+    email: "perfil@atlas.test",
+    password: "contrasena-de-prueba",
+    email_confirm: true,
+  });
+  if (creado.error) throw creado.error;
+  id = creado.data.user.id;
+
   await pg.query(
     `INSERT INTO perfiles (id, nombre, es_propietario, tema, paleta)
      VALUES ($1,'Jose',true,'claro','oceano')`, [id]
   );
+
   sb = createClient<Database>(URL_API, ANON);
   const { error } = await sb.auth.signInWithPassword({
     email: "perfil@atlas.test", password: "contrasena-de-prueba",
@@ -215,7 +237,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await pg.query(`DELETE FROM auth.users WHERE id = $1`, [id]);
+  if (id) await admin.auth.admin.deleteUser(id);
   await pg.end();
 });
 
@@ -228,7 +250,16 @@ describe("perfil", () => {
   });
 
   it("devuelve null sin sesión", async () => {
-    const anonimo = createClient<Database>(URL_API, ANON);
+    // persistSession y storageKey propios son imprescindibles: por defecto el
+    // cliente lee la sesión de localStorage, que en jsdom es compartido, y este
+    // heredaría la de `sb` sin que se note. Ver «Lecciones», punto 5.
+    const anonimo = createClient<Database>(URL_API, ANON, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        storageKey: "atlas-test-perfil-sin-sesion",
+      },
+    });
     expect(await obtenerPerfil(anonimo)).toBeNull();
   });
 });
@@ -1636,6 +1667,27 @@ git add src/lib/db/acciones-proyecto.ts src/tests/db/acciones-proyecto.test.ts
 git commit -m "feat(atlas): alta de contratos y servicios con validacion"
 ```
 
+### ✅ EJECUTADA — commit `15272c7`
+
+111 tests en total (23 nuevos), typecheck y `next build` limpios.
+
+**Hueco del plan, corregido:** la lista de ficheros incluía
+`FormServicio.tsx` pero **ningún paso lo definía**, y el paso 5 ni siquiera
+lo commiteaba. Ejecutado al pie de la letra, este plan dejaba dos acciones
+de servidor sin nada que las llamase. Se ha escrito la interfaz.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | Se escriben `FormServicio.tsx` y además `FormContrato.tsx` | El plan solo nombraba el primero, pero la tarea se llama «alta de contratos **y** servicios». Sin el segundo, `guardarContrato` nacía muerto. |
+| 2 | Se extrae `components/ui/Campo.tsx` | Lo usan los dos formularios. El `htmlFor` es lo que permite localizar los campos por su etiqueta visible en los tests, en vez de por clase CSS. |
+| 3 | Nuevo token `--entrada-fondo` y clase `.entrada` en `globals.css` | No había ningún estilo de campo de formulario: eran los primeros de Atlas. Sin cristal a propósito — el desenfoque bajo un campo editable estorba al leer lo que escribes. |
+| 4 | `FormContrato` se monta solo si `esPropietario` | La acción ya lo rechaza, pero enseñar un formulario que siempre va a fallar es una trampa. |
+| 5 | La fecha de alta por defecto se calcula en hora **local**, no con `toISOString()` | En España, un alta creada a la una de la madrugada se guardaría con la fecha del día anterior. Se calcula al abrir el formulario, no al renderizar, para que servidor y navegador no discrepen. |
+| 6 | 23 tests en vez de los 10 del plan | El plan no probaba los estados del contrato pese a validarlos. Añadidos además `2026-02-31` como fecha imposible, la baja mal formada, y los 11 del comportamiento de los formularios. |
+
+**Pendiente que este plan no cubre:** `guardarCliente` (Tarea 11) sigue sin
+ninguna interfaz que la llame. Ninguna tarea posterior la construye.
+
 ---
 
 ## Tarea 14: Ajustes — el llavero
@@ -1992,6 +2044,31 @@ git add src/lib/db/credenciales.ts src/app/ajustes src/tests/db/credenciales.tes
 git commit -m "feat(atlas): llavero — alta, rotacion y auditoria de uso"
 ```
 
+### ✅ EJECUTADA — commit `45e00f2`
+
+149 tests en total (24 nuevos), typecheck y `next build` limpios.
+
+**Fallo del plan, corregido — y su propio test no podía verlo.**
+`guardarCredencial` pasaba `Uint8Array` a supabase-js, pero PostgREST no mete
+eso en una columna `bytea`: lo serializa como `{"0":12,"1":34,…}` y Postgres
+lo rechaza. El test del paso 1 iba por `pg` directo —donde sí funciona con
+`Buffer`— así que habría dado verde con la aplicación rota. Se añaden
+`aBytea`/`deBytea`, que traducen a hexadecimal `\x…`, y el test reescrito
+pasa por PostgREST.
+
+**Segundo fallo, de seguridad.** El plan metía consultas y mutaciones en un
+único módulo `"use server"`. Eso habría expuesto `usarCredencial(sb, …)`
+—**la función que descifra**— como acción invocable desde el navegador.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | `aBytea`/`deBytea` y el test por PostgREST | Ver arriba: sin esto el llavero no guarda nada. |
+| 2 | Se parte en `credenciales.ts` (consultas) y `acciones-credenciales.ts` (mutaciones) | Es el patrón que ya usa el repo (`clientes.ts` frente a `acciones-clientes.ts`) y evita exponer el descifrado como endpoint. |
+| 3 | Se escriben `FormCredencial.tsx` y `FilaCredencial.tsx` | El plan listaba el primero en sus ficheros sin ningún paso que lo definiera, y no contemplaba interfaz de rotación ni de borrado. Sin ellos las acciones nacían muertas. |
+| 4 | Se añade `borrarCredencial` | El esquema tiene `ON DELETE CASCADE` sobre `credencial_usos` pensado para esto, pero el plan no daba forma de borrar una clave. |
+| 5 | Un test fija las claves exactas que salen de `listarCredenciales` | Que hoy no se seleccione una columna cifrada no impide que mañana alguien la añada. |
+| 6 | Se verifica el bundle compilado | `grep` sobre `.next/static`: ni `ATLAS_MASTER_KEY` ni ningún secreto llegan al JavaScript del cliente. |
+
 ---
 
 ## Tarea 15: Ajustes — usuarios y permisos
@@ -2221,6 +2298,23 @@ npm test && npm run typecheck && npm run build
 git add src/lib/db/usuarios.ts src/app/ajustes/usuarios src/tests/db/usuarios.test.ts
 git commit -m "feat(atlas): usuarios y permisos por proyecto"
 ```
+
+### ✅ EJECUTADA — commit `9df266d`
+
+163 tests en total (14 nuevos), typecheck y `next build` limpios.
+
+**Tercera tarea seguida cuyas acciones se quedaban sin interfaz.**
+`asignarPermiso` y `retirarPermiso` estaban escritas, pero la pantalla del
+paso 5 era de solo lectura: no había forma de repartir un acceso. Se añade
+`PermisosUsuario.tsx`.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | Se escribe `PermisosUsuario.tsx` | Ver arriba. Sin él la tarea no hace lo que dice su título. |
+| 2 | Se parte en `usuarios.ts` (consultas) y `acciones-usuarios.ts` (mutaciones) | Mismo motivo que en el llavero: `listarUsuarios(sb)` dentro de un módulo `"use server"` sería una acción invocable desde el navegador que recibe un cliente de Supabase como argumento. |
+| 3 | Un proyecto que la persona ya tiene no se vuelve a ofrecer | Reasignarle el mismo rol no hace nada. Para cambiarlo se quita y se vuelve a dar, que además deja claro qué pasó. |
+| 4 | Un test comprueba que no salen correos | `listarUsuarios` lee `perfiles`, nunca `auth.users`. El test fija las cuatro claves que salen, para que nadie añada el correo «porque viene bien». |
+| 5 | 14 tests en vez de los 3 del plan | El plan solo probaba `validarRol`. Se añaden el listado con permisos anidados contra la base de datos real, los mayúsculas/minúsculas del rol, y los 8 del comportamiento de la pantalla. |
 
 ---
 
@@ -2487,6 +2581,18 @@ npm test && npm run typecheck && npm run build
 git add src/lib/db/apariencia.ts src/app/ajustes/apariencia src/components/ajustes src/tests
 git commit -m "feat(atlas): apariencia — 2 temas x 5 paletas por usuario"
 ```
+
+### ✅ EJECUTADA — commit `81a23e0`
+
+88 tests en total (12 nuevos), typecheck y `next build` limpios.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | Se añade `src/app/ajustes/page.tsx`, que el plan no contemplaba | La barra lateral ya enlazaba `/ajustes` desde la Tarea 10 y **daba 404**. Sin el índice, la pantalla de apariencia solo era alcanzable escribiendo la URL a mano. Lista solo lo que funciona: las tareas 14 y 15 añadirán las suyas. |
+| 2 | El selector escribe `data-tema`/`data-paleta` en `documentElement` antes de llamar a la acción | El plan solo revalidaba el layout, así que el color tardaba un viaje de ida y vuelta en cambiar. Elegir una paleta a ciegas no sirve. Si la acción falla, se revierten atributos y estado. |
+| 3 | El test del componente mockea `@/lib/db/apariencia` | Sin mock, pulsar un radio ejecutaría la acción de servidor de verdad: `cookies()` fuera de un ámbito de petición revienta, y el fallo llegaría como rechazo sin capturar dentro de `useTransition`. |
+| 4 | 12 tests en vez de los 7 del plan | Añadidos: cadena vacía en ambos campos, que se llama a guardar con los valores correctos, el pintado inmediato, que cambiar de tema conserva la paleta, y que el error sale por `role="alert"`. |
+| 5 | La paleta elegida lleva `outline` e icono de check | Solo con `font-semibold` en el nombre no se distinguía cuál estaba puesta. |
 
 ---
 
@@ -2944,9 +3050,64 @@ git add scripts src/tests/migrar package.json
 git commit -m "feat(atlas): migracion idempotente de clientes, proyectos y contratos"
 ```
 
+### ✅ EJECUTADA — commit `edf4758`
+
+179 tests en total (16 nuevos), typecheck y `next build` limpios.
+
+**Verificada de punta a punta, no solo con tests unitarios.** Como la base de
+origen no era alcanzable (ver abajo), se montó una base desechable con el
+esquema antiguo y filas que cubren los cuatro casos límite: cliente sin
+nombre, proyecto sin fecha de alta, proyecto sin cliente y baja anterior al
+alta. El script se ejecutó **dos veces seguidas** contra la base local de
+Atlas y dejó los mismos 2 clientes, 5 proyectos y 3 contratos: la
+idempotencia funciona.
+
+| # | Desvío del plan | Por qué |
+|---|---|---|
+| 1 | El mapeo va a `src/lib/migrar/mapeo.ts`, no a `scripts/` | Así entra en el umbral de cobertura como el resto de `src/lib`. El script lo importa con ruta relativa. |
+| 2 | `aSlug` se reexporta de `src/lib/texto.ts` en vez de duplicarse | El formulario de clientes ya lo usa. Dos versiones del mismo slug acabarían divergiendo, y la migración propondría identificadores que la aplicación rechaza. |
+| 3 | **No se crea `scripts/tsconfig.json`** ni `typecheck:scripts` | El `tsconfig.json` raíz ya incluye `**/*.ts`, así que `scripts/` se typechequea con el `npm run typecheck` de siempre. El paso 6 del plan sobra. |
+| 4 | `mapearContrato` filtra presupuestos no numéricos | El plan hacía `Number(fila.budget)` a pelo: un `""` o un `"gratis"` darían `NaN`, que PostgREST rechaza **a mitad** de la migración, dejándola incompleta. |
+| 5 | En `--ensayo` también se cuentan los contratos descartados | El plan solo los contaba en la pasada real, justo al revés de lo que sirve: el ensayo existe para ver qué se perdería **antes** de escribir. |
+
+**Bloqueado, para revisar con Jose.** El ensayo contra los datos de verdad no
+se ha podido correr: el `DATABASE_URL` de `apps/command/.env` apunta a
+`db.ojdulflurxyujlkhsttb.supabase.co`, que **no resuelve** (`ENOTFOUND`).
+O el proyecto de Supabase está pausado, o hay que pasar por el *pooler*
+(`aws-0-<región>.pooler.supabase.com`), que es a donde Supabase movió las
+conexiones directas. El script está listo; solo le falta una URL viva.
+
 ---
 
-## Verificación de salida del plan 1A-2
+## ✅ Verificación de salida — PLAN 1A-2 COMPLETO
+
+Ejecutado entre los commits `81a23e0` y `ab9f572`.
+
+| Criterio | Exigido | Real |
+|---|---|---|
+| Batería en verde | 91 tests | **203 tests**, 27 ficheros |
+| Cobertura de `src/lib/**` | ≥ 80 % líneas y funciones | **88.12 %** líneas, **90 %** funciones |
+| `typecheck` y `build` | sin errores | limpios los dos |
+| Componente cliente que importe consultas o cripto | ninguno | ninguno — solo módulos `"use server"` e `import type` |
+| Lectura directa de la tabla `contratos` | ninguna | ninguna, todo por `contratos_visibles` |
+| `any` en `src/lib` o `scripts` | ninguno | ninguno |
+| Secretos en el bundle del navegador | ninguno | `grep` sobre `.next/static`: limpio |
+
+**Una corrección de fondo, no cosmética.** La cobertura salía al 72.73 % y la
+causa era que **ninguna escritura estaba probada**: los cinco módulos de
+acciones iban del 22 % al 45 % porque una acción `"use server"` necesita un
+ámbito de petición HTTP y desde vitest no hay ninguno. Ni un solo `INSERT`
+pasaba por un test. Se separó el núcleo —validar, comprobar el rol y
+escribir— a la capa de datos, donde recibe `sb` y se prueba contra la base de
+verdad; la acción quedó como envoltorio de tres líneas. Ninguna firma pública
+cambió, así que ningún componente se tocó. Commit `ab9f572`.
+
+**Lo que quedó pendiente de Jose:** el ensayo de la migración contra los datos
+reales. El `DATABASE_URL` de la Oficina no resuelve (ver Tarea 17).
+
+---
+
+## Verificación original (referencia)
 
 - [ ] **1. Toda la batería en verde**
 
