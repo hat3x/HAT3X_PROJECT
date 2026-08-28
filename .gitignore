@@ -39,3 +39,10 @@ supabase/.temp/
 
 # APK/keystore de la PWA (NO commitear: la keystore es secreta)
 apk/
+
+# Agente local de captura de imagen. `agent.config.json` lleva el pairingToken,
+# que es un SECRETO: se genera por instalación y nunca se versiona. El ejemplo
+# (agent.config.example.json) sí va al repo.
+agent/agent.config.json
+agent/dist/
+agent/node_modules/

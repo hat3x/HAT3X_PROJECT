@@ -1,0 +1,22 @@
+{
+  "_comentario": "Copia este fichero como agent.config.json y rellénalo. NO lo subas a git: el pairingToken es un secreto.",
+
+  "port": 7345,
+
+  "_pairingToken": "Secreto compartido con el panel; lo genera el instalador. Mínimo 32 caracteres. Si cambia aquí, hay que cambiarlo también en el panel o el agente dejará de atender.",
+  "pairingToken": "PON-AQUI-EL-TOKEN-QUE-GENERO-EL-INSTALADOR-32-CARS",
+
+  "_allowedOrigins": "Quién puede hablar con este agente. Comparación EXACTA: el esquema y el puerto cuentan. Sin esta lista el agente no arranca.",
+  "allowedOrigins": ["https://kairosmanager.app"],
+
+  "_devices": "Los equipos de ESTE ordenador. El id debe ser el mismo que en Ajustes → Equipos de imagen del panel. El navegador solo manda el id: las rutas viven aquí y nunca viajan.",
+  "devices": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "adapter": "carpeta",
+      "settings": {
+        "path": "C:\\Radiografias\\salida"
+      }
+    }
+  ]
+}
