@@ -146,6 +146,10 @@ try {
     { ruta: "/ajustes/notificaciones", exige: [] },
     { ruta: "/ajustes/usuarios", exige: [] },
     { ruta: "/ajustes/credenciales", exige: [] },
+    // `exige` con contenido y no vacío: esta pantalla se pinta entera desde una
+    // tabla que casi siempre estará vacía, y un 200 con el cuerpo en blanco
+    // sería indistinguible de una que funciona.
+    { ruta: "/ajustes/descubridor", exige: ["Descubridor"] },
   ];
 
   // Una ficha que carga pero no lista los servicios es justo el fallo que no se

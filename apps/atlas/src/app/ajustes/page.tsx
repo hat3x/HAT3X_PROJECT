@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Palette, KeyRound, Users, BellRing } from "lucide-react";
+import { Palette, KeyRound, Users, BellRing, Radar } from "lucide-react";
 import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 
@@ -32,6 +32,14 @@ const SECCIONES = [
     titulo: "Usuarios y permisos",
     descripcion: "Quién llega a qué proyecto, y como editor o como lector.",
     Icono: Users,
+    soloPropietario: true,
+  },
+  {
+    href: "/ajustes/descubridor",
+    titulo: "Descubridor",
+    descripcion:
+      "Si los salones de Kairos que Atlas vigila siguen siendo los de verdad.",
+    Icono: Radar,
     soloPropietario: true,
   },
 ] as const;

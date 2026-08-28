@@ -155,10 +155,18 @@ Para reproducirlo entero en local sin tocar el Kairos de verdad, `scripts/prueba
 ```bash
 npx tsx scripts/prueba-descubridor.ts            # lo monta
 # luego, en SQL:  select atlas_disparar_descubridor();
-npx tsx scripts/prueba-descubridor.ts --limpiar  # retira el lado Kairos
+npx tsx scripts/prueba-descubridor.ts --sembrar  # 4 pasadas, para ver la pantalla
+npx tsx scripts/prueba-descubridor.ts --limpiar  # retira todo lo anterior
 ```
 
 Limpia siempre al terminar: la tabla `salons` que crea vive en el esquema `public` de Atlas, y si se queda, el siguiente `npm run tipos` la mete en `src/types/supabase.ts`.
+
+Y para **ver** una pantalla, no solo saber que responde. El guardia exige segundo factor, así que abrir el navegador a mano no basta:
+
+```bash
+npx tsx scripts/prueba-descubridor.ts --sesion > cookie.txt
+npx tsx scripts/mirar.ts /ajustes/descubridor pantalla.png cookie.txt
+```
 
 ---
 
