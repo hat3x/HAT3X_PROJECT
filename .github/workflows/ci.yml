@@ -8,11 +8,10 @@
 # Un CI que solo vigilara main/master/feat no se ejecutaría nunca sobre el
 # trabajo real — que es exactamente lo que ya pasó una vez en el repo padre.
 #
-# Solo se incluye lo que hoy pasa en verde. Un CI que nace en rojo se ignora, y
-# un CI ignorado no protege nada. Quedan fuera, a propósito:
+# Solo se incluye lo que pasa en verde. Un CI que nace en rojo se ignora, y un
+# CI ignorado no protege nada. Quedan fuera, a propósito:
 #   · `npm run lint` — ESLint no está configurado: `next lint` abre un asistente
 #     interactivo y en CI se colgaría.
-#   · `npm run typecheck:scripts` — falla hoy en seed-demo-salon.ts (TS2589).
 #   · `next build` — necesita variables NEXT_PUBLIC_* que no deben vivir aquí.
 # Cuando alguno se arregle, se añade su paso.
 
@@ -55,3 +54,9 @@ jobs:
 
       - name: Tipos
         run: npx tsc --noEmit
+
+      # Los scripts (siembra de demo, teardown) tienen su propio tsconfig y no
+      # entran en el anterior. Son los que tocan datos de salones reales, asi
+      # que conviene que compilen igual de limpios.
+      - name: Tipos de los scripts
+        run: npm run typecheck:scripts

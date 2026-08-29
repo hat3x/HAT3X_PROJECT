@@ -2496,9 +2496,18 @@ async function countRows(
   table: PublicTable,
   match: Readonly<Record<string, string>>,
 ): Promise<number> {
-  let query = client
-    .from(table)
-    .select("*", { count: "exact", head: true }) as unknown as CountQuery;
+  // `client.from(table)` con `table` tipado como la unión de TODAS las tablas
+  // hace que Supabase resuelva el tipo de fila para cada una de ellas, y el
+  // compilador se rinde (TS2589: instanciación excesivamente profunda). El
+  // `as unknown as CountQuery` de después llegaba tarde: la expresión se
+  // comprueba ANTES de la aserción. Estrechar el cliente antes de llamar es lo
+  // único que corta esa expansión. La consulta enviada es idéntica.
+  const contador = client as unknown as {
+    from: (t: string) => {
+      select: (cols: string, opts: { count: "exact"; head: boolean }) => CountQuery;
+    };
+  };
+  let query = contador.from(table).select("*", { count: "exact", head: true });
   for (const [column, value] of Object.entries(match)) {
     query = query.eq(column, value);
   }
