@@ -32,9 +32,29 @@ export function FormFacturaExterna({
   // admite `string`, así que se lee el `FormData` a mano desde `onSubmit`.
   async function alEnviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const datos = new FormData(e.currentTarget);
+    // Capturado ANTES de cualquier `await`: React reutiliza y vacía el evento
+    // sintético en cuanto el manejador cede el control, así que leer
+    // `e.currentTarget` después del `await` de más abajo daría `null`, y
+    // `.reset()` reventaría justo cuando el guardado ha ido bien.
+    const formulario = e.currentTarget;
+    const datos = new FormData(formulario);
     setError(null);
 
+    // Líneas a medias: tienen importe o proyecto pero no concepto. Se avisa
+    // en vez de descartarlas en silencio, porque el usuario sí escribió algo
+    // ahí y el total dejaría de cuadrar con lo que tenía delante.
+    const aMedias = lineas
+      .map((l, i) => ({ l, numero: i + 1 }))
+      .filter(
+        ({ l }) => l.concepto.trim() === "" && (l.importe.trim() !== "" || l.proyectoId !== "")
+      );
+    if (aMedias.length > 0) {
+      const numeros = aMedias.map(({ numero }) => numero).join(", ");
+      return setError(`La línea ${numeros} tiene importe o proyecto pero le falta el concepto.`);
+    }
+
+    // Las líneas del todo vacías sí se ignoran: son las que quedan al pulsar
+    // «Añadir línea» y no rellenar, y no tienen nada que guardar.
     const utiles = lineas.filter((l) => l.concepto.trim() !== "");
     if (utiles.length === 0) return setError("Una factura necesita al menos una línea.");
 
@@ -58,19 +78,38 @@ export function FormFacturaExterna({
     }
 
     setEnviando(true);
-    const r = await guardarFacturaExterna({
-      clienteId: String(datos.get("clienteId") ?? ""),
-      serie: String(datos.get("serie") ?? "").trim(),
-      numero,
-      fechaEmision: String(datos.get("fechaEmision") ?? ""),
-      fechaVencimiento: String(datos.get("fechaVencimiento") ?? "") || null,
-      ivaTipo: 21,
-      lineas: convertidas,
-    });
-    setEnviando(false);
-
-    if (r.ok) setLineas([{ ...LINEA_VACIA }]);
-    else setError(r.error);
+    try {
+      const r = await guardarFacturaExterna({
+        clienteId: String(datos.get("clienteId") ?? ""),
+        serie: String(datos.get("serie") ?? "").trim(),
+        numero,
+        fechaEmision: String(datos.get("fechaEmision") ?? ""),
+        fechaVencimiento: String(datos.get("fechaVencimiento") ?? "") || null,
+        ivaTipo: 21,
+        lineas: convertidas,
+      });
+      if (r.ok) {
+        // Limpia también el número: sin esto, la siguiente factura sale con
+        // el mismo número y choca contra `unique(serie, numero)` con un error
+        // que no explica que la causa es simplemente no haber limpiado el
+        // formulario.
+        formulario.reset();
+        setLineas([{ ...LINEA_VACIA }]);
+      } else {
+        setError(r.error);
+      }
+    } catch {
+      // Igual que en FormGasto: la llamada de red a la acción de servidor
+      // puede rechazar (caída de red, fallo de serialización) aunque la
+      // función esté escrita para devolver `{ ok: false }` y no lanzar. Sin
+      // este `catch` el usuario se quedaría sin saber que nada se guardó.
+      setError("No se pudo guardar. Comprueba la conexión e inténtalo otra vez.");
+    } finally {
+      // Sin este `finally`, un fallo de red en el `await` de arriba dejaría
+      // `enviando` en `true` para siempre: el botón quedaría deshabilitado
+      // hasta recargar la página, sin ninguna pista de por qué.
+      setEnviando(false);
+    }
   }
 
   return (

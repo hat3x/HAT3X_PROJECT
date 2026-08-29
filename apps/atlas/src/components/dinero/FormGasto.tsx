@@ -22,7 +22,12 @@ export function FormGasto({
   // admite `string`, así que se lee el `FormData` a mano desde `onSubmit`.
   async function alEnviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const datos = new FormData(e.currentTarget);
+    // Capturado ANTES de cualquier `await`: React reutiliza y vacía el evento
+    // sintético en cuanto el manejador cede el control, así que leer
+    // `e.currentTarget` después del `await` de más abajo daría `null`, y
+    // `.reset()` reventaría justo cuando el guardado ha ido bien.
+    const formulario = e.currentTarget;
+    const datos = new FormData(formulario);
     setError(null);
 
     const concepto = String(datos.get("concepto") ?? "").trim();
@@ -39,18 +44,32 @@ export function FormGasto({
     const clienteId = String(datos.get("clienteId") ?? "");
 
     setEnviando(true);
-    const r = await guardarGasto({
-      fecha: String(datos.get("fecha") ?? new Date().toISOString().slice(0, 10)),
-      concepto,
-      proveedor: String(datos.get("proveedor") ?? "") || null,
-      baseCentimos: base,
-      ivaCentimos: iva,
-      categoria: String(datos.get("categoria") ?? "otro") as Categoria,
-      clienteId: clienteId === "" ? null : clienteId,
-    });
-    setEnviando(false);
-
-    if (!r.ok) setError(r.error);
+    try {
+      const r = await guardarGasto({
+        fecha: String(datos.get("fecha") ?? new Date().toISOString().slice(0, 10)),
+        concepto,
+        proveedor: String(datos.get("proveedor") ?? "") || null,
+        baseCentimos: base,
+        ivaCentimos: iva,
+        categoria: String(datos.get("categoria") ?? "otro") as Categoria,
+        clienteId: clienteId === "" ? null : clienteId,
+      });
+      if (r.ok) formulario.reset();
+      else setError(r.error);
+    } catch {
+      // `guardarGasto` está escrita para devolver `{ ok: false }` y no
+      // lanzar, pero la llamada de red a la acción de servidor SÍ puede
+      // rechazar (caída de red, fallo de serialización). Sin este `catch`,
+      // el `finally` de abajo sería la única red de seguridad para no dejar
+      // el botón deshabilitado para siempre, pero el usuario se quedaría sin
+      // saber que nada se guardó.
+      setError("No se pudo guardar. Comprueba la conexión e inténtalo otra vez.");
+    } finally {
+      // Sin este `finally`, un fallo de red en el `await` de arriba dejaría
+      // `enviando` en `true` para siempre: el botón quedaría deshabilitado
+      // hasta recargar la página, sin ninguna pista de por qué.
+      setEnviando(false);
+    }
   }
 
   return (
