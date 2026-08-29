@@ -163,6 +163,19 @@ describe("resumen del mes", () => {
     expect((await resumenDelMes(sb, "2026-08-01")).facturado).toBe(0);
   });
 
+  // El plan 2E dejará facturas en borrador hasta asignarles número. Sin este
+  // filtro, la pantalla empezaría a contar como ingreso lo que nadie ha
+  // mandado todavía — y lo haría en silencio, el día que 2E entre.
+  it("un borrador no cuenta como facturado", async () => {
+    await pg.query(
+      `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision,
+                             base, iva_cuota, total, estado)
+       VALUES ('externa','R',9,$1,'2026-08-10',100,0,100,'borrador')`,
+      [idCliente]
+    );
+    expect((await resumenDelMes(sb, "2026-08-01")).facturado).toBe(0);
+  });
+
   it("no mezcla meses", async () => {
     await factura(4, 100, null);
     expect((await resumenDelMes(sb, "2026-07-01")).facturado).toBe(0);

@@ -1,7 +1,7 @@
 import type { Sb } from "./clientes";
 
 export type ResumenMes = {
-  /** Céntimos enteros. Todo lo emitido en el mes, anuladas aparte. */
+  /** Céntimos enteros. Solo facturas en estado emitida: ni borradores ni anuladas. */
   facturado: number;
   /** Céntimos enteros. */
   cobrado: number;
@@ -37,7 +37,12 @@ export async function resumenDelMes(sb: Sb, mes: string): Promise<ResumenMes> {
     .select("total, cobrada_en")
     .gte("fecha_emision", desde)
     .lte("fecha_emision", hasta)
-    .neq("estado", "anulada");
+    // Exige 'emitida' y no solo excluye 'anulada': un borrador es algo que
+    // todavia no se ha mandado a nadie, y contarlo como facturado convertiria
+    // una intencion en un ingreso. Hoy es inalcanzable porque
+    // registrarFacturaExterna fuerza 'emitida', pero el plan 2E dejara
+    // facturas en borrador hasta asignarles numero.
+    .eq("estado", "emitida");
   if (eF) throw eF;
 
   const { data: gastos, error: eG } = await sb

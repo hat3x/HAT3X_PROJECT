@@ -82,10 +82,14 @@ beforeAll(async () => {
   );
   idCliente = c.id;
 
+  // 'emitida' explícito: por defecto una factura nace 'borrador', y esta es
+  // la que los tests usan como "la que sí falta por cobrar" — con el filtro
+  // de `sinCobrar` exigiendo 'emitida' (ronda de arreglo 1), dejarla en el
+  // default la habría hecho desaparecer de esa lista en silencio.
   const { rows: [f] } = await pg.query(
     `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision,
-                           fecha_vencimiento, base, iva_cuota, total)
-     VALUES ('externa','BIO',1,$1,'2026-08-04','2026-09-04',350,73.5,423.5)
+                           fecha_vencimiento, base, iva_cuota, total, estado)
+     VALUES ('externa','BIO',1,$1,'2026-08-04','2026-09-04',350,73.5,423.5,'emitida')
      RETURNING id`,
     [idCliente]
   );
@@ -178,6 +182,18 @@ describe("listar facturas", () => {
   it("las anuladas no salen entre las que faltan por cobrar", async () => {
     const fs = await listarFacturas(sbDuenyo, { clienteId: idCliente, sinCobrar: true });
     expect(fs.map((f) => f.numero)).toEqual([1]);
+  });
+
+  // Mismo motivo que las anuladas: un borrador no es una deuda que perseguir.
+  it("los borradores no salen entre las que faltan por cobrar", async () => {
+    await pg.query(
+      `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision,
+                             base, iva_cuota, total, estado)
+       VALUES ('externa','BIO',9,$1,'2026-08-04',100,0,100,'borrador')`,
+      [idCliente]
+    );
+    const fs = await listarFacturas(sbDuenyo, { clienteId: idCliente, sinCobrar: true });
+    expect(fs.map((f) => f.numero)).not.toContain(9);
   });
 
   // No filtra la consulta: de eso se encarga RLS, y se comprueba en vez de

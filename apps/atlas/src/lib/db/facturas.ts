@@ -118,7 +118,11 @@ export async function listarFacturas(
 
   if (filtros.clienteId) consulta = consulta.eq("cliente_id", filtros.clienteId);
   if (filtros.sinCobrar) {
-    consulta = consulta.is("cobrada_en", null).neq("estado", "anulada");
+    // Exige 'emitida' y no solo excluye 'anulada': un borrador es algo que
+    // todavia no se ha mandado a nadie, y no es una deuda que perseguir. El
+    // plan 2B construye sobre esta consulta la lista de lo que hay que
+    // reclamar, y un borrador ahi seria un falso positivo.
+    consulta = consulta.is("cobrada_en", null).eq("estado", "emitida");
   }
 
   const { data, error } = await consulta;

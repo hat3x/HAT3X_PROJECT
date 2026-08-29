@@ -12,6 +12,11 @@ const FECHA = new Intl.DateTimeFormat("es-ES", {
   timeZone: "Europe/Madrid",
 });
 
+// El mes es el de Madrid, no el de UTC. Madrid va por delante, así que durante
+// la primera hora del día 1 el «hoy» en UTC todavía cae en el mes anterior y la
+// pantalla enseñaría el mes equivocado. «en-CA» se elige porque da AAAA-MM-DD.
+const DIA_MADRID = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" });
+
 function Cifra({ etiqueta, centimos }: { etiqueta: string; centimos: number }) {
   return (
     <div className="cristal cristal-denso p-4">
@@ -35,7 +40,7 @@ export default async function PaginaDinero() {
   // que una pantalla en blanco que parece rota.
   if (!perfil?.esPropietario) notFound();
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = DIA_MADRID.format(new Date());
   const [resumen, facturas] = await Promise.all([
     resumenDelMes(sb, hoy),
     listarFacturas(sb, {}),
