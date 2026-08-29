@@ -167,6 +167,10 @@ try {
     // al principio estarán vacías, y un 200 con el cuerpo en blanco sería
     // indistinguible de una que funciona.
     { ruta: "/dinero", exige: ["Dinero", "Coste de estructura"] },
+    // Se exige el texto de los tres desgloses: la pantalla se pinta entera
+    // desde tablas que estaran vacias al principio, y un 200 con el cuerpo en
+    // blanco seria indistinguible de una que funciona.
+    { ruta: "/dinero/gastos", exige: ["Por plataforma", "Por cliente", "Por proyecto"] },
     { ruta: "/ajustes", exige: [] },
     { ruta: "/ajustes/apariencia", exige: [] },
     { ruta: "/ajustes/notificaciones", exige: [] },

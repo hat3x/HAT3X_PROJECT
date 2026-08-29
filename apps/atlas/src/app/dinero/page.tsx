@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 import { resumenDelMes } from "@/lib/db/resumen-dinero";
@@ -88,6 +89,12 @@ export default async function PaginaDinero() {
         clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
         plataformas={plataformas.map((p) => ({ id: p.id, nombre: p.nombre }))}
       />
+
+      <p className="text-sm">
+        <Link href="/dinero/gastos" className="underline opacity-80 hover:opacity-100">
+          Ver los gastos del mes, con su desglose por plataforma, cliente y proyecto →
+        </Link>
+      </p>
 
       <h2 className="pt-2 text-lg font-semibold">Facturas</h2>
 
