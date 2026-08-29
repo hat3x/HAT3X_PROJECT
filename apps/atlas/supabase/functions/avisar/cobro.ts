@@ -31,14 +31,21 @@ export type FacturaSinCobrar = {
   fechaVencimiento: string | null;
 };
 
+/**
+ * Una factura que ya pasó su plazo. Estrechada a `fechaVencimiento: string`
+ * (sin el `| null` del tipo base): el filtro de `pendientesDeCobro` ya
+ * descarta las facturas sin plazo, así que quien consuma `vencidas` —la
+ * pantalla— puede leer la fecha sin repetir esa comprobación ni recurrir a
+ * `!` para acallar al compilador sobre algo que la función ya garantiza.
+ *
+ * Con nombre propio para que el tipo `Cobro` y el type guard del filtro
+ * apunten al mismo sitio y no puedan divergir por escribirlo dos veces.
+ */
+export type FacturaVencida = FacturaSinCobrar & { fechaVencimiento: string };
+
 export type Cobro = {
   sinFacturar: PeriodoSinFacturar[];
-  // Estrechado a `fechaVencimiento: string` (sin el `| null` del tipo base):
-  // el filtro de abajo ya descarta las facturas sin plazo, así que quien
-  // consuma `vencidas` —la pantalla— puede leer la fecha sin repetir esa
-  // comprobación ni recurrir a `!` para acallar al compilador sobre algo que
-  // la función ya garantiza.
-  vencidas: (FacturaSinCobrar & { fechaVencimiento: string })[];
+  vencidas: FacturaVencida[];
   totalSinFacturarCentimos: number;
   totalVencidoCentimos: number;
   hayAlgo: boolean;
@@ -75,19 +82,22 @@ export function pendientesDeCobro(
   // así que esas no se persiguen — avisar de ellas llenaría el mensaje de
   // facturas que nadie acordó cuándo pagar.
   //
-  // El predicado lleva forma de type guard (`f is ... & { fechaVencimiento:
-  // string }`) para que el `!== null` de aquí sea la única vez que se
-  // comprueba: de ahí en adelante —el `.sort` de debajo, y quien lea
-  // `Cobro.vencidas` fuera de esta función— el tipo ya dice que la fecha
-  // existe, sin más aserciones que repitan una garantía que este filtro ya
-  // dio.
+  // El predicado lleva forma de type guard (`f is FacturaVencida`) para que
+  // el `!== null` de aquí sea la única vez que se comprueba: de ahí en
+  // adelante —el `.sort` de debajo, y quien lea `Cobro.vencidas` fuera de
+  // esta función— el tipo ya dice que la fecha existe, sin más aserciones
+  // que repitan una garantía que este filtro ya dio.
   const vencidas = facturas
     .filter(
-      (f): f is FacturaSinCobrar & { fechaVencimiento: string } =>
+      (f): f is FacturaVencida =>
         f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo
     )
     // Lo más viejo primero: es lo que más urge y lo que peor pinta tiene.
-    .sort((a, b) => (a.fechaVencimiento.slice(0, 10) < b.fechaVencimiento.slice(0, 10) ? -1 : 1));
+    // Comparador de tres vías: dos vencimientos iguales devuelven 0. Un
+    // comparador que nunca devuelve 0 es inconsistente según la
+    // especificación aunque V8 lo tolere. `localeCompare` sobre cadenas ISO
+    // ordena bien porque el formato es lexicográficamente cronológico.
+    .sort((a, b) => a.fechaVencimiento.slice(0, 10).localeCompare(b.fechaVencimiento.slice(0, 10)));
 
   const totalSinFacturarCentimos = periodos.reduce(
     (t, p) => t + p.importeEsperadoCentimos,

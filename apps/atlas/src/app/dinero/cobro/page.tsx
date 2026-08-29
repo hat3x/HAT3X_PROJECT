@@ -24,7 +24,13 @@ const MES = new Intl.DateTimeFormat("es-ES", {
 
 /** Días que lleva vencida, para que se vea cuál duele más. */
 function diasDeRetraso(vencimiento: string, hoy: string): number {
-  const ms = Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${vencimiento}T00:00:00Z`);
+  // Se recorta a AAAA-MM-DD por la misma razón que en `pendientesDeCobro`:
+  // si alguna vez llegara una fecha con hora, pegarle `T00:00:00Z` daría un
+  // `Date.parse` en NaN y el distintivo diría «NaN días». Que la pantalla se
+  // proteja igual que la función evita que una asimetría muerda un día.
+  const ms =
+    Date.parse(`${hoy.slice(0, 10)}T00:00:00Z`) -
+    Date.parse(`${vencimiento.slice(0, 10)}T00:00:00Z`);
   return Math.floor(ms / 86_400_000);
 }
 
