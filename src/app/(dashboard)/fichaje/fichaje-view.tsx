@@ -186,7 +186,10 @@ function TimeClockReport({
   const toISO = `${addDaysYmd(to, 1)}T00:00:00Z`;
   const query = useTimeClockReport(salonId, fromISO, toISO);
 
-  const entries = query.data ?? [];
+  // El `?? []` devolvía un array nuevo en cada render y el useMemo que agrupa
+  // por empleado lo veía siempre como dependencia distinta: recalculaba todo
+  // sin necesidad. Memorizado, solo se rehace cuando cambia el informe.
+  const entries = useMemo(() => query.data ?? [], [query.data]);
   const openNow = entries.filter((e) => e.clockOut === null);
 
   // Totales por empleado.

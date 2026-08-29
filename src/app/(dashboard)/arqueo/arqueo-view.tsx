@@ -237,7 +237,13 @@ function OpenSessionPanel({
   const [notes, setNotes] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const payments = activity.data?.payments ?? [];
+  // El `?? []` crea un array NUEVO en cada render, así que el useMemo de abajo
+  // veía siempre una dependencia distinta y no memorizaba nada. Memorizando el
+  // propio valor, el agregado solo se recalcula cuando llegan cobros nuevos.
+  const payments = useMemo(
+    () => activity.data?.payments ?? [],
+    [activity.data?.payments],
+  );
   const byMethod = useMemo(() => aggregateByMethod(payments), [payments]);
   const totalTakings = sumAllPayments(payments);
   const cashTakings = sumCashPayments(payments);

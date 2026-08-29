@@ -196,7 +196,10 @@ export function SalaView({ salonId, canEdit }: SalaViewProps): React.ReactElemen
 
   const zones = zonesQuery.data ?? [];
   const tables = tablesQuery.data ?? [];
-  const orders = ordersQuery.data ?? [];
+  // El `?? []` daba un array nuevo en cada render, de modo que el indice de
+  // pedidos por mesa se reconstruia constantemente. En sala, que se repinta
+  // con cada cambio de estado, eso se nota.
+  const orders = useMemo(() => ordersQuery.data ?? [], [ordersQuery.data]);
 
   const ordersByTable = useMemo(() => {
     const map = new Map<string, (typeof orders)[number]>();
