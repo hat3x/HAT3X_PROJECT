@@ -3,8 +3,12 @@ import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 import { resumenDelMes } from "@/lib/db/resumen-dinero";
 import { listarFacturas } from "@/lib/db/facturas";
+import { listarClientes } from "@/lib/db/clientes";
+import { listarProyectos } from "@/lib/db/proyectos";
 import { formatear, aCentimos } from "@/lib/dinero";
 import { Distintivo } from "@/components/ui/Distintivo";
+import { FormGasto } from "@/components/dinero/FormGasto";
+import { FormFacturaExterna } from "@/components/dinero/FormFacturaExterna";
 
 const FECHA = new Intl.DateTimeFormat("es-ES", {
   day: "numeric",
@@ -41,9 +45,11 @@ export default async function PaginaDinero() {
   if (!perfil?.esPropietario) notFound();
 
   const hoy = DIA_MADRID.format(new Date());
-  const [resumen, facturas] = await Promise.all([
+  const [resumen, facturas, clientes, proyectos] = await Promise.all([
     resumenDelMes(sb, hoy),
     listarFacturas(sb, {}),
+    listarClientes(sb),
+    listarProyectos(sb),
   ]);
 
   return (
@@ -73,6 +79,15 @@ export default async function PaginaDinero() {
         <strong>{formatear(resumen.gastoEstructura)}</strong>. No se reparte
         entre clientes.
       </p>
+
+      <h2 className="pt-2 text-lg font-semibold">Registrar factura emitida fuera</h2>
+      <FormFacturaExterna
+        clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
+        proyectos={proyectos.map((p) => ({ id: p.id, nombre: p.nombre }))}
+      />
+
+      <h2 className="pt-2 text-lg font-semibold">Apuntar un gasto</h2>
+      <FormGasto clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))} />
 
       <h2 className="pt-2 text-lg font-semibold">Facturas</h2>
 
