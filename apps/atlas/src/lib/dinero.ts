@@ -13,6 +13,14 @@ const EUROS = new Intl.NumberFormat("es-ES", {
   currency: "EUR",
 });
 
+// Tope de `aCentimos`: el máximo que cabe en `numeric(12,2)`, el tipo de las
+// columnas de importe en la base (migración de la Tarea 2). No es un número
+// redondo elegido a ojo: es ese máximo exacto, para que el límite de
+// TypeScript y el de Postgres sean el mismo número y no puedan divergir. Por
+// encima, `aCentimos("1e21")` daría `1e+23` — ya no un entero exacto, que es
+// justo el fallo que este módulo existe para impedir.
+const MAX_CENTIMOS = 999_999_999_999;
+
 /**
  * Texto de un formulario → céntimos.
  *
@@ -29,7 +37,10 @@ export function aCentimos(texto: string | number): number | null {
   // El redondeo va sobre el valor ya escalado: `1.005 * 100` da
   // 100.49999999999999, y redondear eso a secas perdería el céntimo que sí
   // corresponde. El `toFixed(4)` recorta el ruido antes de decidir.
-  return Math.round(Number((n * 100).toFixed(4)));
+  const centimos = Math.round(Number((n * 100).toFixed(4)));
+  if (centimos > MAX_CENTIMOS) return null;
+
+  return centimos;
 }
 
 export function formatear(centimos: number): string {

@@ -31,6 +31,21 @@ describe("a céntimos", () => {
     expect(aCentimos("pepe")).toBeNull();
     expect(aCentimos("-5")).toBeNull();
   });
+
+  // El tope no es un número redondo elegido a ojo: es el máximo que cabe en
+  // `numeric(12,2)`, el tipo de las columnas de importe. Así el límite de
+  // TypeScript y el de la base son el mismo, y no pueden separarse.
+  it("acepta el mayor importe que cabe en la base", () => {
+    expect(aCentimos("9999999999.99")).toBe(999_999_999_999);
+  });
+
+  // Sin este tope, `aCentimos("1e21")` devolvía 1e+23: por encima de
+  // MAX_SAFE_INTEGER ya no es un entero exacto, y punto flotante inexacto es
+  // justo lo que este módulo existe para evitar.
+  it("lo que no cabe en la base da null, no un entero inexacto", () => {
+    expect(aCentimos("1e21")).toBeNull();
+    expect(aCentimos("10000000000")).toBeNull();
+  });
 });
 
 describe("formatear", () => {
