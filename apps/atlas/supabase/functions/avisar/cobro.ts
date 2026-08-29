@@ -33,7 +33,12 @@ export type FacturaSinCobrar = {
 
 export type Cobro = {
   sinFacturar: PeriodoSinFacturar[];
-  vencidas: FacturaSinCobrar[];
+  // Estrechado a `fechaVencimiento: string` (sin el `| null` del tipo base):
+  // el filtro de abajo ya descarta las facturas sin plazo, así que quien
+  // consuma `vencidas` —la pantalla— puede leer la fecha sin repetir esa
+  // comprobación ni recurrir a `!` para acallar al compilador sobre algo que
+  // la función ya garantiza.
+  vencidas: (FacturaSinCobrar & { fechaVencimiento: string })[];
   totalSinFacturarCentimos: number;
   totalVencidoCentimos: number;
   hayAlgo: boolean;
@@ -69,12 +74,20 @@ export function pendientesDeCobro(
   // cumple durante todo su último día. Y sin fecha no hay plazo que incumplir,
   // así que esas no se persiguen — avisar de ellas llenaría el mensaje de
   // facturas que nadie acordó cuándo pagar.
+  //
+  // El predicado lleva forma de type guard (`f is ... & { fechaVencimiento:
+  // string }`) para que el `!== null` de aquí sea la única vez que se
+  // comprueba: de ahí en adelante —el `.sort` de debajo, y quien lea
+  // `Cobro.vencidas` fuera de esta función— el tipo ya dice que la fecha
+  // existe, sin más aserciones que repitan una garantía que este filtro ya
+  // dio.
   const vencidas = facturas
-    .filter((f) => f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo)
+    .filter(
+      (f): f is FacturaSinCobrar & { fechaVencimiento: string } =>
+        f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo
+    )
     // Lo más viejo primero: es lo que más urge y lo que peor pinta tiene.
-    .sort((a, b) =>
-      a.fechaVencimiento!.slice(0, 10) < b.fechaVencimiento!.slice(0, 10) ? -1 : 1
-    );
+    .sort((a, b) => (a.fechaVencimiento.slice(0, 10) < b.fechaVencimiento.slice(0, 10) ? -1 : 1));
 
   const totalSinFacturarCentimos = periodos.reduce(
     (t, p) => t + p.importeEsperadoCentimos,

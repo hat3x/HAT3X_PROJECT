@@ -171,6 +171,7 @@ try {
     // desde tablas que estaran vacias al principio, y un 200 con el cuerpo en
     // blanco seria indistinguible de una que funciona.
     { ruta: "/dinero/gastos", exige: ["Por plataforma", "Por cliente", "Por proyecto"] },
+    { ruta: "/dinero/cobro", exige: ["Cobro"] },
     { ruta: "/ajustes", exige: [] },
     { ruta: "/ajustes/apariencia", exige: [] },
     { ruta: "/ajustes/notificaciones", exige: [] },
