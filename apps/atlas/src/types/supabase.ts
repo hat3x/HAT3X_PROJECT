@@ -637,7 +637,7 @@ export type Database = {
           id: string
           iva: number
           notas: string | null
-          proveedor: string | null
+          plataforma_id: string | null
           proyecto_id: string | null
           recurrente_id: string | null
           total: number
@@ -652,7 +652,7 @@ export type Database = {
           id?: string
           iva?: number
           notas?: string | null
-          proveedor?: string | null
+          plataforma_id?: string | null
           proyecto_id?: string | null
           recurrente_id?: string | null
           total: number
@@ -667,7 +667,7 @@ export type Database = {
           id?: string
           iva?: number
           notas?: string | null
-          proveedor?: string | null
+          plataforma_id?: string | null
           proyecto_id?: string | null
           recurrente_id?: string | null
           total?: number
@@ -678,6 +678,13 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gastos_plataforma_id_fkey"
+            columns: ["plataforma_id"]
+            isOneToOne: false
+            referencedRelation: "plataformas"
             referencedColumns: ["id"]
           },
           {
@@ -707,7 +714,7 @@ export type Database = {
           dia_del_mes: number
           id: string
           iva: number
-          proveedor: string | null
+          plataforma_id: string | null
           proyecto_id: string | null
         }
         Insert: {
@@ -720,7 +727,7 @@ export type Database = {
           dia_del_mes?: number
           id?: string
           iva?: number
-          proveedor?: string | null
+          plataforma_id?: string | null
           proyecto_id?: string | null
         }
         Update: {
@@ -733,7 +740,7 @@ export type Database = {
           dia_del_mes?: number
           id?: string
           iva?: number
-          proveedor?: string | null
+          plataforma_id?: string | null
           proyecto_id?: string | null
         }
         Relationships: [
@@ -742,6 +749,13 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gastos_recurrentes_plataforma_id_fkey"
+            columns: ["plataforma_id"]
+            isOneToOne: false
+            referencedRelation: "plataformas"
             referencedColumns: ["id"]
           },
           {
@@ -1011,6 +1025,36 @@ export type Database = {
           },
         ]
       }
+      plataformas: {
+        Row: {
+          activa: boolean
+          creado_en: string
+          id: string
+          nombre: string
+          notas: string | null
+          para_que: string | null
+          tipo: string
+        }
+        Insert: {
+          activa?: boolean
+          creado_en?: string
+          id?: string
+          nombre: string
+          notas?: string | null
+          para_que?: string | null
+          tipo: string
+        }
+        Update: {
+          activa?: boolean
+          creado_en?: string
+          id?: string
+          nombre?: string
+          notas?: string | null
+          para_que?: string | null
+          tipo?: string
+        }
+        Relationships: []
+      }
       proyectos: {
         Row: {
           actualizado_en: string
@@ -1253,6 +1297,8 @@ export type Database = {
       atlas_disparar_vigia: { Args: never; Returns: undefined }
       atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
       atlas_es_propietario: { Args: never; Returns: boolean }
+      atlas_materializar_periodos: { Args: { mes: string }; Returns: number }
+      atlas_materializar_recurrentes: { Args: { mes: string }; Returns: number }
       atlas_podar_descubrimientos: { Args: never; Returns: undefined }
       atlas_ve_cliente: { Args: { c: string }; Returns: boolean }
       atlas_ve_proyecto: { Args: { p: string }; Returns: boolean }
