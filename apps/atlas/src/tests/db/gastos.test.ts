@@ -50,7 +50,6 @@ function entrada(parcial: Partial<EntradaGasto> = {}): EntradaGasto {
   return {
     fecha: "2026-08-15",
     concepto: "Vercel Pro",
-    proveedor: "Vercel",
     baseCentimos: 2000,
     ivaCentimos: 420,
     categoria: "infraestructura",

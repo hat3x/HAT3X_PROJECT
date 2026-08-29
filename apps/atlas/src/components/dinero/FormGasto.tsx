@@ -11,8 +11,10 @@ import { aCentimos, hoyEnMadrid } from "@/lib/dinero";
  */
 export function FormGasto({
   clientes,
+  plataformas,
 }: {
   clientes: { id: string; nombre: string }[];
+  plataformas: { id: string; nombre: string }[];
 }) {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -51,7 +53,7 @@ export function FormGasto({
         // mes que le tocaba (ver `hoyEnMadrid`).
         fecha: String(datos.get("fecha") ?? hoyEnMadrid()),
         concepto,
-        proveedor: String(datos.get("proveedor") ?? "") || null,
+        plataformaId: String(datos.get("plataformaId") ?? "") || null,
         baseCentimos: base,
         ivaCentimos: iva,
         categoria: String(datos.get("categoria") ?? "otro") as Categoria,
@@ -83,8 +85,18 @@ export function FormGasto({
           <input name="concepto" className="w-full rounded-lg px-2 py-1.5" />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block">Proveedor</span>
-          <input name="proveedor" className="w-full rounded-lg px-2 py-1.5" />
+          <span className="mb-1 block">Plataforma</span>
+          <select name="plataformaId" className="w-full rounded-lg px-2 py-1.5">
+            {/* Vacío el primero: un gasto suelto —un notario, un billete— no es
+                de ninguna plataforma. Y lo que se pague dos veces, merece
+                serlo. */}
+            <option value="">— ninguna —</option>
+            {plataformas.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="block text-sm">
           <span className="mb-1 block">Base</span>

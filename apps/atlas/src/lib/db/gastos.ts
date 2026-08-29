@@ -24,7 +24,8 @@ export type Gasto = {
   /** ISO AAAA-MM-DD */
   fecha: string;
   concepto: string;
-  proveedor: string | null;
+  plataformaId: string | null;
+  plataformaNombre: string | null;
   base: number;
   iva: number;
   total: number;
@@ -32,6 +33,7 @@ export type Gasto = {
   clienteId: string | null;
   clienteNombre: string | null;
   proyectoId: string | null;
+  proyectoNombre: string | null;
   /**
    * Imputado a alguien concreto. Si es falso es coste de estructura, y NO se
    * reparte entre clientes: repartirlo inventaría una precisión que no existe.
@@ -42,7 +44,7 @@ export type Gasto = {
 export type EntradaGasto = {
   fecha: string;
   concepto: string;
-  proveedor?: string | null;
+  plataformaId?: string | null;
   /** Céntimos enteros. Nunca euros en float. */
   baseCentimos: number;
   /** Céntimos enteros. Nunca euros en float. */
@@ -69,8 +71,12 @@ export async function listarGastos(
   let consulta = sb
     .from("gastos")
     .select(
-      `id, fecha, concepto, proveedor, base, iva, total, categoria,
-       cliente_id, proyecto_id, clientes(nombre)`
+      // Se traen los NOMBRES de los tres ejes, no solo sus identificadores: el
+      // desglose de la pantalla agrupa por ellos, y resolverlos después
+      // obligaría a una consulta por fila.
+      `id, fecha, concepto, base, iva, total, categoria,
+       cliente_id, proyecto_id, plataforma_id,
+       clientes(nombre), proyectos(nombre), plataformas(nombre)`
     )
     .order("fecha", { ascending: false })
     .limit(500);
@@ -82,27 +88,31 @@ export async function listarGastos(
   const { data, error } = await consulta;
   if (error) throw error;
 
-  return (data ?? []).map((g) => {
-    // PostgREST devuelve el join como objeto o como array según la
-    // cardinalidad que infiera. Normalizarlo aquí evita repetir el ternario
-    // en cada consumidor.
-    const c = g.clientes as { nombre: string } | { nombre: string }[] | null;
-    const cliente = Array.isArray(c) ? (c[0] ?? null) : c;
-    return {
-      id: g.id,
-      fecha: g.fecha,
-      concepto: g.concepto,
-      proveedor: g.proveedor,
-      base: Number(g.base),
-      iva: Number(g.iva),
-      total: Number(g.total),
-      categoria: g.categoria,
-      clienteId: g.cliente_id,
-      clienteNombre: cliente?.nombre ?? null,
-      proyectoId: g.proyecto_id,
-      esDirecto: g.cliente_id !== null || g.proyecto_id !== null,
-    };
-  });
+  // PostgREST devuelve cada join como objeto o como array según la
+  // cardinalidad que infiera. Se normaliza en un solo sitio en vez de repetir
+  // el ternario tres veces.
+  const nombreDe = (u: unknown): string | null => {
+    const v = u as { nombre: string } | { nombre: string }[] | null;
+    const uno = Array.isArray(v) ? (v[0] ?? null) : v;
+    return uno?.nombre ?? null;
+  };
+
+  return (data ?? []).map((g) => ({
+    id: g.id,
+    fecha: g.fecha,
+    concepto: g.concepto,
+    base: Number(g.base),
+    iva: Number(g.iva),
+    total: Number(g.total),
+    categoria: g.categoria,
+    clienteId: g.cliente_id,
+    clienteNombre: nombreDe(g.clientes),
+    proyectoId: g.proyecto_id,
+    proyectoNombre: nombreDe(g.proyectos),
+    plataformaId: g.plataforma_id,
+    plataformaNombre: nombreDe(g.plataformas),
+    esDirecto: g.cliente_id !== null || g.proyecto_id !== null,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +138,7 @@ export async function escribirGasto(sb: Sb, entrada: EntradaGasto): Promise<Ok> 
   const { error } = await sb.from("gastos").insert({
     fecha: entrada.fecha,
     concepto: entrada.concepto.trim(),
-    proveedor: entrada.proveedor ?? null,
+    plataforma_id: entrada.plataformaId ?? null,
     base: aEuros(entrada.baseCentimos),
     iva: aEuros(entrada.ivaCentimos),
     total: aEuros(entrada.baseCentimos + entrada.ivaCentimos),

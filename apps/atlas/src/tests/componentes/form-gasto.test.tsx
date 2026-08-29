@@ -11,12 +11,13 @@ vi.mock("@/lib/db/acciones-gastos", () => ({
 }));
 
 const CLIENTES = [{ id: "c1", nombre: "Biodental" }];
+const PLATAFORMAS = [{ id: "pf1", nombre: "Twilio" }];
 
 beforeEach(() => guardar.mockClear());
 
 describe("formulario de gasto", () => {
   it("manda los importes en céntimos, no en euros", async () => {
-    render(<FormGasto clientes={CLIENTES} />);
+    render(<FormGasto clientes={CLIENTES} plataformas={PLATAFORMAS} />);
     const u = userEvent.setup();
 
     await u.type(screen.getByLabelText("Concepto"), "Vercel Pro");
@@ -30,7 +31,7 @@ describe("formulario de gasto", () => {
   });
 
   it("sin concepto no llama a guardar", async () => {
-    render(<FormGasto clientes={CLIENTES} />);
+    render(<FormGasto clientes={CLIENTES} plataformas={PLATAFORMAS} />);
     await userEvent.setup().click(screen.getByRole("button", { name: "Guardar gasto" }));
 
     expect(guardar).not.toHaveBeenCalled();
@@ -38,7 +39,7 @@ describe("formulario de gasto", () => {
   });
 
   it("un importe que no se entiende se explica", async () => {
-    render(<FormGasto clientes={CLIENTES} />);
+    render(<FormGasto clientes={CLIENTES} plataformas={PLATAFORMAS} />);
     const u = userEvent.setup();
 
     await u.type(screen.getByLabelText("Concepto"), "Algo");
@@ -51,7 +52,7 @@ describe("formulario de gasto", () => {
 
   // Sin cliente es estructura, y eso NO es un error: es el caso más común.
   it("sin cliente se guarda igual, como estructura", async () => {
-    render(<FormGasto clientes={CLIENTES} />);
+    render(<FormGasto clientes={CLIENTES} plataformas={PLATAFORMAS} />);
     const u = userEvent.setup();
 
     await u.type(screen.getByLabelText("Concepto"), "Vercel");
@@ -69,7 +70,7 @@ describe("formulario de gasto", () => {
   // mientras el bug original vuelve.
   it("un fallo de red se explica y no deja el botón muerto", async () => {
     guardar.mockRejectedValueOnce(new Error("boom"));
-    render(<FormGasto clientes={CLIENTES} />);
+    render(<FormGasto clientes={CLIENTES} plataformas={PLATAFORMAS} />);
     const u = userEvent.setup();
 
     await u.type(screen.getByLabelText("Concepto"), "Vercel Pro");

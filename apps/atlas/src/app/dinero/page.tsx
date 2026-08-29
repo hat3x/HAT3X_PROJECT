@@ -5,6 +5,7 @@ import { resumenDelMes } from "@/lib/db/resumen-dinero";
 import { listarFacturas } from "@/lib/db/facturas";
 import { listarClientes } from "@/lib/db/clientes";
 import { listarProyectos } from "@/lib/db/proyectos";
+import { listarPlataformas } from "@/lib/db/plataformas";
 import { formatear, aCentimos, hoyEnMadrid } from "@/lib/dinero";
 import { Distintivo } from "@/components/ui/Distintivo";
 import { FormGasto } from "@/components/dinero/FormGasto";
@@ -40,11 +41,12 @@ export default async function PaginaDinero() {
   if (!perfil?.esPropietario) notFound();
 
   const hoy = hoyEnMadrid();
-  const [resumen, facturas, clientes, proyectos] = await Promise.all([
+  const [resumen, facturas, clientes, proyectos, plataformas] = await Promise.all([
     resumenDelMes(sb, hoy),
     listarFacturas(sb, {}),
     listarClientes(sb),
     listarProyectos(sb),
+    listarPlataformas(sb),
   ]);
 
   return (
@@ -82,7 +84,10 @@ export default async function PaginaDinero() {
       />
 
       <h2 className="pt-2 text-lg font-semibold">Apuntar un gasto</h2>
-      <FormGasto clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))} />
+      <FormGasto
+        clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
+        plataformas={plataformas.map((p) => ({ id: p.id, nombre: p.nombre }))}
+      />
 
       <h2 className="pt-2 text-lg font-semibold">Facturas</h2>
 
