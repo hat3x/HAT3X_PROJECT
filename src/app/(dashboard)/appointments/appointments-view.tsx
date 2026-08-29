@@ -460,8 +460,12 @@ export function AppointmentsView({
           />
         </div>
 
-        {/* Boton de dos posiciones. El nombre accesible NO cambia con el estado:
-            se identifica siempre igual y expresa si esta activo con
+        {/* Solo en pantalla ancha: lo unico que abre este boton es arrastrar y
+            redimensionar en la parrilla, y en movil no hay parrilla. Enseniarlo
+            alli seria un control que no hace nada.
+
+            Boton de dos posiciones. El nombre accesible NO cambia con el
+            estado: se identifica siempre igual y expresa si esta activo con
             aria-pressed. Si el nombre cambiara, un lector de pantalla lo
             anunciaria como si fuera otro control distinto. */}
         <Button
@@ -475,7 +479,7 @@ export function AppointmentsView({
               ? "Las citas se pueden arrastrar y cambiar de duración. Pulsa para bloquear."
               : "La agenda está bloqueada: las citas no se mueven sin querer."
           }
-          className="shrink-0 whitespace-nowrap"
+          className="hidden shrink-0 whitespace-nowrap md:inline-flex"
         >
           {editMode ? (
             <Pencil className="h-4 w-4 sm:mr-2" />

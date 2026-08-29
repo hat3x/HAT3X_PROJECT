@@ -143,7 +143,12 @@ export function AppointmentDrawer({
         className={cn(
           // Mismo z-index que el velo: al ir DESPUÉS en el DOM ya queda por
           // encima (orden de pintado entre hermanos con igual z-index).
-          "fixed right-0 top-0 z-40 flex h-full w-[400px] max-w-[92vw] flex-col border-l border-border bg-[var(--glass-panel)] shadow-xl backdrop-blur-xl backdrop-saturate-150 transition-transform duration-200 ease-apple-out",
+          // En movil ocupa todo el ancho: desde el telefono esta ficha es la
+          // UNICA via para modificar una cita (confirmar, reprogramar,
+          // cancelar), asi que dejar un margen inutil de 8 % encoge justo la
+          // pantalla donde se trabaja. De `sm` en adelante queda igual que
+          // siempre — el escritorio no cambia.
+          "fixed right-0 top-0 z-40 flex h-full w-full flex-col border-l border-border bg-[var(--glass-panel)] shadow-xl backdrop-blur-xl backdrop-saturate-150 transition-transform duration-200 ease-apple-out sm:w-[400px] sm:max-w-[92vw]",
           isOpen ? "translate-x-0" : "translate-x-full",
         )}
       >
