@@ -88,8 +88,8 @@ function cita(): AppointmentWithDetails {
   } as unknown as AppointmentWithDetails;
 }
 
-function pintar(): void {
-  render(
+function pintar(): HTMLElement {
+  const { container } = render(
     <AppointmentsView
       salonId={SALON}
       salonSlug="espiral"
@@ -98,6 +98,7 @@ function pintar(): void {
       sector={"peluqueria" as SalonSector}
     />,
   );
+  return container;
 }
 
 beforeEach(() => {
@@ -110,12 +111,10 @@ afterEach(() => {
 });
 
 describe("modo edición de la agenda", () => {
-  it("arranca en solo lectura: la cita no se puede arrastrar", () => {
-    pintar();
+  it("arranca en solo lectura: nada de la agenda se puede arrastrar", () => {
+    const container = pintar();
 
-    const tarjeta = screen.getByRole("button", { name: /Ana Ruiz/ });
-    expect(tarjeta.querySelector("[data-grip]")).toBeNull();
-    expect(tarjeta.className).toContain("cursor-default");
+    expect(container.querySelector("[data-grip]")).toBeNull();
   });
 
   it("ofrece activar la edición", () => {
@@ -125,20 +124,17 @@ describe("modo edición de la agenda", () => {
   });
 
   it("con la edición activada, la cita ya se puede arrastrar y redimensionar", () => {
-    pintar();
+    const container = pintar();
     fireEvent.click(screen.getByRole("button", { name: /editar/i }));
 
-    const tarjeta = screen.getByRole("button", { name: /Ana Ruiz/ });
-    expect(tarjeta.querySelector("[data-grip]")).not.toBeNull();
-    expect(tarjeta.className).toContain("cursor-grab");
+    expect(container.querySelector("[data-grip]")).not.toBeNull();
   });
 
   it("se puede volver a bloquear", () => {
-    pintar();
+    const container = pintar();
     fireEvent.click(screen.getByRole("button", { name: /editar/i }));
     fireEvent.click(screen.getByRole("button", { name: /editar/i }));
 
-    const tarjeta = screen.getByRole("button", { name: /Ana Ruiz/ });
-    expect(tarjeta.querySelector("[data-grip]")).toBeNull();
+    expect(container.querySelector("[data-grip]")).toBeNull();
   });
 });

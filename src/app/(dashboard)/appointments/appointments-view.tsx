@@ -10,6 +10,7 @@ import {
 } from "@/app/(dashboard)/appointments/calendar-view";
 import { RescheduleDialog } from "@/app/(dashboard)/appointments/reschedule-dialog";
 import { AgendaDayKpis } from "@/components/agenda/agenda-day-kpis";
+import { AgendaMobileDay } from "@/components/agenda/agenda-mobile-day";
 import { AgendaSidePanel } from "@/components/agenda/agenda-side-panel";
 import { AppointmentDrawer } from "@/components/agenda/appointment-drawer";
 import { DayGrid } from "@/components/agenda/day-grid";
@@ -517,7 +518,21 @@ export function AppointmentsView({
           <div className="shrink-0 px-4 pt-3 sm:px-6">
             <AgendaDayKpis appointments={dayAppointments} />
           </div>
-          <div className="flex min-h-0 flex-1 gap-4 px-4 pb-4 pt-3 sm:px-6">
+          {/* En movil la parrilla no es incomoda, es ilegible: una rejilla de N
+              columnas pide ~200 px por columna y la altura de la tarjeta la
+              marca la duracion, asi que un cuarto de hora mide 20 px y sale sin
+              texto. Se cambia de forma, no de tamano: lista por horas. */}
+          <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
+            <AgendaMobileDay
+              appointments={dayAppointments}
+              timezone={timezone}
+              isLoading={appointmentsQuery.isPending}
+              isError={appointmentsQuery.isError}
+              onSelectAppointment={(a) => setSelectedAppt(a)}
+            />
+          </div>
+
+          <div className="hidden min-h-0 flex-1 gap-4 px-4 pb-4 pt-3 sm:px-6 md:flex">
             <div className="min-w-0 flex-1">
               <DayGrid
                 appointments={dayAppointments}
