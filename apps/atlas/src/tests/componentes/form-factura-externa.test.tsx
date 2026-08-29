@@ -102,4 +102,29 @@ describe("formulario de factura externa", () => {
     expect(guardar).toHaveBeenCalled();
     expect(numero.value).toBe("");
   });
+
+  // El try/catch/finally se añadió para arreglar un hallazgo de revisión: un
+  // fallo de red en la llamada a la acción de servidor dejaba `enviando` en
+  // `true` para siempre y el botón quedaba muerto hasta recargar la página.
+  // Sin este test, alguien podría mover `setEnviando(false)` dentro del
+  // `try` —un refactor que parece inocente— y la batería seguiría en verde
+  // mientras el bug original vuelve.
+  it("un fallo de red se explica y no deja el botón muerto", async () => {
+    guardar.mockRejectedValueOnce(new Error("boom"));
+    render(<FormFacturaExterna clientes={CLIENTES} proyectos={PROYECTOS} />);
+    const u = userEvent.setup();
+
+    await u.type(screen.getByLabelText("Concepto de la línea 1"), "Diseño web");
+    await u.type(screen.getByLabelText("Importe de la línea 1"), "20");
+    await u.type(screen.getByLabelText("Número"), "7");
+    const boton = screen.getByRole("button", { name: "Registrar factura" });
+    await u.click(boton);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudo guardar. Comprueba la conexión e inténtalo otra vez."
+    );
+    // Esto es lo que de verdad prueba que el `finally` corrió: si `enviando`
+    // se hubiera quedado en `true`, el botón seguiría deshabilitado aquí.
+    expect(boton).toBeEnabled();
+  });
 });

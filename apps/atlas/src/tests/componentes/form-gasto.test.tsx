@@ -60,4 +60,28 @@ describe("formulario de gasto", () => {
 
     expect(guardar).toHaveBeenCalledWith(expect.objectContaining({ clienteId: null }));
   });
+
+  // El try/catch/finally se añadió para arreglar un hallazgo de revisión: un
+  // fallo de red en la llamada a la acción de servidor dejaba `enviando` en
+  // `true` para siempre y el botón quedaba muerto hasta recargar la página.
+  // Sin este test, alguien podría mover `setEnviando(false)` dentro del
+  // `try` —un refactor que parece inocente— y la batería seguiría en verde
+  // mientras el bug original vuelve.
+  it("un fallo de red se explica y no deja el botón muerto", async () => {
+    guardar.mockRejectedValueOnce(new Error("boom"));
+    render(<FormGasto clientes={CLIENTES} />);
+    const u = userEvent.setup();
+
+    await u.type(screen.getByLabelText("Concepto"), "Vercel Pro");
+    await u.type(screen.getByLabelText("Base"), "20");
+    const boton = screen.getByRole("button", { name: "Guardar gasto" });
+    await u.click(boton);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No se pudo guardar. Comprueba la conexión e inténtalo otra vez."
+    );
+    // Esto es lo que de verdad prueba que el `finally` corrió: si `enviando`
+    // se hubiera quedado en `true`, el botón seguiría deshabilitado aquí.
+    expect(boton).toBeEnabled();
+  });
 });
