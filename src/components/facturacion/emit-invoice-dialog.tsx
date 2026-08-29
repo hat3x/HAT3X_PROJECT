@@ -45,6 +45,13 @@ export interface EmitInvoiceDialogProps {
   issuer: InvoiceIssuer;
   /** Cliente de la venta (opcional) para prerellenar el receptor de una factura completa. */
   customer?: InvoiceCustomer | null;
+  /**
+   * Referencia de origen si la venta viene de un volcado histórico
+   * (`pos_sales.migrated_from`). Cuando llega, NO se ofrece emitir: su factura
+   * la emitió el sistema anterior y el servidor rechaza la emisión. Enseñar un
+   * botón que siempre falla es peor que no enseñarlo.
+   */
+  migratedFrom?: string | null;
   triggerLabel?: string;
   triggerVariant?: "default" | "outline" | "secondary" | "ghost";
   triggerSize?: "default" | "sm" | "lg";
@@ -73,6 +80,7 @@ export function EmitInvoiceDialog({
   saleId,
   issuer,
   customer,
+  migratedFrom = null,
   triggerLabel = "Emitir factura",
   triggerVariant = "outline",
   triggerSize = "sm",
@@ -163,6 +171,18 @@ export function EmitInvoiceDialog({
     } catch {
       // El mensaje se muestra desde `actionError` (emit/saveFiscal.error).
     }
+  }
+
+  // Venta traída de un volcado histórico: su documento fiscal ya lo emitió el
+  // sistema anterior, y `emitInvoiceAction` rechaza la emisión. Se dice, en vez
+  // de ofrecer un botón que solo puede terminar en un error.
+  if (migratedFrom !== null) {
+    return (
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
+        Facturado por el sistema anterior
+      </p>
+    );
   }
 
   return (

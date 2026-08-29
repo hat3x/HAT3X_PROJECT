@@ -51,7 +51,7 @@ export default async function TicketDetailPage({
       .maybeSingle(),
     supabase
       .from("pos_sales")
-      .select("customer:customers(full_name, tax_id, address)")
+      .select("migrated_from, customer:customers(full_name, tax_id, address)")
       .eq("id", params.id)
       .eq("salon_id", salonId)
       .maybeSingle(),
@@ -98,6 +98,7 @@ export default async function TicketDetailPage({
               saleId={detail.id}
               issuer={issuer}
               customer={invoiceCustomer}
+              migratedFrom={saleRow.data?.migrated_from ?? null}
             />
             <a
               href={`/api/facturacion/ticket/${detail.id}`}
