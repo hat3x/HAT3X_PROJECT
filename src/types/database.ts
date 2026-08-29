@@ -4080,6 +4080,121 @@ export interface Database {
       };
       // Renglones de medicación de una receta. INMUTABLES cuando la cabecera ya
       // no es 'draft' (trigger prescription_item_guard en BD).
+      // Trazabilidad de implantes y esterilizacion (A3) —
+      // 20260829110000_implant_traceability.
+      implant_placement: {
+        Row: {
+          id: string;
+          salon_id: string;
+          customer_id: string;
+          fdi_code: number;
+          udi_raw: string | null;
+          gtin: string | null;
+          lot: string | null;
+          serial: string | null;
+          ref: string | null;
+          brand: string | null;
+          expiry: string | null;
+          diameter_mm: number | null;
+          length_mm: number | null;
+          placed_at: string;
+          placed_by: string | null;
+          appointment_id: string | null;
+          plan_item_id: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          customer_id: string;
+          fdi_code: number;
+          udi_raw?: string | null;
+          gtin?: string | null;
+          lot?: string | null;
+          serial?: string | null;
+          ref?: string | null;
+          brand?: string | null;
+          expiry?: string | null;
+          diameter_mm?: number | null;
+          length_mm?: number | null;
+          placed_at?: string;
+          placed_by?: string | null;
+          appointment_id?: string | null;
+          plan_item_id?: string | null;
+          notes?: string | null;
+        };
+        Update: {
+          fdi_code?: number;
+          udi_raw?: string | null;
+          gtin?: string | null;
+          lot?: string | null;
+          serial?: string | null;
+          ref?: string | null;
+          brand?: string | null;
+          expiry?: string | null;
+          diameter_mm?: number | null;
+          length_mm?: number | null;
+          placed_by?: string | null;
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
+      sterilization_cycle: {
+        Row: {
+          id: string;
+          salon_id: string;
+          autoclave_id: string;
+          cycle_number: string;
+          program: string | null;
+          started_at: string;
+          result: "ok" | "fallido";
+          operator_id: string | null;
+          ticket_path: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          autoclave_id: string;
+          cycle_number: string;
+          program?: string | null;
+          started_at: string;
+          result: "ok" | "fallido";
+          operator_id?: string | null;
+          ticket_path?: string | null;
+          notes?: string | null;
+        };
+        Update: {
+          program?: string | null;
+          result?: "ok" | "fallido";
+          ticket_path?: string | null;
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
+      sterilization_use: {
+        Row: {
+          id: string;
+          salon_id: string;
+          cycle_id: string;
+          appointment_id: string;
+          used_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          cycle_id: string;
+          appointment_id: string;
+          used_at?: string;
+        };
+        Update: { used_at?: string };
+        Relationships: [];
+      };
       prescription_item: {
         Row: {
           id: string;

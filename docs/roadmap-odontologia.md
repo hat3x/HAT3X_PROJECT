@@ -245,6 +245,35 @@ más facturan.
 **Hecho cuando.** Desde la ficha de un paciente se ve qué implantes lleva con su UDI, y desde un
 lote se listan todos los pacientes afectados.
 
+**Estado (2026-08-30): a medias, y con lo esencial en pie.**
+
+| Pieza | Dónde | Estado |
+|---|---|---|
+| Lector de UDI GS1 (paréntesis y crudo, fechas, AI desconocidos) | `src/lib/dental/udi.ts` | ✅ 14 tests |
+| Tablas + RLS (`implant_placement`, `sterilization_cycle`, `sterilization_use`) | migración `20260829110000` | ✅ aplicada |
+| Validación del registro | `src/lib/validations/implant.ts` | ✅ 8 tests |
+| Acción de registro con puerta de sector | `expediente/implant-actions.ts` | ✅ 8 tests |
+| Consultas por paciente y **por lote** | `src/lib/queries/implants.ts` | ✅ 4 tests |
+| Lista de implantes (ficha y alerta) | `components/dental/implant-list.tsx` | ✅ 7 tests |
+| **Buscar por lote** → pacientes + teléfono marcable | `/expediente/lotes` | ✅ |
+| Formulario de alta desde la ficha, con cámara | — | ⛔ pendiente |
+| Ciclos de esterilización (alta y enlace a cita) | — | ⛔ pendiente |
+| Informe exportable | — | ⛔ pendiente |
+
+Decisiones que sostienen que el registro sirva:
+
+- **El lector falla en cerrado.** Un GTIN a medias o una caducidad imposible se rechazan en vez
+  de guardarse: en la ficha parecerían un dato bueno y fallarían el día que se buscan. Los AI que
+  no interpretamos se conservan, y `udi_raw` guarda el código tal cual.
+- **Día `00` es fin de mes** (regla GS1). Leerlo literal da una fecha inválida o el último día del
+  mes anterior.
+- **`customer_id` es `ON DELETE RESTRICT` y no hay política de `DELETE`.** Una trazabilidad que
+  desaparece al borrar la ficha no es trazabilidad; corregir un error es un `UPDATE`, con rastro.
+- **Un lote vacío no consulta.** Un `eq` con cadena vacía podría devolver media clínica y hacer
+  creer que la alerta afecta a todos.
+- **La búsqueda por lote trae teléfono marcable.** Lo siguiente que ocurre tras mirar esa lista es
+  una llamada.
+
 ---
 
 ## A4 · Receta electrónica privada homologada (SREP) — **M**
