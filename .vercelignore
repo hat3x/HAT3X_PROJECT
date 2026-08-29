@@ -25,3 +25,10 @@ supabase/.temp/
 
 # Documentación y planes: no intervienen en el build
 docs/
+
+# Secretos. `.env.local` lleva SUPABASE_SERVICE_ROLE_KEY, TWILIO_AUTH_TOKEN y
+# los tokens de Vercel: no tiene por qué salir de esta máquina. Las variables de
+# produccion se configuran en el panel del proyecto, no viajan en la subida.
+.env
+.env.*
+!.env.example
