@@ -242,19 +242,55 @@ export async function registrarFacturaExterna(
     // PostgREST no da transacciones entre dos llamadas, así que la cabecera se
     // retira a mano. Sin esto quedaría una factura de 0 € que parece real y que
     // descuadraría cualquier suma del periodo.
-    await sb.from("facturas").delete().eq("id", data.id);
+    const { error: eRescate } = await sb.from("facturas").delete().eq("id", data.id);
+
+    // Se distingue el caso porque cada uno exige una acción distinta de quien
+    // lo lea: si el rescate funcionó, basta con saber por qué fallaron las
+    // líneas para poder reintentar. Si además falló el rescate, hay que decir
+    // que ha quedado una factura vacía ocupando esa serie-número, o nadie
+    // sabrá que hay basura que borrar a mano y por qué el reintento choca con
+    // un número «ya usado».
+    if (eRescate) {
+      return {
+        ok: false,
+        error:
+          `No se pudieron guardar las líneas (${eLineas.message}), y además ` +
+          `quedó una factura vacía en ${entrada.serie}-${entrada.numero} que ` +
+          `hay que borrar a mano.`,
+      };
+    }
     return { ok: false, error: eLineas.message };
   }
 
   return { ok: true };
 }
 
-/** `fecha = null` deshace el cobro. */
+/**
+ * `fecha = null` deshace el cobro.
+ *
+ * Comprueba propietario y fila afectada a mano, porque un `update` cuyo
+ * `using()` de RLS filtra la fila NO da error: afecta a cero filas y
+ * Supabase lo cuenta como éxito. Sin esto, un colaborador —o un `id` que no
+ * existe— recibiría `{ ok: true }` sin haber cobrado nada.
+ */
 export async function marcarCobrada(
   sb: Sb,
   id: string,
   fecha: string | null
 ): Promise<Ok> {
-  const { error } = await sb.from("facturas").update({ cobrada_en: fecha }).eq("id", id);
-  return error ? { ok: false, error: error.message } : { ok: true };
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) {
+    return { ok: false, error: "Solo el propietario puede gestionar facturas." };
+  }
+
+  const { data, error } = await sb
+    .from("facturas")
+    .update({ cobrada_en: fecha })
+    .eq("id", id)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { ok: false, error: "Esa factura no existe." };
+  }
+  return { ok: true };
 }

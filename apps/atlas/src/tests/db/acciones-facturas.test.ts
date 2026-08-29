@@ -218,4 +218,30 @@ describe("marcar cobrada", () => {
     [tras] = await listarFacturas(sbDuenyo, { clienteId: idCliente });
     expect(tras!.cobradaEn).toBeNull();
   });
+
+  it("un colaborador no puede marcar cobrada", async () => {
+    await registrarFacturaExterna(sbDuenyo, entrada());
+    const [f] = await listarFacturas(sbDuenyo, { clienteId: idCliente });
+
+    const r = await marcarCobrada(sbColaborador, f!.id, "2026-09-01");
+    expect(r).toEqual({
+      ok: false,
+      error: "Solo el propietario puede gestionar facturas.",
+    });
+
+    // Y lo que de verdad importa: que NO se haya cobrado.
+    const [tras] = await listarFacturas(sbDuenyo, { clienteId: idCliente });
+    expect(tras!.cobradaEn).toBeNull();
+  });
+
+  // Un id inexistente producía la misma mentira que el caso del colaborador:
+  // cero filas afectadas y un {ok:true} que no había hecho nada.
+  it("una factura que no existe no se cobra en silencio", async () => {
+    const r = await marcarCobrada(
+      sbDuenyo,
+      "00000000-0000-0000-0000-000000000000",
+      "2026-09-01"
+    );
+    expect(r).toEqual({ ok: false, error: "Esa factura no existe." });
+  });
 });
