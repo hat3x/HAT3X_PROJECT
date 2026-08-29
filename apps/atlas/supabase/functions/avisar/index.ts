@@ -11,6 +11,7 @@ import { clasificar, repartirSellos, type FilaPendiente } from "./pendientes.ts"
 import { firmar } from "./firma.ts";
 import { enviarCorreo, type AvisoEnviable } from "./correo.ts";
 import { enviarPush } from "./push.ts";
+import { pendientesDeCobro } from "./cobro.ts";
 
 const VENTANA_MS = 2 * 60 * 1000;
 const CADUCIDAD_ENLACE_MS = 24 * 60 * 60 * 1000;
@@ -49,6 +50,16 @@ Deno.serve(async (peticion: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false } }
   );
+
+  // La misma función sirve a dos cadencias: las incidencias van cada minuto y
+  // el cobro una vez al día, disparados por dos tareas de cron distintas. Se
+  // reutiliza esta y no se escribe una nueva porque una nueva necesitaría su
+  // propia copia de `push.ts` y `correo.ts`, y dos copias del envío divergen
+  // siempre.
+  const cuerpo = await peticion.json().catch(() => ({}));
+  if (cuerpo?.cobro === true) {
+    return await avisarDeCobro(sb);
+  }
 
   const ahora = new Date().toISOString();
 
@@ -222,10 +233,16 @@ async function correoDe(sb: SupabaseClient, usuarioId: string): Promise<string> 
 async function registrar(
   sb: SupabaseClient,
   usuarioId: string,
-  incidenciaId: string,
+  // Un aviso de cobro no tiene incidencia: admite `null` para que esa rama
+  // pueda registrar sin fingir una que no existe.
+  incidenciaId: string | null,
   canal: "push" | "email",
   ok: boolean,
-  error: string | null
+  error: string | null,
+  // Al final y con valor por defecto para que las dos llamadas que ya
+  // existían (las de incidencia, arriba) no tengan que tocarse: siguen
+  // pasando sus mismos seis argumentos y siguen quedando marcadas 'incidencia'.
+  tipo: "incidencia" | "cobro" = "incidencia"
 ): Promise<void> {
   // Los fallos se registran igual que los aciertos: una suscripción caducada o
   // un canal sin configurar tienen que verse, no perderse en silencio.
@@ -235,5 +252,142 @@ async function registrar(
     canal,
     ok,
     error,
+    tipo,
+  });
+}
+
+/**
+ * El resumen diario de cobro: qué lleva sin facturarse y qué sin cobrarse.
+ *
+ * No manda nada si no hay nada. Un aviso diario que llega vacío se convierte
+ * en ruido, y el ruido se deja de leer — con lo que el día que sí importe
+ * tampoco se leerá.
+ *
+ * No usa `repartir`: esa función construye un enlace firmado para silenciar
+ * UNA incidencia, y un aviso de cobro no tiene incidencia que silenciar.
+ * Forzar la firma habría sido más código para menos verdad; en su lugar se
+ * llama a `enviarPush` y `enviarCorreo` directamente, que es lo que
+ * `repartir` hace por dentro.
+ */
+async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const mesEnCurso = `${hoy.slice(0, 7)}-01`;
+
+  // Se lee `contratos_visibles`, no `contratos`: la tabla tiene la lectura
+  // revocada para los roles de API (`20260815100300_rls.sql`) y embeber
+  // `contratos` aquí haría fallar la consulta con «permission denied for
+  // table contratos» aunque esta función use la service_role key para todo
+  // lo demás. Se escribe igual que `src/lib/db/cobro.ts` (misma selección,
+  // mismos filtros, mismo orden): la misma pregunta hecha de dos formas
+  // distintas puede acabar respondiendo cosas distintas, y entonces el aviso
+  // diario y la pantalla dirían números que no cuadran.
+  const { data: per } = await sb
+    .from("periodos_contrato")
+    .select(
+      `contrato_id, periodo, importe_esperado,
+       contratos_visibles!inner(clientes!inner(nombre))`
+    )
+    .is("factura_id", null)
+    .lt("periodo", mesEnCurso)
+    .order("periodo");
+
+  const { data: fac } = await sb
+    .from("facturas")
+    .select("id, serie, numero, total, fecha_vencimiento, clientes!inner(nombre)")
+    .is("cobrada_en", null)
+    .eq("estado", "emitida")
+    .order("fecha_vencimiento");
+
+  // PostgREST devuelve cada relación como objeto o como array según la
+  // cardinalidad que infiera. Se normaliza en un solo sitio, igual que en
+  // `src/lib/db/cobro.ts`.
+  const uno = (u: unknown) => (Array.isArray(u) ? u[0] : u);
+
+  const cobro = pendientesDeCobro(
+    (per ?? []).map((p) => ({
+      contratoId: p.contrato_id,
+      clienteNombre: uno(uno(p.contratos_visibles).clientes).nombre,
+      periodo: p.periodo,
+      // Ningún float toca un importe: el numeric(12,2) de Postgres se
+      // convierte a céntimos enteros aquí, una sola vez, al leerlo.
+      importeEsperadoCentimos: Math.round(Number(p.importe_esperado) * 100),
+    })),
+    (fac ?? []).map((f) => ({
+      id: f.id,
+      serie: f.serie,
+      numero: f.numero,
+      clienteNombre: uno(f.clientes).nombre,
+      totalCentimos: Math.round(Number(f.total) * 100),
+      fechaVencimiento: f.fecha_vencimiento,
+    })),
+    hoy
+  );
+
+  if (!cobro.hayAlgo) {
+    return new Response(JSON.stringify({ enviados: 0, motivo: "nada pendiente" }), {
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const enviable: AvisoEnviable = {
+    titulo: cobro.titulo,
+    cuerpo: cobro.cuerpo,
+    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/`,
+  };
+
+  const claves = {
+    publica: Deno.env.get("VAPID_PUBLICA") ?? "",
+    privada: Deno.env.get("VAPID_PRIVADA") ?? "",
+    contacto: Deno.env.get("VAPID_CONTACTO") ?? "mailto:info@hat3x.com",
+  };
+  const apiKeyCorreo = Deno.env.get("RESEND_API_KEY") ?? "";
+
+  const { data: perfiles } = await sb
+    .from("perfiles")
+    .select("id")
+    .eq("es_propietario", true);
+
+  let enviados = 0;
+  for (const p of perfiles ?? []) {
+    // El candado del día. Si el cron se dispara dos veces, el segundo no manda
+    // nada: un aviso repetido enseña que el sistema no se controla a sí mismo.
+    // Escrita así (usuario_id + tipo='cobro' + enviada_en), la consulta encaja
+    // exactamente con el índice parcial `notificaciones_cobro_del_dia`.
+    const { data: yaHoy } = await sb
+      .from("notificaciones")
+      .select("id")
+      .eq("usuario_id", p.id)
+      .eq("tipo", "cobro")
+      .gte("enviada_en", `${hoy}T00:00:00Z`)
+      .limit(1);
+    if (yaHoy && yaHoy.length > 0) continue;
+
+    const { data: suscripciones } = await sb
+      .from("suscripciones_push")
+      .select("id, endpoint, p256dh, auth")
+      .eq("usuario_id", p.id);
+
+    for (const s of suscripciones ?? []) {
+      const r = await enviarPush(
+        { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
+        enviable,
+        claves
+      );
+      await registrar(sb, p.id, null, "push", r.ok, r.error, "cobro");
+      if (r.ok) enviados++;
+      // Una suscripción que el navegador tiró se borra: si no, se reintentaría
+      // en cada aviso, para siempre.
+      if (r.caducada) await sb.from("suscripciones_push").delete().eq("id", s.id);
+    }
+
+    // El correo se intenta aunque el push haya salido: es el rastro escrito.
+    const correo = await correoDe(sb, p.id);
+    const rc = await enviarCorreo(correo, enviable, apiKeyCorreo, fetch);
+    await registrar(sb, p.id, null, "email", rc.ok, rc.error, "cobro");
+    if (rc.ok) enviados++;
+  }
+
+  return new Response(JSON.stringify({ enviados }), {
+    headers: { "content-type": "application/json" },
   });
 }

@@ -24,19 +24,23 @@ function leer(ruta: string): string {
 }
 
 describe.each([
-  ["vigia", "incidencias", "maquina"],
-  ["vigia", "incidencias", "evaluar"],
-  ["avisar", "alertas", "agrupar"],
-  ["avisar", "alertas", "firma"],
-  ["avisar", "alertas", "pendientes"],
-])("copia de %s/%s.ts para Deno", (funcion, carpeta, nombre) => {
-  const original = leer(`src/lib/${carpeta}/${nombre}.ts`);
-  const copia = leer(`supabase/functions/${funcion}/${nombre}.ts`);
+  ["vigia", "incidencias", "maquina", "maquina"],
+  ["vigia", "incidencias", "evaluar", "evaluar"],
+  ["avisar", "alertas", "agrupar", "agrupar"],
+  ["avisar", "alertas", "firma", "firma"],
+  ["avisar", "alertas", "pendientes", "pendientes"],
+  // El original vive en `cobro/pendientes.ts`, pero en la carpeta de la Edge
+  // Function ya hay un `pendientes.ts` — el de incidencias. Se copia con
+  // nombre distinto, `cobro.ts`, para no pisarlo.
+  ["avisar", "cobro", "pendientes", "cobro"],
+])("copia de %s/%s.ts para Deno", (funcion, carpeta, nombreOriginal, nombreCopia) => {
+  const original = leer(`src/lib/${carpeta}/${nombreOriginal}.ts`);
+  const copia = leer(`supabase/functions/${funcion}/${nombreCopia}.ts`);
 
   it("lleva la cabecera que avisa de que es una copia", () => {
     const lineas = copia.split("\n").slice(0, 3);
     expect(lineas[0]).toBe(
-      `// COPIA de src/lib/${carpeta}/${nombre}.ts — NO editar aquí.`
+      `// COPIA de src/lib/${carpeta}/${nombreOriginal}.ts — NO editar aquí.`
     );
     expect(lineas[1]).toBe(CABECERA_2);
     expect(lineas[2]).toBe(CABECERA_3);
