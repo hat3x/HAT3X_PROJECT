@@ -1,4 +1,7 @@
 import type { Sb } from "./clientes";
+import { obtenerPerfil } from "./perfil";
+import { desglosar } from "@/lib/dinero";
+import type { Ok } from "./proyectos";
 
 export type LineaFactura = {
   id: string;
@@ -131,4 +134,127 @@ export async function obtenerFactura(sb: Sb, id: string): Promise<Factura | null
     .maybeSingle();
   if (error) throw error;
   return data ? aFactura(data as unknown as Fila) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Escritura. Recibe `sb` y hace todo el trabajo —validar, comprobar el rol y
+// escribir— para que se pueda probar contra la base. El envoltorio de
+// `acciones-facturas.ts` solo resuelve el cliente de servidor y revalida.
+// ---------------------------------------------------------------------------
+
+export type EntradaLinea = {
+  concepto: string;
+  descripcion?: string | null;
+  cantidad: number;
+  /** Céntimos enteros. Nunca euros en float. */
+  precioUnitarioCentimos: number;
+  proyectoId?: string | null;
+};
+
+export type EntradaFactura = {
+  clienteId: string;
+  serie: string;
+  numero: number;
+  fechaEmision: string;
+  fechaVencimiento?: string | null;
+  ivaTipo: number;
+  lineas: EntradaLinea[];
+  notas?: string | null;
+};
+
+/** Céntimos → el `numeric(12,2)` que espera Postgres. */
+function aEuros(centimos: number): number {
+  return centimos / 100;
+}
+
+/**
+ * Registra una factura emitida FUERA de Atlas.
+ *
+ * `origen = 'externa'` y sin cadena de huellas: registrar una factura ajena es
+ * contabilidad, no emisión. La emisión propia llega en el plan 2E.
+ *
+ * Nace `emitida` y no `borrador`: es una factura que ya existe y que alguien ya
+ * recibió. Un borrador es algo que todavía no se ha mandado.
+ */
+export async function registrarFacturaExterna(
+  sb: Sb,
+  entrada: EntradaFactura
+): Promise<Ok> {
+  if (entrada.lineas.length === 0) {
+    return { ok: false, error: "Una factura necesita al menos una línea." };
+  }
+
+  // RLS lo impediría igual, pero así el mensaje es claro en vez de un 42501.
+  const perfil = await obtenerPerfil(sb);
+  if (!perfil?.esPropietario) {
+    return { ok: false, error: "Solo el propietario puede gestionar facturas." };
+  }
+
+  const lineas = entrada.lineas.map((l, i) => ({
+    orden: i,
+    concepto: l.concepto,
+    descripcion: l.descripcion ?? null,
+    cantidad: l.cantidad,
+    precio_unitario: aEuros(l.precioUnitarioCentimos),
+    importe: aEuros(Math.round(l.precioUnitarioCentimos * l.cantidad)),
+    proyecto_id: l.proyectoId ?? null,
+  }));
+
+  const baseCentimos = entrada.lineas.reduce(
+    (suma, l) => suma + Math.round(l.precioUnitarioCentimos * l.cantidad),
+    0
+  );
+  const d = desglosar(baseCentimos, entrada.ivaTipo);
+
+  const { data, error } = await sb
+    .from("facturas")
+    .insert({
+      origen: "externa",
+      serie: entrada.serie,
+      numero: entrada.numero,
+      cliente_id: entrada.clienteId,
+      fecha_emision: entrada.fechaEmision,
+      fecha_vencimiento: entrada.fechaVencimiento ?? null,
+      base: aEuros(d.base),
+      iva_tipo: entrada.ivaTipo,
+      iva_cuota: aEuros(d.cuota),
+      total: aEuros(d.total),
+      estado: "emitida",
+      notas: entrada.notas ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    return error.code === "23505"
+      ? {
+          ok: false,
+          error: `Ya hay una factura con ese número en la serie ${entrada.serie}.`,
+        }
+      : { ok: false, error: error.message };
+  }
+
+  const { error: eLineas } = await sb
+    .from("factura_lineas")
+    .insert(lineas.map((l) => ({ ...l, factura_id: data.id })));
+
+  if (eLineas) {
+    // PostgREST no da transacciones entre dos llamadas, así que la cabecera se
+    // retira a mano. Sin esto quedaría una factura de 0 € que parece real y que
+    // descuadraría cualquier suma del periodo.
+    await sb.from("facturas").delete().eq("id", data.id);
+    return { ok: false, error: eLineas.message };
+  }
+
+  return { ok: true };
+}
+
+/** `fecha = null` deshace el cobro. */
+export async function marcarCobrada(
+  sb: Sb,
+  id: string,
+  fecha: string | null
+): Promise<Ok> {
+  const { error } = await sb.from("facturas").update({ cobrada_en: fecha }).eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
