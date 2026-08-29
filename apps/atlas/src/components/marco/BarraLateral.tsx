@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { LayoutGrid, Boxes, Users, BellRing, Settings } from "lucide-react";
+import { LayoutGrid, Boxes, Users, BellRing, Settings, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ENTRADAS = [
@@ -8,6 +8,7 @@ const ENTRADAS = [
   { href: "/proyectos", etiqueta: "Proyectos", Icono: Boxes },
   { href: "/clientes", etiqueta: "Clientes", Icono: Users },
   { href: "/alertas", etiqueta: "Alertas", Icono: BellRing },
+  { href: "/dinero", etiqueta: "Dinero", Icono: Wallet },
   { href: "/ajustes", etiqueta: "Ajustes", Icono: Settings },
 ] as const;
 

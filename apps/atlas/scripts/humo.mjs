@@ -141,6 +141,10 @@ try {
     { ruta: "/clientes", exige: clientes.slice(0, 3).map((c) => c.nombre) },
     { ruta: "/proyectos", exige: proyectos.slice(0, 3).map((p) => p.nombre) },
     { ruta: "/alertas", exige: [] },
+    // `exige` con contenido y no vacío: la pantalla se pinta desde tablas que
+    // al principio estarán vacías, y un 200 con el cuerpo en blanco sería
+    // indistinguible de una que funciona.
+    { ruta: "/dinero", exige: ["Dinero", "Coste de estructura"] },
     { ruta: "/ajustes", exige: [] },
     { ruta: "/ajustes/apariencia", exige: [] },
     { ruta: "/ajustes/notificaciones", exige: [] },
