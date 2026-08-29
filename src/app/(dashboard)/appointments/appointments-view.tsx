@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, Pencil, Plus, Search } from "lucide-react";
 
 import { AppointmentForm } from "@/app/(dashboard)/appointments/appointment-form";
 import {
@@ -99,6 +99,17 @@ export function AppointmentsView({
 }: AppointmentsViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
+  /**
+   * La agenda arranca en SOLO LECTURA y hay que pedir editar a propósito.
+   *
+   * Sin esto, arrastrar para ver la tarde y arrastrar para mover una cita son
+   * el mismo gesto: un roce cambia la hora de una paciente y nadie se entera.
+   * Consultar no exige nada; solo se protege lo que modifica.
+   *
+   * No se recuerda entre visitas a propósito: si volviera activado, la
+   * protección dejaría de proteger justo cuando hace falta.
+   */
+  const [editMode, setEditMode] = useState(false);
   const [date, setDate] = useState<string>(today);
   const [view, setView] = useState<"dia" | CalendarMode>("dia");
   const [hiddenProfIds, setHiddenProfIds] = useState<Set<string>>(new Set());
@@ -448,6 +459,31 @@ export function AppointmentsView({
           />
         </div>
 
+        {/* Boton de dos posiciones. El nombre accesible NO cambia con el estado:
+            se identifica siempre igual y expresa si esta activo con
+            aria-pressed. Si el nombre cambiara, un lector de pantalla lo
+            anunciaria como si fuera otro control distinto. */}
+        <Button
+          type="button"
+          variant={editMode ? "default" : "outline"}
+          onClick={() => setEditMode((v) => !v)}
+          aria-pressed={editMode}
+          aria-label="Editar la agenda"
+          title={
+            editMode
+              ? "Las citas se pueden arrastrar y cambiar de duración. Pulsa para bloquear."
+              : "La agenda está bloqueada: las citas no se mueven sin querer."
+          }
+          className="shrink-0 whitespace-nowrap"
+        >
+          {editMode ? (
+            <Pencil className="h-4 w-4 sm:mr-2" />
+          ) : (
+            <Lock className="h-4 w-4 sm:mr-2" />
+          )}
+          <span className="hidden sm:inline">{editMode ? "Editando" : "Editar"}</span>
+        </Button>
+
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <Button
             onClick={() => setCreateOpen(true)}
@@ -494,7 +530,7 @@ export function AppointmentsView({
                 overdueByCustomer={overdueMap}
                 onSelectAppointment={(a) => setSelectedAppt(a)}
                 onSelectSlot={() => setCreateOpen(true)}
-                onMoveAppointment={handleMoveAppointment}
+                onMoveAppointment={editMode ? handleMoveAppointment : undefined}
               />
             </div>
             <aside className="hidden w-[236px] shrink-0 overflow-y-auto lg:block">
@@ -523,7 +559,7 @@ export function AppointmentsView({
               selectDate(d);
               setCreateOpen(true);
             }}
-            onMoveAppointment={handleMoveAppointmentWeek}
+            onMoveAppointment={editMode ? handleMoveAppointmentWeek : undefined}
           />
         </div>
       ) : (
