@@ -101,32 +101,61 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  // Cada borrado en su propio try: un fallo en el primero no puede impedir los
-  // siguientes, o el fichero quedaría inservible tras una corrida cortada.
+  // Cada borrado va en su propio `try`: si uno falla, no debe impedir los
+  // siguientes, y el cierre de `pg` en el `finally` está garantizado pase lo
+  // que pase. Esta limpieza es solo cortesía cuando todo sale bien; la red de
+  // seguridad real es la limpieza defensiva de `beforeAll`.
   try {
-    await pg.query(`DELETE FROM periodos_contrato WHERE contrato_id = $1`, [idContrato]);
-  } catch {}
-  try {
-    await pg.query(`DELETE FROM facturas WHERE cliente_id = $1`, [idCliente]);
-  } catch {}
-  try {
-    await pg.query(`DELETE FROM contratos WHERE id = $1`, [idContrato]);
-  } catch {}
-  try {
-    await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
-  } catch {}
-  try {
-    await pg.query(`DELETE FROM proyectos WHERE id = $1`, [idProyecto]);
-  } catch {}
-  try {
-    const { data: lista } = await admin.auth.admin.listUsers();
-    for (const u of lista?.users ?? []) {
-      if (u.email === CORREO_DUENYO || u.email === CORREO_COLAB) {
-        await admin.auth.admin.deleteUser(u.id);
+    try {
+      if (idContrato !== "") {
+        await pg.query(`DELETE FROM periodos_contrato WHERE contrato_id = $1`, [
+          idContrato,
+        ]);
       }
+    } catch {
+      // Se limpia en la siguiente corrida, en el `beforeAll`.
     }
-  } catch {}
-  await pg.end();
+    try {
+      if (idCliente !== "") {
+        await pg.query(`DELETE FROM facturas WHERE cliente_id = $1`, [idCliente]);
+      }
+    } catch {
+      // Idem.
+    }
+    try {
+      if (idContrato !== "") {
+        await pg.query(`DELETE FROM contratos WHERE id = $1`, [idContrato]);
+      }
+    } catch {
+      // Idem.
+    }
+    try {
+      if (idCliente !== "") {
+        await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
+      }
+    } catch {
+      // Idem.
+    }
+    try {
+      if (idProyecto !== "") {
+        await pg.query(`DELETE FROM proyectos WHERE id = $1`, [idProyecto]);
+      }
+    } catch {
+      // Idem.
+    }
+    try {
+      const { data: lista } = await admin.auth.admin.listUsers();
+      for (const u of lista?.users ?? []) {
+        if (u.email === CORREO_DUENYO || u.email === CORREO_COLAB) {
+          await admin.auth.admin.deleteUser(u.id);
+        }
+      }
+    } catch {
+      // Idem: por correo, en la limpieza defensiva de la próxima corrida.
+    }
+  } finally {
+    await pg.end();
+  }
 });
 
 async function periodo(mes: string, conFactura: string | null = null) {
