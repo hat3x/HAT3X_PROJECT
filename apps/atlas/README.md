@@ -146,6 +146,7 @@ src/
 │   ├── cripto/      AES-256-GCM sobre WebCrypto (no node:crypto — Deno tiene que poder usarlo)
 │   ├── db/          Consultas y acciones de servidor, separadas a propósito (ver abajo)
 │   ├── descubrir/   El censo de Kairos: leerlo, decidir qué mover y aplicarlo
+│   ├── dinero.ts    Los importes, en céntimos enteros. Ningún float toca un euro
 │   ├── incidencias/ La máquina de estados
 │   └── tema/        Dos temas × cinco paletas, en tokens CSS
 ├── middleware.ts   El guardia. Su `matcher` deja fuera el manifiesto y el service worker

@@ -9,7 +9,6 @@ import {
   readPendingCheckpoints,
   updateClientNotes,
 } from '@/lib/supabase';
-import { recordTransaction, queryFinances } from '@/lib/finance';
 import {
   addCompanyMemory,
   readCompanyBrainContext,
@@ -19,12 +18,7 @@ import {
 } from '@/lib/company-brain';
 import { HAT3X_KNOWLEDGE } from '@/lib/hat3x-knowledge';
 import { buildAidenSystemPrompt } from '@/core/aiden-system-prompt';
-import type {
-  CommandResult,
-  ExecutivePlan,
-  RecordTransactionInput,
-  TransactionCategory,
-} from '@/types/jarvis';
+import type { CommandResult, ExecutivePlan } from '@/types/jarvis';
 
 const PROJECT_ROOT =
   process.env['HAT3X_PROJECT_ROOT'] ?? 'C:\\Users\\josem\\Desktop\\HAT3X\\CLAUDE\\HAT3X';
@@ -802,21 +796,10 @@ async function executeTool(
     return JSON.stringify(result);
   }
 
-  if (name === 'record_transaction') {
-    const result = await recordTransaction(
-      input as unknown as RecordTransactionInput & { category: TransactionCategory }
-    );
-    actionRef.value = { type: 'transaction_recorded', transaction: result };
-    return JSON.stringify(result);
-  }
-
-  if (name === 'query_finances') {
-    const result = await queryFinances(
-      input['month'] as number | undefined,
-      input['year'] as number | undefined
-    );
-    actionRef.value = { type: 'financial_summary', summary: result };
-    return JSON.stringify(result);
+  if (name === 'record_transaction' || name === 'query_finances') {
+    // finance.ts está jubilado desde el bloque 2A: el dinero vive en Atlas,
+    // no en `hat3x_transactions`. No hay nada que llamar aquí.
+    return 'Eso ahora se apunta en Atlas, en /dinero. Jarvis ya no lleva las cuentas.';
   }
 
   if (name === 'record_recurring_expense') {

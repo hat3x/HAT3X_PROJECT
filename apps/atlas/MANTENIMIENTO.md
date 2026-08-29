@@ -260,7 +260,10 @@ select atlas_consolidar_retencion();
 | Mes | Confirmar que llega el latido a healthchecks.io, si está dado de alta |
 | Mes | Revisar `credencial_usos`: quién ha descifrado qué |
 | Mes | Mirar `descubrimientos` por `ok = false`: un descubridor roto no se nota hasta que un cliente nuevo lleva semanas sin vigilar |
+| Mes | Comprobar que los recibos fijos se materializaron: `select count(*) from gastos where recurrente_id is not null and date_trunc('month', fecha) = date_trunc('month', current_date);` |
 | Trimestre | Comprobar el tamaño de la base |
+
+**Un gasto recurrente puede estar apuntado en dos sitios a la vez.** `apps/jarvis/src/lib/company-brain.ts` todavía escribe en `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue` — su propia copia de `gastos_recurrentes`, `gastos` y `facturas` — porque jubilarlas es un plan aparte (bloque 2A solo jubiló `hat3x_transactions`, vía `finance.ts`). Si una suma no cuadra, antes de sospechar de Atlas mira si ese gasto se dio de alta también desde jarvis.
 
 ---
 

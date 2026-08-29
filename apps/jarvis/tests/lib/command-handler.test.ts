@@ -10,11 +10,6 @@ vi.mock('@/lib/supabase', () => ({
   createClientRecord: vi.fn(),
 }));
 
-vi.mock('@/lib/finance', () => ({
-  recordTransaction: vi.fn(),
-  queryFinances: vi.fn(),
-}));
-
 vi.mock('@/lib/company-brain', () => ({
   readCompanyBrainContext: vi.fn().mockResolvedValue({
     monthlyRecurringExpenses: 420,
@@ -38,34 +33,12 @@ vi.mock('openai', () => ({
 }));
 
 import OpenAI from 'openai';
-import { recordTransaction, queryFinances } from '@/lib/finance';
 import { recordRecurringExpense, recordProjectRevenue, recordProjectCost, addCompanyMemory } from '@/lib/company-brain';
 import { createClientRecord, createTask, findClients, updateClientNotes } from '@/lib/supabase';
 import { handleCommand } from '@/lib/command-handler';
-import type { BrainWriteResult, DbTransaction, FinancialSummary, DbTask, DbClient } from '@/types/jarvis';
+import type { BrainWriteResult, DbTask, DbClient } from '@/types/jarvis';
 
 vi.stubGlobal('fetch', vi.fn());
-
-const mockTransaction: DbTransaction = {
-  id: 'txn-1',
-  type: 'income',
-  amount: 1500,
-  description: 'Proyecto web NovaMed',
-  category: 'cliente',
-  client_id: null,
-  date: '2026-05-01',
-  created_at: '2026-05-01T10:00:00Z',
-};
-
-const mockSummary: FinancialSummary = {
-  month: 5,
-  year: 2026,
-  totalIncome: 3000,
-  totalExpense: 800,
-  margin: 2200,
-  byCategory: [],
-  recentTransactions: [],
-};
 
 const mockTask: DbTask = {
   id: 'task-1',
@@ -211,8 +184,12 @@ describe('handleCommand - update_client_notes tool', () => {
   });
 });
 
-describe('handleCommand - record_transaction tool', () => {
-  it('records a transaction when OpenAI calls record_transaction', async () => {
+// finance.ts está jubilado (bloque 2A): estas dos ramas ya no llaman a
+// recordTransaction/queryFinances, así que no hay nada que mockear de
+// '@/lib/finance'. Solo queda comprobar que no se dispara ninguna acción de
+// tipo financiero y que el manejador no revienta al recibir esas órdenes.
+describe('handleCommand - record_transaction tool (jubilado)', () => {
+  it('no dispara ninguna acción financiera cuando el modelo pide record_transaction', async () => {
     const mockCreate = vi.fn()
       .mockResolvedValueOnce({
         output: [{
@@ -222,18 +199,16 @@ describe('handleCommand - record_transaction tool', () => {
           arguments: JSON.stringify({ type: 'income', amount: 1500, description: 'Proyecto web', category: 'cliente' }),
         }],
       })
-      .mockResolvedValueOnce({ output_text: 'Ingreso de 1.500 euros registrado.', output: [] });
+      .mockResolvedValueOnce({ output_text: 'Eso ahora se apunta en Atlas, en /dinero. Jarvis ya no lleva las cuentas.', output: [] });
     vi.mocked(OpenAI).mockImplementation(() => ({ responses: { create: mockCreate } } as never));
-    vi.mocked(recordTransaction).mockResolvedValue(mockTransaction);
 
     const result = await handleCommand('Hemos cobrado 1500 euros del proyecto NovaMed');
-    expect(result.action?.type).toBe('transaction_recorded');
-    expect(recordTransaction).toHaveBeenCalledWith(expect.objectContaining({ type: 'income', amount: 1500 }));
+    expect(result.action).toBeUndefined();
   });
 });
 
-describe('handleCommand - query_finances tool', () => {
-  it('returns a financial summary when OpenAI calls query_finances', async () => {
+describe('handleCommand - query_finances tool (jubilado)', () => {
+  it('no dispara ninguna acción financiera cuando el modelo pide query_finances', async () => {
     const mockCreate = vi.fn()
       .mockResolvedValueOnce({
         output: [{
@@ -243,13 +218,11 @@ describe('handleCommand - query_finances tool', () => {
           arguments: JSON.stringify({}),
         }],
       })
-      .mockResolvedValueOnce({ output_text: 'En mayo tienes 3.000 euros de ingresos y 800 euros de gastos.', output: [] });
+      .mockResolvedValueOnce({ output_text: 'Eso ahora se apunta en Atlas, en /dinero. Jarvis ya no lleva las cuentas.', output: [] });
     vi.mocked(OpenAI).mockImplementation(() => ({ responses: { create: mockCreate } } as never));
-    vi.mocked(queryFinances).mockResolvedValue(mockSummary);
 
     const result = await handleCommand('Como vamos de finanzas este mes?');
-    expect(result.action?.type).toBe('financial_summary');
-    expect(result.response).toContain('3.000');
+    expect(result.action).toBeUndefined();
   });
 });
 
@@ -323,7 +296,8 @@ describe('handleCommand - multiple tool calls', () => {
       })
       .mockResolvedValueOnce({ output_text: 'Finanzas revisadas y memoria guardada.', output: [] });
     vi.mocked(OpenAI).mockImplementation(() => ({ responses: { create: mockCreate } } as never));
-    vi.mocked(queryFinances).mockResolvedValue(mockSummary);
+    // query_finances ya no llama a nada (finance.ts jubilado, bloque 2A):
+    // no hace falta mockear su resultado.
     vi.mocked(addCompanyMemory).mockResolvedValue(mockBrainWrite);
 
     const result = await handleCommand('Revisa finanzas y recuerda priorizar mensualidades');
