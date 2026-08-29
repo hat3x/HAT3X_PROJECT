@@ -867,6 +867,7 @@ export type Database = {
           id: number
           incidencia_id: string | null
           ok: boolean
+          tipo: string
           usuario_id: string
         }
         Insert: {
@@ -876,6 +877,7 @@ export type Database = {
           id?: number
           incidencia_id?: string | null
           ok: boolean
+          tipo?: string
           usuario_id: string
         }
         Update: {
@@ -885,6 +887,7 @@ export type Database = {
           id?: number
           incidencia_id?: string | null
           ok?: boolean
+          tipo?: string
           usuario_id?: string
         }
         Relationships: [
@@ -1293,6 +1296,7 @@ export type Database = {
     Functions: {
       atlas_consolidar_retencion: { Args: never; Returns: undefined }
       atlas_disparar_avisos: { Args: never; Returns: undefined }
+      atlas_disparar_cobro: { Args: never; Returns: undefined }
       atlas_disparar_descubridor: { Args: never; Returns: undefined }
       atlas_disparar_vigia: { Args: never; Returns: undefined }
       atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
