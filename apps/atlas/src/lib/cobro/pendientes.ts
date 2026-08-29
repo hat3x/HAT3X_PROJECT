@@ -53,14 +53,25 @@ export function pendientesDeCobro(
   facturas: FacturaSinCobrar[],
   hoy: string
 ): Cobro {
+  // Comparar cadenas ISO solo es válido si las dos tienen el mismo formato.
+  // Confiar en que el llamador pase siempre AAAA-MM-DD puro —y nunca, por
+  // ejemplo, un `toISOString()` entero, con hora— es confiar en algo que esta
+  // función no puede comprobar. Con hora incluida, la fecha sola es prefijo
+  // estricto y por tanto «menor», así que la factura que vence hoy se
+  // colaría como vencida. Recortar aquí a los diez primeros caracteres hace
+  // que el contrato se cumpla sin depender del llamador.
+  const hoySolo = hoy.slice(0, 10);
+
   // Vencida es la que pasó su plazo, no la que lo tiene hoy: un plazo se
   // cumple durante todo su último día. Y sin fecha no hay plazo que incumplir,
   // así que esas no se persiguen — avisar de ellas llenaría el mensaje de
   // facturas que nadie acordó cuándo pagar.
   const vencidas = facturas
-    .filter((f) => f.fechaVencimiento !== null && f.fechaVencimiento < hoy)
+    .filter((f) => f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo)
     // Lo más viejo primero: es lo que más urge y lo que peor pinta tiene.
-    .sort((a, b) => (a.fechaVencimiento! < b.fechaVencimiento! ? -1 : 1));
+    .sort((a, b) =>
+      a.fechaVencimiento!.slice(0, 10) < b.fechaVencimiento!.slice(0, 10) ? -1 : 1
+    );
 
   const totalSinFacturarCentimos = periodos.reduce(
     (t, p) => t + p.importeEsperadoCentimos,
@@ -75,10 +86,10 @@ export function pendientesDeCobro(
   // El plural concuerda a propósito: un aviso que dice «1 meses» se lee como un
   // fallo del sistema, y un aviso que parece roto se deja de leer.
   const trozoSin = `${nSin} ${nSin === 1 ? "mes" : "meses"} sin facturar`;
-  const trozoVen = `${nVen} ${nVen === 1 ? "factura vencida" : "vencidas"}`;
+  const trozoVen = `${nVen} ${nVen === 1 ? "factura vencida" : "facturas vencidas"}`;
 
   let titulo: string;
-  if (nSin > 0 && nVen > 0) titulo = `Cobro: ${nSin} sin facturar y ${trozoVen}`;
+  if (nSin > 0 && nVen > 0) titulo = `Cobro: ${trozoSin} y ${trozoVen}`;
   else if (nVen > 0) titulo = `Cobro: ${trozoVen}`;
   else if (nSin > 0) titulo = `Cobro: ${trozoSin}`;
   else titulo = "Cobro: nada pendiente";

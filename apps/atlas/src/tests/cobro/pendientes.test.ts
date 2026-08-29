@@ -61,6 +61,18 @@ describe("pendientes de cobro", () => {
     expect(c.vencidas).toEqual([]);
   });
 
+  // Comparar cadenas ISO solo vale si las dos tienen el mismo formato. Con la
+  // hora incluida, la fecha sola es prefijo estricto y por tanto «menor», así
+  // que la que vence hoy se colaría como vencida.
+  it("da igual que la fecha de hoy venga con hora", () => {
+    const conHora = pendientesDeCobro(
+      [],
+      [factura({ fechaVencimiento: HOY })],
+      `${HOY}T09:00:00.000Z`
+    );
+    expect(conHora.vencidas).toEqual([]);
+  });
+
   it("la que venció ayer sí", () => {
     const c = pendientesDeCobro([], [factura({ fechaVencimiento: "2026-09-14" })], HOY);
     expect(c.vencidas).toHaveLength(1);
@@ -93,7 +105,7 @@ describe("pendientes de cobro", () => {
       [factura({ fechaVencimiento: "2026-09-01" })],
       HOY
     );
-    expect(c.titulo).toBe("Cobro: 1 sin facturar y 1 factura vencida");
+    expect(c.titulo).toBe("Cobro: 1 mes sin facturar y 1 factura vencida");
     expect(c.cuerpo).toContain("350,00");
     expect(c.cuerpo).toContain("423,50");
   });
@@ -115,5 +127,34 @@ describe("pendientes de cobro", () => {
   it("concuerda el plural", () => {
     const c = pendientesDeCobro([periodo(), periodo({ contratoId: "c2" })], [], HOY);
     expect(c.titulo).toBe("Cobro: 2 meses sin facturar");
+  });
+
+  // El defecto original solo se veía con nVen >= 2: con una sola vencida
+  // "factura vencida" ya suena bien aunque el plural esté mal resuelto.
+  it("concuerda el plural también en las vencidas", () => {
+    const c = pendientesDeCobro(
+      [],
+      [
+        factura({ id: "f1", fechaVencimiento: "2026-09-01" }),
+        factura({ id: "f2", fechaVencimiento: "2026-09-02" }),
+      ],
+      HOY
+    );
+    expect(c.titulo).toBe("Cobro: 2 facturas vencidas");
+  });
+
+  // El título combinado con ambos en plural es el caso que dejaba pasar el
+  // defecto de usar `${nSin}` a pelo en vez de `trozoSin`.
+  it("concuerda el plural en el título combinado", () => {
+    const c = pendientesDeCobro(
+      [periodo(), periodo({ contratoId: "c2" })],
+      [
+        factura({ id: "f1", fechaVencimiento: "2026-09-01" }),
+        factura({ id: "f2", fechaVencimiento: "2026-09-02" }),
+        factura({ id: "f3", fechaVencimiento: "2026-09-03" }),
+      ],
+      HOY
+    );
+    expect(c.titulo).toBe("Cobro: 2 meses sin facturar y 3 facturas vencidas");
   });
 });
