@@ -8,9 +8,10 @@
 // que pide da 404 (eso es lo que el navegador convierte en ChunkLoadError) y
 // que los datos que deben salir salen.
 //
-// Crea un usuario de prueba y lo borra al terminar. No toca la cuenta real.
-// Solo desarrollo local: las claves de abajo son las que Supabase pone por
-// defecto y salen en `supabase status`, iguales en cualquier máquina.
+// Crea dos usuarios de prueba —propietario y colaborador— y los borra al
+// terminar. No toca ninguna cuenta real. Solo desarrollo local: las claves de
+// abajo son las que Supabase pone por defecto y salen en `supabase status`,
+// iguales en cualquier máquina.
 //
 import { createHmac } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
@@ -27,6 +28,7 @@ const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const PUERTO = process.argv[2] ?? "3010";
 const BASE = `http://localhost:${PUERTO}`;
 const CORREO = "humo@atlas.test";
+const CORREO_COLABORADOR = "humo-colaborador@atlas.test";
 const CLAVE = "contrasena-de-prueba";
 
 /** base32 → bytes: así viene la semilla del segundo factor. */
@@ -57,13 +59,16 @@ function totp(semilla) {
 const admin = createClient(API, SERVICE, { auth: { persistSession: false } });
 const db = new pg.Client(URL_PG);
 let idUsuario = "";
+let idColaborador = "";
 let fallos = 0;
 
 async function limpiar() {
   try {
-    if (idUsuario) {
-      await db.query(`DELETE FROM perfiles WHERE id = $1`, [idUsuario]);
-      await admin.auth.admin.deleteUser(idUsuario);
+    for (const id of [idUsuario, idColaborador]) {
+      if (id) {
+        await db.query(`DELETE FROM perfiles WHERE id = $1`, [id]);
+        await admin.auth.admin.deleteUser(id);
+      }
     }
     await db.end();
   } catch {
@@ -71,27 +76,27 @@ async function limpiar() {
   }
 }
 
-try {
-  await db.connect();
-
-  // Restos de una ejecución anterior que se cortara a medias.
-  const { data: listado } = await admin.auth.admin.listUsers();
-  for (const u of listado?.users ?? []) {
-    if (u.email === CORREO) await admin.auth.admin.deleteUser(u.id);
-  }
-
+// Da de alta un usuario, le hace pasar sesión con contraseña y segundo
+// factor, y devuelve la cookie con la que se puede pedir cualquier pantalla
+// como si fuera él. Se usa dos veces: una para el propietario (dueño de las
+// pruebas de arriba) y otra para el colaborador de la comprobación de abajo,
+// porque llegar a la pantalla protegida exige pasar el mismo guardia de
+// `src/middleware.ts` para los dos — sin el segundo factor superado, el
+// guardia redirige a /verificar antes de que la pantalla llegue a decidir
+// nada por su cuenta.
+async function entrarConSegundoFactor(correo, propietario) {
   const alta = await admin.auth.admin.createUser({
-    email: CORREO,
+    email: correo,
     password: CLAVE,
     email_confirm: true,
   });
   if (alta.error) throw alta.error;
-  idUsuario = alta.data.user.id;
+  const idUsuarioNuevo = alta.data.user.id;
 
   await db.query(
-    `INSERT INTO perfiles (id, nombre, es_propietario) VALUES ($1,'Humo',true)
+    `INSERT INTO perfiles (id, nombre, es_propietario) VALUES ($1,'Humo',$2)
      ON CONFLICT (id) DO NOTHING`,
-    [idUsuario]
+    [idUsuarioNuevo, propietario]
   );
 
   // El cliente de servidor deja la sesión en las mismas cookies que espera
@@ -104,7 +109,7 @@ try {
     },
   });
 
-  const entrada = await sb.auth.signInWithPassword({ email: CORREO, password: CLAVE });
+  const entrada = await sb.auth.signInWithPassword({ email: correo, password: CLAVE });
   if (entrada.error) throw entrada.error;
 
   const inscrito = await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "humo" });
@@ -119,6 +124,23 @@ try {
   if (ok2fa.error) throw ok2fa.error;
 
   const cookie = [...galletas].map(([n, v]) => `${n}=${v}`).join("; ");
+  return { idUsuario: idUsuarioNuevo, cookie };
+}
+
+try {
+  await db.connect();
+
+  // Restos de una ejecución anterior que se cortara a medias.
+  const { data: listado } = await admin.auth.admin.listUsers();
+  for (const u of listado?.users ?? []) {
+    if (u.email === CORREO || u.email === CORREO_COLABORADOR) {
+      await admin.auth.admin.deleteUser(u.id);
+    }
+  }
+
+  const sesion = await entrarConSegundoFactor(CORREO, true);
+  idUsuario = sesion.idUsuario;
+  const cookie = sesion.cookie;
 
   const { rows: clientes } = await db.query(`SELECT nombre FROM clientes ORDER BY nombre`);
   const { rows: proyectos } = await db.query(`SELECT nombre FROM proyectos ORDER BY nombre`);
@@ -219,6 +241,26 @@ try {
       console.log(`  x   ${ruta.padEnd(26)} ${e.message}`);
       fallos++;
     }
+  }
+
+  // /dinero a un colaborador tiene que dar 404. Está en la lista de
+  // verificación del plan y nada más lo comprobaba: un test de función no
+  // sirve aquí porque lo que hay que probar es el guardia de la RUTA servida
+  // —`notFound()` en `src/app/dinero/page.tsx`, detrás del middleware de
+  // sesión y segundo factor de verdad—, no una llamada aislada a
+  // `obtenerPerfil`. Usuario aparte y con su propio segundo factor: el
+  // guardia de `src/middleware.ts` exige aal2 para cualquier pantalla, así
+  // que sin repetir el alta de MFA la petición ni llegaría a la página.
+  console.log("");
+  {
+    const colaborador = await entrarConSegundoFactor(CORREO_COLABORADOR, false);
+    idColaborador = colaborador.idUsuario;
+    const res = await fetch(`${BASE}/dinero`, { headers: { cookie: colaborador.cookie } });
+    const bien = res.status === 404;
+    console.log(
+      `  ${(bien ? "ok" : "x").padEnd(3)} ${"/dinero (colaborador)".padEnd(26)} ${res.status}`
+    );
+    if (!bien) fallos++;
   }
 
   // Estas tres tienen que servirse sin sesión, o la aplicación no se instala.

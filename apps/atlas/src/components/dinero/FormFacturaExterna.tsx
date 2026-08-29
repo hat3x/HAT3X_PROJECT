@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { guardarFacturaExterna } from "@/lib/db/acciones-facturas";
-import { aCentimos } from "@/lib/dinero";
+import { aCentimos, hoyEnMadrid } from "@/lib/dinero";
 
 type Linea = { concepto: string; importe: string; proyectoId: string };
 
@@ -138,7 +138,7 @@ export function FormFacturaExterna({
           <input
             name="fechaEmision"
             type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
+            defaultValue={hoyEnMadrid()}
             className="w-full rounded-lg px-2 py-1.5"
           />
         </label>

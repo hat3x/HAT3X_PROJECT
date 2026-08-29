@@ -62,3 +62,56 @@ describe("permisos de las funciones de materializar", () => {
     await pg.query("rollback");
   });
 });
+
+// Cinco funciones más, anteriores a esta rama, se quedaron sin el REVOKE que
+// cierra el resto (ver 20260829140000_permisos_funciones.sql). Solo se prueba
+// el camino negativo: dos de ellas (retención y poda de descubrimientos)
+// hacen trabajo real si llegan a ejecutarse, así que aquí basta con confirmar
+// que el permiso falla, y el `rollback` es la red de seguridad si alguna
+// vez dejara de fallar.
+describe("permisos de las funciones de cron", () => {
+  it("un rol autenticado no puede disparar el vigia", async () => {
+    await pg.query("begin");
+    await pg.query("set local role authenticated");
+    await expect(pg.query("select atlas_disparar_vigia()")).rejects.toThrow(
+      /permission denied|permiso denegado/i
+    );
+    await pg.query("rollback");
+  });
+
+  it("un rol autenticado no puede consolidar la retencion", async () => {
+    await pg.query("begin");
+    await pg.query("set local role authenticated");
+    await expect(
+      pg.query("select atlas_consolidar_retencion()")
+    ).rejects.toThrow(/permission denied|permiso denegado/i);
+    await pg.query("rollback");
+  });
+
+  it("un rol autenticado no puede disparar los avisos", async () => {
+    await pg.query("begin");
+    await pg.query("set local role authenticated");
+    await expect(pg.query("select atlas_disparar_avisos()")).rejects.toThrow(
+      /permission denied|permiso denegado/i
+    );
+    await pg.query("rollback");
+  });
+
+  it("un rol autenticado no puede podar descubrimientos", async () => {
+    await pg.query("begin");
+    await pg.query("set local role authenticated");
+    await expect(
+      pg.query("select atlas_podar_descubrimientos()")
+    ).rejects.toThrow(/permission denied|permiso denegado/i);
+    await pg.query("rollback");
+  });
+
+  it("un rol autenticado no puede disparar el descubridor", async () => {
+    await pg.query("begin");
+    await pg.query("set local role authenticated");
+    await expect(
+      pg.query("select atlas_disparar_descubridor()")
+    ).rejects.toThrow(/permission denied|permiso denegado/i);
+    await pg.query("rollback");
+  });
+});

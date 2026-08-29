@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { guardarGasto } from "@/lib/db/acciones-gastos";
 import { CATEGORIAS, type Categoria } from "@/lib/db/gastos";
-import { aCentimos } from "@/lib/dinero";
+import { aCentimos, hoyEnMadrid } from "@/lib/dinero";
 
 /**
  * Los importes se convierten a céntimos AQUÍ, en el borde. A partir de este
@@ -46,7 +46,10 @@ export function FormGasto({
     setEnviando(true);
     try {
       const r = await guardarGasto({
-        fecha: String(datos.get("fecha") ?? new Date().toISOString().slice(0, 10)),
+        // Madrid, no UTC: entre medianoche y las dos de la mañana un gasto sin
+        // fecha se apuntaría con la fecha de ayer, y el día 1 eso lo saca del
+        // mes que le tocaba (ver `hoyEnMadrid`).
+        fecha: String(datos.get("fecha") ?? hoyEnMadrid()),
         concepto,
         proveedor: String(datos.get("proveedor") ?? "") || null,
         baseCentimos: base,
@@ -96,7 +99,7 @@ export function FormGasto({
           <input
             name="fecha"
             type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
+            defaultValue={hoyEnMadrid()}
             className="w-full rounded-lg px-2 py-1.5"
           />
         </label>

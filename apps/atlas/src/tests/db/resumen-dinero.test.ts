@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { resumenDelMes } from "@/lib/db/resumen-dinero";
 import type { Database } from "@/types/supabase";
+import { soloLocal } from "@/tests/ayuda/solo-local";
 
 const URL_API = "http://127.0.0.1:54321";
 const ANON =
@@ -21,6 +22,10 @@ let idUsuario = "";
 let idCliente = "";
 
 beforeAll(async () => {
+  // Antes de nada: este fichero hace `DELETE FROM` sin filtro sobre `gastos`
+  // más abajo. Comprobarlo cuesta una comparación de texto; no comprobarlo,
+  // el día que `URL_PG` apunte a otro sitio, es irreversible.
+  soloLocal(URL_PG);
   pg = new Client({ connectionString: URL_PG });
   await pg.connect();
   admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });

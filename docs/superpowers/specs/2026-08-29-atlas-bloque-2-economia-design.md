@@ -19,6 +19,7 @@ que no se hablan:
 |---|---|
 | Ingreso recurrente | `contratos.cuota_mensual`, en Atlas |
 | Ingresos y gastos sueltos | `hat3x_transactions`, en `apps/jarvis/src/lib/finance.ts` |
+| Gastos recurrentes y costes/ingresos por proyecto | `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue`, en `apps/jarvis/src/lib/company-brain.ts` |
 | Horas trabajadas | `apps/fichaje`, en un `fichaje.json` local |
 | Presupuestos y documentos mensuales | Markdown y HTML escritos a mano en `clients/` |
 | Facturas | En ningún sitio |
@@ -404,6 +405,15 @@ cifra que ya tienes y la disfraza de precisión por cliente.
 Si para repartir un gasto hay que **elegir** una regla —a partes iguales, por
 facturación, por horas—, esa elección es del que la elige y no del dato. Una
 cifra arbitraria con dos decimales engaña más que dos cifras honestas.
+
+> **Nota abierta:** falta decidir qué es un gasto imputado a un **proyecto**
+> pero sin **cliente**. Hoy el código (`apps/atlas/src/lib/db/gastos.ts`)
+> cuenta como directo cualquier gasto con `cliente_id` **o** `proyecto_id`, así
+> que un gasto solo-proyecto ya cae del lado de «Sí». Pero el propio ejemplo de
+> esta sección apunta a lo contrario: «Supabase de Kairos» es un coste de
+> proyecto sin cliente concreto detrás, y aquí se clasifica como «No» —
+> multi-tenant, repartirlo sería inventado. Las dos reglas no pueden ser
+> ciertas a la vez. Esta decisión queda para el plan 2D.
 
 ---
 

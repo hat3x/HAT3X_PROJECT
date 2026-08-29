@@ -102,11 +102,14 @@ beforeAll(async () => {
     [idFactura]
   );
 
-  // Una cobrada, para poder filtrar.
+  // Una cobrada, para poder filtrar. 'emitida' explícito: sin él nace
+  // 'borrador' por defecto, y el filtro de `sinCobrar` la habría dejado fuera
+  // por el estado en vez de por el cobro — el `.is("cobrada_en", null)` de
+  // `listarFacturas` habría podido borrarse sin que ningún test lo notara.
   await pg.query(
     `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision,
-                           base, iva_cuota, total, cobrada_en)
-     VALUES ('externa','BIO',2,$1,'2026-07-04',350,73.5,423.5,'2026-07-20')`,
+                           base, iva_cuota, total, estado, cobrada_en)
+     VALUES ('externa','BIO',2,$1,'2026-07-04',350,73.5,423.5,'emitida','2026-07-20')`,
     [idCliente]
   );
 

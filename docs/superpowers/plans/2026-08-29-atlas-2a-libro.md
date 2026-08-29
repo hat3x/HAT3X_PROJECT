@@ -2725,9 +2725,9 @@ git commit -m "feat(atlas): dar de alta gastos y facturas desde la pantalla"
 
 ---
 
-## Tarea 10: Jubilar `finance.ts` de jarvis
+## Tarea 10: Jubilar `finance.ts` de jarvis (parcial — quedan tres tablas fuera)
 
-**El objetivo del plan es que el dinero viva en UN sitio.** Mientras `hat3x_transactions` siga siendo la verdad de alguien hay dos verdades, y las dos verdades es lo que este bloque vino a arreglar.
+**El objetivo del plan era que el dinero viviera en UN sitio, y este bloque no lo cumple del todo.** Esta tarea vuelca `hat3x_transactions` y jubila `finance.ts`, pero `apps/jarvis/src/lib/company-brain.ts` sigue leyendo y escribiendo `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue`, y `command-handler.ts` las expone a través de `company-brain.ts`. Mientras esas tres tablas sigan siendo la verdad de alguien, sigue habiendo dos verdades — la migración de esta tarea cierra una de las dos, no las dos.
 
 **Ficheros:**
 - Crear: `apps/atlas/scripts/migrar/transacciones.ts`

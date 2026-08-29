@@ -5,7 +5,7 @@ import { resumenDelMes } from "@/lib/db/resumen-dinero";
 import { listarFacturas } from "@/lib/db/facturas";
 import { listarClientes } from "@/lib/db/clientes";
 import { listarProyectos } from "@/lib/db/proyectos";
-import { formatear, aCentimos } from "@/lib/dinero";
+import { formatear, aCentimos, hoyEnMadrid } from "@/lib/dinero";
 import { Distintivo } from "@/components/ui/Distintivo";
 import { FormGasto } from "@/components/dinero/FormGasto";
 import { FormFacturaExterna } from "@/components/dinero/FormFacturaExterna";
@@ -15,11 +15,6 @@ const FECHA = new Intl.DateTimeFormat("es-ES", {
   month: "short",
   timeZone: "Europe/Madrid",
 });
-
-// El mes es el de Madrid, no el de UTC. Madrid va por delante, así que durante
-// la primera hora del día 1 el «hoy» en UTC todavía cae en el mes anterior y la
-// pantalla enseñaría el mes equivocado. «en-CA» se elige porque da AAAA-MM-DD.
-const DIA_MADRID = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" });
 
 function Cifra({ etiqueta, centimos }: { etiqueta: string; centimos: number }) {
   return (
@@ -44,7 +39,7 @@ export default async function PaginaDinero() {
   // que una pantalla en blanco que parece rota.
   if (!perfil?.esPropietario) notFound();
 
-  const hoy = DIA_MADRID.format(new Date());
+  const hoy = hoyEnMadrid();
   const [resumen, facturas, clientes, proyectos] = await Promise.all([
     resumenDelMes(sb, hoy),
     listarFacturas(sb, {}),

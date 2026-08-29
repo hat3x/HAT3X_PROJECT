@@ -13,6 +13,20 @@ const EUROS = new Intl.NumberFormat("es-ES", {
   currency: "EUR",
 });
 
+// El día es el de Madrid, no el de UTC. Madrid va por delante, así que entre
+// medianoche y las dos de la mañana (hora de Madrid) el «hoy» en UTC todavía
+// cae en el día anterior. Para una pantalla que solo enseña una fecha eso es
+// un desliz visual; para un formulario que la escribe en el libro es un gasto
+// o una factura con la fecha de ayer — y el día 1 del mes, eso la saca del
+// mes que le tocaba. «en-CA» se elige porque da AAAA-MM-DD, el formato que
+// esperan los `<input type="date">` y la base.
+const DIA_MADRID = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" });
+
+/** AAAA-MM-DD del día de hoy en Madrid, sin pasar por el día UTC. */
+export function hoyEnMadrid(): string {
+  return DIA_MADRID.format(new Date());
+}
+
 // Tope de `aCentimos`: el máximo que cabe en `numeric(12,2)`, el tipo de las
 // columnas de importe en la base (migración de la Tarea 2). No es un número
 // redondo elegido a ojo: es ese máximo exacto, para que el límite de
