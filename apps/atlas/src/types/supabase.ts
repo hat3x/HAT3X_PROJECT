@@ -494,6 +494,265 @@ export type Database = {
           },
         ]
       }
+      factura_lineas: {
+        Row: {
+          cantidad: number
+          concepto: string
+          descripcion: string | null
+          factura_id: string
+          id: string
+          importe: number
+          orden: number
+          precio_unitario: number
+          proyecto_id: string | null
+        }
+        Insert: {
+          cantidad?: number
+          concepto: string
+          descripcion?: string | null
+          factura_id: string
+          id?: string
+          importe: number
+          orden?: number
+          precio_unitario: number
+          proyecto_id?: string | null
+        }
+        Update: {
+          cantidad?: number
+          concepto?: string
+          descripcion?: string | null
+          factura_id?: string
+          id?: string
+          importe?: number
+          orden?: number
+          precio_unitario?: number
+          proyecto_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factura_lineas_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "facturas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factura_lineas_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      facturas: {
+        Row: {
+          base: number
+          cliente_id: string
+          cobrada_en: string | null
+          creado_en: string
+          estado: string
+          fecha_emision: string
+          fecha_vencimiento: string | null
+          firma: string | null
+          huella: string | null
+          huella_anterior: string | null
+          id: string
+          iva_cuota: number
+          iva_tipo: number
+          notas: string | null
+          numero: number | null
+          origen: string
+          rectifica_a: string | null
+          serie: string
+          total: number
+        }
+        Insert: {
+          base: number
+          cliente_id: string
+          cobrada_en?: string | null
+          creado_en?: string
+          estado?: string
+          fecha_emision: string
+          fecha_vencimiento?: string | null
+          firma?: string | null
+          huella?: string | null
+          huella_anterior?: string | null
+          id?: string
+          iva_cuota: number
+          iva_tipo?: number
+          notas?: string | null
+          numero?: number | null
+          origen: string
+          rectifica_a?: string | null
+          serie: string
+          total: number
+        }
+        Update: {
+          base?: number
+          cliente_id?: string
+          cobrada_en?: string | null
+          creado_en?: string
+          estado?: string
+          fecha_emision?: string
+          fecha_vencimiento?: string | null
+          firma?: string | null
+          huella?: string | null
+          huella_anterior?: string | null
+          id?: string
+          iva_cuota?: number
+          iva_tipo?: number
+          notas?: string | null
+          numero?: number | null
+          origen?: string
+          rectifica_a?: string | null
+          serie?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "facturas_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "facturas_rectifica_a_fkey"
+            columns: ["rectifica_a"]
+            isOneToOne: false
+            referencedRelation: "facturas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gastos: {
+        Row: {
+          base: number
+          categoria: string
+          cliente_id: string | null
+          concepto: string
+          creado_en: string
+          fecha: string
+          id: string
+          iva: number
+          notas: string | null
+          proveedor: string | null
+          proyecto_id: string | null
+          recurrente_id: string | null
+          total: number
+        }
+        Insert: {
+          base: number
+          categoria: string
+          cliente_id?: string | null
+          concepto: string
+          creado_en?: string
+          fecha: string
+          id?: string
+          iva?: number
+          notas?: string | null
+          proveedor?: string | null
+          proyecto_id?: string | null
+          recurrente_id?: string | null
+          total: number
+        }
+        Update: {
+          base?: number
+          categoria?: string
+          cliente_id?: string | null
+          concepto?: string
+          creado_en?: string
+          fecha?: string
+          id?: string
+          iva?: number
+          notas?: string | null
+          proveedor?: string | null
+          proyecto_id?: string | null
+          recurrente_id?: string | null
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gastos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gastos_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gastos_recurrente_id_fkey"
+            columns: ["recurrente_id"]
+            isOneToOne: false
+            referencedRelation: "gastos_recurrentes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gastos_recurrentes: {
+        Row: {
+          activo: boolean
+          base: number
+          categoria: string
+          cliente_id: string | null
+          concepto: string
+          creado_en: string
+          dia_del_mes: number
+          id: string
+          iva: number
+          proveedor: string | null
+          proyecto_id: string | null
+        }
+        Insert: {
+          activo?: boolean
+          base: number
+          categoria: string
+          cliente_id?: string | null
+          concepto: string
+          creado_en?: string
+          dia_del_mes?: number
+          id?: string
+          iva?: number
+          proveedor?: string | null
+          proyecto_id?: string | null
+        }
+        Update: {
+          activo?: boolean
+          base?: number
+          categoria?: string
+          cliente_id?: string | null
+          concepto?: string
+          creado_en?: string
+          dia_del_mes?: number
+          id?: string
+          iva?: number
+          proveedor?: string | null
+          proyecto_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gastos_recurrentes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gastos_recurrentes_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       incidencias: {
         Row: {
           abierta_en: string
@@ -663,6 +922,55 @@ export type Database = {
           vista_resumen?: string
         }
         Relationships: []
+      }
+      periodos_contrato: {
+        Row: {
+          contrato_id: string
+          creado_en: string
+          factura_id: string | null
+          id: string
+          importe_esperado: number
+          periodo: string
+        }
+        Insert: {
+          contrato_id: string
+          creado_en?: string
+          factura_id?: string | null
+          id?: string
+          importe_esperado: number
+          periodo: string
+        }
+        Update: {
+          contrato_id?: string
+          creado_en?: string
+          factura_id?: string | null
+          id?: string
+          importe_esperado?: number
+          periodo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "periodos_contrato_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "periodos_contrato_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos_visibles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "periodos_contrato_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "facturas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       permisos: {
         Row: {
