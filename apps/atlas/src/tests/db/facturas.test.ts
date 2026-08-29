@@ -11,6 +11,10 @@ const SERVICE =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
 const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
+const CORREO_DUENYO = "duenyo-facturas@atlas.test";
+const CORREO_COLABORADOR = "colab-facturas@atlas.test";
+const SLUG_CLIENTE = "biodental-prueba";
+
 let pg: Client;
 let admin: ReturnType<typeof createClient<Database>>;
 let sbDuenyo: ReturnType<typeof createClient<Database>>;
@@ -46,12 +50,35 @@ beforeAll(async () => {
   pg = new Client({ connectionString: URL_PG });
   await pg.connect();
   admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
-  sbDuenyo = await altaUsuario("duenyo-facturas@atlas.test", true, "df");
-  sbColaborador = await altaUsuario("colab-facturas@atlas.test", false, "cf");
+
+  // Limpieza defensiva: si una corrida anterior murió entre crear los usuarios
+  // y su `afterAll` (el propio `afterAll` podía reventar contra una columna
+  // uuid con `idCliente` todavía en "" — ya ha pasado), el correo queda
+  // ocupado y esta corrida falla aquí mismo, en el `createUser` de más abajo,
+  // sin llegar nunca a limpiar nada. Limpiar solo al final deja el fichero
+  // inservible para siempre; limpiar también al principio lo hace
+  // autorreparable. Mismo mecanismo que `scripts/humo.mjs`: recorrer
+  // `listUsers()` y borrar por correo — `perfiles` lo borra la cascada de la
+  // FK a `auth.users`, no hace falta a mano.
+  const { data: listado } = await admin.auth.admin.listUsers();
+  for (const u of listado?.users ?? []) {
+    if (u.email === CORREO_DUENYO || u.email === CORREO_COLABORADOR) {
+      await admin.auth.admin.deleteUser(u.id);
+    }
+  }
+  await pg.query(
+    `DELETE FROM facturas WHERE cliente_id IN (SELECT id FROM clientes WHERE slug = $1)`,
+    [SLUG_CLIENTE]
+  );
+  await pg.query(`DELETE FROM clientes WHERE slug = $1`, [SLUG_CLIENTE]);
+
+  sbDuenyo = await altaUsuario(CORREO_DUENYO, true, "df");
+  sbColaborador = await altaUsuario(CORREO_COLABORADOR, false, "cf");
 
   const { rows: [c] } = await pg.query(
-    `INSERT INTO clientes (nombre, slug) VALUES ('Biodental Prueba','biodental-prueba')
-     RETURNING id`
+    `INSERT INTO clientes (nombre, slug) VALUES ('Biodental Prueba',$1)
+     RETURNING id`,
+    [SLUG_CLIENTE]
   );
   idCliente = c.id;
 
@@ -78,19 +105,55 @@ beforeAll(async () => {
      VALUES ('externa','BIO',2,$1,'2026-07-04',350,73.5,423.5,'2026-07-20')`,
     [idCliente]
   );
+
+  // Una anulada y sin cobrar: no es una deuda que perseguir, y esa exclusión
+  // es justo la consulta sobre la que se construye el plan 2B.
+  await pg.query(
+    `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision,
+                           base, iva_cuota, total, estado)
+     VALUES ('externa','BIO',3,$1,'2026-06-04',350,73.5,423.5,'anulada')`,
+    [idCliente]
+  );
 });
 
 afterAll(async () => {
-  await pg.query(`DELETE FROM facturas WHERE cliente_id = $1`, [idCliente]);
-  await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
-  for (const id of usuarios) await admin.auth.admin.deleteUser(id);
-  await pg.end();
+  // Cada borrado va en su propio `try`: si uno falla, no debe impedir los
+  // siguientes, y el cierre de `pg` en el `finally` está garantizado pase lo
+  // que pase. Antes, un fallo a mitad de este bloque dejaba el fichero
+  // inservible para siempre porque nunca llegaba a borrar los usuarios ni a
+  // cerrar la conexión. Esta limpieza es solo cortesía cuando todo sale bien;
+  // la red de seguridad real es la limpieza defensiva de `beforeAll`.
+  try {
+    try {
+      if (idCliente !== "") {
+        await pg.query(`DELETE FROM facturas WHERE cliente_id = $1`, [idCliente]);
+      }
+    } catch {
+      // Se limpia en la siguiente corrida, en el `beforeAll`.
+    }
+    try {
+      if (idCliente !== "") {
+        await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
+      }
+    } catch {
+      // Idem.
+    }
+    for (const id of usuarios) {
+      try {
+        await admin.auth.admin.deleteUser(id);
+      } catch {
+        // Idem: por correo, en la limpieza defensiva de la próxima corrida.
+      }
+    }
+  } finally {
+    await pg.end();
+  }
 });
 
 describe("listar facturas", () => {
   it("trae las del cliente, la más reciente primero", async () => {
     const fs = await listarFacturas(sbDuenyo, { clienteId: idCliente });
-    expect(fs).toHaveLength(2);
+    expect(fs).toHaveLength(3);
     expect(fs[0]!.numero).toBe(1);
     expect(fs[0]!.clienteNombre).toBe("Biodental Prueba");
   });
@@ -107,6 +170,14 @@ describe("listar facturas", () => {
     const fs = await listarFacturas(sbDuenyo, { clienteId: idCliente, sinCobrar: true });
     expect(fs).toHaveLength(1);
     expect(fs[0]!.numero).toBe(1);
+  });
+
+  // Una factura anulada y sin cobrar NO es una deuda que perseguir. Es la
+  // consulta sobre la que se construye el plan 2B, así que la exclusión se
+  // fija con un test en vez de confiarla al `.neq` del código.
+  it("las anuladas no salen entre las que faltan por cobrar", async () => {
+    const fs = await listarFacturas(sbDuenyo, { clienteId: idCliente, sinCobrar: true });
+    expect(fs.map((f) => f.numero)).toEqual([1]);
   });
 
   // No filtra la consulta: de eso se encarga RLS, y se comprueba en vez de
