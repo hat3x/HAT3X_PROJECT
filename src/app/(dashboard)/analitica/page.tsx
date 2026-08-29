@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { DentalKpis } from "@/app/(dashboard)/analitica/dental-kpis";
 import { RangeSelector } from "@/app/(dashboard)/analitica/range-selector";
 import {
   CustomersSplitChart,
@@ -33,6 +34,9 @@ import {
 import { formatMoney } from "@/lib/format";
 import {
   getAgendaOccupancy,
+  getDentalAppointmentOutcomes,
+  getDentalPlanAcceptance,
+  getDentalUnscheduledWork,
   getNewVsReturningCustomers,
   getPaymentMethodDistribution,
   getRevenueByLocation,
@@ -162,7 +166,20 @@ export default async function AnaliticaPage({
     ? loadSalesAnalytics(supabase, salon.id, range)
     : Promise.resolve(null);
 
-  const [occupancy, sales] = await Promise.all([occupancyPromise, salesPromise]);
+  const isDental = salon.sector === "odontologia";
+  const dentalPromise = isDental
+    ? Promise.all([
+        getDentalPlanAcceptance(supabase, salon.id, range.period),
+        getDentalAppointmentOutcomes(supabase, salon.id, range.period),
+        getDentalUnscheduledWork(supabase, salon.id),
+      ])
+    : Promise.resolve(null);
+
+  const [occupancy, sales, dental] = await Promise.all([
+    occupancyPromise,
+    salesPromise,
+    dentalPromise,
+  ]);
 
   return (
     <main className="container py-8 md:py-10">
@@ -197,6 +214,20 @@ export default async function AnaliticaPage({
           </p>
         </div>
       </header>
+
+      {/* Va ANTES de la analitica de comercio: quien dirige una clinica entra a
+          mirar presupuestos y ausencias, no ticket medio. Lo primero de la
+          pagina debe ser lo primero que se busca. */}
+      {dental !== null ? (
+        <div className="mb-8">
+          <DentalKpis
+            planCounts={dental[0]}
+            outcomes={dental[1]}
+            unscheduled={dental[2]}
+            currency={CURRENCY}
+          />
+        </div>
+      ) : null}
 
       {sales !== null ? (
         <SalesAnalytics range={range} sales={sales} />

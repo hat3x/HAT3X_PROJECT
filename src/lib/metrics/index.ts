@@ -10,6 +10,10 @@
  * Ver `src/lib/metrics/README.md` para el contrato completo.
  */
 export {
+  getDentalAppointmentOutcomes,
+  getDentalPlanAcceptance,
+  getDentalUnscheduledWork,
+  type DentalUnscheduledWork,
   getSalesSummary,
   getRevenueTimeseries,
   getRevenueByLocation,
@@ -37,3 +41,14 @@ export {
   type NewVsReturningCustomers,
   type AgendaOccupancy,
 } from "./types";
+
+// Indicadores de clínica dental (B5). Las DEFINICIONES —qué cuenta como
+// aceptado, sobre qué se divide una ausencia— viven aquí, no en SQL, para que
+// estén probadas en un solo sitio.
+export {
+  computeAcceptanceRate,
+  computeNoShowRate,
+  type AcceptanceRate,
+  type AppointmentOutcomeCounts,
+  type TreatmentPlanStatusCounts,
+} from "./dental";

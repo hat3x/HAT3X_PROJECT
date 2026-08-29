@@ -423,6 +423,30 @@ están contando.**
 
 **Depende de.** B2 para el desglose por gabinete; el resto es inmediato.
 
+**Estado (2026-08-29): ✅ construida, con dos recortes declarados.**
+
+| Indicador | Estado |
+|---|---|
+| Tasa de aceptación de presupuestos | ✅ `salon_dental_plan_acceptance` + `computeAcceptanceRate` |
+| Presupuestos esperando respuesta | ✅ se reporta aparte de los rechazados |
+| Tratamientos propuestos sin agendar | ✅ `salon_dental_unscheduled_work`, valorado en euros |
+| Ausencias | ✅ `salon_dental_appointment_outcomes` + `computeNoShowRate` |
+| Producción por profesional | ✅ ya existía (`getRevenueByProfessional`) |
+| Producción por gabinete | ⛔ espera a B2 |
+| Eficacia del recall | ⛔ **no hay dato**: el recall se DERIVA de la última visita (`selectPatientsDueForRecall`) y nadie registra que se avisó a un paciente. `whatsapp_reminder_queue` guarda recordatorios de cita, que no es lo mismo. Sin registrar el aviso no hay numerador. |
+
+Las definiciones viven en `src/lib/metrics/dental.ts`, no en SQL, porque son la
+parte que decide si el número sirve — y ahí están probadas en un solo sitio:
+
+- **Aceptado incluye `in_progress` y `completed`.** Verificado contra datos
+  reales: Biodental tiene `accepted: 0` pero 38 en curso y 24 terminados. Contar
+  solo `accepted` daría 0 % a una clínica con 62 planes en marcha.
+- **El borrador no entra en el denominador**: no se presentó a nadie.
+- **La ausencia se mide sobre citas pasadas**, excluyendo canceladas (avisar no
+  es faltar) y pendientes (la agenda futura diluye sin que nadie mejore nada).
+- **Una tasa sin datos es `null`, no 0 %.** "Cero por ciento" afirma que se
+  presentaron y los rechazaron; es una conclusión falsa y cara.
+
 ---
 
 # BLOQUE C — Diferenciadoras

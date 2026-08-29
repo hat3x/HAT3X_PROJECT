@@ -4238,6 +4238,33 @@ export interface Database {
       };
 
       /** Ocupación de agenda (reservado / capacidad; una fila). */
+      // Indicadores de clinica dental (B5) — 20260829100000_dental_kpis.
+      // Devuelven recuentos en crudo: las tasas se derivan en
+      // src/lib/metrics/dental.ts, donde estan probadas las definiciones.
+      salon_dental_plan_acceptance: {
+        Args: { p_salon_id: string; p_from: string; p_to: string };
+        Returns: {
+          draft: number;
+          proposed: number;
+          accepted: number;
+          in_progress: number;
+          completed: number;
+          cancelled: number;
+        }[];
+      };
+      salon_dental_unscheduled_work: {
+        Args: { p_salon_id: string };
+        Returns: { items: number; patients: number; value_cents: number }[];
+      };
+      salon_dental_appointment_outcomes: {
+        Args: { p_salon_id: string; p_from: string; p_to: string };
+        Returns: {
+          no_show: number;
+          completed: number;
+          cancelled: number;
+          pending: number;
+        }[];
+      };
       salon_agenda_occupancy: {
         Args: {
           p_salon_id: string;

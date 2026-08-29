@@ -23,6 +23,11 @@
  * Supabase de servidor (`@/lib/supabase/server`). No importar desde componentes
  * cliente.
  */
+import type {
+  AppointmentOutcomeCounts,
+  TreatmentPlanStatusCounts,
+} from "@/lib/metrics/dental";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/types/database";
@@ -232,4 +237,89 @@ export async function getAgendaOccupancy(
     throw error;
   }
   return data?.[0] ?? EMPTY_OCCUPANCY;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Indicadores de clínica dental (B5) — migración 20260829100000_dental_kpis.
+//
+// Los tres RPC devuelven RECUENTOS EN CRUDO. Las tasas se derivan en
+// `@/lib/metrics/dental`, que es donde están probadas las definiciones: qué
+// cuenta como aceptado y sobre qué se divide. Ahí está el juicio; aquí, el
+// transporte.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Planes de tratamiento por estado, creados dentro del periodo. */
+export async function getDentalPlanAcceptance(
+  client: AnySupabaseClient,
+  salonId: string,
+  period: MetricsPeriod,
+): Promise<TreatmentPlanStatusCounts> {
+  const { data, error } = await client.rpc("salon_dental_plan_acceptance", {
+    p_salon_id: salonId,
+    p_from: period.from,
+    p_to: period.to,
+  });
+  if (error !== null) {
+    throw error;
+  }
+  const row = data?.[0];
+  return {
+    draft: Number(row?.draft ?? 0),
+    proposed: Number(row?.proposed ?? 0),
+    accepted: Number(row?.accepted ?? 0),
+    in_progress: Number(row?.in_progress ?? 0),
+    completed: Number(row?.completed ?? 0),
+    cancelled: Number(row?.cancelled ?? 0),
+  };
+}
+
+export interface DentalUnscheduledWork {
+  items: number;
+  patients: number;
+  valueCents: number;
+}
+
+/**
+ * Trabajo ya aceptado por el paciente y todavía sin fecha. SIN periodo: es una
+ * bolsa viva, y lo propuesto hace meses es justo lo que hay que rescatar.
+ */
+export async function getDentalUnscheduledWork(
+  client: AnySupabaseClient,
+  salonId: string,
+): Promise<DentalUnscheduledWork> {
+  const { data, error } = await client.rpc("salon_dental_unscheduled_work", {
+    p_salon_id: salonId,
+  });
+  if (error !== null) {
+    throw error;
+  }
+  const row = data?.[0];
+  return {
+    items: Number(row?.items ?? 0),
+    patients: Number(row?.patients ?? 0),
+    valueCents: Number(row?.value_cents ?? 0),
+  };
+}
+
+/** Citas del periodo por desenlace. */
+export async function getDentalAppointmentOutcomes(
+  client: AnySupabaseClient,
+  salonId: string,
+  period: MetricsPeriod,
+): Promise<AppointmentOutcomeCounts> {
+  const { data, error } = await client.rpc("salon_dental_appointment_outcomes", {
+    p_salon_id: salonId,
+    p_from: period.from,
+    p_to: period.to,
+  });
+  if (error !== null) {
+    throw error;
+  }
+  const row = data?.[0];
+  return {
+    noShow: Number(row?.no_show ?? 0),
+    completed: Number(row?.completed ?? 0),
+    cancelled: Number(row?.cancelled ?? 0),
+    pending: Number(row?.pending ?? 0),
+  };
 }
