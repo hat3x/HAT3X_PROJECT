@@ -648,6 +648,7 @@ Atlas se construye por capas, cada una con su propio spec y su propio plan.
 | **4** | Módulos de administración por proyecto. Kairos (jubila `kairos-admin`), 100 Montaditos, el resto | 1 |
 | **5** | Uso y coste: métricas de negocio y consumo por servicio | 3 |
 | **6** | Integración con la Oficina Virtual: agentes dentro de la vista Oficina | 1 |
+| **7** | Agente de correo: ingesta, triaje y enlace con las fichas de cliente | 1 |
 
 ---
 

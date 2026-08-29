@@ -1,8 +1,13 @@
-# Atlas 2A/2B — Agente de correo · Diseño
+# Atlas 7A/7B — Agente de correo · Diseño
 
 **Fecha:** 2026-08-28
 **Autor:** Jose (HAT3X) + Claude
 **Estado:** Diseño aprobado en brainstorming, pendiente de revisión y de plan de implementación.
+
+> **Renumerado el 2026-08-29.** Nació como «Atlas 2A/2B». El mapa de bloques
+> del [diseño del bloque 1](./2026-08-15-atlas-nucleo-monitorizacion-alertas-design.md)
+> ya asignaba el bloque 2 a economía, así que el agente de correo pasa a ser el
+> bloque 7 y sus fases 7A-7D. Solo cambiaron las etiquetas; el contenido no.
 
 ## 1. Propósito
 
@@ -22,12 +27,12 @@ datos reales sobre qué clasifica bien el agente, así que van en spec aparte.
 
 | Fase | Qué hace | ¿En este spec? |
 |---|---|---|
-| **2A** Ingesta y triaje | Lee la bandeja, clasifica, guarda el índice, avisa de lo urgente | **Sí** |
-| **2B** Enlace con Atlas | Cruza remitente con `contactos.email`, el correo aparece en la ficha del cliente | **Sí** |
-| 2C Borradores | Redacta y deja esperando el OK | No — spec propia |
-| 2D Respuesta autónoma | Envía solo, dentro de un perímetro acotado | No — spec propia |
+| **7A** Ingesta y triaje | Lee la bandeja, clasifica, guarda el índice, avisa de lo urgente | **Sí** |
+| **7B** Enlace con Atlas | Cruza remitente con `contactos.email`, el correo aparece en la ficha del cliente | **Sí** |
+| 7C Borradores | Redacta y deja esperando el OK | No — spec propia |
+| 7D Respuesta autónoma | Envía solo, dentro de un perímetro acotado | No — spec propia |
 
-**2D condiciona 2A** aunque no se implemente: la autonomía acordada es
+**7D condiciona 7A** aunque no se implemente: la autonomía acordada es
 *acuses de recibo + lista blanca de categorías*, y eso exige que desde el primer
 día se guarde **por qué** el agente clasificó cada correo como lo hizo. Sin ese
 rastro, ampliar la lista blanca sería a ojo.
@@ -42,7 +47,7 @@ rastro, ampliar la lista blanca sería a ojo.
 | Clasificador | **Híbrido: reglas deterministas → LLM para lo que sobreviva** | Barato, y el caso común es reproducible y testeable sin red. |
 | Juez por defecto | **`deepseek/deepseek-v4-flash` vía OpenRouter** | Mismo patrón que Aiden (ver `2026-08-06-aiden-llm-openrouter-design.md`). Se inyecta **por parámetro**: cambiar a Ollama o a otro proveedor es una línea. |
 | Qué se guarda | **Metadatos + resumen + motivo. NUNCA el cuerpo.** | Gmail sigue siendo el archivo. Atlas no duplica la obligación RGPD ni crea un segundo sitio del que fugarse. |
-| Autonomía (2D) | Acuses de recibo + lista blanca de categorías | Nunca `dinero` ni `incidencia`. |
+| Autonomía (7D) | Acuses de recibo + lista blanca de categorías | Nunca `dinero` ni `incidencia`. |
 | Retención | `correos` 365 días · `pasadas_correo` 180 días | Historia útil en la ficha del cliente, con un límite defendible frente a la minimización de datos. |
 
 ### Alternativas descartadas
@@ -154,7 +159,7 @@ create table correos (
   decidido_por     text not null,            -- regla | juez | fallo
   confianza        numeric(3,2),             -- null cuando decidio una regla
 
-  cliente_id       uuid references clientes(id),    -- fase 2B
+  cliente_id       uuid references clientes(id),    -- fase 7B
   enlace_por       text,                            -- contacto | dominio | manual
 
   visto_en         timestamptz,
@@ -167,7 +172,7 @@ se reintenta tras un fallo, `on conflict do nothing` evita duplicados sin
 coordinación.
 
 `motivo` y `decidido_por` no son adorno: son lo único que permitirá, dentro de
-meses, decidir con datos qué categorías entran en la lista blanca de 2D.
+meses, decidir con datos qué categorías entran en la lista blanca de 7D.
 
 ### 5.3 `pasadas_correo`
 
@@ -188,10 +193,10 @@ de filtrar lo que filtraban.
 
 ### 5.4 Categorías
 
-| Categoría | Qué es | ¿Candidata a lista blanca (2D)? |
+| Categoría | Qué es | ¿Candidata a lista blanca (7D)? |
 |---|---|---|
 | `lead` | Alguien que pregunta por los servicios | Sí — acuse de recibo |
-| `cliente` | Cliente existente (enlazado en 2B) | No, al principio |
+| `cliente` | Cliente existente (enlazado en 7B) | No, al principio |
 | `proveedor` | Facturas y gestiones de proveedores | No |
 | `dinero` | Cobros, impagos, bancos, Stripe | **Nunca** |
 | `incidencia` | Algo roto, cliente enfadado | **Nunca** |
@@ -229,11 +234,11 @@ de Google va en variable de entorno, nunca en la base.
 
 | Fase | Scope |
 |---|---|
-| 2A / 2B | `gmail.readonly` |
-| 2C | `gmail.compose` |
-| 2D | `gmail.send` |
+| 7A / 7B | `gmail.readonly` |
+| 7C | `gmail.compose` |
+| 7D | `gmail.send` |
 
-Se arranca **solo con `gmail.readonly`**. Cuando llegue 2C, Google volverá a
+Se arranca **solo con `gmail.readonly`**. Cuando llegue 7C, Google volverá a
 pedir consentimiento — y eso es correcto: el día que este agente gane permiso
 para escribir en nombre de HAT3X, merece preguntarse explícitamente.
 
@@ -286,7 +291,7 @@ cierra el caso — da la categoría pero no la urgencia, que es lo que interesa.
 dato entra en el prompt («este remitente es Peluquería Tal, cliente activo desde
 marzo») y el juez decide mejor. La regla mejora la pregunta en vez de saltársela.
 
-Ese cruce es también el mecanismo de la fase 2B, y tiene dos niveles:
+Ese cruce es también el mecanismo de la fase 7B, y tiene dos niveles:
 
 | `enlace_por` | Cómo | Fiabilidad |
 |---|---|---|
@@ -297,7 +302,7 @@ Ese cruce es también el mecanismo de la fase 2B, y tiene dos niveles:
 El nivel `dominio` cubre el caso corriente de que te escriba alguien nuevo de un
 cliente que ya tienes. Se distingue de `contacto` en el propio dato porque no es
 lo mismo *saber* quién escribe que *suponerlo* — y a la hora de decidir la lista
-blanca de 2D, esa diferencia importa.
+blanca de 7D, esa diferencia importa.
 
 ### 7.2 El juez
 
@@ -350,7 +355,7 @@ Vitest, como el resto de Atlas. Lo que importa no son los caminos felices.
 Se exportan ~50 correos reales, se etiquetan a mano una vez, y el script informa
 de aciertos, fallos y coste por pasada.
 
-Sin esto, la decisión de 2D («¿qué categorías son bastante fiables para responder
+Sin esto, la decisión de 7D («¿qué categorías son bastante fiables para responder
 solas?») sería a ojo. Con esto, es un número.
 
 ## 10. Qué hay que dejar preparado
@@ -378,7 +383,7 @@ falta y dónde ponerla, igual que hace `src/lib/descubrir/ajustes.ts`.
 2. **Subencargado del tratamiento (RGPD).** El cuerpo de los correos de clientes
    se envía al clasificador. Eso convierte al proveedor del LLM en subencargado, y
    DeepSeek es una empresa china — transferencia fuera del EEE que hay que
-   documentar. **Debe resolverse antes de 2C/2D**, y las salidas son: fijar un
+   documentar. **Debe resolverse antes de 7C/7D**, y las salidas son: fijar un
    proveedor con DPA y sin transferencia (Mistral, o Llama vía Groq/Together), o
    autoalojar con Ollama. El juez se inyecta por parámetro precisamente para que
    ese cambio sea de una línea.
@@ -386,5 +391,5 @@ falta y dónde ponerla, igual que hace `src/lib/descubrir/ajustes.ts`.
 3. **Retención de `correos` a 365 días:** decisión de negocio, no técnica. Queda
    escrita para poder revisarla.
 
-4. **Un solo buzón al principio.** El esquema soporta varios; la UI de 2A gestiona
+4. **Un solo buzón al principio.** El esquema soporta varios; la UI de 7A gestiona
    uno. Ampliarla no requiere cambiar tablas.
