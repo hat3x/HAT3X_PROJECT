@@ -270,7 +270,11 @@ async function registrar(
  * `repartir` hace por dentro.
  */
 async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
-  const hoy = new Date().toISOString().slice(0, 10);
+  // Un solo instante para todo el ciclo, igual que hace `repartir` con su
+  // propio `ahora`: así el filtro del día y el sello de `ultima_ok_en` no
+  // pueden caer en fechas distintas por una carrera contra el reloj.
+  const ahora = new Date().toISOString();
+  const hoy = ahora.slice(0, 10);
   const mesEnCurso = `${hoy.slice(0, 7)}-01`;
 
   // Se lee `contratos_visibles`, no `contratos`: la tabla tiene la lectura
@@ -348,18 +352,30 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
     .eq("es_propietario", true);
 
   let enviados = 0;
+  // Propietarios para los que el candado del día no se pudo comprobar: se
+  // cuentan aparte, no se confunden con "ya avisado" ni con "nada pendiente".
+  const noComprobados: string[] = [];
   for (const p of perfiles ?? []) {
     // El candado del día. Si el cron se dispara dos veces, el segundo no manda
     // nada: un aviso repetido enseña que el sistema no se controla a sí mismo.
     // Escrita así (usuario_id + tipo='cobro' + enviada_en), la consulta encaja
     // exactamente con el índice parcial `notificaciones_cobro_del_dia`.
-    const { data: yaHoy } = await sb
+    const { data: yaHoy, error: errorYaHoy } = await sb
       .from("notificaciones")
       .select("id")
       .eq("usuario_id", p.id)
       .eq("tipo", "cobro")
       .gte("enviada_en", `${hoy}T00:00:00Z`)
       .limit(1);
+    // Fallar cerrado, no abierto: si esta consulta se cae no hay forma de
+    // saber si ya se avisó hoy, y enviar de todos modos convertiría el
+    // candado en decorativo justo el día en que hace falta. Y el fallo se
+    // cuenta en la respuesta en vez de callarse, porque un candado roto en
+    // silencio se lee igual que un día sin nada pendiente.
+    if (errorYaHoy) {
+      noComprobados.push(p.id);
+      continue;
+    }
     if (yaHoy && yaHoy.length > 0) continue;
 
     const { data: suscripciones } = await sb
@@ -374,7 +390,17 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
         claves
       );
       await registrar(sb, p.id, null, "push", r.ok, r.error, "cobro");
-      if (r.ok) enviados++;
+      if (r.ok) {
+        enviados++;
+        // Igual que hace `repartir` para las incidencias: sin este sello la
+        // columna se queda en null para siempre y el runbook de
+        // MANTENIMIENTO.md acusaría a las claves VAPID de un problema que no
+        // existe.
+        await sb
+          .from("suscripciones_push")
+          .update({ ultima_ok_en: ahora })
+          .eq("id", s.id);
+      }
       // Una suscripción que el navegador tiró se borra: si no, se reintentaría
       // en cada aviso, para siempre.
       if (r.caducada) await sb.from("suscripciones_push").delete().eq("id", s.id);
@@ -387,7 +413,7 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
     if (rc.ok) enviados++;
   }
 
-  return new Response(JSON.stringify({ enviados }), {
+  return new Response(JSON.stringify({ enviados, noComprobados }), {
     headers: { "content-type": "application/json" },
   });
 }
