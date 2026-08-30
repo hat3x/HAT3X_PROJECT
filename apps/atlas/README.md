@@ -33,10 +33,15 @@ pg_cron (cada minuto)
    │                                      agrupa por proyecto, resuelve
    │                                      destinatarios, envía push y correo
    │
-   └── atlas_disparar_cobro()   ── pg_net ──▶  Edge Function «avisar»  {"cobro": true}
-   (una vez al día, 9:07 UTC)     ¿meses sin facturar o facturas vencidas?
-                                          si hay algo, un resumen a los
-                                          propietarios, push y correo
+   ├── atlas_disparar_cobro()   ── pg_net ──▶  Edge Function «avisar»  {"cobro": true}
+   │   (una vez al día, 9:07 UTC)     ¿meses sin facturar o facturas vencidas?
+   │                                          si hay algo, un resumen a los
+   │                                          propietarios, push y correo
+   │
+   └── atlas_disparar_fichajes() ── pg_net ─▶  Edge Function «avisar»  {"fichajes": true}
+       (cada hora, minuto 41)         ¿algún fichaje abierto hace más de 10 h?
+                                              si lo hay, avisa a quien lo
+                                              dejó abierto, push y correo
 ```
 
 Van separadas a propósito: comprobar servicios no debe quedarse esperando a un servidor de correo.
@@ -144,7 +149,8 @@ Están todas en [`.env.example`](./.env.example) con su explicación. Las tres q
 ```
 src/
 ├── app/            Rutas. (auth) son las pantallas de entrada; api/silenciar responde sin sesión
-├── components/     Interfaz. marco/ es la estructura común; ui/ las piezas sueltas
+│   └── dinero/horas    Fichar y ver las horas del mes; el fichaje en curso también vive en el marco
+├── components/     Interfaz. marco/ es la estructura común (con el fichaje siempre a la vista, Fichaje.tsx); ui/ las piezas sueltas
 ├── lib/
 │   ├── alertas/     Agrupar, firmar enlaces, destinatarios y pendientes — TODO puro
 │   ├── auth/        El guardia: qué ruta corresponde a cada estado de sesión

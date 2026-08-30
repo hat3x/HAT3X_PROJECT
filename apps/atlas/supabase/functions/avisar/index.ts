@@ -12,6 +12,7 @@ import { firmar } from "./firma.ts";
 import { enviarCorreo, type AvisoEnviable } from "./correo.ts";
 import { enviarPush } from "./push.ts";
 import { pendientesDeCobro } from "./cobro.ts";
+import { abiertosDemasiado } from "./fichajes.ts";
 
 const VENTANA_MS = 2 * 60 * 1000;
 const CADUCIDAD_ENLACE_MS = 24 * 60 * 60 * 1000;
@@ -59,6 +60,9 @@ Deno.serve(async (peticion: Request) => {
   const cuerpo = await peticion.json().catch(() => ({}));
   if (cuerpo?.cobro === true) {
     return await avisarDeCobro(sb);
+  }
+  if (cuerpo?.fichajes === true) {
+    return await avisarDeFichajes(sb);
   }
 
   const ahora = new Date().toISOString();
@@ -242,7 +246,7 @@ async function registrar(
   // Al final y con valor por defecto para que las dos llamadas que ya
   // existían (las de incidencia, arriba) no tengan que tocarse: siguen
   // pasando sus mismos seis argumentos y siguen quedando marcadas 'incidencia'.
-  tipo: "incidencia" | "cobro" = "incidencia"
+  tipo: "incidencia" | "cobro" | "fichaje" = "incidencia"
 ): Promise<void> {
   // Los fallos se registran igual que los aciertos: una suscripción caducada o
   // un canal sin configurar tienen que verse, no perderse en silencio.
@@ -254,6 +258,77 @@ async function registrar(
     error,
     tipo,
   });
+}
+
+/**
+ * El envío a una persona por los dos canales, con su registro. Lo comparten
+ * `avisarDeCobro` y `avisarDeFichajes`: las dos mandan push + correo a un
+ * único destinatario y registran cada intento con `registrar`, y una segunda
+ * copia de ese cuerpo en el mismo fichero habría divergido igual que si
+ * viviera en dos ficheros distintos.
+ *
+ * `ahora` entra por parámetro y no se calcula aquí dentro a propósito: cada
+ * llamante fija un único instante para todo su ciclo (el mismo que usa para
+ * su propio candado), así que el sello `ultima_ok_en` de todas las
+ * suscripciones tratadas en una misma invocación cae en la misma fecha, sin
+ * depender de cuánto tarde la vuelta a la base entre una persona y la
+ * siguiente.
+ */
+async function enviarA(
+  sb: SupabaseClient,
+  usuarioId: string,
+  titulo: string,
+  cuerpo: string,
+  url: string,
+  tipo: "cobro" | "fichaje",
+  ahora: string
+): Promise<number> {
+  const enviable: AvisoEnviable = { titulo, cuerpo, url };
+
+  const claves = {
+    publica: Deno.env.get("VAPID_PUBLICA") ?? "",
+    privada: Deno.env.get("VAPID_PRIVADA") ?? "",
+    contacto: Deno.env.get("VAPID_CONTACTO") ?? "mailto:info@hat3x.com",
+  };
+  const apiKeyCorreo = Deno.env.get("RESEND_API_KEY") ?? "";
+
+  let enviados = 0;
+
+  const { data: suscripciones } = await sb
+    .from("suscripciones_push")
+    .select("id, endpoint, p256dh, auth")
+    .eq("usuario_id", usuarioId);
+
+  for (const s of suscripciones ?? []) {
+    const r = await enviarPush(
+      { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
+      enviable,
+      claves
+    );
+    await registrar(sb, usuarioId, null, "push", r.ok, r.error, tipo);
+    if (r.ok) {
+      enviados++;
+      // Igual que hace `repartir` para las incidencias: sin este sello la
+      // columna se queda en null para siempre y el runbook de
+      // MANTENIMIENTO.md acusaría a las claves VAPID de un problema que no
+      // existe.
+      await sb
+        .from("suscripciones_push")
+        .update({ ultima_ok_en: ahora })
+        .eq("id", s.id);
+    }
+    // Una suscripción que el navegador tiró se borra: si no, se reintentaría
+    // en cada aviso, para siempre.
+    if (r.caducada) await sb.from("suscripciones_push").delete().eq("id", s.id);
+  }
+
+  // El correo se intenta aunque el push haya salido: es el rastro escrito.
+  const correo = await correoDe(sb, usuarioId);
+  const rc = await enviarCorreo(correo, enviable, apiKeyCorreo, fetch);
+  await registrar(sb, usuarioId, null, "email", rc.ok, rc.error, tipo);
+  if (rc.ok) enviados++;
+
+  return enviados;
 }
 
 /**
@@ -366,13 +441,6 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
     url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`,
   };
 
-  const claves = {
-    publica: Deno.env.get("VAPID_PUBLICA") ?? "",
-    privada: Deno.env.get("VAPID_PRIVADA") ?? "",
-    contacto: Deno.env.get("VAPID_CONTACTO") ?? "mailto:info@hat3x.com",
-  };
-  const apiKeyCorreo = Deno.env.get("RESEND_API_KEY") ?? "";
-
   const { data: perfiles, error: errorPerfiles } = await sb
     .from("perfiles")
     .select("id")
@@ -413,39 +481,86 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
     }
     if (yaHoy && yaHoy.length > 0) continue;
 
-    const { data: suscripciones } = await sb
-      .from("suscripciones_push")
-      .select("id, endpoint, p256dh, auth")
-      .eq("usuario_id", p.id);
+    enviados += await enviarA(sb, p.id, cobro.titulo, cobro.cuerpo, enviable.url, "cobro", ahora);
+  }
 
-    for (const s of suscripciones ?? []) {
-      const r = await enviarPush(
-        { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
-        enviable,
-        claves
-      );
-      await registrar(sb, p.id, null, "push", r.ok, r.error, "cobro");
-      if (r.ok) {
-        enviados++;
-        // Igual que hace `repartir` para las incidencias: sin este sello la
-        // columna se queda en null para siempre y el runbook de
-        // MANTENIMIENTO.md acusaría a las claves VAPID de un problema que no
-        // existe.
-        await sb
-          .from("suscripciones_push")
-          .update({ ultima_ok_en: ahora })
-          .eq("id", s.id);
-      }
-      // Una suscripción que el navegador tiró se borra: si no, se reintentaría
-      // en cada aviso, para siempre.
-      if (r.caducada) await sb.from("suscripciones_push").delete().eq("id", s.id);
+  return new Response(JSON.stringify({ enviados, noComprobados }), {
+    headers: { "content-type": "application/json" },
+  });
+}
+
+/**
+ * El aviso del fichaje que se dejó abierto. Cada hora se mira qué lleva
+ * abierto más de AVISO_HORAS y se avisa a su dueño —a él, no al propietario:
+ * es su olvido y es él quien puede cerrarlo.
+ *
+ * Lee TABLAS: la service_role no tiene `auth.uid()` y las vistas filtradas
+ * la rechazan (lección del cobro).
+ */
+async function avisarDeFichajes(sb: SupabaseClient): Promise<Response> {
+  const ahora = Date.now();
+  const ahoraIso = new Date(ahora).toISOString();
+
+  const { data: abiertos, error: errorAbiertos } = await sb
+    .from("fichajes")
+    .select("id, usuario_id, inicio, proyectos(nombre), clientes(nombre)")
+    .is("fin", null);
+  if (errorAbiertos) {
+    // Un permiso denegado disfrazado de «nada abierto» sería invisible.
+    return new Response(JSON.stringify({ error: errorAbiertos.message }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const uno = (u: unknown) => (Array.isArray(u) ? u[0] : u);
+  const avisos = abiertosDemasiado(
+    (abiertos ?? []).map((f) => ({
+      id: f.id,
+      usuarioId: f.usuario_id,
+      inicio: f.inicio,
+      proyectoNombre: uno(f.proyectos)?.nombre ?? null,
+      clienteNombre: uno(f.clientes)?.nombre ?? null,
+    })),
+    ahora
+  );
+
+  if (avisos.length === 0) {
+    return new Response(JSON.stringify({ enviados: 0, motivo: "nada abierto de más" }), {
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  // id → inicio. Un `abiertos!.find(...)!.inicio` dentro del bucle mentiría
+  // sobre lo que el compilador puede garantizar: nada asegura que ESE id siga
+  // en el array (y de hecho no hace falta que lo compruebe, porque `avisos`
+  // sale de mapear el propio `abiertos`). Un mapa hecho una vez, antes del
+  // bucle, dice lo mismo sin el `!`.
+  const inicioPorFichaje = new Map((abiertos ?? []).map((f) => [f.id, f.inicio] as const));
+
+  let enviados = 0;
+  const noComprobados: string[] = [];
+  for (const a of avisos) {
+    const inicio = inicioPorFichaje.get(a.fichajeId)!;
+    // El candado: un aviso por fichaje, no uno por hora. Si ya hay un aviso
+    // de fichaje a esta persona POSTERIOR al inicio del fichaje, es de este
+    // mismo, y no se repite. Falla cerrado: si no se puede comprobar, no se
+    // manda, y se cuenta.
+    const { data: ya, error: errorYa } = await sb
+      .from("notificaciones")
+      .select("id")
+      .eq("usuario_id", a.usuarioId)
+      .eq("tipo", "fichaje")
+      .gte("enviada_en", inicio)
+      .limit(1);
+    if (errorYa) {
+      noComprobados.push(a.usuarioId);
+      continue;
     }
+    if (ya && ya.length > 0) continue;
 
-    // El correo se intenta aunque el push haya salido: es el rastro escrito.
-    const correo = await correoDe(sb, p.id);
-    const rc = await enviarCorreo(correo, enviable, apiKeyCorreo, fetch);
-    await registrar(sb, p.id, null, "email", rc.ok, rc.error, "cobro");
-    if (rc.ok) enviados++;
+    const url = `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/horas`;
+    enviados += await enviarA(sb, a.usuarioId, a.titulo, a.cuerpo, url, "fichaje", ahoraIso);
   }
 
   return new Response(JSON.stringify({ enviados, noComprobados }), {

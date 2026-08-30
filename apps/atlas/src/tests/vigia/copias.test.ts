@@ -33,6 +33,9 @@ describe.each([
   // Function ya hay un `pendientes.ts` — el de incidencias. Se copia con
   // nombre distinto, `cobro.ts`, para no pisarlo.
   ["avisar", "cobro", "pendientes", "cobro"],
+  // El original vive en `horas/abiertos.ts`, con el mismo nombre en la Edge
+  // Function porque ahí no hay ya un `abiertos.ts` con el que choque.
+  ["avisar", "horas", "abiertos", "fichajes"],
 ])("copia de %s/%s.ts para Deno", (funcion, carpeta, nombreOriginal, nombreCopia) => {
   const original = leer(`src/lib/${carpeta}/${nombreOriginal}.ts`);
   const copia = leer(`supabase/functions/${funcion}/${nombreCopia}.ts`);

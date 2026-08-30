@@ -1356,6 +1356,7 @@ export type Database = {
       atlas_disparar_avisos: { Args: never; Returns: undefined }
       atlas_disparar_cobro: { Args: never; Returns: undefined }
       atlas_disparar_descubridor: { Args: never; Returns: undefined }
+      atlas_disparar_fichajes: { Args: never; Returns: undefined }
       atlas_disparar_vigia: { Args: never; Returns: undefined }
       atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
       atlas_es_propietario: { Args: never; Returns: boolean }

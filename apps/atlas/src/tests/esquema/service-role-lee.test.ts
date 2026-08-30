@@ -33,6 +33,7 @@ const TABLAS_QUE_LEE_LA_EDGE_FUNCTION = [
   "perfiles",
   "notificaciones",
   "suscripciones_push",
+  "fichajes",
 ];
 
 describe("lo que la service_role puede leer", () => {

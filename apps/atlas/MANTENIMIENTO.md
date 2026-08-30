@@ -23,7 +23,7 @@ select j.jobname, d.status, d.return_message, d.start_time
  order by d.start_time desc;
 ```
 
-Las cuatro tareas —`atlas-vigia`, `atlas-avisos`, `atlas-retencion` y `atlas-cobro`— deben aparecer con `succeeded`. Las dos primeras, cada minuto; `atlas-cobro`, una vez al día.
+Las cinco tareas —`atlas-vigia`, `atlas-avisos`, `atlas-retencion`, `atlas-cobro` y `atlas-fichajes`— deben aparecer con `succeeded`. Las dos primeras, cada minuto; `atlas-cobro`, una vez al día; `atlas-fichajes`, cada hora, al minuto 41.
 
 **pg_cron corre en UTC.** `atlas-cobro` está dada de alta como `7 9 * * *`, que son las **11:07 de Madrid en verano y las 10:07 en invierno**. El comentario de la migración `20260829170000_aviso_cobro.sql` dice «9:07 de la mañana» y no se puede corregir porque ya está aplicada: la verdad vive aquí.
 
@@ -115,6 +115,17 @@ Es un aviso diario y **no manda nada si no hay nada pendiente**, así que un dí
 2. **`ultima_ok_en` en `suscripciones_push`.** Si el push salió, ese sello se mueve; si lleva días parado con avisos que sí deberían haber llegado, sospecha de las claves VAPID (punto 3 de arriba).
 3. **La Edge Function lee la tabla `contratos`, no la vista `contratos_visibles`.** La vista filtra por `auth.uid()` y solo está concedida a `authenticated`; la service_role no la puede leer. Si alguien «unifica» la consulta con la de la pantalla (`src/lib/db/cobro.ts`) embebiendo la vista, la función vuelve al 500. Lo vigila `src/tests/esquema/service-role-lee.test.ts`.
 4. **La hora.** `atlas-cobro` corre a las 9:07 UTC (ver arriba). Antes de esa hora no ha pasado nada todavía.
+
+---
+
+## «No llega el aviso de fichaje abierto»
+
+Es el aviso que caza el fichaje que se dejó abierto (una jornada real, o un olvido: diez horas sin cerrar). Corre cada hora, al minuto 41, y **no manda nada si no hay ningún fichaje abierto desde hace diez horas** — un día sin aviso puede ser un día sin olvidos.
+
+1. **Qué respondió la Edge Function.** La tarea `atlas-fichajes` llama a `avisar` con `{"fichajes": true}`; la respuesta queda en el registro de la función (`npx supabase functions logs avisar`). Un **500** con `error` es una lectura que falló: la función falla cerrado, igual que `avisarDeCobro`, y no envía nada a propósito. Un 200 con `noComprobados` no vacío es que el candado por fichaje (¿ya se avisó de ESTE?) no se pudo consultar para esas personas y se les saltó esa vuelta.
+2. **`ultima_ok_en` en `suscripciones_push`.** El mismo sello que usa el aviso de cobro: si el push sale, se mueve. Si no se mueve con avisos que sí deberían haber salido, sospecha de las claves VAPID.
+3. **El aviso va al dueño del fichaje, no al propietario.** A diferencia de `atlas-cobro` (que avisa a todos los propietarios), aquí el destinatario es quien dejó el fichaje abierto: es su olvido y solo él puede cerrarlo. Si un colaborador se queja de que «nadie me avisó», mira `notificaciones` filtrando por su `usuario_id`, no por el propietario.
+4. **La hora.** `atlas-fichajes` corre al minuto 41 de cada hora (UTC, pero da igual: se mide en horas transcurridas desde el `inicio` del fichaje, no en hora del día).
 
 ---
 
@@ -275,6 +286,7 @@ select atlas_consolidar_retencion();
 | Mes | Mirar `descubrimientos` por `ok = false`: un descubridor roto no se nota hasta que un cliente nuevo lleva semanas sin vigilar |
 | Mes | Comprobar que los recibos fijos se materializaron: `select count(*) from gastos where recurrente_id is not null and date_trunc('month', fecha) = date_trunc('month', current_date);` |
 | Día (automático) | `atlas-cobro` avisa a los propietarios de los meses de contrato sin facturar y de las facturas vencidas, a las 9:07 UTC. Si no llega, ver «El aviso de cobro no llega» |
+| Hora (automático) | `atlas-fichajes` avisa a quien lleva un fichaje abierto más de diez horas, al minuto 41. Si no llega, ver «No llega el aviso de fichaje abierto» |
 | Trimestre | Comprobar el tamaño de la base |
 
 **Un gasto recurrente puede estar apuntado en dos sitios a la vez.** `apps/jarvis/src/lib/company-brain.ts` todavía escribe en `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue` — su propia copia de `gastos_recurrentes`, `gastos` y `facturas` — porque jubilarlas es un plan aparte (bloque 2A solo jubiló `hat3x_transactions`, vía `finance.ts`). Si una suma no cuadra, antes de sospechar de Atlas mira si ese gasto se dio de alta también desde jarvis.
