@@ -34,6 +34,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      ajustes_economia: {
+        Row: {
+          actualizado_en: string
+          cif: string | null
+          coste_hora: number
+          direccion: string | null
+          id: number
+          razon_social: string | null
+        }
+        Insert: {
+          actualizado_en?: string
+          cif?: string | null
+          coste_hora?: number
+          direccion?: string | null
+          id: number
+          razon_social?: string | null
+        }
+        Update: {
+          actualizado_en?: string
+          cif?: string | null
+          coste_hora?: number
+          direccion?: string | null
+          id?: number
+          razon_social?: string | null
+        }
+        Relationships: []
+      }
       check_agregados: {
         Row: {
           bucket: string
@@ -193,6 +220,35 @@ export type Database = {
             columns: ["servicio_id"]
             isOneToOne: false
             referencedRelation: "servicios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cierres_mes: {
+        Row: {
+          cerrado_en: string
+          cerrado_por: string | null
+          coste_hora: number
+          mes: string
+        }
+        Insert: {
+          cerrado_en?: string
+          cerrado_por?: string | null
+          coste_hora: number
+          mes: string
+        }
+        Update: {
+          cerrado_en?: string
+          cerrado_por?: string | null
+          coste_hora?: number
+          mes?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cierres_mes_cerrado_por_fkey"
+            columns: ["cerrado_por"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
             referencedColumns: ["id"]
           },
         ]
