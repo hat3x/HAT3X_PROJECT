@@ -1,3 +1,5 @@
+> **JUBILADA (agosto 2026).** Las horas se fichan desde Atlas (`/dinero/horas` y el botón del marco). Su histórico está volcado en `fichajes` con `origen='anadido'` por `apps/atlas/scripts/migrar/fichajes.ts`. Este código no se mantiene; borrar la carpeta es decisión del propietario.
+
 # HAT3X Fichaje
 
 Herramienta de fichaje (time tracking) para HAT3X. Lee los logs de Claude Code, reparte las horas
