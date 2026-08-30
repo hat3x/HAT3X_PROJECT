@@ -90,6 +90,16 @@ export function ExceptionsEditor({
                 Marca un día libre o define un horario especial para una fecha
                 concreta.
               </DialogDescription>
+              {/* El aviso viene de un caso real: se puso un horario especial de
+                  tarde esperando AÑADIRLA, y reemplazó el día entero — ese
+                  profesional dejó de trabajar por la mañana sin que nada lo
+                  dijera. La alternativa correcta es invisible justo cuando hace
+                  falta, así que se nombra aquí. */}
+              <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                El horario especial <strong>sustituye</strong> el horario de ese día: solo se
+                ofrecerán las horas que pongas aquí. Para añadir un turno sin quitar el resto,
+                usa <strong>Días sueltos</strong> en el horario de la clínica.
+              </p>
             </DialogHeader>
             <ExceptionForm
               salonId={salonId}
