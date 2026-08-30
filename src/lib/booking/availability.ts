@@ -200,6 +200,72 @@ export function resolveSalonRanges(
   return [...semanales, ...extra].sort((a, b) => a.start - b.start);
 }
 
+/** Una cita ya colocada, con el gabinete que ocupa (si tiene). */
+export interface OperatoryUsage {
+  operatoryId: string | null;
+  start: number;
+  end: number;
+}
+
+/**
+ * Tramos en los que NO queda ningún gabinete libre.
+ *
+ * El gabinete es un recurso compartido, y ahí está la diferencia con el
+ * horario: dos dentistas pueden trabajar a la vez, pero no en el mismo sillón.
+ * Hasta ahora Biodental lo resolvía con `single_resource`, que bloqueaba el
+ * hueco para TODA la clínica — sirve con un gabinete y se rompe con dos.
+ *
+ * Tres decisiones que evitan que esto deje una agenda sin huecos por error:
+ *
+ *  · **Sin gabinetes configurados no se bloquea nada.** Una clínica que no usa
+ *    esta función no puede quedarse sin poder citar por haberla estrenado.
+ *  · **Una cita sin gabinete no ocupa ninguno.** Durante la migración habrá
+ *    citas antiguas sin asignar; contarlas como "ocupan todos" vaciaría la
+ *    agenda de golpe.
+ *  · **Un gabinete desconocido tampoco cuenta.** Si se borró o es de otro
+ *    salón, no se puede deducir nada de él.
+ */
+export function resolveOperatoryBusy(
+  operatoryIds: readonly string[],
+  usages: readonly OperatoryUsage[],
+): Array<{ start: number; end: number }> {
+  const total = operatoryIds.length;
+  if (total === 0) return [];
+
+  const validos = new Set(operatoryIds);
+  const ocupaciones = usages.filter(
+    (u) => u.operatoryId !== null && validos.has(u.operatoryId) && u.end > u.start,
+  );
+  if (ocupaciones.length < total) return [];
+
+  // Barrido por los extremos: entre dos extremos consecutivos la ocupación no
+  // cambia, así que basta contar cuántos gabinetes distintos están ocupados en
+  // cada tramo. Se cuentan DISTINTOS: dos citas en el mismo sillón no dejan sin
+  // sillón a nadie más.
+  const puntos = Array.from(
+    new Set(ocupaciones.flatMap((u) => [u.start, u.end])),
+  ).sort((a, b) => a - b);
+
+  const llenos: Array<{ start: number; end: number }> = [];
+  for (let i = 0; i < puntos.length - 1; i += 1) {
+    const desde = puntos[i] as number;
+    const hasta = puntos[i + 1] as number;
+    const ocupados = new Set(
+      ocupaciones
+        .filter((u) => u.start < hasta && desde < u.end)
+        .map((u) => u.operatoryId as string),
+    );
+    if (ocupados.size >= total) {
+      // Se pega al tramo anterior si son contiguos: dos trozos seguidos son un
+      // solo periodo sin sillón, y partirlo confundiría al leerlo.
+      const ultimo = llenos[llenos.length - 1];
+      if (ultimo !== undefined && ultimo.end === desde) ultimo.end = hasta;
+      else llenos.push({ start: desde, end: hasta });
+    }
+  }
+  return llenos;
+}
+
 function resolveWorkingRanges(
   date: string,
   schedules: ScheduleSlot[],
