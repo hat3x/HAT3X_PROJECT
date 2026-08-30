@@ -135,16 +135,40 @@ export function calcularMargen(e: {
   const ordenar = (m: Map<string, Acumulado>) =>
     [...m.entries()].map(([id, a]) => fila(id, a, coste)).sort((x, y) => y.margenCentimos - x.margenCentimos);
 
-  // El total se calcula sobre los totales, no sumando filas: así el test de
-  // cuadre comprueba de verdad que ningún eje pierde ni duplica nada.
-  const horasTotal = costeDeMinutos(minutosTotal, coste);
+  const filasCliente = ordenar(clientes);
+  const filasProyecto = ordenar(proyectos);
+  const lineaSinCliente = linea(sinClienteG, sinClienteMin, coste);
+  const lineaSinProyecto = linea(sinProyectoG, sinProyectoMin, coste);
+  const lineaEstructura = linea(estructuraG, estructuraMin, coste);
+
+  // Ronda de arreglo 1: el total de horas se SUMA a partir de las filas ya
+  // redondeadas del eje de cliente (porCliente + sinCliente + estructura); no
+  // se redondea aparte sobre el total de minutos. Con coste no exacto y
+  // minutos que no son múltiplos de 60 los dos números difieren: con coste
+  // 3333 y dos clientes de 1 minuto cada uno, las filas dan 56 + 56 = 112
+  // pero redondear el total de minutos (2) da 111. La pantalla enseña las
+  // filas y el total juntos, y un total que no cuadra con lo que se ve
+  // encima parece un error de verdad aunque no lo sea.
+  //
+  // El eje de proyectos cuadra con el mismo número por construcción, no por
+  // coincidencia: son las mismas líneas (tramos) las que alimentan
+  // porProyecto + sinProyecto + estructura, solo agrupadas por otra clave.
+  // Mientras los tramos de un cliente no se repartan entre varios proyectos
+  // (ni un proyecto entre varios clientes) de forma que un eje junte lo que
+  // el otro separa, cada grupo del eje de cliente tiene un grupo espejo en
+  // el de proyecto con exactamente los mismos minutos, y el mismo redondeo
+  // por grupo da la misma suma en los dos ejes.
+  const horasTotal =
+    filasCliente.reduce((t, f) => t + f.horasCentimos, 0) +
+    lineaSinCliente.horasCentimos +
+    lineaEstructura.horasCentimos;
 
   return {
-    porCliente: ordenar(clientes),
-    sinCliente: linea(sinClienteG, sinClienteMin, coste),
-    porProyecto: ordenar(proyectos),
-    sinProyecto: linea(sinProyectoG, sinProyectoMin, coste),
-    estructura: linea(estructuraG, estructuraMin, coste),
+    porCliente: filasCliente,
+    sinCliente: lineaSinCliente,
+    porProyecto: filasProyecto,
+    sinProyecto: lineaSinProyecto,
+    estructura: lineaEstructura,
     total: {
       facturadoCentimos: facturadoTotal,
       gastosCentimos: gastosTotal,

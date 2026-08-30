@@ -96,4 +96,44 @@ describe("calcularMargen", () => {
     const solo = calcularMargen({ facturas: [], gastos: [gastos[0]!], tramos: [], costeHoraCentimos: COSTE });
     expect(solo.porCliente).toEqual([{ id: "c-bio", nombre: "Biodental", facturadoCentimos: 0, gastosCentimos: 4830, minutos: 0, horasCentimos: 0, margenCentimos: -4830 }]);
   });
+
+  // Ronda de arreglo 1: con coste no exacto (3333) y minutos que no son
+  // múltiplos de 60, redondear el total de minutos de una sola vez YA NO
+  // cuadra con la suma de las filas: 2 clientes de 1 minuto cada uno dan
+  // 56 + 56 = 112 en las filas, pero redondear el total (2 minutos) da 111.
+  // `total.horasCentimos` se define como la suma de filas — no el redondeo
+  // del total — para que la pantalla, que enseña las dos cosas juntas,
+  // nunca muestre un total que no cuadre con lo que hay encima.
+  it("con coste y minutos que no cuadran al redondear el total, el total es la suma de las filas, en los dos ejes", () => {
+    const COSTE_IMPAR = 3333;
+    const tramosImpares: TramoMes[] = [
+      { clienteId: "c1", clienteNombre: "Uno", proyectoId: "p1", proyectoNombre: "Proyecto Uno", minutos: 1 },
+      { clienteId: "c2", clienteNombre: "Dos", proyectoId: "p2", proyectoNombre: "Proyecto Dos", minutos: 7 },
+      // Sin cliente, con proyecto: alimenta `sinCliente` en el eje de
+      // cliente y una fila de `porProyecto` propia en el eje de proyecto.
+      { clienteId: null, clienteNombre: null, proyectoId: "p3", proyectoNombre: "Proyecto Tres", minutos: 13 },
+      // Ni cliente ni proyecto: estructura, la misma línea en los dos ejes.
+      { clienteId: null, clienteNombre: null, proyectoId: null, proyectoNombre: null, minutos: 1 },
+    ];
+    const r2 = calcularMargen({ facturas: [], gastos: [], tramos: tramosImpares, costeHoraCentimos: COSTE_IMPAR });
+
+    // Las filas, calculadas a mano: 56, 389, 722 y 56.
+    const sumaEjeCliente = r2.porCliente.reduce((t, f) => t + f.horasCentimos, 0) + r2.sinCliente.horasCentimos + r2.estructura.horasCentimos;
+    const sumaEjeProyecto = r2.porProyecto.reduce((t, f) => t + f.horasCentimos, 0) + r2.sinProyecto.horasCentimos + r2.estructura.horasCentimos;
+    expect(r2.total.horasCentimos).toBe(1223);
+    expect(sumaEjeCliente).toBe(1223);
+    expect(sumaEjeProyecto).toBe(1223);
+
+    // Y no el redondeo directo del total de minutos (1222): las dos formas
+    // de cuadrar difieren aquí a propósito, para fijar cuál gana.
+    expect(costeDeMinutos(r2.total.minutos, COSTE_IMPAR)).toBe(1222);
+    expect(r2.total.horasCentimos).not.toBe(costeDeMinutos(r2.total.minutos, COSTE_IMPAR));
+
+    // Y el margen del total cuadra por los dos ejes, con este total de horas.
+    const sumaMargenClientes = r2.porCliente.reduce((t, f) => t + f.margenCentimos, 0);
+    expect(sumaMargenClientes - r2.sinCliente.gastosCentimos - r2.sinCliente.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
+    const sumaMargenProyectos = r2.porProyecto.reduce((t, f) => t + f.margenCentimos, 0);
+    const facturadoSinProyecto2 = 0;
+    expect(sumaMargenProyectos + facturadoSinProyecto2 - r2.sinProyecto.gastosCentimos - r2.sinProyecto.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
+  });
 });
