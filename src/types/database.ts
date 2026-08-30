@@ -1568,6 +1568,8 @@ export interface Database {
           status: AppointmentStatus;
           starts_at: string;
           ends_at: string;
+          /** Gabinete donde se atiende. NULL = sin asignar (B2). */
+          operatory_id: string | null;
           price_cents: number;
           currency: string;
           notes: string | null;
@@ -1585,6 +1587,8 @@ export interface Database {
           status?: AppointmentStatus;
           starts_at: string;
           ends_at: string;
+          /** Gabinete donde se atiende. NULL = sin asignar (B2). */
+          operatory_id?: string | null;
           price_cents?: number;
           currency?: string;
           notes?: string | null;
@@ -1602,6 +1606,7 @@ export interface Database {
           status?: AppointmentStatus;
           starts_at?: string;
           ends_at?: string;
+          operatory_id?: string | null;
           price_cents?: number;
           currency?: string;
           notes?: string | null;
@@ -4085,6 +4090,21 @@ export interface Database {
       // Excepciones del horario de la CLINICA (20260830110000).
       // is_open=false -> cerrado ese dia; is_open=true + horas -> turno EXTRA
       // que se suma al horario semanal.
+      // Gabinetes (B2 — 20260830120000). Recurso compartido: dos
+      // profesionales pueden trabajar a la vez, pero no en el mismo sillon.
+      operatory: {
+        Row: {
+          id: string;
+          salon_id: string;
+          name: string;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: { id?: string; salon_id: string; name: string; active?: boolean };
+        Update: { name?: string; active?: boolean };
+        Relationships: [];
+      };
       salon_opening_exceptions: {
         Row: {
           id: string;

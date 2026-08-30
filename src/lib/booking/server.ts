@@ -13,6 +13,7 @@ import {
   type DaySlot,
   type GenerateSlotsInput,
   minutesToTime,
+  resolveOperatoryBusy,
   resolveSalonRanges,
 } from "@/lib/booking/availability";
 import { normalizeEmail, type CreateBookingInput } from "@/lib/booking/schema";
@@ -299,7 +300,8 @@ async function loadProfessionalDayInputs(
     blocksQuery = blocksQuery.neq("appointment_id", excludeAppointmentId);
   }
 
-  const [schedulesRes, exceptionRes, blocksRes, salonHoursRes, salonExcRes] = await Promise.all([
+  const [schedulesRes, exceptionRes, blocksRes, salonHoursRes, salonExcRes, operatoriesRes, chairRes] =
+    await Promise.all([
     admin
       .from("professional_schedules")
       .select("weekday, start_time, end_time")
@@ -327,6 +329,22 @@ async function loadProfessionalDayInputs(
       .select("exception_date, is_open, start_time, end_time")
       .eq("salon_id", salon.id)
       .eq("exception_date", date),
+    // Gabinetes activos del salón.
+    admin.from("operatory").select("id").eq("salon_id", salon.id).eq("active", true),
+    // Citas del día que OCUPAN un gabinete, de CUALQUIER profesional: el sillón
+    // es un recurso compartido. Se toma la cita entera y no sus bloques de
+    // fase, porque durante la espera el profesional queda libre pero el sillón
+    // no — el paciente sigue sentado mientras el composite cura.
+    admin
+      .from("appointments")
+      .select("operatory_id, starts_at, ends_at")
+      .eq("salon_id", salon.id)
+      // `filter` en vez de `.in`/`.gte`: misma consulta en PostgREST, y es el
+      // subconjunto de la API que los dobles de test ya cubren. Solo cuentan
+      // las citas vivas: una cancelada no ocupa sillón.
+      .filter("status", "in", "(pending,confirmed)")
+      .filter("starts_at", "gte", startIso)
+      .filter("starts_at", "lt", endIso),
   ]);
 
   if (schedulesRes.error || blocksRes.error) {
@@ -365,6 +383,32 @@ async function loadProfessionalDayInputs(
   const busy: BusyInterval[] = (blocksRes.data ?? []).map((b) =>
     parseTstzRange(b.occupied_range),
   );
+
+  // Falla en cerrado, igual que el horario: si no se sabe qué sillones hay o
+  // cuáles están ocupados, no se ofrecen huecos. Ofrecer una cita sin sitio
+  // donde sentar al paciente es peor que no ofrecerla.
+  if (operatoriesRes.error || chairRes.error) {
+    throw new BookingError(500, "Error al cargar los gabinetes.");
+  }
+  const operatoryIds = (operatoriesRes.data ?? []).map((o) => o.id);
+  if (operatoryIds.length > 0) {
+    // `resolveOperatoryBusy` no depende de la unidad: se le pasan milisegundos
+    // igual que en los tests se le pasan minutos.
+    const sinSillon = resolveOperatoryBusy(
+      operatoryIds,
+      (chairRes.data ?? []).map((a) => ({
+        operatoryId: a.operatory_id,
+        start: Date.parse(a.starts_at),
+        end: Date.parse(a.ends_at),
+      })),
+    );
+    for (const tramo of sinSillon) {
+      busy.push({
+        starts_at: new Date(tramo.start).toISOString(),
+        ends_at: new Date(tramo.end).toISOString(),
+      });
+    }
+  }
 
   // Duración de bloqueo efectivo: solo las fases activas que generan bloques.
   const blockingMin = applicationMin + postExposureMin;
