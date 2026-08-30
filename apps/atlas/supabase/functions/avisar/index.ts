@@ -434,12 +434,12 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
     });
   }
 
-  const enviable: AvisoEnviable = {
-    titulo: cobro.titulo,
-    cuerpo: cobro.cuerpo,
-    // Abre la pantalla que enseña esto mismo con detalle, no la raíz.
-    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`,
-  };
+  // Solo la url hace falta aquí: `enviarA` arma su propio `AvisoEnviable`
+  // con `titulo`/`cuerpo`/`url` a partir de sus parámetros, así que guardar
+  // los tres en un objeto aparte para leer luego un único campo sería
+  // repetir sin necesidad lo que ya tienen `cobro.titulo` y `cobro.cuerpo`.
+  // Abre la pantalla que enseña esto mismo con detalle, no la raíz.
+  const url = `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`;
 
   const { data: perfiles, error: errorPerfiles } = await sb
     .from("perfiles")
@@ -481,7 +481,7 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
     }
     if (yaHoy && yaHoy.length > 0) continue;
 
-    enviados += await enviarA(sb, p.id, cobro.titulo, cobro.cuerpo, enviable.url, "cobro", ahora);
+    enviados += await enviarA(sb, p.id, cobro.titulo, cobro.cuerpo, url, "cobro", ahora);
   }
 
   return new Response(JSON.stringify({ enviados, noComprobados }), {
@@ -546,6 +546,13 @@ async function avisarDeFichajes(sb: SupabaseClient): Promise<Response> {
     // de fichaje a esta persona POSTERIOR al inicio del fichaje, es de este
     // mismo, y no se repite. Falla cerrado: si no se puede comprobar, no se
     // manda, y se cuenta.
+    //
+    // El candado no filtra por `ok`: una fila de `notificaciones` con
+    // ok=false también lo cierra. Si el push Y el correo de un fichaje
+    // fallan los dos, ese fichaje no se reintenta en la siguiente hora.
+    // Mismo criterio que `avisarDeCobro`, y aceptado por el mismo motivo: lo
+    // cubre el runbook semanal de mirar `notificaciones` por `ok = false`
+    // (ver «Tareas periódicas» en MANTENIMIENTO.md).
     const { data: ya, error: errorYa } = await sb
       .from("notificaciones")
       .select("id")

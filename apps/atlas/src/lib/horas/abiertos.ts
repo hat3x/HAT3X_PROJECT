@@ -7,7 +7,15 @@
 // copia la vigila `src/tests/vigia/copias.test.ts`.
 //
 
-/** A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido. */
+/**
+ * A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido.
+ *
+ * La salida rápida de `atlas_disparar_fichajes()` usa el mismo número en SQL
+ * (`interval '10 hours'`, en la migración ya aplicada `20260830110000_aviso_fichaje.sql`);
+ * si cambia uno, cambia el otro: si el SQL corta más tarde que este número, se
+ * avisa más tarde de lo que promete la pantalla; si corta antes, la Edge
+ * Function recibe invocaciones vacías que no encuentran nada que avisar.
+ */
 export const AVISO_HORAS = 10;
 
 /**

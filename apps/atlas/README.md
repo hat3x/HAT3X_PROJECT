@@ -175,7 +175,7 @@ supabase/
 
 **2. Ningún componente cliente importa de un módulo de consultas ni de `lib/cripto`.** Arrastra `next/headers` y rompe la compilación. El gating por rol se calcula en la página de servidor y baja como prop.
 
-**3. La lógica que comparten la aplicación y las Edge Functions va copiada**, no importada: Deno no resuelve el alias `@/` y el despliegue solo sube `supabase/functions`. Las cinco copias las vigila `src/tests/vigia/copias.test.ts`, que falla si divergen aunque sea un byte. Si tocas el original, vuelve a copiarlo.
+**3. La lógica que comparten la aplicación y las Edge Functions va copiada**, no importada: Deno no resuelve el alias `@/` y el despliegue solo sube `supabase/functions`. Las copias las vigila `src/tests/vigia/copias.test.ts` —ahí está la lista completa, no aquí, para no tener dos sitios que desactualizar—, que falla si divergen aunque sea un byte. Si tocas el original, vuelve a copiarlo.
 
 ## Seguridad
 

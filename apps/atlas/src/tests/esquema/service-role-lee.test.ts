@@ -23,8 +23,9 @@ afterAll(async () => {
   await pg.end();
 });
 
-// Todas las relaciones que `avisarDeCobro` toca con la service_role. Si
-// alguien añade una lectura nueva a la Edge Function, la añade aquí.
+// Todas las relaciones que las dos ramas de la Edge Function tocan con la
+// service_role —`avisarDeCobro` y `avisarDeFichajes`—. Si alguien añade una
+// lectura nueva a la Edge Function, la añade aquí.
 const TABLAS_QUE_LEE_LA_EDGE_FUNCTION = [
   "periodos_contrato",
   "contratos",
@@ -34,6 +35,7 @@ const TABLAS_QUE_LEE_LA_EDGE_FUNCTION = [
   "notificaciones",
   "suscripciones_push",
   "fichajes",
+  "proyectos",
 ];
 
 describe("lo que la service_role puede leer", () => {

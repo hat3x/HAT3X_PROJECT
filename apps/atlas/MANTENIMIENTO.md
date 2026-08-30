@@ -286,7 +286,7 @@ select atlas_consolidar_retencion();
 | Mes | Mirar `descubrimientos` por `ok = false`: un descubridor roto no se nota hasta que un cliente nuevo lleva semanas sin vigilar |
 | Mes | Comprobar que los recibos fijos se materializaron: `select count(*) from gastos where recurrente_id is not null and date_trunc('month', fecha) = date_trunc('month', current_date);` |
 | Día (automático) | `atlas-cobro` avisa a los propietarios de los meses de contrato sin facturar y de las facturas vencidas, a las 9:07 UTC. Si no llega, ver «El aviso de cobro no llega» |
-| Hora (automático) | `atlas-fichajes` avisa a quien lleva un fichaje abierto más de diez horas, al minuto 41. Si no llega, ver «No llega el aviso de fichaje abierto» |
+| Hora (automático) | `atlas-fichajes` avisa a quien lleva un fichaje abierto más de diez horas, al minuto 41 (las diez horas están por duplicado, en el SQL y en `AVISO_HORAS`: si cambia una, cambia la otra). Si no llega, ver «No llega el aviso de fichaje abierto» |
 | Trimestre | Comprobar el tamaño de la base |
 
 **Un gasto recurrente puede estar apuntado en dos sitios a la vez.** `apps/jarvis/src/lib/company-brain.ts` todavía escribe en `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue` — su propia copia de `gastos_recurrentes`, `gastos` y `facturas` — porque jubilarlas es un plan aparte (bloque 2A solo jubiló `hat3x_transactions`, vía `finance.ts`). Si una suma no cuadra, antes de sospechar de Atlas mira si ese gasto se dio de alta también desde jarvis.
@@ -296,7 +296,7 @@ select atlas_consolidar_retencion();
 ## Al tocar el código
 
 - **`npm run build` antes de dar nada por terminado.** Los tests y `tsc` en verde no bastan: una función de servidor sin `async` en un módulo `"use server"` solo la caza el build. **Pero para el servidor de desarrollo antes** — comparten `.next` y el build se lo deja inservible.
-- **Si tocas lógica compartida con las Edge Functions, vuelve a copiarla.** `copias.test.ts` falla si divergen aunque sea un byte. Las cinco copias son `maquina`, `evaluar`, `agrupar`, `firma` y `pendientes`.
+- **Si tocas lógica compartida con las Edge Functions, vuelve a copiarla.** `copias.test.ts` falla si divergen aunque sea un byte. La lista de copias vigentes vive en ese fichero, no aquí: repetirla a mano en dos sitios es exactamente lo que la dejó desactualizada la última vez.
 - **Migraciones con `npx supabase migration up --local`.** **Nunca `db reset`** — no hay `seed.sql` y borra los datos dados de alta a mano.
 - **Una migración aplicada no se edita.** Se corrige con otra encima.
 
