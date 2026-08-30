@@ -85,6 +85,24 @@ function cuotaTotal(contratos: ContratoVisible[]): number | null {
   return conImporte.reduce((suma, c) => suma + (c.cuotaMensual ?? 0), 0);
 }
 
+/**
+ * Solo `id` y `nombre`, ordenados. Existe aparte de `listarClientes` porque
+ * quien la llama —el selector de fichar, en el marco— no necesita ni
+ * `contratos_visibles` ni las cuotas agregadas: pedirlas ahí sería arrastrar
+ * cuatro consultas de más en CADA página, porque el marco se renderiza en
+ * todas.
+ */
+export async function nombresDeClientes(
+  sb: Sb
+): Promise<{ id: string; nombre: string }[]> {
+  const { data, error } = await sb
+    .from("clientes")
+    .select("id, nombre")
+    .order("nombre");
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function listarClientes(sb: Sb): Promise<ClienteResumen[]> {
   const { data, error } = await sb
     .from("clientes")

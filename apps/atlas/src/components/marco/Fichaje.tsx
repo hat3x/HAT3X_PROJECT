@@ -26,15 +26,24 @@ export function Fichaje({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const [ahora, setAhora] = useState(() => Date.now());
+  // Nace en `null` y no en `Date.now()`: el servidor renderiza en un
+  // instante y el cliente hidrata en otro, y si esos dos instantes caen a
+  // ambos lados de un cambio de minuto el texto del cronómetro no coincide
+  // — error de hidratación. Mientras es `null` no se pinta el cronómetro,
+  // solo la etiqueta; en el primer efecto tras montar se fija el valor real,
+  // ya solo en el cliente.
+  const [ahora, setAhora] = useState<number | null>(null);
 
   // El cronómetro se refresca cada medio minuto: basta para leerlo y no
-  // vuelve a pintar el marco entero cada segundo.
+  // vuelve a pintar el marco entero cada segundo. La dependencia es
+  // `enCurso?.inicio` (una cadena) y no `enCurso` (un objeto nuevo en cada
+  // render del layout): con el objeto, el efecto se reiniciaría de más.
   useEffect(() => {
     if (!enCurso) return;
+    setAhora(Date.now());
     const t = setInterval(() => setAhora(Date.now()), 30_000);
     return () => clearInterval(t);
-  }, [enCurso]);
+  }, [enCurso?.inicio]);
 
   async function ejecutar(accion: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null);
@@ -51,12 +60,18 @@ export function Fichaje({
   }
 
   if (enCurso) {
-    const minutos = Math.round((ahora - Date.parse(enCurso.inicio)) / 60_000);
+    // `ahora` es `null` hasta que el efecto corre en el cliente (ver el
+    // comentario del `useState` de arriba): mientras tanto no hay minutos
+    // fiables que pintar, solo la etiqueta de qué está en curso.
+    const minutos =
+      ahora === null ? null : Math.round((ahora - Date.parse(enCurso.inicio)) / 60_000);
     return (
       <div className="cristal space-y-2 p-3" aria-live="polite">
         <div className="text-[11px] uppercase tracking-wider opacity-60">Fichado en</div>
         <div className="truncate text-sm font-medium">{enCurso.etiqueta}</div>
-        <div className="text-sm tabular-nums opacity-80">{formatearMinutos(Math.max(0, minutos))}</div>
+        {minutos !== null && (
+          <div className="text-sm tabular-nums opacity-80">{formatearMinutos(Math.max(0, minutos))}</div>
+        )}
         {error && (
           <p role="alert" className="text-xs" style={{ color: "var(--estado-caido)" }}>
             {error}

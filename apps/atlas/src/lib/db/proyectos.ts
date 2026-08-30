@@ -14,6 +14,24 @@ export type ProyectoResumen = {
   numClientes: number;
 };
 
+/**
+ * Solo `id` y `nombre`, ordenados. Existe aparte de `listarProyectos` porque
+ * quien la llama —el selector de fichar, en el marco— no necesita ni
+ * `contratos_visibles` ni las cuotas agregadas: pedirlas ahí sería arrastrar
+ * cuatro consultas de más en CADA página, porque el marco se renderiza en
+ * todas.
+ */
+export async function nombresDeProyectos(
+  sb: Sb
+): Promise<{ id: string; nombre: string }[]> {
+  const { data, error } = await sb
+    .from("proyectos")
+    .select("id, nombre")
+    .order("nombre");
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function listarProyectos(sb: Sb): Promise<ProyectoResumen[]> {
   const { data, error } = await sb
     .from("proyectos")

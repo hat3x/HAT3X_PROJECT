@@ -8,8 +8,8 @@ import { Fichaje, type EnCurso } from "@/components/marco/Fichaje";
 import { Auroras } from "@/components/marco/Auroras";
 import { RegistrarSW } from "@/components/marco/RegistrarSW";
 import { fichajeEnCurso } from "@/lib/db/fichajes";
-import { listarProyectos } from "@/lib/db/proyectos";
-import { listarClientes } from "@/lib/db/clientes";
+import { nombresDeProyectos } from "@/lib/db/proyectos";
+import { nombresDeClientes } from "@/lib/db/clientes";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -46,10 +46,14 @@ export default async function RootLayout({
   let proyectos: { id: string; nombre: string }[] = [];
   let clientes: { id: string; nombre: string }[] = [];
   if (perfil) {
+    // `nombresDeProyectos`/`nombresDeClientes`, no `listarProyectos`/
+    // `listarClientes`: el marco se renderiza en TODAS las páginas, y estas
+    // últimas arrastran `contratos_visibles` entera y agregan cuotas — cuatro
+    // consultas de más solo para quedarse con `{id, nombre}`.
     const [f, ps, cs] = await Promise.all([
       fichajeEnCurso(sb),
-      listarProyectos(sb),
-      listarClientes(sb),
+      nombresDeProyectos(sb),
+      nombresDeClientes(sb),
     ]);
     // La etiqueta se compone aquí, una vez, y viaja como texto: el componente
     // cliente no tiene por qué saber de proyectos ni de clientes.
@@ -61,8 +65,8 @@ export default async function RootLayout({
             [f.proyectoNombre, f.clienteNombre].filter(Boolean).join(" · ") || "Sin asignar",
         }
       : null;
-    proyectos = ps.map((p) => ({ id: p.id, nombre: p.nombre }));
-    clientes = cs.map((c) => ({ id: c.id, nombre: c.nombre }));
+    proyectos = ps;
+    clientes = cs;
   }
 
   return (

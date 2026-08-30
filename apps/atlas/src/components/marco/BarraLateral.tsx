@@ -25,9 +25,14 @@ export function BarraLateral({
   rutaActual: string;
 }) {
   return (
+    // `flex-1`: desde que el marco (tarea 4) puso este <nav> dentro de una
+    // columna flex-col junto al bloque de fichaje, el <nav> ya no se estira
+    // solo. Sin `flex-1` el rótulo «Propietario» de abajo (con `mt-auto`) no
+    // tiene espacio sobrante que ocupar y queda pegado a la última entrada,
+    // en vez de al fondo de la columna, encima del fichaje.
     <nav
       aria-label="Navegación principal"
-      className="cristal flex flex-col gap-1 p-3"
+      className="cristal flex flex-1 flex-col gap-1 p-3"
     >
       <div className="px-2 pb-3 text-sm font-bold tracking-widest">ATLAS</div>
       {ENTRADAS.map(({ href, etiqueta, Icono }) => {
