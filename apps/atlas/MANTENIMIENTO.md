@@ -129,6 +129,22 @@ Es el aviso que caza el fichaje que se dejó abierto (una jornada real, o un olv
 
 ---
 
+## «La rentabilidad no cuadra»
+
+Antes de sospechar de `calcularMargen`, mira estas cuatro cosas en orden — son las que explican casi todos los descuadres:
+
+1. **El coste de la hora.** `/ajustes/economia` fija el que se usa en un mes **abierto**. Si alguien lo cambió a media pantalla, las horas de todo el mes en curso cambian de golpe, no solo las de a partir de ahora.
+2. **Si el mes está cerrado con otro coste.** Un mes cerrado (`cierres_mes`) tiene su coste **congelado** en el momento del cierre: cambiar `/ajustes/economia` después no lo mueve, a propósito. Si el número no coincide con el coste actual, comprueba si ese mes está cerrado:
+   ```sql
+   select mes, coste_hora, cerrado_en from cierres_mes order by mes desc;
+   ```
+3. **Los tramos abiertos no cuentan.** `rentabilidadDelMes` solo suma fichajes con `fin` (§6.3): un fichaje que sigue abierto no aporta minutos hasta que se cierra, aunque lleve horas corriendo. No es un fallo, es la regla — evita contar un tramo dos veces si se corrige antes de cerrarlo.
+4. **Se calcula con bases, no con totales.** Facturas y gastos entran por su `base` (sin IVA): el IVA no es ingreso ni es coste, solo pasa por caja. Si comparas contra un total con IVA, va a parecer que falta dinero.
+
+**Cómo reabrir un mes:** el botón «Reabrir» de `/dinero/rentabilidad` (`reabrirMesAccion`) borra el cierre de `cierres_mes` para ese mes; a partir de ahí vuelve a seguir el coste vigente en `/ajustes/economia` hasta que se cierre de nuevo. Solo lo puede hacer el propietario.
+
+**`ajustes_economia` es de una fila.** Toda lectura y escritura filtra por `id = 1`; no se crea una fila nueva ni se cambia ese id — no hay «histórico de costes» fuera de lo que ya congelaron los cierres de mes.
+
 ## «Kairos tiene un salón nuevo y Atlas no lo vigila»
 
 O al revés: se dio de baja un cliente y Atlas sigue alertando de su 404. Lo resuelve el descubridor, que pasa **cada hora al minuto 23**. Si lleva más de eso sin moverse, mira lo que dejó escrito:

@@ -18,6 +18,10 @@ export async function guardarAjustesEconomia(entrada: EntradaAjustes): Promise<O
   if (!r.ok) return r;
   revalidatePath("/ajustes/economia");
   revalidatePath("/dinero/rentabilidad");
+  // Las fichas leen `margenDe` con el coste vigente: sin esto seguirían
+  // enseñando el margen calculado con el coste anterior hasta su próxima carga.
+  revalidatePath("/clientes", "layout");
+  revalidatePath("/proyectos", "layout");
   return { ok: true };
 }
 
@@ -32,6 +36,10 @@ export async function cerrarMesAccion(mes: string): Promise<Ok> {
   const r = await cerrarMes(sb, mes, ajustes.costeHoraCentimos, Date.now());
   if (!r.ok) return r;
   revalidatePath("/dinero/rentabilidad");
+  // Cerrar congela el coste del mes: las fichas también deben dejar de
+  // enseñar el margen con el coste que tenían abierto.
+  revalidatePath("/clientes", "layout");
+  revalidatePath("/proyectos", "layout");
   return { ok: true };
 }
 
@@ -40,5 +48,8 @@ export async function reabrirMesAccion(mes: string): Promise<Ok> {
   const r = await reabrirMes(sb, mes);
   if (!r.ok) return r;
   revalidatePath("/dinero/rentabilidad");
+  // Reabrir vuelve al coste actual (§ arriba): mismo motivo para las fichas.
+  revalidatePath("/clientes", "layout");
+  revalidatePath("/proyectos", "layout");
   return { ok: true };
 }

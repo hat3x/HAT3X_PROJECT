@@ -13,7 +13,7 @@ import { leerAjustes } from "./ajustes-economia";
 import { cierreDe, type Cierre } from "./cierres";
 import { limitesMesMadrid, mesVecino } from "@/lib/dinero";
 import { minutosDe } from "@/lib/horas/tramos";
-import { calcularMargen, type Rentabilidad, type FacturaMes, type GastoMes, type TramoMes } from "@/lib/rentabilidad/margen";
+import { calcularMargen, type Rentabilidad, type FacturaMes, type GastoMes, type TramoMes, type FilaMargen } from "@/lib/rentabilidad/margen";
 
 const cent = (n: number) => Math.round(n * 100);
 
@@ -70,4 +70,25 @@ export async function rentabilidadDelMes(
 
   const costeHoraCentimos = cerrado ? cerrado.costeHoraCentimos : ajustes.costeHoraCentimos;
   return { r: calcularMargen({ facturas: facturasMes, gastos: gastosMes, tramos: tramosMes, costeHoraCentimos }), costeHoraCentimos, cerrado };
+}
+
+/**
+ * La fila de un cliente o de un proyecto en el mes, o ceros si no aparece —
+ * la ficha del cliente/proyecto pide esto, no el mes entero: reutiliza
+ * `rentabilidadDelMes` y busca por id, en vez de duplicar la consulta.
+ */
+export async function margenDe(
+  sb: Sb,
+  eje: { clienteId: string } | { proyectoId: string },
+  mes: string
+): Promise<FilaMargen & { costeHoraCentimos: number; cerrado: boolean }> {
+  const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sb, mes);
+  const filas = "clienteId" in eje ? r.porCliente : r.porProyecto;
+  const id = "clienteId" in eje ? eje.clienteId : eje.proyectoId;
+  // Sin factura, gasto ni tramo ese mes, el id no aparece en la lista: no es
+  // un error, es que no hubo nada que contar, así que ceros y no una excepción.
+  const f = filas.find((x) => x.id === id) ?? { id, nombre: "", facturadoCentimos: 0, gastosCentimos: 0, minutos: 0, horasCentimos: 0, margenCentimos: 0 };
+  // `cerrado` aquí es solo si el mes está cerrado (booleano): la ficha no
+  // necesita el objeto `Cierre` completo, solo saber si el coste está congelado.
+  return { ...f, costeHoraCentimos, cerrado: cerrado !== null };
 }

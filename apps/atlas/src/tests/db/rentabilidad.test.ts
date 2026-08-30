@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { leerAjustes, escribirAjustes, validarAjustes } from "@/lib/db/ajustes-economia";
 import { cierreDe, cerrarMes, reabrirMes } from "@/lib/db/cierres";
-import { rentabilidadDelMes } from "@/lib/db/rentabilidad";
+import { rentabilidadDelMes, margenDe } from "@/lib/db/rentabilidad";
 import type { Database } from "@/types/supabase";
 
 const URL_API = "http://127.0.0.1:54321";
@@ -150,6 +150,27 @@ describe("rentabilidadDelMes", () => {
 
   it("un colaborador no ve nada del margen", async () => {
     await expect(rentabilidadDelMes(sbColab, MES)).rejects.toThrow();
+  });
+});
+
+describe("margenDe", () => {
+  it("la fila de un cliente en el mes, con el coste vigente (mes abierto)", async () => {
+    // El test anterior deja el coste en 3000 y MES sin cerrar todavía: el
+    // margen esperado (25000) es el mismo que calcula `rentabilidadDelMes`.
+    const m = await margenDe(sbDuenyo, { clienteId: idCliente }, MES);
+    expect(m.margenCentimos).toBe(25000);
+    expect(m.costeHoraCentimos).toBe(3000);
+    expect(m.cerrado).toBe(false);
+  });
+
+  it("la fila de un proyecto en el mes", async () => {
+    const m = await margenDe(sbDuenyo, { proyectoId: idProyecto }, MES);
+    expect(m.facturadoCentimos).toBe(29000);
+  });
+
+  it("un id que no aparece ese mes devuelve ceros, no un error", async () => {
+    const m = await margenDe(sbDuenyo, { clienteId: "00000000-0000-0000-0000-000000000000" }, MES);
+    expect(m).toMatchObject({ facturadoCentimos: 0, gastosCentimos: 0, minutos: 0, horasCentimos: 0, margenCentimos: 0 });
   });
 });
 

@@ -4,8 +4,11 @@ import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 import { obtenerCliente, serviciosDeCliente } from "@/lib/db/clientes";
 import { estadoDeServicios } from "@/lib/db/servicios-estado";
+import { margenDe } from "@/lib/db/rentabilidad";
 import { formatearUptime } from "@/lib/uptime/calcular";
+import { mesDe, hoyEnMadrid } from "@/lib/dinero";
 import { Distintivo } from "@/components/ui/Distintivo";
+import { ResumenMargen } from "@/components/dinero/ResumenMargen";
 import type { EstadoCheck } from "@/lib/incidencias/maquina";
 import type { EstadoVisual } from "@/components/ui/Distintivo";
 
@@ -54,6 +57,10 @@ export default async function FichaCliente({
   ]);
   if (!cliente) notFound();
   const verImportes = perfil?.esPropietario ?? false;
+  // No se llama a `margenDe` si no es propietario: se ahorra la consulta, y
+  // RLS la lanzaría igual si se intentase.
+  const mes = mesDe(hoyEnMadrid());
+  const margen = verImportes ? await margenDe(sb, { clienteId: cliente.id }, mes) : null;
 
   // Lo suyo, y cómo está ahora mismo. Es la pregunta que trae a alguien a esta
   // pantalla: «¿le está pasando algo a este cliente?».
@@ -193,6 +200,10 @@ export default async function FichaCliente({
           </ul>
         )}
       </section>
+
+      {margen && (
+        <ResumenMargen fila={margen} mes={mes} costeHoraCentimos={margen.costeHoraCentimos} />
+      )}
 
       <section className="cristal p-4">
         <h2

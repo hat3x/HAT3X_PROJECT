@@ -87,6 +87,14 @@ Cada pasada queda escrita en `descubrimientos`, salga bien o mal. Sin eso, uno q
 
 Si falta alguna, la pasada no revienta: lo anota en `descubrimientos` diciendo cuál falta y dónde ponerla. Eso lo decide `src/lib/descubrir/ajustes.ts`.
 
+## El dinero: rentabilidad y cierre de mes
+
+`/dinero/rentabilidad` enseña el margen del mes, por cliente y por proyecto: lo facturado, los gastos directos, las horas a su coste y lo que queda. Solo lo ve el propietario. El coste de la hora (y los datos de facturación) se fija en `/ajustes/economia`, una fila única (`ajustes_economia`, `id = 1`) que cualquier cambio sobrescribe para todos los meses abiertos.
+
+**Cerrar un mes** (`cerrarMesAccion`) congela en `cierres_mes` el coste de la hora vigente en ese instante: cambiar el coste después no mueve un mes ya cerrado, así que el histórico no se reescribe con retroactividad. **Reabrirlo** (`reabrirMesAccion`) borra ese cierre y el mes vuelve a seguir el coste actual.
+
+La regla de los dos ejes del margen (`src/lib/rentabilidad/margen.ts`): cliente y proyecto son ejes independientes, cada uno con su propio contador — lo directo de un eje no se reparte en el otro, y lo que no tiene ningún contador va a una línea aparte con nombre honesto, nunca prorrateado.
+
 ## Arrancar en local
 
 Hace falta Docker en marcha.

@@ -4,10 +4,13 @@ import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 import { obtenerProyecto } from "@/lib/db/proyectos";
 import { listarClientes } from "@/lib/db/clientes";
+import { margenDe } from "@/lib/db/rentabilidad";
+import { mesDe, hoyEnMadrid } from "@/lib/dinero";
 import { Portada } from "@/components/proyectos/Portada";
 import { Distintivo } from "@/components/ui/Distintivo";
 import { FormServicio } from "@/components/proyectos/FormServicio";
 import { FormContrato } from "@/components/proyectos/FormContrato";
+import { ResumenMargen } from "@/components/dinero/ResumenMargen";
 import { formatearUptime } from "@/lib/uptime/calcular";
 import type { EstadoCheck } from "@/lib/incidencias/maquina";
 import type { EstadoVisual } from "@/components/ui/Distintivo";
@@ -51,6 +54,10 @@ export default async function FichaProyecto({
   ]);
   if (!proyecto) notFound();
   const verImportes = perfil?.esPropietario ?? false;
+  // No se llama a `margenDe` si no es propietario: se ahorra la consulta, y
+  // RLS la lanzaría igual si se intentase.
+  const mes = mesDe(hoyEnMadrid());
+  const margen = verImportes ? await margenDe(sb, { proyectoId: proyecto.id }, mes) : null;
   // A los formularios solo viaja lo que necesitan para poblar un desplegable.
   const elegibles = clientes.map((c) => ({ id: c.id, nombre: c.nombre }));
   const enProduccion =
@@ -182,6 +189,10 @@ export default async function FichaProyecto({
               </div>
             )}
           </section>
+
+          {margen && (
+            <ResumenMargen fila={margen} mes={mes} costeHoraCentimos={margen.costeHoraCentimos} />
+          )}
 
           {(proyecto.enlaces.length > 0 || proyecto.repoUrl) && (
             <section className="cristal p-4">
