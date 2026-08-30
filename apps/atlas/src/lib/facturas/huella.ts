@@ -78,7 +78,15 @@ export async function huellaDe(r: RegistroAlta): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
 }
 
-/** Recorre la cadena y recalcula cada huella. Si algo no encaja, dice dónde. */
+/**
+ * Recorre la cadena y recalcula cada huella. Si algo no encaja, dice dónde.
+ *
+ * `eslabones` debe venir ordenado por `genEn` (fecha de generación): esta
+ * función no reordena ni asume nada sobre el orden de llegada, solo compara
+ * cada `huellaAnterior` contra la huella calculada del eslabón previo en el
+ * array. Un array desordenado (o con eslabones fuera de secuencia) se informa
+ * como una rotura de cadena igual que una huella manipulada.
+ */
 export async function verificarCadena(
   eslabones: Eslabon[]
 ): Promise<{ ok: true } | { ok: false; rotaEn: number; esperada: string; encontrada: string }> {

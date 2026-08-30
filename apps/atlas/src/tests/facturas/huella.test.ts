@@ -16,6 +16,20 @@ describe("cadenaCanonica", () => {
   it("recorta espacios de los valores", () => {
     expect(cadenaCanonica({ ...V1, nifEmisor: " 89890001K " })).toBe(cadenaCanonica(V1));
   });
+  it("recorta espacios de los cinco campos de texto, no solo el NIF", () => {
+    // huellaAnterior no puede probarse con V1 (es null); se usa un registro
+    // encadenado como V2, con huella real, para que el recorte sea observable.
+    const base: RegistroAlta = { ...V2 };
+    const conEspacios: RegistroAlta = {
+      ...base,
+      nifEmisor: ` ${base.nifEmisor} `,
+      numSerie: ` ${base.numSerie} `,
+      fechaExpedicion: ` ${base.fechaExpedicion} `,
+      huellaAnterior: base.huellaAnterior === null ? null : ` ${base.huellaAnterior} `,
+      genEn: ` ${base.genEn} `,
+    };
+    expect(cadenaCanonica(conEspacios)).toBe(cadenaCanonica(base));
+  });
 });
 
 describe("huellaDe — vectores de la AEAT", () => {
