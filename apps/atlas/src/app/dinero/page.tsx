@@ -102,6 +102,12 @@ export default async function PaginaDinero() {
         </Link>
       </p>
 
+      <p className="text-sm">
+        <Link href="/dinero/horas" className="underline opacity-80 hover:opacity-100">
+          Ver las horas del mes →
+        </Link>
+      </p>
+
       <h2 className="pt-2 text-lg font-semibold">Facturas</h2>
 
       {facturas.length === 0 ? (

@@ -172,6 +172,7 @@ try {
     // blanco seria indistinguible de una que funciona.
     { ruta: "/dinero/gastos", exige: ["Por plataforma", "Por cliente", "Por proyecto"] },
     { ruta: "/dinero/cobro", exige: ["Cobro"] },
+    { ruta: "/dinero/horas", exige: ["Horas"] },
     { ruta: "/ajustes", exige: [] },
     { ruta: "/ajustes/apariencia", exige: [] },
     { ruta: "/ajustes/notificaciones", exige: [] },
