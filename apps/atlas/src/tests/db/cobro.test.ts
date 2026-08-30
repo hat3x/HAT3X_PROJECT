@@ -177,9 +177,25 @@ async function factura(numero: number, vence: string | null, cobrada: string | n
   return rows[0].id as string;
 }
 
+// Otros ficheros de la suite (tests de facturas, de periodos, de económica)
+// dejan filas en las mismas tablas, y un fichero abortado a medias las deja
+// para siempre. Un `toEqual([])` sobre TODO lo que ve el propietario
+// rompería por culpa ajena; se compara solo lo que pertenece al cliente y
+// al contrato de este test.
+async function soloMio(c: Awaited<ReturnType<typeof leerCobro>>) {
+  const { rows } = await pg.query(`SELECT id FROM facturas WHERE cliente_id = $1`, [
+    idCliente,
+  ]);
+  const misFacturas = new Set(rows.map((r) => r.id as string));
+  return {
+    periodos: c.periodos.filter((p) => p.contratoId === idContrato),
+    facturas: c.facturas.filter((f) => misFacturas.has(f.id)),
+  };
+}
+
 describe("leer lo pendiente de cobro", () => {
   it("sin nada, las dos listas vienen vacías", async () => {
-    const c = await leerCobro(sbDuenyo, "2026-09-15");
+    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
     expect(c.periodos).toEqual([]);
     expect(c.facturas).toEqual([]);
   });
@@ -196,14 +212,14 @@ describe("leer lo pendiente de cobro", () => {
   // avisar de algo que no ha llegado a ser un descuido.
   it("el mes en curso no cuenta como sin facturar", async () => {
     await periodo("2026-09-01");
-    const c = await leerCobro(sbDuenyo, "2026-09-15");
+    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
     expect(c.periodos).toEqual([]);
   });
 
   it("un periodo ya facturado no cuenta", async () => {
     const id = await factura(1, "2026-09-01", null);
     await periodo("2026-08-01", id);
-    const c = await leerCobro(sbDuenyo, "2026-09-15");
+    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
     expect(c.periodos).toEqual([]);
   });
 
@@ -216,7 +232,7 @@ describe("leer lo pendiente de cobro", () => {
 
   it("una cobrada no viene", async () => {
     await factura(3, "2026-09-01", "2026-09-05");
-    const c = await leerCobro(sbDuenyo, "2026-09-15");
+    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
     expect(c.facturas).toEqual([]);
   });
 
@@ -230,7 +246,7 @@ describe("leer lo pendiente de cobro", () => {
               ('externa','C',5,$1,'2026-08-01','2026-09-01',350,73.5,423.5,'anulada')`,
       [idCliente]
     );
-    const c = await leerCobro(sbDuenyo, "2026-09-15");
+    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
     expect(c.facturas).toEqual([]);
   });
 

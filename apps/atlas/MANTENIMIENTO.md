@@ -23,7 +23,9 @@ select j.jobname, d.status, d.return_message, d.start_time
  order by d.start_time desc;
 ```
 
-Las tres tareas —`atlas-vigia`, `atlas-avisos` y `atlas-retencion`— deben aparecer con `succeeded`. Las dos primeras, cada minuto.
+Las cuatro tareas —`atlas-vigia`, `atlas-avisos`, `atlas-retencion` y `atlas-cobro`— deben aparecer con `succeeded`. Las dos primeras, cada minuto; `atlas-cobro`, una vez al día.
+
+**pg_cron corre en UTC.** `atlas-cobro` está dada de alta como `7 9 * * *`, que son las **11:07 de Madrid en verano y las 10:07 en invierno**. El comentario de la migración `20260829170000_aviso_cobro.sql` dice «9:07 de la mañana» y no se puede corregir porque ya está aplicada: la verdad vive aquí.
 
 ---
 
@@ -102,6 +104,17 @@ alter database postgres set app.atlas_service_key   = '<service_role key>';
 ```
 
 En local la URL es la de dentro de Docker: `http://kong:8000/functions/v1`. Y las funciones tienen que estar servidas (`npx supabase functions serve --env-file .env.local`).
+
+---
+
+## «El aviso de cobro no llega»
+
+Es un aviso diario y **no manda nada si no hay nada pendiente**, así que un día sin aviso puede ser un día sin deudas. Para distinguirlo:
+
+1. **Qué respondió la Edge Function.** La tarea `atlas-cobro` llama a `avisar` con `{"cobro": true}`; la respuesta queda en el registro de la función (`npx supabase functions logs avisar`, o el panel). Un 500 con `error` significa que una lectura falló y **no se envió nada a propósito**: la función falla cerrado, porque un permiso denegado disfrazado de «nada pendiente» es exactamente el fallo que no se nota. Un 200 con `noComprobados` no vacío es que el candado del día no se pudo consultar para esos propietarios y se les saltó.
+2. **`ultima_ok_en` en `suscripciones_push`.** Si el push salió, ese sello se mueve; si lleva días parado con avisos que sí deberían haber llegado, sospecha de las claves VAPID (punto 3 de arriba).
+3. **La Edge Function lee la tabla `contratos`, no la vista `contratos_visibles`.** La vista filtra por `auth.uid()` y solo está concedida a `authenticated`; la service_role no la puede leer. Si alguien «unifica» la consulta con la de la pantalla (`src/lib/db/cobro.ts`) embebiendo la vista, la función vuelve al 500. Lo vigila `src/tests/esquema/service-role-lee.test.ts`.
+4. **La hora.** `atlas-cobro` corre a las 9:07 UTC (ver arriba). Antes de esa hora no ha pasado nada todavía.
 
 ---
 
@@ -261,6 +274,7 @@ select atlas_consolidar_retencion();
 | Mes | Revisar `credencial_usos`: quién ha descifrado qué |
 | Mes | Mirar `descubrimientos` por `ok = false`: un descubridor roto no se nota hasta que un cliente nuevo lleva semanas sin vigilar |
 | Mes | Comprobar que los recibos fijos se materializaron: `select count(*) from gastos where recurrente_id is not null and date_trunc('month', fecha) = date_trunc('month', current_date);` |
+| Día (automático) | `atlas-cobro` avisa a los propietarios de los meses de contrato sin facturar y de las facturas vencidas, a las 9:07 UTC. Si no llega, ver «El aviso de cobro no llega» |
 | Trimestre | Comprobar el tamaño de la base |
 
 **Un gasto recurrente puede estar apuntado en dos sitios a la vez.** `apps/jarvis/src/lib/company-brain.ts` todavía escribe en `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue` — su propia copia de `gastos_recurrentes`, `gastos` y `facturas` — porque jubilarlas es un plan aparte (bloque 2A solo jubiló `hat3x_transactions`, vía `finance.ts`). Si una suma no cuadra, antes de sospechar de Atlas mira si ese gasto se dio de alta también desde jarvis.

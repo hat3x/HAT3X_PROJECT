@@ -274,33 +274,59 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
   // propio `ahora`: así el filtro del día y el sello de `ultima_ok_en` no
   // pueden caer en fechas distintas por una carrera contra el reloj.
   const ahora = new Date().toISOString();
-  const hoy = ahora.slice(0, 10);
+  // «Hoy» se calcula en Madrid, no en UTC, igual que hace `hoyEnMadrid()` en
+  // `src/lib/dinero.ts` para la pantalla. A la hora del cron coinciden, pero
+  // una invocación a mano entre las 00:00 y las 02:00 de Madrid daría «ayer»
+  // con el día UTC — y el día 1 eso hace desaparecer el mes recién cerrado,
+  // que es justo el que hay que perseguir. Se calcula aquí y no en
+  // `cobro.ts`, que tiene que seguir byte a byte igual que su original.
+  const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(
+    new Date(ahora)
+  );
   const mesEnCurso = `${hoy.slice(0, 7)}-01`;
 
-  // Se lee `contratos_visibles`, no `contratos`: la tabla tiene la lectura
-  // revocada para los roles de API (`20260815100300_rls.sql`) y embeber
-  // `contratos` aquí haría fallar la consulta con «permission denied for
-  // table contratos» aunque esta función use la service_role key para todo
-  // lo demás. Se escribe igual que `src/lib/db/cobro.ts` (misma selección,
-  // mismos filtros, mismo orden): la misma pregunta hecha de dos formas
-  // distintas puede acabar respondiendo cosas distintas, y entonces el aviso
-  // diario y la pantalla dirían números que no cuadran.
-  const { data: per } = await sb
+  // Se lee la tabla `contratos`, NO la vista `contratos_visibles` que usa la
+  // pantalla (`src/lib/db/cobro.ts`). La vista filtra por `auth.uid()` y solo
+  // tiene `grant select` para `authenticated`; esta función entra con la
+  // service_role, que no tiene ni `auth.uid()` ni ese grant, y la consulta
+  // fallaba con «permission denied for view contratos_visibles». Las tablas
+  // base sí las lee la service_role (lo comprueba
+  // `src/tests/esquema/service-role-lee.test.ts`, que también comprueba que
+  // la vista sigue vedada a ese rol). Quién llama decide qué puede leer: la
+  // app entra con el JWT del propietario y debe pasar por la vista; esta
+  // función entra con la service_role y debe ir a la tabla. Lo que tiene que
+  // ser idéntico entre las dos consultas —y lo es— son los filtros, las
+  // exclusiones, el corte del mes y el orden: la misma pregunta hecha de dos
+  // formas distintas puede acabar respondiendo cosas distintas, y entonces
+  // el aviso diario y la pantalla dirían números que no cuadran.
+  const { data: per, error: errorPer } = await sb
     .from("periodos_contrato")
     .select(
       `contrato_id, periodo, importe_esperado,
-       contratos_visibles!inner(clientes!inner(nombre))`
+       contratos!inner(clientes!inner(nombre))`
     )
     .is("factura_id", null)
     .lt("periodo", mesEnCurso)
     .order("periodo");
 
-  const { data: fac } = await sb
+  const { data: fac, error: errorFac } = await sb
     .from("facturas")
     .select("id, serie, numero, total, fecha_vencimiento, clientes!inner(nombre)")
     .is("cobrada_en", null)
     .eq("estado", "emitida")
     .order("fecha_vencimiento");
+
+  // Mismo criterio que el candado del día, más abajo: si una lectura falla,
+  // no se envía nada y la respuesta lo dice. Un permiso denegado o un corte
+  // de red que se leyera como lista vacía se convertiría en «nada pendiente»
+  // — el peor fallo posible, porque nadie lo nota: el aviso no llega y el
+  // silencio se parece exactamente a un día sin deudas.
+  if (errorPer || errorFac) {
+    return new Response(
+      JSON.stringify({ error: (errorPer ?? errorFac)!.message }),
+      { status: 500, headers: { "content-type": "application/json" } }
+    );
+  }
 
   // PostgREST devuelve cada relación como objeto o como array según la
   // cardinalidad que infiera. Se normaliza en un solo sitio, igual que en
@@ -310,7 +336,7 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
   const cobro = pendientesDeCobro(
     (per ?? []).map((p) => ({
       contratoId: p.contrato_id,
-      clienteNombre: uno(uno(p.contratos_visibles).clientes).nombre,
+      clienteNombre: uno(uno(p.contratos).clientes).nombre,
       periodo: p.periodo,
       // Ningún float toca un importe: el numeric(12,2) de Postgres se
       // convierte a céntimos enteros aquí, una sola vez, al leerlo.
@@ -336,7 +362,8 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
   const enviable: AvisoEnviable = {
     titulo: cobro.titulo,
     cuerpo: cobro.cuerpo,
-    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/`,
+    // Abre la pantalla que enseña esto mismo con detalle, no la raíz.
+    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`,
   };
 
   const claves = {
@@ -346,10 +373,18 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
   };
   const apiKeyCorreo = Deno.env.get("RESEND_API_KEY") ?? "";
 
-  const { data: perfiles } = await sb
+  const { data: perfiles, error: errorPerfiles } = await sb
     .from("perfiles")
     .select("id")
     .eq("es_propietario", true);
+  // Igual que arriba: sin la lista de destinatarios no se puede fingir que
+  // se avisó, ni callar que no se pudo saber a quién.
+  if (errorPerfiles) {
+    return new Response(JSON.stringify({ error: errorPerfiles.message }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }
 
   let enviados = 0;
   // Propietarios para los que el candado del día no se pudo comprobar: se

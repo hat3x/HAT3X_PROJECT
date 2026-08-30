@@ -16,7 +16,7 @@ Lo que hay que entender antes de tocar nada: **clientes** y **proyectos** son ej
 
 Un proyecto puede servir a varios clientes; un cliente puede tener varios proyectos. Y hay proyectos internos que no son de nadie — por eso `servicios.cliente_id` es **opcional**. Modelarlo como «un cliente tiene proyectos» parece más simple hasta que llega Kairos, que es un producto propio vendido a varias peluquerías.
 
-Los importes (`cuota_mensual`, `notas`) los ve **solo el propietario**. Toda lectura de contratos pasa por la vista `contratos_visibles`, nunca por la tabla.
+Los importes (`cuota_mensual`, `notas`) los ve **solo el propietario**. Toda lectura de contratos desde la app pasa por la vista `contratos_visibles`, nunca por la tabla. La única excepción es la Edge Function `avisar` en su rama de cobro: entra con la service_role, que no puede leer la vista, y lee `contratos` directamente (ver MANTENIMIENTO.md, «El aviso de cobro no llega»).
 
 ## Cómo funciona la vigilancia
 
@@ -28,10 +28,15 @@ pg_cron (cada minuto)
    │                                    comprueba, escribe check_resultados,
    │                                    abre o cierra incidencias
    │
-   └── atlas_disparar_avisos()  ── pg_net ──▶  Edge Function «avisar»
-          ¿hay incidencias sin sellar?             │
-                                          agrupa por proyecto, resuelve
-                                          destinatarios, envía push y correo
+   ├── atlas_disparar_avisos()  ── pg_net ──▶  Edge Function «avisar»
+   │      ¿hay incidencias sin sellar?             │
+   │                                      agrupa por proyecto, resuelve
+   │                                      destinatarios, envía push y correo
+   │
+   └── atlas_disparar_cobro()   ── pg_net ──▶  Edge Function «avisar»  {"cobro": true}
+   (una vez al día, 9:07 UTC)     ¿meses sin facturar o facturas vencidas?
+                                          si hay algo, un resumen a los
+                                          propietarios, push y correo
 ```
 
 Van separadas a propósito: comprobar servicios no debe quedarse esperando a un servidor de correo.
