@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 
 import { DaySlots, DaySlotsSkeleton } from "@/components/booking/day-slots";
+import { buildManualSlot } from "@/lib/booking/manual-slot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +59,16 @@ export function AppointmentForm({
   const [professionalId, setProfessionalId] = useState<string>("any");
   const [date, setDate] = useState<string>(today);
   const [selectedSlot, setSelectedSlot] = useState<PublicSlot | null>(null);
+  /**
+   * Hora a mano. La rejilla del motor va bien para el caso normal, pero trabaja
+   * en múltiplos de 15 minutos y con la duración que dicta el servicio; una
+   * clínica no siempre hace eso —una revisión son dos minutos—. Este modo se
+   * salta la rejilla, NO las reglas: el solape lo sigue impidiendo la base.
+   */
+  const [manualMode, setManualMode] = useState(false);
+  const [manualTime, setManualTime] = useState("");
+  const [manualDuration, setManualDuration] = useState("");
+  const [manualError, setManualError] = useState<string | null>(null);
   const [contact, setContact] = useState<ContactState>(EMPTY_CONTACT);
 
   // Buscador de cliente existente (por nombre o teléfono). Si se selecciona uno,
@@ -122,21 +133,45 @@ export function AppointmentForm({
     setSelectedSlot(null);
   }
 
-  const canSubmit =
-    Boolean(selectedSlot) &&
-    (selectedCustomer !== null ||
-      (contact.fullName.trim().length >= 2 && contact.phone.trim().length >= 6));
+  const hayCliente =
+    selectedCustomer !== null ||
+    (contact.fullName.trim().length >= 2 && contact.phone.trim().length >= 6);
+
+  // En modo manual no hay hueco elegido: basta con hora y duración escritas.
+  // La validación de verdad ocurre al enviar, para poder explicar el motivo en
+  // lugar de dejar el botón apagado sin decir por qué.
+  const canSubmit = hayCliente && (manualMode ? manualTime !== "" : Boolean(selectedSlot));
 
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
-    if (!canSubmit || !selectedSlot) return;
+    if (!canSubmit) return;
+
+    let slot: PublicSlot | null = selectedSlot;
+    if (manualMode) {
+      const duracion = Number(manualDuration) || selectedService?.duration_minutes || 30;
+      const r = buildManualSlot({
+        date,
+        time: manualTime,
+        durationMin: duracion,
+        timeZone: timezone,
+        professionalId,
+      });
+      if (!r.ok) {
+        setManualError(r.error);
+        return;
+      }
+      setManualError(null);
+      slot = r.slot;
+    }
+    if (slot === null) return;
+    const elegido = slot;
 
     createMutation.mutate(
       {
         serviceId,
-        professionalId: selectedSlot.professionalId,
-        startsAt: selectedSlot.startsAt,
-        endsAt: selectedSlot.endsAt,
+        professionalId: elegido.professionalId,
+        startsAt: elegido.startsAt,
+        endsAt: elegido.endsAt,
         customerId: selectedCustomer?.id,
         customer: {
           fullName: contact.fullName,
@@ -217,19 +252,87 @@ export function AppointmentForm({
           reservando únicamente huecos disponibles. */}
       {serviceId && date && (
         <div className="space-y-2">
-          <Label>Hora *</Label>
-          {slotsQuery.isLoading && <DaySlotsSkeleton />}
-          {slotsQuery.isError && (
-            <p className="text-sm text-destructive">Error al cargar disponibilidad.</p>
-          )}
-          {slotsQuery.isSuccess && (
-            <DaySlots
-              slots={slotsQuery.data}
-              timeZone={timezone}
-              selected={selectedSlot}
-              anyProfessional={professionalId === "any"}
-              onSelect={(slot) => setSelectedSlot(slot)}
-            />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label>Hora *</Label>
+            {/* La rejilla sigue siendo lo primero: cubre el caso normal de un
+                toque. Este enlace abre la puerta a lo que la rejilla no puede
+                expresar — una hora que no cae en el cuarto de hora, o una cita
+                mucho mas corta que su servicio. */}
+            <button
+              type="button"
+              onClick={() => {
+                setManualMode((v) => !v);
+                setSelectedSlot(null);
+                setManualError(null);
+              }}
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {manualMode ? "Elegir de los huecos libres" : "Poner hora y duración a mano"}
+            </button>
+          </div>
+
+          {manualMode ? (
+            <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+              <div className="flex flex-wrap gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="manual-time" className="text-xs">
+                    Hora
+                  </Label>
+                  <Input
+                    id="manual-time"
+                    type="time"
+                    // Sin `step`, el navegador permite cualquier minuto: es
+                    // justo lo que la rejilla impedia.
+                    step={60}
+                    value={manualTime}
+                    onChange={(e) => setManualTime(e.target.value)}
+                    className="w-32"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="manual-duration" className="text-xs">
+                    Duración (min)
+                  </Label>
+                  <Input
+                    id="manual-duration"
+                    type="number"
+                    min={1}
+                    max={720}
+                    placeholder={String(selectedService?.duration_minutes ?? 30)}
+                    value={manualDuration}
+                    onChange={(e) => setManualDuration(e.target.value)}
+                    className="w-28"
+                  />
+                </div>
+              </div>
+
+              {professionalId === "any" ? (
+                <p className="text-xs text-muted-foreground">
+                  Elige arriba con qué profesional es la cita: al poner la hora a mano, hay que
+                  decir quién la tiene libre.
+                </p>
+              ) : null}
+
+              {manualError !== null ? (
+                <p className="text-sm text-destructive">{manualError}</p>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              {slotsQuery.isLoading && <DaySlotsSkeleton />}
+              {slotsQuery.isError && (
+                <p className="text-sm text-destructive">Error al cargar disponibilidad.</p>
+              )}
+              {slotsQuery.isSuccess && (
+                <DaySlots
+                  slots={slotsQuery.data}
+                  timeZone={timezone}
+                  selected={selectedSlot}
+                  anyProfessional={professionalId === "any"}
+                  onSelect={(slot) => setSelectedSlot(slot)}
+                />
+              )}
+            </>
           )}
         </div>
       )}
