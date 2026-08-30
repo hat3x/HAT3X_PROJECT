@@ -13,22 +13,26 @@ import { Distintivo } from "@/components/ui/Distintivo";
 
 const MES = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric", timeZone: "Europe/Madrid" });
 
-function Tabla({ titulo, filas, eje, facturadoSinEje, lineaExtra, extraNombre, estructura }: {
+function Tabla({ titulo, filas, eje, lineaExtra, extraNombre, estructura }: {
   titulo: string; filas: FilaMargen[]; eje: string;
-  // Solo lo usa la tabla «Por proyecto»: es facturado puro (una línea de
-  // factura sin proyecto), no gastos ni minutos, así que no encaja en el
-  // tipo `Linea` que comparten `lineaExtra` y `estructura`.
-  facturadoSinEje?: number;
   lineaExtra: Linea; extraNombre: string; estructura: Linea;
 }) {
   const th = "px-4 py-2 font-medium";
   const td = "whitespace-nowrap px-4 py-2.5 tabular-nums text-right";
-  const total = (l: Linea) => l.gastosCentimos + l.horasCentimos;
+  const coste = (l: Linea) => l.gastosCentimos + l.horasCentimos;
+  // Ronda final (revisión del Ruling 6): el cajón «sin proyecto» factura
+  // (las líneas de factura sin proyecto) Y cuesta (sus gastos y horas), así
+  // que es UNA fila con su margen, que puede ser positivo, y no una fila de
+  // facturado más otra de coste para el mismo cajón. En «sin cliente» y en
+  // estructura el facturado es 0 por construcción (una factura siempre
+  // tiene cliente) y se pinta «—», no «0,00 €»: no es que se facturara cero,
+  // es que ahí no cabe facturar.
+  const margen = (l: Linea) => l.facturadoCentimos - coste(l);
   // Ronda de arreglo 1: una línea «sin repartir» con coste de la hora en cero
-  // puede tener minutos y ningún céntimo (gastos y horas a 0): `total() > 0`
+  // puede tener minutos y ningún céntimo (gastos y horas a 0): `coste() > 0`
   // la escondía igual que si no hubiera pasado nada ese mes. Los minutos
-  // cuentan como actividad aunque no cuesten dinero.
-  const hayActividad = (l: Linea) => total(l) > 0 || l.minutos > 0;
+  // cuentan como actividad aunque no cuesten dinero, y el facturado también.
+  const hayActividad = (l: Linea) => coste(l) > 0 || l.minutos > 0 || l.facturadoCentimos > 0;
   return (
     <div className="space-y-2">
       <h2 className="pt-2 text-lg font-semibold">{titulo}</h2>
@@ -59,31 +63,16 @@ function Tabla({ titulo, filas, eje, facturadoSinEje, lineaExtra, extraNombre, e
                 <td className={`${td} font-semibold`} style={f.margenCentimos < 0 ? { color: "var(--estado-caido)" } : undefined}>{formatear(f.margenCentimos)}</td>
               </tr>
             ))}
-            {/* Solo en «Por proyecto»: el facturado de una línea sin proyecto
-                (§2A: el proyecto vive en la línea) no tiene fila propia, pero
-                sí cuenta en el total — sin esta fila la tabla no cuadraba a
-                la vista. Es facturado puro: nada que repartir en las demás
-                columnas. */}
-            {typeof facturadoSinEje === "number" && facturadoSinEje > 0 && (
-              <tr style={{ color: "var(--texto-tenue)" }}>
-                <td className="px-4 py-2.5">Sin proyecto</td>
-                <td className={td}>{formatear(facturadoSinEje)}</td>
-                <td className={td}>—</td>
-                <td className={td}>—</td>
-                <td className={td}>—</td>
-                <td className={td}>—</td>
-              </tr>
-            )}
             {/* Las dos líneas de abajo NO se reparten (§6.3): repartirlas
                 inventaría una precisión por cliente que el dato no tiene. */}
             {hayActividad(lineaExtra) && (
               <tr style={{ color: "var(--texto-tenue)" }}>
                 <td className="px-4 py-2.5">{extraNombre}</td>
-                <td className={td}>—</td>
+                <td className={td}>{lineaExtra.facturadoCentimos > 0 ? formatear(lineaExtra.facturadoCentimos) : "—"}</td>
                 <td className={td}>{formatear(lineaExtra.gastosCentimos)}</td>
                 <td className={td}>{formatearMinutos(lineaExtra.minutos)}</td>
                 <td className={td}>{formatear(lineaExtra.horasCentimos)}</td>
-                <td className={td}>−{formatear(total(lineaExtra))}</td>
+                <td className={td} style={margen(lineaExtra) < 0 ? { color: "var(--estado-caido)" } : undefined}>{formatear(margen(lineaExtra))}</td>
               </tr>
             )}
             <tr style={{ color: "var(--texto-tenue)" }}>
@@ -92,7 +81,7 @@ function Tabla({ titulo, filas, eje, facturadoSinEje, lineaExtra, extraNombre, e
               <td className={td}>{formatear(estructura.gastosCentimos)}</td>
               <td className={td}>{formatearMinutos(estructura.minutos)}</td>
               <td className={td}>{formatear(estructura.horasCentimos)}</td>
-              <td className={td}>−{formatear(total(estructura))}</td>
+              <td className={td}>−{formatear(coste(estructura))}</td>
             </tr>
           </tbody>
         </table>
@@ -115,7 +104,12 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
   const mesPedido = searchParams.mes;
   const mes = mesPedido && /^\d{4}-(0[1-9]|1[0-2])$/.test(mesPedido) ? mesPedido : mesActual;
   const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sb, mes);
-  const esActual = mes === mesActual;
+  // Ronda final: «pasado» y no «distinto del actual». Con `!esActual`, un
+  // mes futuro tecleado en la URL enseñaba «siguiente →» (que se aleja aún
+  // más) y el botón de cierre (que `cerrarMes` rechaza igual, pero con un
+  // botón que promete lo que no puede hacer). La comparación por texto
+  // AAAA-MM ordena bien porque los dos vienen ya validados.
+  const esPasado = mes < mesActual;
 
   // Ronda de arreglo 1: tipado explícito y no un array de tuplas sin tipo —
   // `String(t)` y `Number(v)` tapaban que el título y el valor podían ser
@@ -148,7 +142,7 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
       <div className="flex flex-wrap items-center gap-3">
         <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, -1)}`} className="text-sm underline opacity-80 hover:opacity-100">← anterior</Link>
         <span className="text-lg font-semibold capitalize">{MES.format(new Date(`${mes}-01T12:00:00Z`))}</span>
-        {!esActual && <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, 1)}`} className="text-sm underline opacity-80 hover:opacity-100">siguiente →</Link>}
+        {esPasado && <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, 1)}`} className="text-sm underline opacity-80 hover:opacity-100">siguiente →</Link>}
         {cerrado ? (
           <Distintivo estado="ok" texto={`Cerrado a ${formatear(cerrado.costeHoraCentimos)}/h`} />
         ) : costeHoraCentimos === 0 ? (
@@ -156,8 +150,8 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
         ) : (
           <span className="text-sm" style={{ color: "var(--texto-tenue)" }}>{formatear(costeHoraCentimos)}/h</span>
         )}
-        {/* El mes en curso no se cierra: le faltan días. */}
-        {!esActual && <BotonCierreMes mes={mes} cerrado={cerrado !== null} />}
+        {/* El mes en curso no se cierra (le faltan días), y uno futuro menos. */}
+        {esPasado && <BotonCierreMes mes={mes} cerrado={cerrado !== null} />}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-5">
@@ -170,7 +164,7 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
       </div>
 
       <Tabla titulo="Por cliente" eje="Cliente" filas={r.porCliente} lineaExtra={r.sinCliente} extraNombre="De proyectos sin cliente" estructura={r.estructura} />
-      <Tabla titulo="Por proyecto" eje="Proyecto" filas={r.porProyecto} facturadoSinEje={r.facturadoSinProyectoCentimos} lineaExtra={r.sinProyecto} extraNombre="De clientes sin proyecto" estructura={r.estructura} />
+      <Tabla titulo="Por proyecto" eje="Proyecto" filas={r.porProyecto} lineaExtra={r.sinProyecto} extraNombre="De clientes sin proyecto" estructura={r.estructura} />
       <p className="text-xs" style={{ color: "var(--texto-tenue)" }}>
         La estructura es la misma línea en las dos tablas: se resta una sola vez del resultado.
       </p>

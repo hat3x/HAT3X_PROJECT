@@ -21,14 +21,25 @@ export async function rentabilidadDelMes(
   sb: Sb,
   mes: string
 ): Promise<{ r: Rentabilidad; costeHoraCentimos: number; cerrado: Cierre | null }> {
+  // Cortes del mes. Facturas y gastos son `date`: se cortan por día, con
+  // `hastaDia` EXCLUSIVO (primer día del mes siguiente). Los tramos son
+  // `timestamptz`: se cortan por instante en Madrid (`limitesMesMadrid`).
+  // `resumen-dinero.ts` corta por día INCLUSIVO (último día del mes) y aquí
+  // por día exclusivo, y no se unifican a propósito: aquel resume caja y solo
+  // maneja `date`, así que el último día le basta; este combina `date` y
+  // `timestamptz`, y el instante «primer día del mes siguiente a las 00:00»
+  // es el único corte que significa lo mismo para los dos tipos.
   const desdeDia = `${mes}-01`;
-  const hastaDia = `${mesVecino(mes, 1)}-01`; // primer día del mes siguiente
+  const hastaDia = `${mesVecino(mes, 1)}-01`;
   const rango = limitesMesMadrid(mes);
 
   const [ajustes, cerrado, facturas, gastos, tramos, proyectos] = await Promise.all([
     leerAjustes(sb),
     cierreDe(sb, mes),
-    listarFacturas(sb, {}),
+    // `hasta` exclusivo en `listarFacturas`: el corte lo hace la base, no
+    // el `limit(200)` — antes se traían las últimas 200 EN TOTAL y un mes
+    // antiguo perdía facturas en silencio.
+    listarFacturas(sb, { desde: desdeDia, hasta: hastaDia }),
     listarGastos(sb, { desde: desdeDia, hasta: hastaDia }),
     listarTramos(sb, rango),
     // `LineaFactura` solo trae `proyectoId` (no `proyectoNombre`): se resuelve
@@ -38,14 +49,10 @@ export async function rentabilidadDelMes(
   ]);
   const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]));
 
-  // `listarFacturas` no filtra por fecha: trae las últimas 200 EN TOTAL (no
-  // 200 del mes), así que un mes antiguo puede perder facturas en silencio en
-  // cuanto el negocio pase de 200 facturas totales. Aquí solo se filtra por
-  // mes de emisión y estado sobre lo que llegó; ampliar `listarFacturas` con
-  // un filtro de fecha (para no depender del límite de 200) es de
-  // `facturas.ts`, no de aquí.
+  // El rango ya lo puso la consulta; aquí solo queda el estado: un borrador
+  // no se ha mandado a nadie y una anulada no es ingreso.
   const facturasMes: FacturaMes[] = facturas
-    .filter((f) => f.estado === "emitida" && f.fechaEmision >= desdeDia && f.fechaEmision < hastaDia)
+    .filter((f) => f.estado === "emitida")
     .map((f) => ({
       clienteId: f.clienteId,
       clienteNombre: f.clienteNombre,

@@ -70,6 +70,13 @@ export default async function PaginaDinero() {
         <Cifra etiqueta="Gasto directo" centimos={resumen.gastoDirecto} />
       </div>
 
+      {/* Las dos pantallas enseñan el mismo mes con cifras distintas a
+          propósito: aquí caja (con IVA), en Rentabilidad margen (bases).
+          Decirlo evita que parezca un descuadre. */}
+      <p className="text-xs" style={{ color: "var(--texto-tenue)" }}>
+        Aquí, importes totales con IVA: es caja. En Rentabilidad, bases sin IVA: es margen.
+      </p>
+
       {/* La estructura va aparte y sin repartir, a propósito: cualquier regla
           de reparto entre clientes sería una elección nuestra, no un dato. */}
       <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>

@@ -47,7 +47,8 @@ describe("calcularMargen", () => {
   });
 
   it("lo que tiene proyecto pero no cliente va a «sin cliente», sin repartir", () => {
-    expect(r.sinCliente).toEqual({ gastosCentimos: 2500, minutos: 60, horasCentimos: 3000 });
+    // `facturadoCentimos` es 0 por construcción: una factura siempre tiene cliente.
+    expect(r.sinCliente).toEqual({ facturadoCentimos: 0, gastosCentimos: 2500, minutos: 60, horasCentimos: 3000 });
   });
 
   it("por proyecto: el facturado sale de las líneas, y el Supabase de Kairos sí es directo aquí", () => {
@@ -63,12 +64,14 @@ describe("calcularMargen", () => {
     expect(r.porProyecto.find((f) => f.id === "sin-proyecto")).toBeUndefined();
     expect(r.total.facturadoCentimos - r.porProyecto.reduce((t, f) => t + f.facturadoCentimos, 0)).toBe(10000);
     // La línea de fClub, sin proyecto: su facturado no cae en ninguna fila de
-    // `porProyecto`, pero tampoco desaparece — vive en su propio campo.
-    expect(r.facturadoSinProyectoCentimos).toBe(10000);
+    // `porProyecto`, pero tampoco desaparece — es el facturado del mismo
+    // cajón «sin proyecto» que ya recoge sus gastos y minutos (ronda final:
+    // un cajón, una fila).
+    expect(r.sinProyecto.facturadoCentimos).toBe(10000);
   });
 
   it("la estructura es lo que no tiene ningún contador, una sola vez", () => {
-    expect(r.estructura).toEqual({ gastosCentimos: 2000, minutos: 30, horasCentimos: 1500 });
+    expect(r.estructura).toEqual({ facturadoCentimos: 0, gastosCentimos: 2000, minutos: 30, horasCentimos: 1500 });
   });
 
   it("los dos ejes cuadran con el total del negocio", () => {
@@ -81,7 +84,7 @@ describe("calcularMargen", () => {
     const sumaClientes = r.porCliente.reduce((t, f) => t + f.margenCentimos, 0);
     expect(sumaClientes - r.sinCliente.gastosCentimos - r.sinCliente.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
     const sumaProyectos = r.porProyecto.reduce((t, f) => t + f.margenCentimos, 0);
-    expect(sumaProyectos + r.facturadoSinProyectoCentimos - r.sinProyecto.gastosCentimos - r.sinProyecto.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
+    expect(sumaProyectos + r.sinProyecto.facturadoCentimos - r.sinProyecto.gastosCentimos - r.sinProyecto.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
   });
 
   it("ordena de más a menos margen", () => {
@@ -135,7 +138,7 @@ describe("calcularMargen", () => {
     const sumaMargenClientes = r2.porCliente.reduce((t, f) => t + f.margenCentimos, 0);
     expect(sumaMargenClientes - r2.sinCliente.gastosCentimos - r2.sinCliente.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
     const sumaMargenProyectos = r2.porProyecto.reduce((t, f) => t + f.margenCentimos, 0);
-    const facturadoSinProyecto2 = 0;
-    expect(sumaMargenProyectos + facturadoSinProyecto2 - r2.sinProyecto.gastosCentimos - r2.sinProyecto.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
+    expect(r2.sinProyecto.facturadoCentimos).toBe(0);
+    expect(sumaMargenProyectos + r2.sinProyecto.facturadoCentimos - r2.sinProyecto.gastosCentimos - r2.sinProyecto.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
   });
 });

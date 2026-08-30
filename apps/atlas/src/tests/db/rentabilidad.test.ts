@@ -175,6 +175,17 @@ describe("margenDe", () => {
 });
 
 describe("cierres", () => {
+  // Ronda final: un `mes` que no sea AAAA-MM se rechaza antes de tocar la
+  // base, con un mensaje claro en vez de un error de Postgres o, en reabrir,
+  // un «no estaba cerrado» engañoso.
+  it("un mes que no es AAAA-MM se rechaza sin tocar la base", async () => {
+    const error = "El mes tiene que ser AAAA-MM.";
+    for (const malo of ["2090-13", "2090-3", "2090-03-01", "marzo", ""]) {
+      expect(await cerrarMes(sbDuenyo, malo, 3000, AHORA)).toEqual({ ok: false, error });
+      expect(await reabrirMes(sbDuenyo, malo)).toEqual({ ok: false, error });
+    }
+  });
+
   it("no se cierra el mes en curso ni uno futuro", async () => {
     const r = await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA);
     expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });

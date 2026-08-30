@@ -20,8 +20,11 @@ export function ResumenMargen({ fila, mes, costeHoraCentimos }: { fila: FilaMarg
     <section className="cristal p-4">
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Este mes</h2>
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        {celda("Facturado", formatear(fila.facturadoCentimos))}
-        {celda("Gastos directos", formatear(fila.gastosCentimos))}
+        {/* «(base)»: aquí todo va sin IVA, y la pantalla de Dinero enseña
+            totales con IVA. Sin la etiqueta, las dos cifras del mismo mes
+            parecen contradecirse. */}
+        {celda("Facturado (base)", formatear(fila.facturadoCentimos))}
+        {celda("Gastos (base)", formatear(fila.gastosCentimos))}
         {celda("Horas", `${formatearMinutos(fila.minutos)} · ${formatear(fila.horasCentimos)}`)}
         {celda("Margen", formatear(fila.margenCentimos), fila.margenCentimos < 0)}
       </div>

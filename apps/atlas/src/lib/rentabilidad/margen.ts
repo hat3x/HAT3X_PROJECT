@@ -37,7 +37,16 @@ export type TramoMes = {
   minutos: number;
 };
 
-export type Linea = { gastosCentimos: number; minutos: number; horasCentimos: number };
+/**
+ * Un cajón «sin repartir». Lleva `facturadoCentimos` porque el cajón
+ * «con cliente pero sin proyecto» SÍ factura: una línea de factura sin
+ * proyecto (2A: el proyecto vive en la línea) es ingreso de ese cajón, y
+ * tenerlo en un campo aparte de `Rentabilidad` obligaba a la pantalla a
+ * pintar dos filas para el mismo cajón. En `sinCliente` y `estructura` es
+ * siempre 0: una factura tiene cliente por esquema, así que nada sin
+ * cliente puede facturar.
+ */
+export type Linea = { facturadoCentimos: number; gastosCentimos: number; minutos: number; horasCentimos: number };
 
 export type FilaMargen = {
   id: string;
@@ -54,20 +63,14 @@ export type Rentabilidad = {
   /** Con proyecto pero sin cliente. No se reparte. */
   sinCliente: Linea;
   porProyecto: FilaMargen[];
-  /** Con cliente pero sin proyecto. No se reparte. */
+  /**
+   * Con cliente pero sin proyecto. No se reparte. Su `facturadoCentimos` es
+   * la suma de las líneas de factura sin proyecto: sin él la tabla por
+   * proyecto no cuadraba a la vista con el total.
+   */
   sinProyecto: Linea;
   /** Sin ningún contador. Una sola vez. */
   estructura: Linea;
-  // El facturado de una línea sin proyecto (2A: el
-  // proyecto vive en la LÍNEA, no en la factura) no cae en ninguna fila de
-  // `porProyecto` -- no tiene id de proyecto que lo agrupe -- pero sí en
-  // `total.facturadoCentimos`. Sin este campo la tabla por proyecto no
-  // cuadraba a la vista: la suma de sus filas quedaba por debajo del total y
-  // parecía un error, no una omisión a propósito. Solo facturado: el gasto y
-  // los minutos que le correspondan a un cliente sin proyecto ya viven en
-  // `sinProyecto`, y los que no tengan ni cliente ni proyecto, en
-  // `estructura`.
-  facturadoSinProyectoCentimos: number;
   total: { facturadoCentimos: number; gastosCentimos: number; minutos: number; horasCentimos: number; margenCentimos: number };
 };
 
@@ -91,8 +94,8 @@ function fila(id: string, a: Acumulado, coste: number): FilaMargen {
   };
 }
 
-function linea(gastos: number, minutos: number, coste: number): Linea {
-  return { gastosCentimos: gastos, minutos, horasCentimos: costeDeMinutos(minutos, coste) };
+function linea(facturado: number, gastos: number, minutos: number, coste: number): Linea {
+  return { facturadoCentimos: facturado, gastosCentimos: gastos, minutos, horasCentimos: costeDeMinutos(minutos, coste) };
 }
 
 export function calcularMargen(e: {
@@ -149,9 +152,10 @@ export function calcularMargen(e: {
 
   const filasCliente = ordenar(clientes);
   const filasProyecto = ordenar(proyectos);
-  const lineaSinCliente = linea(sinClienteG, sinClienteMin, coste);
-  const lineaSinProyecto = linea(sinProyectoG, sinProyectoMin, coste);
-  const lineaEstructura = linea(estructuraG, estructuraMin, coste);
+  // Solo `sinProyecto` factura (ver `Linea`); las otras dos van a 0.
+  const lineaSinCliente = linea(0, sinClienteG, sinClienteMin, coste);
+  const lineaSinProyecto = linea(facturadoSinProyecto, sinProyectoG, sinProyectoMin, coste);
+  const lineaEstructura = linea(0, estructuraG, estructuraMin, coste);
 
   // Ronda de arreglo 1: el total de horas se SUMA a partir de las filas ya
   // redondeadas del eje de cliente (porCliente + sinCliente + estructura); no
@@ -181,7 +185,6 @@ export function calcularMargen(e: {
     porProyecto: filasProyecto,
     sinProyecto: lineaSinProyecto,
     estructura: lineaEstructura,
-    facturadoSinProyectoCentimos: facturadoSinProyecto,
     total: {
       facturadoCentimos: facturadoTotal,
       gastosCentimos: gastosTotal,

@@ -105,10 +105,22 @@ function aFactura(f: Fila): Factura {
 /**
  * El historial. **No filtra por permisos**: de eso se encarga RLS, y hay un
  * test que lo comprueba con un colaborador en vez de suponerlo.
+ *
+ * `desde` y `hasta` van en ISO `AAAA-MM-DD` sobre `fecha_emision`. `desde` es
+ * INCLUSIVO (`gte`) y `hasta` es EXCLUSIVO (`lt`): así un mes se pide como
+ * `{ desde: "2026-08-01", hasta: "2026-09-01" }` sin tener que calcular el
+ * último día del mes. Ojo: `listarGastos` usa `hasta` inclusivo (`lte`);
+ * quien combine las dos tiene que recortar una de ellas.
+ *
+ * El `limit(200)` sigue ahí para el historial sin filtro (la pantalla de
+ * Dinero): con un rango de fechas, 200 facturas en un mes es más de lo que
+ * este negocio emite, así que el límite no muerde. Sin el rango, la
+ * rentabilidad de un mes antiguo perdía facturas en silencio en cuanto el
+ * total superaba las 200.
  */
 export async function listarFacturas(
   sb: Sb,
-  filtros: { clienteId?: string; sinCobrar?: boolean }
+  filtros: { clienteId?: string; sinCobrar?: boolean; desde?: string; hasta?: string }
 ): Promise<Factura[]> {
   let consulta = sb
     .from("facturas")
@@ -117,6 +129,8 @@ export async function listarFacturas(
     .limit(200);
 
   if (filtros.clienteId) consulta = consulta.eq("cliente_id", filtros.clienteId);
+  if (filtros.desde) consulta = consulta.gte("fecha_emision", filtros.desde);
+  if (filtros.hasta) consulta = consulta.lt("fecha_emision", filtros.hasta);
   if (filtros.sinCobrar) {
     // Exige 'emitida' y no solo excluye 'anulada': un borrador es algo que
     // todavia no se ha mandado a nadie, y no es una deuda que perseguir. El

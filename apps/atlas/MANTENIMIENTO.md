@@ -140,6 +140,7 @@ Antes de sospechar de `calcularMargen`, mira estas cuatro cosas en orden — son
    ```
 3. **Los tramos abiertos no cuentan.** `rentabilidadDelMes` solo suma fichajes con `fin` (§6.3): un fichaje que sigue abierto no aporta minutos hasta que se cierra, aunque lleve horas corriendo. No es un fallo, es la regla — evita contar un tramo dos veces si se corrige antes de cerrarlo.
 4. **Se calcula con bases, no con totales.** Facturas y gastos entran por su `base` (sin IVA): el IVA no es ingreso ni es coste, solo pasa por caja. Si comparas contra un total con IVA, va a parecer que falta dinero.
+5. **Un mes cerrado congela el coste de la hora, NO los datos.** El cierre solo fija `coste_hora`; las facturas, gastos y tramos con fecha de ese mes se siguen leyendo en vivo. Si un mes cerrado cambia de cifras, es que alguien apuntó, corrigió o borró un gasto, una factura o un fichaje con fecha de ese mes — es alguien moviéndolo, no el sistema. Búscalo por fecha en `gastos`, `facturas` (`fecha_emision`) y `fichajes` (`inicio`).
 
 **Cómo reabrir un mes:** el botón «Reabrir» de `/dinero/rentabilidad` (`reabrirMesAccion`) borra el cierre de `cierres_mes` para ese mes; a partir de ahí vuelve a seguir el coste vigente en `/ajustes/economia` hasta que se cierre de nuevo. Solo lo puede hacer el propietario.
 

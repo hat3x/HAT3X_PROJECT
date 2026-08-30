@@ -55,10 +55,14 @@ afterAll(async () => {
 });
 
 describe("ajustes_economia", () => {
-  it("nace con una fila y coste cero", async () => {
+  // La fila la escriben otros tests (`rentabilidad.test.ts` fija el coste y
+  // lo restaura al terminar) y el propio propietario desde `/ajustes/economia`:
+  // su VALOR no es un invariante del esquema. Lo que sí lo es: que haya una
+  // sola fila y que el coste no sea negativo.
+  it("tiene una sola fila", async () => {
     const { rows } = await pg.query(`SELECT id, coste_hora FROM ajustes_economia`);
     expect(rows).toHaveLength(1);
-    expect(Number(rows[0].coste_hora)).toBe(0);
+    expect(Number(rows[0].coste_hora)).toBeGreaterThanOrEqual(0);
   });
 
   it("no admite una segunda fila", async () => {

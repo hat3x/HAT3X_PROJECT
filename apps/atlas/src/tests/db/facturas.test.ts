@@ -199,6 +199,19 @@ describe("listar facturas", () => {
     expect(fs.map((f) => f.numero)).not.toContain(9);
   });
 
+  // Ronda final: el rango de fechas lo pone la base, no un filtro en memoria
+  // sobre las últimas 200. Se eligen los bordes justos: `desde` cae sobre la
+  // del 4 de julio (inclusivo, debe salir) y `hasta` sobre las del 4 de
+  // agosto (exclusivo, no deben salir). La de junio queda fuera por abajo.
+  it("con desde/hasta, una factura fuera del rango no sale (hasta exclusivo)", async () => {
+    const fs = await listarFacturas(sbDuenyo, {
+      clienteId: idCliente,
+      desde: "2026-07-04",
+      hasta: "2026-08-04",
+    });
+    expect(fs.map((f) => f.numero)).toEqual([2]);
+  });
+
   // No filtra la consulta: de eso se encarga RLS, y se comprueba en vez de
   // suponerse.
   it("un colaborador no ve ninguna factura", async () => {
