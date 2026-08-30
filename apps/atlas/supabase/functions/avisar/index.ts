@@ -541,7 +541,15 @@ async function avisarDeFichajes(sb: SupabaseClient): Promise<Response> {
   let enviados = 0;
   const noComprobados: string[] = [];
   for (const a of avisos) {
-    const inicio = inicioPorFichaje.get(a.fichajeId)!;
+    const inicio = inicioPorFichaje.get(a.fichajeId);
+    // `avisos` sale de mapear `abiertos`, así que aquí siempre hay inicio;
+    // pero un `!` convierte esa suposición en un TypeError sin rastro si un
+    // día deja de ser cierta. Sin inicio no hay con qué cerrar el candado:
+    // se cuenta como no comprobado y no se manda, igual que un error de base.
+    if (inicio === undefined) {
+      noComprobados.push(a.usuarioId);
+      continue;
+    }
     // El candado: un aviso por fichaje, no uno por hora. Si ya hay un aviso
     // de fichaje a esta persona POSTERIOR al inicio del fichaje, es de este
     // mismo, y no se repite. Falla cerrado: si no se puede comprobar, no se

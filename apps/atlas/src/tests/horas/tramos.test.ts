@@ -102,6 +102,17 @@ describe("resumir", () => {
     const sinAsignarCliente = r.porCliente.find((f) => f.nombre === "Sin asignar");
     expect(sinAsignarCliente?.id).toBeNull();
   });
+
+  it("con id pero sin nombre (RLS esconde la fila), cliente y proyecto dicen «Sin permiso», no «Sin asignar»", () => {
+    const r = resumir(
+      [tramo({ clienteNombre: null, proyectoNombre: null }), tramo({ id: "t2", clienteId: null, clienteNombre: null })],
+      AHORA
+    );
+    expect(r.porCliente.find((f) => f.id === "c1")?.nombre).toBe("Sin permiso");
+    expect(r.porProyecto.find((f) => f.id === "p1")?.nombre).toBe("Sin permiso");
+    // Sin id sigue siendo «Sin asignar»: son dos verdades distintas.
+    expect(r.porCliente.find((f) => f.id === null)?.nombre).toBe("Sin asignar");
+  });
 });
 
 describe("formatearMinutos", () => {

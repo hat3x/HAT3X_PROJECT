@@ -5,6 +5,7 @@
 //
 //   npx tsx scripts/migrar/fichajes.ts            # vuelca (idempotente)
 //   npx tsx scripts/migrar/fichajes.ts --limpiar  # retira lo importado
+//   ATLAS_PG="postgresql://...produccion..." npx tsx scripts/migrar/fichajes.ts
 //
 // El usuario es el propietario. Si hubiera más de uno (o ninguno), hay que
 // decir cuál con --usuario <uuid>: adivinar a quién atribuir horas es peor
@@ -14,7 +15,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Client } from "pg";
 
-const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+// La base de destino sale del entorno, como en `traer.ts` (`ORIGEN_PG`,
+// `ATLAS_URL`...): `ATLAS_PG=postgresql://... npx tsx scripts/migrar/fichajes.ts`.
+// Sin la variable se usa la de Supabase local, como hace `transacciones.ts`
+// sin `--destino`. Antes solo apuntaba al local y no lo decía: el volcado
+// real habría ido, en silencio, a la base de desarrollo de quien lo lanzara.
+const URL_PG_LOCAL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+const URL_PG = process.env.ATLAS_PG || URL_PG_LOCAL;
 const NOTA = "[importado de apps/fichaje]";
 const RUTA = resolve(__dirname, "../../../fichaje/data/fichaje.json");
 const TOPE_MS = 16 * 3_600_000;
@@ -27,10 +34,15 @@ export type FilaNueva = { inicio: string; fin: string; clienteId: string | null;
 export function convertir(
   viejos: FichajeViejo[],
   clientes: Map<string, string>
-): { filas: FilaNueva[]; sinCliente: string[]; descartados: number } {
+): { filas: FilaNueva[]; sinCliente: string[]; descartados: number; restosDescartados: number } {
   const filas: FilaNueva[] = [];
   const sinCliente = new Set<string>();
+  // `descartados` cuenta TRAMOS ENTEROS que no entran; `restosDescartados`,
+  // los restos de menos de un minuto de una partición. Son cosas distintas:
+  // un tramo de 16 h y 30 s SÍ se importa (su fila de 16 h está), y contarlo
+  // a la vez en `filas` y en `descartados` haría que el informe no cuadrara.
   let descartados = 0;
+  let restosDescartados = 0;
   for (const v of viejos) {
     if (!v.salida) {
       descartados++; // un abierto de la app vieja no se puede reconstruir
@@ -55,12 +67,12 @@ export function convertir(
     // 16 h y 30 s deja un resto de 30 s, y eso no es trabajo, es ruido. Se
     // descarta en vez de insertar una fila de menos de un minuto.
     if (fin - ini < MINIMO_MS) {
-      descartados++;
+      restosDescartados++;
     } else {
       filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(fin).toISOString(), clienteId, clienteSlug: slug });
     }
   }
-  return { filas, sinCliente: [...sinCliente], descartados };
+  return { filas, sinCliente: [...sinCliente], descartados, restosDescartados };
 }
 
 async function main() {
@@ -89,7 +101,7 @@ async function main() {
     const datos = JSON.parse(readFileSync(RUTA, "utf8")) as { fichajes: FichajeViejo[] };
     const { rows: cl } = await pg.query(`SELECT id, slug FROM clientes`);
     const clientes = new Map<string, string>(cl.map((c) => [c.slug, c.id]));
-    const { filas, sinCliente, descartados } = convertir(datos.fichajes, clientes);
+    const { filas, sinCliente, descartados, restosDescartados } = convertir(datos.fichajes, clientes);
 
     // Idempotente por (usuario, inicio): volver a ejecutarlo no duplica.
     let nuevos = 0;
@@ -102,7 +114,10 @@ async function main() {
       );
       nuevos += r.rowCount ?? 0;
     }
-    console.log(`Importados ${nuevos} tramos nuevos (${filas.length} en total, ${descartados} descartados).`);
+    console.log(
+      `Importados ${nuevos} tramos nuevos (${filas.length} en total, ${descartados} descartados, ` +
+        `${restosDescartados} restos de partición por debajo del minuto).`
+    );
     if (sinCliente.length > 0) {
       console.log(`Sin cliente en Atlas (quedan sin asignar): ${sinCliente.join(", ")}`);
     }

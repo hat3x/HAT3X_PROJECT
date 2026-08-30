@@ -25,6 +25,7 @@ describe("convertir", () => {
     const r = convertir([{ entrada: "2026-08-06T03:29:41+02:00", salida: "2026-08-06T03:29:44+02:00", cliente_principal: "biodental" }], CLIENTES);
     expect(r.filas).toEqual([]);
     expect(r.descartados).toBe(1);
+    expect(r.restosDescartados).toBe(0);
   });
 
   it("un tramo de más de 16 horas se parte en tramos de 16 y el resto", () => {
@@ -42,6 +43,20 @@ describe("convertir", () => {
     expect(r.filas.map((f) => [f.inicio, f.fin])).toEqual([
       ["2026-08-01T00:00:00.000Z", "2026-08-01T16:00:00.000Z"],
     ]);
-    expect(r.descartados).toBe(1);
+    // El tramo entero SÍ se importó (su fila de 16 h está), así que no es un
+    // descartado: es un resto descartado, que se cuenta aparte para que
+    // `filas` y `descartados` no se solapen en el informe.
+    expect(r.descartados).toBe(0);
+    expect(r.restosDescartados).toBe(1);
+  });
+
+  it("un resto de exactamente un minuto sí se inserta como segunda fila", () => {
+    const r = convertir([{ entrada: "2026-08-01T00:00:00Z", salida: "2026-08-01T16:01:00Z", cliente_principal: "biodental" }], CLIENTES);
+    expect(r.filas.map((f) => [f.inicio, f.fin])).toEqual([
+      ["2026-08-01T00:00:00.000Z", "2026-08-01T16:00:00.000Z"],
+      ["2026-08-01T16:00:00.000Z", "2026-08-01T16:01:00.000Z"],
+    ]);
+    expect(r.descartados).toBe(0);
+    expect(r.restosDescartados).toBe(0);
   });
 });

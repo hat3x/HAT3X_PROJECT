@@ -24,8 +24,9 @@ export const AVISO_HORAS = 10;
 /**
  * A partir de aquí ya no se cuenta. Un fichaje abierto desde el lunes no son
  * 26 horas de trabajo: son un olvido, y contarlas inflaría el coste del
- * cliente. El tramo sigue abierto —hay que cerrarlo y corregir el fin— pero
- * los minutos que se suman se paran aquí.
+ * cliente. Mientras siga abierto, los minutos que se suman se paran aquí; al
+ * pararlo, `parar()` lo cierra en este mismo tope y lo marca como añadido,
+ * para que un fin reconstruido no pase por uno medido.
  */
 export const TOPE_HORAS = 16;
 
@@ -66,7 +67,9 @@ export function abiertosDemasiado(
       horas,
       titulo: `Llevas ${horas} horas fichado ${donde}`,
       // Se dice qué hacer, no solo qué pasa: el aviso sirve para corregir.
-      cuerpo: "Si ya no estás trabajando, ciérralo y corrige la hora de fin desde Horas.",
+      cuerpo:
+        "Si ya no estás trabajando, páralo: se cerrará a las 16 horas y quedará marcado como añadido. " +
+        "Si fue menos, bórralo desde Horas y añade el tramo bueno.",
     });
   }
   return avisos;

@@ -25,6 +25,9 @@ export type EntradaTramo = EntradaFichaje & {
   fin: string;
 };
 
+/** Lo que queda escrito en la nota cuando `parar` cierra por tope. */
+export const NOTA_TOPE = "Cerrado por tope: el fin es reconstruido, no medido";
+
 const CAMPOS =
   "id, usuario_id, proyecto_id, cliente_id, inicio, fin, origen, nota, " +
   // Uniones EXTERNAS a propósito: un colaborador sin permiso sobre el
@@ -124,18 +127,77 @@ export async function empezar(sb: Sb, e: EntradaFichaje): Promise<Ok> {
   return { ok: false, error: error.message };
 }
 
-export async function parar(sb: Sb): Promise<Ok> {
+/**
+ * Cierra el fichaje en curso. Recibe `ahoraMs` por parámetro (la acción pasa
+ * `Date.now()`) para poder probar el tope sin esperar dieciséis horas.
+ *
+ * Si el abierto lleva más de `TOPE_HORAS`, no se cierra en `ahora`: se cierra
+ * en `inicio + TOPE_HORAS`, con `origen='anadido'` y una nota que lo dice.
+ * Un fichaje olvidado tres días, cerrado en `ahora`, sería un tramo de 72 h
+ * con `origen='atlas'`; la lectura lo toparía a 16 h y quedaría indistinguible
+ * de una jornada honesta de 16 h medidas. Pero ese fin no se midió: se
+ * reconstruyó, y eso es exactamente lo que `anadido` significa. Así el
+ * resumen lo cuenta como reconstruido, la tabla lo enseña como añadido y
+ * quien lo ve puede borrarlo y añadir el tramo bueno.
+ */
+export async function parar(sb: Sb, ahoraMs: number): Promise<Ok> {
   const yo = await quienSoy(sb);
   if (!yo) return { ok: false, error: "No hay sesión." };
+  const { data: abierto, error: errorLeer } = await sb
+    .from("fichajes")
+    .select("id, inicio, nota")
+    .eq("usuario_id", yo)
+    .is("fin", null)
+    .maybeSingle();
+  if (errorLeer) return { ok: false, error: errorLeer.message };
+  // Cero filas no es un error de Postgres, pero sí es mentir si se devuelve ok.
+  if (!abierto) return { ok: false, error: "No hay ningún fichaje en curso." };
+
+  const inicioMs = Date.parse(abierto.inicio);
+  const topeMs = TOPE_HORAS * 3_600_000;
+  const porTope = ahoraMs - inicioMs > topeMs;
+  const cambios = porTope
+    ? {
+        fin: new Date(inicioMs + topeMs).toISOString(),
+        origen: "anadido",
+        // Si ya había nota, se antepone: lo que escribió la persona no se pierde.
+        nota: [NOTA_TOPE, abierto.nota].filter(Boolean).join(" · "),
+      }
+    : { fin: new Date(ahoraMs).toISOString() };
+
   const { data, error } = await sb
     .from("fichajes")
-    .update({ fin: new Date().toISOString() })
+    .update(cambios)
+    .eq("id", abierto.id)
     .eq("usuario_id", yo)
     .is("fin", null)
     .select("id");
   if (error) return { ok: false, error: error.message };
-  // Cero filas no es un error de Postgres, pero sí es mentir si se devuelve ok.
+  // Entre la lectura y la escritura otro cliente pudo cerrarlo: no se finge.
   if (!data || data.length === 0) return { ok: false, error: "No hay ningún fichaje en curso." };
+  return { ok: true };
+}
+
+/**
+ * Borra un tramo propio. RLS (`fichajes_propios`) es la barrera: un
+ * colaborador no puede tocar filas ajenas y el propietario solo las suyas
+ * para escritura; el `.eq("usuario_id", yo)` es defensa en profundidad. Si no
+ * se borró ninguna fila —no existe, o no es mía— se dice, porque devolver ok
+ * sobre una fila que sigue ahí es mentir.
+ */
+export async function borrarTramo(sb: Sb, id: string): Promise<Ok> {
+  const yo = await quienSoy(sb);
+  if (!yo) return { ok: false, error: "No hay sesión." };
+  const { data, error } = await sb
+    .from("fichajes")
+    .delete()
+    .eq("id", id)
+    .eq("usuario_id", yo)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { ok: false, error: "Ese tramo no existe o no es tuyo." };
+  }
   return { ok: true };
 }
 
@@ -176,4 +238,20 @@ export async function listarTramos(
     .order("inicio", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((f) => aTramo(f as unknown as Fila));
+}
+
+/**
+ * El inicio del fichaje más reciente que se puede ver, esté en el mes que
+ * esté. «Último fichaje» no puede salir de los tramos del mes: el día 1 diría
+ * «Nunca» aunque se fichara ayer. Quién ve qué lo decide RLS.
+ */
+export async function ultimoInicio(sb: Sb): Promise<string | null> {
+  const { data, error } = await sb
+    .from("fichajes")
+    .select("inicio")
+    .order("inicio", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.inicio ?? null;
 }

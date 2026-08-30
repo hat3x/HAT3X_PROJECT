@@ -24,6 +24,12 @@ export function BarraLateral({
   esPropietario: boolean;
   rutaActual: string;
 }) {
+  // Un colaborador no puede entrar en `/dinero`: esa pantalla hace
+  // `notFound()` a quien no es propietario, y el único enlace a `/dinero/horas`
+  // vivía allí dentro. Para él, «Dinero» lleva directo a sus horas; la entrada
+  // sigue marcándose activa con `startsWith("/dinero")`, así que no cambia nada
+  // más que el destino.
+  const destino = (href: string) => (href === "/dinero" && !esPropietario ? "/dinero/horas" : href);
   return (
     // `flex-1`: desde que el marco (tarea 4) puso este <nav> dentro de una
     // columna flex-col junto al bloque de fichaje, el <nav> ya no se estira
@@ -41,7 +47,7 @@ export function BarraLateral({
         return (
           <Link
             key={href}
-            href={href}
+            href={destino(href)}
             aria-current={activa ? "page" : undefined}
             className={cn(
               "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",

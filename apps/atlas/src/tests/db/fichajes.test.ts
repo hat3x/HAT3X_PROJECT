@@ -9,7 +9,11 @@ import {
   parar,
   anadirTramo,
   listarTramos,
+  borrarTramo,
+  ultimoInicio,
+  NOTA_TOPE,
 } from "@/lib/db/fichajes";
+import { TOPE_HORAS } from "@/lib/horas/abiertos";
 import type { Database } from "@/types/supabase";
 import type { Tramo } from "@/lib/horas/tramos";
 
@@ -190,14 +194,65 @@ describe("fichar", () => {
 
   it("parar cierra el que estaba en curso", async () => {
     await empezar(sbDuenyo, { proyectoId: null, clienteId: null, nota: null });
-    const r = await parar(sbDuenyo);
+    const r = await parar(sbDuenyo, Date.now());
     expect(r).toEqual({ ok: true });
     expect(await fichajeEnCurso(sbDuenyo)).toBeNull();
   });
 
+  it("parar uno de dos horas cierra en ahora y sigue siendo medido", async () => {
+    // El inicio se pone a mano por SQL: `empezar` siempre ficha en `now()`.
+    const inicio = new Date(AHORA - 2 * 3_600_000).toISOString();
+    await pg.query(`INSERT INTO fichajes (usuario_id, inicio) VALUES ($1, $2)`, [idDuenyo, inicio]);
+    expect(await parar(sbDuenyo, AHORA)).toEqual({ ok: true });
+    const [t] = soloMios(await listarTramos(sbDuenyo, RANGO));
+    expect(Date.parse(t!.fin!)).toBe(AHORA);
+    expect(t!.origen).toBe("atlas");
+    expect(t!.nota).toBeNull();
+  });
+
+  it("parar uno de veinte horas cierra en inicio + tope, como añadido y con nota", async () => {
+    // Un olvido de 20 h no son 20 h medidas ni 16 h medidas: el fin se
+    // reconstruye, y el tramo tiene que decirlo para poder corregirlo.
+    const inicio = new Date(AHORA - 20 * 3_600_000).toISOString();
+    await pg.query(`INSERT INTO fichajes (usuario_id, inicio, nota) VALUES ($1, $2, 'reunión')`, [idDuenyo, inicio]);
+    expect(await parar(sbDuenyo, AHORA)).toEqual({ ok: true });
+    const [t] = soloMios(await listarTramos(sbDuenyo, RANGO));
+    expect(Date.parse(t!.fin!)).toBe(Date.parse(inicio) + TOPE_HORAS * 3_600_000);
+    expect(t!.origen).toBe("anadido");
+    // La nota de la persona no se pierde: el aviso del tope se antepone.
+    expect(t!.nota).toBe(`${NOTA_TOPE} · reunión`);
+  });
+
   it("parar sin nada en curso lo dice, no finge", async () => {
-    const r = await parar(sbDuenyo);
+    const r = await parar(sbDuenyo, Date.now());
     expect(r).toEqual({ ok: false, error: "No hay ningún fichaje en curso." });
+  });
+
+  it("borrar un tramo propio lo quita; uno inexistente lo dice", async () => {
+    await anadirTramo(
+      sbDuenyo,
+      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T09:00:00Z" },
+      AHORA
+    );
+    const [t] = soloMios(await listarTramos(sbDuenyo, RANGO));
+    expect(await borrarTramo(sbDuenyo, t!.id)).toEqual({ ok: true });
+    expect(soloMios(await listarTramos(sbDuenyo, RANGO))).toEqual([]);
+    const otra = await borrarTramo(sbDuenyo, t!.id);
+    expect(otra.ok).toBe(false);
+  });
+
+  it("el último inicio sale de cualquier mes, no solo del rango en pantalla", async () => {
+    // Un tramo de julio: el día 1 de agosto, el listado del mes está vacío
+    // pero «Último fichaje» no puede decir «Nunca».
+    await anadirTramo(
+      sbColab,
+      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-07-30T08:00:00Z", fin: "2026-07-30T09:00:00Z" },
+      AHORA
+    );
+    expect(soloMios(await listarTramos(sbColab, RANGO))).toEqual([]);
+    const u = await ultimoInicio(sbColab);
+    expect(u).not.toBeNull();
+    expect(Date.parse(u!)).toBe(Date.parse("2026-07-30T08:00:00Z"));
   });
 
   it("un tramo añadido queda marcado como añadido", async () => {
@@ -241,6 +296,27 @@ describe("quién ve qué (RLS, con usuarios reales)", () => {
     expect(veDuenyo).toHaveLength(2);
     // El nombre viaja con el tramo: el propietario sabe de quién es cada hora.
     expect(veDuenyo.map((t) => t.usuarioNombre).sort()).toEqual(["Colab", "Dueño"]);
+  });
+
+  it("el colaborador no puede borrar el tramo del dueño; el suyo sí", async () => {
+    await anadirTramo(
+      sbDuenyo,
+      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T11:00:00Z" },
+      AHORA
+    );
+    await anadirTramo(
+      sbColab,
+      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T09:00:00Z" },
+      AHORA
+    );
+    const delDuenyo = soloMios(await listarTramos(sbDuenyo, RANGO)).find((t) => t.usuarioId === idDuenyo);
+    const delColab = soloMios(await listarTramos(sbColab, RANGO)).find((t) => t.usuarioId === idColab);
+    // RLS no le deja ver la fila ajena, así que el DELETE no borra nada: 0
+    // filas, y la función lo dice en vez de fingir.
+    expect((await borrarTramo(sbColab, delDuenyo!.id)).ok).toBe(false);
+    expect(soloMios(await listarTramos(sbDuenyo, RANGO))).toHaveLength(2);
+    expect(await borrarTramo(sbColab, delColab!.id)).toEqual({ ok: true });
+    expect(soloMios(await listarTramos(sbDuenyo, RANGO)).map((t) => t.usuarioId)).toEqual([idDuenyo]);
   });
 
   it("un proyecto que el colaborador no puede ver no le esconde su propio fichaje", async () => {

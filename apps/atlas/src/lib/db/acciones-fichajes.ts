@@ -3,7 +3,14 @@
 
 import { revalidatePath } from "next/cache";
 import { clienteServidor } from "@/lib/supabase/servidor";
-import { empezar, parar, anadirTramo, type EntradaFichaje, type EntradaTramo } from "./fichajes";
+import {
+  empezar,
+  parar,
+  anadirTramo,
+  borrarTramo,
+  type EntradaFichaje,
+  type EntradaTramo,
+} from "./fichajes";
 import type { Ok } from "./proyectos";
 
 //
@@ -25,7 +32,7 @@ export async function empezarFichaje(entrada: EntradaFichaje): Promise<Ok> {
 
 export async function pararFichaje(): Promise<Ok> {
   const sb = await clienteServidor();
-  const r = await parar(sb);
+  const r = await parar(sb, Date.now());
   if (!r.ok) return r;
   revalidatePath("/", "layout");
   return { ok: true };
@@ -36,5 +43,19 @@ export async function anadirFichaje(entrada: EntradaTramo): Promise<Ok> {
   const r = await anadirTramo(sb, entrada, Date.now());
   if (!r.ok) return r;
   revalidatePath("/dinero/horas");
+  return { ok: true };
+}
+
+/**
+ * Borrar un tramo propio. Revalida la pantalla de horas y también el layout:
+ * si el tramo borrado era el que el marco enseñaba como último, el marco lo
+ * seguiría enseñando.
+ */
+export async function borrarFichaje(id: string): Promise<Ok> {
+  const sb = await clienteServidor();
+  const r = await borrarTramo(sb, id);
+  if (!r.ok) return r;
+  revalidatePath("/dinero/horas");
+  revalidatePath("/", "layout");
   return { ok: true };
 }

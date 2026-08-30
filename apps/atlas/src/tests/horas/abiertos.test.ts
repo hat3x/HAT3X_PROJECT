@@ -39,7 +39,7 @@ describe("abiertosDemasiado", () => {
     expect(con?.titulo).toBe("Llevas 11 horas fichado en Kairos · Biodental");
     const [sin] = abiertosDemasiado([abierto({ proyectoNombre: null, clienteNombre: null })], AHORA);
     expect(sin?.titulo).toBe("Llevas 11 horas fichado sin asignar");
-    expect(sin?.cuerpo).toMatch(/ciérralo/i);
+    expect(sin?.cuerpo).toMatch(/páralo/i);
   });
 
   it("las horas se redondean hacia abajo", () => {

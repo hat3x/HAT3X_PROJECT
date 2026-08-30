@@ -36,6 +36,12 @@ export type ResumenHoras = {
 };
 
 const SIN_ASIGNAR = "Sin asignar";
+/**
+ * Hay id pero no nombre: la fila existe y RLS la esconde (un colaborador sin
+ * permiso sobre el proyecto). No es «Sin asignar» —está asignado— y decirlo
+ * así engañaría: el rótulo dice la verdad, que no se puede ver.
+ */
+const SIN_PERMISO = "Sin permiso";
 
 /** Minutos de un tramo, con el tope aplicado. Un abierto cuenta hasta `ahora`. */
 export function minutosDe(t: Tramo, ahoraMs: number): number {
@@ -49,13 +55,14 @@ function agrupar(
   ahoraMs: number,
   clave: (t: Tramo) => string | null,
   nombre: (t: Tramo) => string | null,
-  rotuloPorDefecto: string = SIN_ASIGNAR
+  rotuloConIdSinNombre: string = SIN_PERMISO
 ): FilaHoras[] {
   const filas = new Map<string | null, FilaHoras>();
   for (const t of tramos) {
     const id = clave(t);
-    // Si no hay nombre pero sí hay ID, es "Sin nombre"; si ni ID ni nombre, es "Sin asignar".
-    const nombreUsado = nombre(t) ?? (id ? rotuloPorDefecto : SIN_ASIGNAR);
+    // Con id y sin nombre, el rótulo depende del eje («Sin permiso» para
+    // cliente y proyecto, «Sin nombre» para persona); sin id, «Sin asignar».
+    const nombreUsado = nombre(t) ?? (id ? rotuloConIdSinNombre : SIN_ASIGNAR);
     const fila = filas.get(id) ?? { id, nombre: nombreUsado, minutos: 0 };
     fila.minutos += minutosDe(t, ahoraMs);
     filas.set(id, fila);
@@ -83,8 +90,8 @@ export function resumir(tramos: Tramo[], ahoraMs: number): ResumenHoras {
     medidosMin: medidos,
     anadidosMin: anadidos,
     // Los tres agrupan los MISMOS tramos: si no suman igual, hay uno perdido.
-    porCliente: agrupar(tramos, ahoraMs, (t) => t.clienteId, (t) => t.clienteNombre, SIN_ASIGNAR),
-    porProyecto: agrupar(tramos, ahoraMs, (t) => t.proyectoId, (t) => t.proyectoNombre, SIN_ASIGNAR),
+    porCliente: agrupar(tramos, ahoraMs, (t) => t.clienteId, (t) => t.clienteNombre, SIN_PERMISO),
+    porProyecto: agrupar(tramos, ahoraMs, (t) => t.proyectoId, (t) => t.proyectoNombre, SIN_PERMISO),
     porPersona: agrupar(tramos, ahoraMs, (t) => t.usuarioId, (t) => t.usuarioNombre, "Sin nombre"),
     ultimoInicio: ultimo,
     sospechosos,

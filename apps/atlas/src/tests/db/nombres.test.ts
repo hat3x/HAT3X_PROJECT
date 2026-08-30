@@ -13,6 +13,7 @@ const ANON =
 const SERVICE =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
 const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+const CORREO = "nombres@atlas.test";
 
 let pg: Client;
 let idUsuario = "";
@@ -29,8 +30,16 @@ beforeAll(async () => {
   admin = createClient<Database>(URL_API, SERVICE, {
     auth: { persistSession: false },
   });
+  // Limpieza defensiva ANTES de crear: si una corrida anterior se cortó a
+  // medias, el usuario sigue ahí y `createUser` fallaría para siempre.
+  const { data: listado } = await admin.auth.admin.listUsers();
+  for (const u of listado?.users ?? []) {
+    if (u.email === CORREO) await admin.auth.admin.deleteUser(u.id);
+  }
+  await pg.query(`DELETE FROM clientes  WHERE slug LIKE '%-nombres-db'`);
+  await pg.query(`DELETE FROM proyectos WHERE slug LIKE '%-nombres-db'`);
   const creado = await admin.auth.admin.createUser({
-    email: "nombres@atlas.test",
+    email: CORREO,
     password: "contrasena-de-prueba",
     email_confirm: true,
   });
@@ -55,17 +64,22 @@ beforeAll(async () => {
 
   sbUsuario = createClient<Database>(URL_API, ANON);
   const { error } = await sbUsuario.auth.signInWithPassword({
-    email: "nombres@atlas.test",
+    email: CORREO,
     password: "contrasena-de-prueba",
   });
   if (error) throw error;
 });
 
 afterAll(async () => {
-  await pg.query(`DELETE FROM clientes  WHERE slug LIKE '%-nombres-db'`);
-  await pg.query(`DELETE FROM proyectos WHERE slug LIKE '%-nombres-db'`);
-  if (idUsuario) await admin.auth.admin.deleteUser(idUsuario);
-  await pg.end();
+  // `pg.end()` en el `finally`: si una limpieza falla, la conexión no queda
+  // colgando y Vitest no se queda esperando a que se cierre sola.
+  try {
+    await pg.query(`DELETE FROM clientes  WHERE slug LIKE '%-nombres-db'`);
+    await pg.query(`DELETE FROM proyectos WHERE slug LIKE '%-nombres-db'`);
+    if (idUsuario) await admin.auth.admin.deleteUser(idUsuario);
+  } finally {
+    await pg.end();
+  }
 });
 
 describe("nombresDeClientes y nombresDeProyectos", () => {

@@ -3,12 +3,13 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
-import { listarTramos } from "@/lib/db/fichajes";
-import { listarProyectos } from "@/lib/db/proyectos";
-import { listarClientes } from "@/lib/db/clientes";
+import { listarTramos, ultimoInicio } from "@/lib/db/fichajes";
+import { nombresDeProyectos } from "@/lib/db/proyectos";
+import { nombresDeClientes } from "@/lib/db/clientes";
 import { resumir, formatearMinutos, minutosDe, type FilaHoras } from "@/lib/horas/tramos";
 import { hoyEnMadrid } from "@/lib/dinero";
 import { FormTramo } from "@/components/dinero/FormTramo";
+import { BotonBorrarTramo } from "@/components/dinero/BotonBorrarTramo";
 import { Distintivo } from "@/components/ui/Distintivo";
 
 const FECHA_HORA = new Intl.DateTimeFormat("es-ES", {
@@ -79,10 +80,16 @@ export default async function PaginaHoras() {
   const esPropietario = perfil?.esPropietario ?? false;
 
   const rango = mesEnCurso(hoyEnMadrid());
-  const [tramos, proyectos, clientes] = await Promise.all([
+  // `nombresDe*` y no `listar*`: los desplegables solo necesitan id y nombre,
+  // y `listar*` arrastra contratos, cuotas y estados que aquí nadie lee.
+  //
+  // «Último fichaje» se pide aparte y sin rango: si saliera de los tramos del
+  // mes, el día 1 diría «Nunca» aunque se fichara ayer.
+  const [tramos, proyectos, clientes, ultimo] = await Promise.all([
     listarTramos(sb, rango),
-    listarProyectos(sb),
-    listarClientes(sb),
+    nombresDeProyectos(sb),
+    nombresDeClientes(sb),
+    ultimoInicio(sb),
   ]);
   // Un único instante para toda la pantalla: `resumir` lo usa para el total y
   // los desgloses, y la tabla de abajo lo reutiliza en `minutosDe` fila por
@@ -95,10 +102,14 @@ export default async function PaginaHoras() {
   return (
     <section className="max-w-5xl space-y-4">
       <header>
-        <Link href="/dinero" className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100">
-          <ChevronLeft size={15} aria-hidden="true" />
-          Dinero
-        </Link>
+        {/* Solo al propietario: `/dinero` hace notFound() a los demás, y un
+            enlace a una puerta cerrada es peor que ninguno. */}
+        {esPropietario && (
+          <Link href="/dinero" className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100">
+            <ChevronLeft size={15} aria-hidden="true" />
+            Dinero
+          </Link>
+        )}
         <h1 className="text-2xl font-semibold tracking-tight">Horas</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
           Lo fichado este mes. La regla es fichar antes de empezar; lo que se añade después cuenta, pero se ve.
@@ -119,7 +130,7 @@ export default async function PaginaHoras() {
         <div className="cristal cristal-denso p-4">
           <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Último fichaje</div>
           <div className="mt-1 text-lg font-semibold">
-            {r.ultimoInicio ? FECHA_HORA.format(new Date(r.ultimoInicio)) : <Distintivo estado="desconocido" texto="Nunca" />}
+            {ultimo ? FECHA_HORA.format(new Date(ultimo)) : <Distintivo estado="desconocido" texto="Nunca" />}
           </div>
         </div>
       </div>
@@ -147,8 +158,8 @@ export default async function PaginaHoras() {
 
       <h2 className="pt-2 text-lg font-semibold">Se me olvidó fichar</h2>
       <FormTramo
-        proyectos={proyectos.map((p) => ({ id: p.id, nombre: p.nombre }))}
-        clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
+        proyectos={proyectos}
+        clientes={clientes}
       />
 
       <h2 className="pt-2 text-lg font-semibold">Los tramos del mes</h2>
@@ -168,6 +179,9 @@ export default async function PaginaHoras() {
                 <th scope="col" className="px-4 py-2 font-medium">Duración</th>
                 <th scope="col" className="px-4 py-2 font-medium">Para</th>
                 <th scope="col" className="px-4 py-2 font-medium">Origen</th>
+                <th scope="col" className="px-4 py-2 font-medium">
+                  <span className="sr-only">Acciones</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
@@ -197,6 +211,13 @@ export default async function PaginaHoras() {
                     </td>
                     <td className="px-4 py-2.5">
                       {t.origen === "anadido" ? <Distintivo estado="aviso" texto="Añadido" /> : <span style={{ color: "var(--texto-tenue)" }}>Medido</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {/* Solo en las filas propias: RLS no dejaría borrar las
+                          ajenas, y enseñar un botón que siempre falla es
+                          prometer lo que no se puede. El propietario ve las
+                          de todos, pero solo borra las suyas. */}
+                      {perfil && t.usuarioId === perfil.id && <BotonBorrarTramo id={t.id} />}
                     </td>
                   </tr>
                 );
