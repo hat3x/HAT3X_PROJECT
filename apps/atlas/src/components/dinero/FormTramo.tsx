@@ -10,7 +10,9 @@ import { anadirFichaje } from "@/lib/db/acciones-fichajes";
  *
  * Las horas se teclean en la zona del dispositivo (`datetime-local` no lleva
  * zona) y se mandan en ISO con zona: `new Date(valor)` las interpreta en la
- * zona del navegador, que es la de quien las recuerda.
+ * zona del navegador, que es la de quien las recuerda. Si quien rellena el
+ * formulario está de viaje, la hora se interpreta en la zona del
+ * dispositivo, no en la de Madrid — es una limitación aceptada, no un bug.
  */
 export function FormTramo({
   proyectos,

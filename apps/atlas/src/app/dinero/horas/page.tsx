@@ -6,7 +6,7 @@ import { obtenerPerfil } from "@/lib/db/perfil";
 import { listarTramos } from "@/lib/db/fichajes";
 import { listarProyectos } from "@/lib/db/proyectos";
 import { listarClientes } from "@/lib/db/clientes";
-import { resumir, formatearMinutos, type FilaHoras } from "@/lib/horas/tramos";
+import { resumir, formatearMinutos, minutosDe, type FilaHoras } from "@/lib/horas/tramos";
 import { hoyEnMadrid } from "@/lib/dinero";
 import { FormTramo } from "@/components/dinero/FormTramo";
 import { Distintivo } from "@/components/ui/Distintivo";
@@ -84,7 +84,12 @@ export default async function PaginaHoras() {
     listarProyectos(sb),
     listarClientes(sb),
   ]);
-  const r = resumir(tramos, Date.now());
+  // Un único instante para toda la pantalla: `resumir` lo usa para el total y
+  // los desgloses, y la tabla de abajo lo reutiliza en `minutosDe` fila por
+  // fila. Si cada uno leyera su propio `Date.now()`, un tramo abierto podría
+  // sumar un minuto distinto en la fila que en el total.
+  const ahora = Date.now();
+  const r = resumir(tramos, ahora);
   const pctAnadido = r.totalMin === 0 ? 0 : Math.round((r.anadidosMin / r.totalMin) * 100);
 
   return (
@@ -167,13 +172,23 @@ export default async function PaginaHoras() {
             </thead>
             <tbody className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
               {tramos.map((t) => {
-                const minutos = t.fin === null ? null : Math.round((Date.parse(t.fin) - Date.parse(t.inicio)) / 60_000);
+                // La misma `minutosDe` que usa `resumir`: es lo que hace que
+                // la suma de esta columna cuadre con el total de arriba,
+                // tope de 16 h incluido tanto en cerrados como en abiertos.
+                const minutos = minutosDe(t, ahora);
                 return (
                   <tr key={t.id}>
                     {esPropietario && <td className="px-4 py-2.5">{t.usuarioNombre ?? "—"}</td>}
                     <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">{FECHA_HORA.format(new Date(t.inicio))}</td>
                     <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
-                      {minutos === null ? <Distintivo estado="ok" texto="En curso" /> : formatearMinutos(minutos)}
+                      {t.fin === null ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Distintivo estado="ok" texto="En curso" />
+                          <span>{formatearMinutos(minutos)}</span>
+                        </span>
+                      ) : (
+                        formatearMinutos(minutos)
+                      )}
                     </td>
                     <td className="px-4 py-2.5">
                       {[t.proyectoNombre, t.clienteNombre].filter(Boolean).join(" · ") || (
