@@ -626,6 +626,64 @@ export type Database = {
           },
         ]
       }
+      fichajes: {
+        Row: {
+          cliente_id: string | null
+          creado_en: string
+          fin: string | null
+          id: string
+          inicio: string
+          nota: string | null
+          origen: string
+          proyecto_id: string | null
+          usuario_id: string
+        }
+        Insert: {
+          cliente_id?: string | null
+          creado_en?: string
+          fin?: string | null
+          id?: string
+          inicio: string
+          nota?: string | null
+          origen?: string
+          proyecto_id?: string | null
+          usuario_id: string
+        }
+        Update: {
+          cliente_id?: string | null
+          creado_en?: string
+          fin?: string | null
+          id?: string
+          inicio?: string
+          nota?: string | null
+          origen?: string
+          proyecto_id?: string | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fichajes_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fichajes_proyecto_id_fkey"
+            columns: ["proyecto_id"]
+            isOneToOne: false
+            referencedRelation: "proyectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fichajes_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gastos: {
         Row: {
           base: number
