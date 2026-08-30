@@ -10,7 +10,7 @@ import { cerrarMesAccion, reabrirMesAccion } from "@/lib/db/acciones-economia";
  * vuelve al coste actual. Son dos botones y no un conmutador para que cada
  * acción diga lo que hace.
  */
-export function BotonCierreMes({ mes, cerrado, costeHoraCentimos }: { mes: string; cerrado: boolean; costeHoraCentimos: number }) {
+export function BotonCierreMes({ mes, cerrado }: { mes: string; cerrado: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -34,7 +34,7 @@ export function BotonCierreMes({ mes, cerrado, costeHoraCentimos }: { mes: strin
           <LockOpen size={14} aria-hidden="true" /> Reabrir el mes
         </button>
       ) : (
-        <button type="button" disabled={enviando} onClick={() => ejecutar(() => cerrarMesAccion(mes, costeHoraCentimos))} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
+        <button type="button" disabled={enviando} onClick={() => ejecutar(() => cerrarMesAccion(mes))} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
           <Lock size={14} aria-hidden="true" /> Cerrar el mes
         </button>
       )}

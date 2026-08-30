@@ -118,7 +118,7 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
           <span className="text-sm" style={{ color: "var(--texto-tenue)" }}>{formatear(costeHoraCentimos)}/h</span>
         )}
         {/* El mes en curso no se cierra: le faltan días. */}
-        {!esActual && <BotonCierreMes mes={mes} cerrado={cerrado !== null} costeHoraCentimos={costeHoraCentimos} />}
+        {!esActual && <BotonCierreMes mes={mes} cerrado={cerrado !== null} />}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">

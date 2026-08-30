@@ -4,7 +4,7 @@
 //
 import type { Sb } from "./clientes";
 import type { Ok } from "./proyectos";
-import { mesDe } from "@/lib/dinero";
+import { mesDe, mesEnMadrid } from "@/lib/dinero";
 
 export type Cierre = { mes: string; costeHoraCentimos: number; cerradoEn: string };
 
@@ -22,8 +22,13 @@ export async function cierreDe(sb: Sb, mes: string): Promise<Cierre | null> {
 
 export async function cerrarMes(sb: Sb, mes: string, costeHoraCentimos: number, ahoraMs: number): Promise<Ok> {
   // El mes en curso no se cierra: le faltan días. Se compara por texto de mes
-  // porque el instante viene por parámetro y así se prueba sin esperar.
-  const mesActual = new Date(ahoraMs).toISOString().slice(0, 7);
+  // porque el instante viene por parámetro y así se prueba sin esperar. Se
+  // corta en Madrid, no en UTC: el resto de la app (`limitesMesMadrid`,
+  // `hoyEnMadrid`) corta meses ahí, y entre las 00:00 y las ~02:00 de Madrid
+  // del día 1, el mes que acaba de terminar todavía es el anterior en UTC —
+  // con `toISOString` esa ventana de dos horas impediría cerrar un mes que sí
+  // ha terminado.
+  const mesActual = mesEnMadrid(ahoraMs);
   if (mes >= mesActual) return { ok: false, error: "No se cierra un mes que no ha terminado." };
   const {
     data: { user },

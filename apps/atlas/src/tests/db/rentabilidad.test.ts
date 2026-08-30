@@ -18,6 +18,14 @@ const SLUG = "rentabilidad-prueba";
 // y el propietario ve TODO, así que el aislamiento es por mes, no por fila.
 const MES = "2090-03";
 const AHORA = Date.parse("2090-05-15T12:00:00Z");
+// Ronda de arreglo 1: el corte de mes de `cerrarMes` debe ser en Madrid, no
+// en UTC (igual que `limitesMesMadrid`/`hoyEnMadrid`). A las 00:30 Madrid del
+// 1 de junio (verano, UTC+2) todavía es 31 de mayo en UTC: con un corte por
+// UTC, mayo seguiría pareciendo el mes en curso y no se podría cerrar aunque
+// en Madrid ya haya terminado. El literal en UTC de este instante es
+// "2090-05-31T22:30:00Z" — no "2090-06-01T00:30:00Z", que ya es junio en
+// ambos calendarios y no ejercitaría el caso.
+const AHORA_LIMITE = Date.parse("2090-05-31T22:30:00Z");
 
 let pg: Client;
 let admin: ReturnType<typeof createClient<Database>>;
@@ -42,6 +50,9 @@ async function altaUsuario(correo: string, propietario: boolean, clave: string) 
 
 async function limpiarDatos() {
   await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, [`${MES}-01`]);
+  // El cierre de mayo que ejercita el corte Madrid/UTC (más abajo): un mes
+  // distinto de MES, así que necesita su propia limpieza.
+  await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, ["2090-05-01"]);
   await pg.query(`DELETE FROM fichajes WHERE inicio >= '2090-03-01' AND inicio < '2090-04-01'`);
   await pg.query(`DELETE FROM gastos WHERE fecha >= '2090-03-01' AND fecha < '2090-04-01'`);
   await pg.query(`DELETE FROM facturas WHERE fecha_emision >= '2090-03-01' AND fecha_emision < '2090-04-01'`);
@@ -146,6 +157,21 @@ describe("cierres", () => {
   it("no se cierra el mes en curso ni uno futuro", async () => {
     const r = await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA);
     expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });
+  });
+
+  it("el mes en curso se decide en Madrid, no en UTC", async () => {
+    // A las 00:30 Madrid del 1 de junio (AHORA_LIMITE), mayo ya ha terminado
+    // en Madrid aunque en UTC siga siendo 31 de mayo: mayo se puede cerrar, y
+    // junio (el mes en curso en Madrid) no.
+    try {
+      expect(await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA_LIMITE)).toEqual({ ok: true });
+      const r = await cerrarMes(sbDuenyo, "2090-06", 3000, AHORA_LIMITE);
+      expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });
+    } finally {
+      // Este cierre es ajeno a MES ("2090-03"): limpiarDatos() en afterAll no
+      // lo toca, así que se retira aquí para no dejarlo en la base.
+      await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, ["2090-05-01"]);
+    }
   });
 
   it("cerrar congela el coste: cambiarlo después no mueve el mes cerrado", async () => {

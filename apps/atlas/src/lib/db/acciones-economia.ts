@@ -3,7 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { clienteServidor } from "@/lib/supabase/servidor";
-import { escribirAjustes, type EntradaAjustes } from "./ajustes-economia";
+import { escribirAjustes, leerAjustes, type EntradaAjustes } from "./ajustes-economia";
 import { cerrarMes, reabrirMes } from "./cierres";
 import type { Ok } from "./proyectos";
 
@@ -21,9 +21,15 @@ export async function guardarAjustesEconomia(entrada: EntradaAjustes): Promise<O
   return { ok: true };
 }
 
-export async function cerrarMesAccion(mes: string, costeHoraCentimos: number): Promise<Ok> {
+// Recibe solo `mes`, no el coste: lo que llega por la red no decide con qué
+// coste se congela un mes. Una pestaña abierta antes de cambiar el coste en
+// Ajustes mandaría aquí un valor obsoleto si el cliente lo escogiera; leerlo
+// en el servidor, justo antes de cerrar, es la única fuente que puede ser el
+// coste vigente en ese instante.
+export async function cerrarMesAccion(mes: string): Promise<Ok> {
   const sb = await clienteServidor();
-  const r = await cerrarMes(sb, mes, costeHoraCentimos, Date.now());
+  const ajustes = await leerAjustes(sb);
+  const r = await cerrarMes(sb, mes, ajustes.costeHoraCentimos, Date.now());
   if (!r.ok) return r;
   revalidatePath("/dinero/rentabilidad");
   return { ok: true };

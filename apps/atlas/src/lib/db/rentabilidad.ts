@@ -38,9 +38,12 @@ export async function rentabilidadDelMes(
   ]);
   const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]));
 
-  // `listarFacturas` no filtra por fecha (trae las últimas 200): se filtra aquí
-  // por mes de emisión y estado. Si algún día hay más de 200 en un mes,
-  // ampliarla es de `facturas.ts`, no de aquí.
+  // `listarFacturas` no filtra por fecha: trae las últimas 200 EN TOTAL (no
+  // 200 del mes), así que un mes antiguo puede perder facturas en silencio en
+  // cuanto el negocio pase de 200 facturas totales. Aquí solo se filtra por
+  // mes de emisión y estado sobre lo que llegó; ampliar `listarFacturas` con
+  // un filtro de fecha (para no depender del límite de 200) es de
+  // `facturas.ts`, no de aquí.
   const facturasMes: FacturaMes[] = facturas
     .filter((f) => f.estado === "emitida" && f.fechaEmision >= desdeDia && f.fechaEmision < hastaDia)
     .map((f) => ({

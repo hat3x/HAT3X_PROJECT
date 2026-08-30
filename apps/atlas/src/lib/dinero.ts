@@ -27,6 +27,15 @@ export function hoyEnMadrid(): string {
   return DIA_MADRID.format(new Date());
 }
 
+// El mismo desfase que `hoyEnMadrid`, pero para un instante cualquiera y
+// recortado a mes: lo usa `cerrarMes` para decidir si un mes «ya terminó» en
+// Madrid, no en UTC. Entre las 00:00 y las ~02:00 de Madrid del día 1, el mes
+// que acaba de terminar todavía es el anterior en UTC — sin esto, esa
+// ventana de dos horas impediría cerrar el mes que sí ha terminado.
+export function mesEnMadrid(ms: number): string {
+  return DIA_MADRID.format(new Date(ms)).slice(0, 7);
+}
+
 // Tope de `aCentimos`: el máximo que cabe en `numeric(12,2)`, el tipo de las
 // columnas de importe en la base (migración de la Tarea 2). No es un número
 // redondo elegido a ojo: es ese máximo exacto, para que el límite de
