@@ -42,6 +42,7 @@ export type Database = {
           direccion: string | null
           id: number
           razon_social: string | null
+          validado_gestoria: boolean
         }
         Insert: {
           actualizado_en?: string
@@ -50,6 +51,7 @@ export type Database = {
           direccion?: string | null
           id: number
           razon_social?: string | null
+          validado_gestoria?: boolean
         }
         Update: {
           actualizado_en?: string
@@ -58,8 +60,38 @@ export type Database = {
           direccion?: string | null
           id?: number
           razon_social?: string | null
+          validado_gestoria?: boolean
         }
         Relationships: []
+      }
+      cadena_facturas: {
+        Row: {
+          factura_id: string | null
+          id: number
+          punta: string | null
+          sellada_en: string | null
+        }
+        Insert: {
+          factura_id?: string | null
+          id: number
+          punta?: string | null
+          sellada_en?: string | null
+        }
+        Update: {
+          factura_id?: string | null
+          id?: number
+          punta?: string | null
+          sellada_en?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cadena_facturas_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "facturas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       check_agregados: {
         Row: {
@@ -550,6 +582,48 @@ export type Database = {
           },
         ]
       }
+      factura_eventos: {
+        Row: {
+          creado_en: string
+          detalle: Json
+          factura_id: string | null
+          id: string
+          tipo: string
+          usuario_id: string | null
+        }
+        Insert: {
+          creado_en?: string
+          detalle?: Json
+          factura_id?: string | null
+          id?: string
+          tipo: string
+          usuario_id?: string | null
+        }
+        Update: {
+          creado_en?: string
+          detalle?: Json
+          factura_id?: string | null
+          id?: string
+          tipo?: string
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "factura_eventos_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "facturas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "factura_eventos_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       factura_lineas: {
         Row: {
           cantidad: number
@@ -613,6 +687,7 @@ export type Database = {
           firma: string | null
           huella: string | null
           huella_anterior: string | null
+          huella_gen_en: string | null
           id: string
           iva_cuota: number
           iva_tipo: number
@@ -621,6 +696,7 @@ export type Database = {
           origen: string
           rectifica_a: string | null
           serie: string
+          tipo_factura: string
           total: number
         }
         Insert: {
@@ -634,6 +710,7 @@ export type Database = {
           firma?: string | null
           huella?: string | null
           huella_anterior?: string | null
+          huella_gen_en?: string | null
           id?: string
           iva_cuota: number
           iva_tipo?: number
@@ -642,6 +719,7 @@ export type Database = {
           origen: string
           rectifica_a?: string | null
           serie: string
+          tipo_factura?: string
           total: number
         }
         Update: {
@@ -655,6 +733,7 @@ export type Database = {
           firma?: string | null
           huella?: string | null
           huella_anterior?: string | null
+          huella_gen_en?: string | null
           id?: string
           iva_cuota?: number
           iva_tipo?: number
@@ -663,6 +742,7 @@ export type Database = {
           origen?: string
           rectifica_a?: string | null
           serie?: string
+          tipo_factura?: string
           total?: number
         }
         Relationships: [
@@ -1408,6 +1488,10 @@ export type Database = {
       }
     }
     Functions: {
+      atlas_anular_factura: {
+        Args: { p_factura: string; p_motivo: string }
+        Returns: Json
+      }
       atlas_consolidar_retencion: { Args: never; Returns: undefined }
       atlas_disparar_avisos: { Args: never; Returns: undefined }
       atlas_disparar_cobro: { Args: never; Returns: undefined }
@@ -1415,10 +1499,28 @@ export type Database = {
       atlas_disparar_fichajes: { Args: never; Returns: undefined }
       atlas_disparar_vigia: { Args: never; Returns: undefined }
       atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
+      atlas_emitir_factura: {
+        Args: {
+          p_factura: string
+          p_firma: string
+          p_gen_en: string
+          p_huella: string
+          p_huella_anterior: string
+          p_numero: number
+        }
+        Returns: Json
+      }
       atlas_es_propietario: { Args: never; Returns: boolean }
       atlas_materializar_periodos: { Args: { mes: string }; Returns: number }
       atlas_materializar_recurrentes: { Args: { mes: string }; Returns: number }
       atlas_podar_descubrimientos: { Args: never; Returns: undefined }
+      atlas_siguiente_emision: {
+        Args: { p_serie: string }
+        Returns: {
+          numero: number
+          punta: string
+        }[]
+      }
       atlas_ve_cliente: { Args: { c: string }; Returns: boolean }
       atlas_ve_proyecto: { Args: { p: string }; Returns: boolean }
     }
