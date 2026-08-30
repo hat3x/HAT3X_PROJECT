@@ -5,7 +5,7 @@ import { FormEconomia } from "@/components/ajustes/FormEconomia";
 const acciones = vi.hoisted(() => ({ guardarAjustesEconomia: vi.fn() }));
 vi.mock("@/lib/db/acciones-economia", () => acciones);
 
-const ACTUAL = { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3000 };
+const ACTUAL = { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3000, validadoGestoria: false };
 
 beforeEach(() => acciones.guardarAjustesEconomia.mockReset().mockResolvedValue({ ok: true }));
 

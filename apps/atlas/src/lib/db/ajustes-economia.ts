@@ -6,14 +6,20 @@
 import type { Sb } from "./clientes";
 import type { Ok } from "./proyectos";
 
-export type AjustesEconomia = {
+// Lo que se escribe desde el formulario. `validadoGestoria` no viaja aquí: no
+// hay control en la interfaz para ese aviso todavía (§7 solo lo consulta), y
+// meterlo en `EntradaAjustes` obligaría a mandarlo en cada guardado normal.
+export type EntradaAjustes = {
   razonSocial: string | null;
   cif: string | null;
   direccion: string | null;
   costeHoraCentimos: number;
 };
 
-export type EntradaAjustes = AjustesEconomia;
+export type AjustesEconomia = EntradaAjustes & {
+  /** El aviso de «la gestoría aún no ha validado esto» (§7, migración de emisión). No bloquea: informa. */
+  validadoGestoria: boolean;
+};
 
 const limpia = (s: string | null) => {
   const t = (s ?? "").trim();
@@ -34,7 +40,7 @@ export function validarAjustes(e: EntradaAjustes): Ok {
 export async function leerAjustes(sb: Sb): Promise<AjustesEconomia> {
   const { data, error } = await sb
     .from("ajustes_economia")
-    .select("razon_social, cif, direccion, coste_hora")
+    .select("razon_social, cif, direccion, coste_hora, validado_gestoria")
     .eq("id", 1)
     .maybeSingle();
   if (error) throw error;
@@ -47,6 +53,7 @@ export async function leerAjustes(sb: Sb): Promise<AjustesEconomia> {
     direccion: data.direccion,
     // numeric(8,2) → céntimos, una sola vez.
     costeHoraCentimos: Math.round(Number(data.coste_hora) * 100),
+    validadoGestoria: data.validado_gestoria,
   };
 }
 
