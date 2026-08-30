@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Armchair,
   Blocks,
   Building2,
   Clock,
@@ -66,8 +67,8 @@ export function AjustesNav(): React.ReactElement {
     return item;
   });
 
-  // "Mutuas y seguros" y "Equipos de imagen" solo tienen sentido en odontología
-  // (baremos con aseguradoras; sensores y ortopantomógrafos) — se insertan justo
+  // "Mutuas y seguros", "Gabinetes" y "Equipos de imagen" solo tienen sentido en
+  // odontología (baremos con aseguradoras; sillones; sensores) — se insertan justo
   // después de "Servicios" en vez de añadirse a NAV_ITEMS a secas, para no
   // mostrarlas en peluquería/restauración.
   if (sector === "odontologia") {
@@ -77,6 +78,7 @@ export function AjustesNav(): React.ReactElement {
       insertAt,
       0,
       { href: "/ajustes/mutuas", label: "Mutuas y seguros", icon: ShieldPlus },
+      { href: "/ajustes/gabinetes", label: "Gabinetes", icon: Armchair },
       { href: "/ajustes/equipos", label: "Equipos de imagen", icon: ScanLine },
     );
   }
