@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Palette, KeyRound, Users, BellRing, Radar } from "lucide-react";
+import { Palette, KeyRound, Users, BellRing, Radar, Coins } from "lucide-react";
 import { clienteServidor } from "@/lib/supabase/servidor";
 import { obtenerPerfil } from "@/lib/db/perfil";
 
@@ -25,6 +25,13 @@ const SECCIONES = [
     titulo: "Llavero",
     descripcion: "Las claves de los servicios, cifradas. Alta, rotación y borrado.",
     Icono: KeyRound,
+    soloPropietario: true,
+  },
+  {
+    href: "/ajustes/economia",
+    titulo: "Economía",
+    descripcion: "Coste de la hora y datos del emisor.",
+    Icono: Coins,
     soloPropietario: true,
   },
   {
