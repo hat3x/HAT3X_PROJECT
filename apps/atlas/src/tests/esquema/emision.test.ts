@@ -19,6 +19,9 @@ const CORREO_DUENYO = "duenyo-emision-esquema@atlas.test";
 const CORREO_COLAB = "colab-emision-esquema@atlas.test";
 const SLUG_CLIENTE = "prueba-emision-esquema";
 const SERIE = "TE1";
+// Una serie es de externas o de Atlas (ronda 1, I2): la externa de prueba va aparte.
+const SERIE_EXTERNA = "TE1X";
+const SERIES = [SERIE, SERIE_EXTERNA];
 
 type ArgsEmitir = Database["public"]["Functions"]["atlas_emitir_factura"]["Args"];
 
@@ -45,29 +48,38 @@ function argsEmitir(a: Omit<ArgsEmitir, "p_huella_anterior"> & { p_huella_anteri
 // La serie de prueba se limpia con los disparadores de inmutabilidad apagados,
 // SOLO aquí: el disparador no deja borrar una emitida ni tocar sus eventos, y
 // un test que no puede limpiar deja la serie de prueba envenenada para siempre.
+// Todo en UNA transacción: si algo falla a medias, el ROLLBACK deshace también
+// el `disable trigger`, y la base no se queda con un disparador apagado.
 async function limpiarSerie() {
-  await pg.query(`ALTER TABLE facturas DISABLE TRIGGER facturas_inmutables`);
-  await pg.query(`ALTER TABLE factura_lineas DISABLE TRIGGER factura_lineas_inmutables`);
-  await pg.query(`ALTER TABLE factura_eventos DISABLE TRIGGER factura_eventos_inmutables`);
+  await pg.query(`BEGIN`);
   try {
+    await pg.query(`ALTER TABLE facturas DISABLE TRIGGER facturas_inmutables`);
+    await pg.query(`ALTER TABLE factura_lineas DISABLE TRIGGER factura_lineas_inmutables`);
+    await pg.query(`ALTER TABLE factura_eventos DISABLE TRIGGER factura_eventos_inmutables`);
     await pg.query(
-      `DELETE FROM factura_eventos WHERE factura_id IN (SELECT id FROM facturas WHERE serie = $1)`,
-      [SERIE]
+      `DELETE FROM factura_eventos WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
+      [SERIES]
     );
     await pg.query(
       `UPDATE cadena_facturas SET punta = NULL, factura_id = NULL, sellada_en = NULL
-        WHERE factura_id IN (SELECT id FROM facturas WHERE serie = $1)`,
-      [SERIE]
+        WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
+      [SERIES]
     );
     await pg.query(
-      `DELETE FROM factura_lineas WHERE factura_id IN (SELECT id FROM facturas WHERE serie = $1)`,
-      [SERIE]
+      `DELETE FROM factura_lineas WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
+      [SERIES]
     );
-    await pg.query(`DELETE FROM facturas WHERE serie = $1`, [SERIE]);
-  } finally {
+    await pg.query(`DELETE FROM facturas WHERE serie = ANY($1)`, [SERIES]);
+    // La serie de prueba no deja huella en `series_facturas`: la siguiente
+    // corrida vuelve a decidir su origen con la primera factura.
+    await pg.query(`DELETE FROM series_facturas WHERE serie = ANY($1)`, [SERIES]);
     await pg.query(`ALTER TABLE facturas ENABLE TRIGGER facturas_inmutables`);
     await pg.query(`ALTER TABLE factura_lineas ENABLE TRIGGER factura_lineas_inmutables`);
     await pg.query(`ALTER TABLE factura_eventos ENABLE TRIGGER factura_eventos_inmutables`);
+    await pg.query(`COMMIT`);
+  } catch (e) {
+    await pg.query(`ROLLBACK`);
+    throw e;
   }
 }
 
@@ -184,9 +196,14 @@ describe("inmutabilidad", () => {
     const { rows } = await pg.query(
       `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado)
        VALUES ('externa',$2,900,$1,'2091-01-10',100,21,21,121,'emitida') RETURNING id`,
-      [idCliente, SERIE]
+      [idCliente, SERIE_EXTERNA]
     );
     await expect(pg.query(`UPDATE facturas SET base = 200 WHERE id = $1`, [rows[0].id])).resolves.toBeDefined();
+  });
+
+  it("una anulada no vuelve a emitida", async () => {
+    expect(idEmitida).not.toBe("");
+    await expect(pg.query(`UPDATE facturas SET estado = 'emitida' WHERE id = $1`, [idEmitida])).rejects.toThrow(/inmutable/);
   });
 
   it("los eventos no se editan ni se borran", async () => {
@@ -216,9 +233,16 @@ describe("las RPC", () => {
       "atlas_emitir_factura",
       argsEmitir({ p_factura: idBorrador, p_numero: 99, p_huella_anterior: null, p_huella: "B".repeat(64), p_firma: "x", p_gen_en: new Date().toISOString() })
     );
-    expect(r.data).toMatchObject({ ok: false, reintentar: true });
+    // Ya hay una emitida (la 1, del bloque anterior): el número real es el 2.
+    expect(r.data).toMatchObject({ ok: false, reintentar: true, numero: 2 });
     const { rows } = await pg.query(`SELECT estado, numero FROM facturas WHERE id = $1`, [idBorrador]);
     expect(rows[0]).toEqual({ estado: "borrador", numero: null });
+  });
+
+  it("un colaborador no ve el siguiente número ni la punta", async () => {
+    const { data, error } = await sbColab.rpc("atlas_siguiente_emision", { p_serie: SERIE });
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
   });
 
   it("el código no puede poner número a un borrador por su cuenta", async () => {

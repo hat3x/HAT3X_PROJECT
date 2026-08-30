@@ -18,6 +18,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pg.query(`DELETE FROM facturas WHERE cliente_id = $1`, [idCliente]);
+  await pg.query(`DELETE FROM series_facturas WHERE serie IN ('X','XA','DUP')`);
   await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
   await pg.end();
 });
@@ -48,7 +49,8 @@ describe("esquema de economía", () => {
   });
 
   it("una de Atlas sí puede", async () => {
-    const { rows } = await factura({ origen: "atlas", huella: "abc" });
+    // En su propia serie: desde 2E una serie es de externas o de Atlas.
+    const { rows } = await factura({ origen: "atlas", serie: "XA", huella: "abc" });
     expect(rows[0].id).toBeTruthy();
   });
 

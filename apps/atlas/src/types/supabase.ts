@@ -1300,6 +1300,24 @@ export type Database = {
         }
         Relationships: []
       }
+      series_facturas: {
+        Row: {
+          creado_en: string
+          origen: string
+          serie: string
+        }
+        Insert: {
+          creado_en?: string
+          origen: string
+          serie: string
+        }
+        Update: {
+          creado_en?: string
+          origen?: string
+          serie?: string
+        }
+        Relationships: []
+      }
       servicios: {
         Row: {
           activo: boolean
