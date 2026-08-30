@@ -173,6 +173,7 @@ try {
     { ruta: "/dinero/gastos", exige: ["Por plataforma", "Por cliente", "Por proyecto"] },
     { ruta: "/dinero/cobro", exige: ["Cobro"] },
     { ruta: "/dinero/horas", exige: ["Horas"] },
+    { ruta: "/dinero/rentabilidad", exige: ["Rentabilidad"] },
     { ruta: "/ajustes", exige: [] },
     { ruta: "/ajustes/apariencia", exige: [] },
     { ruta: "/ajustes/notificaciones", exige: [] },

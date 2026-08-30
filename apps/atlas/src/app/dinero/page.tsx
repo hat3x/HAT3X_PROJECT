@@ -108,6 +108,12 @@ export default async function PaginaDinero() {
         </Link>
       </p>
 
+      <p className="text-sm">
+        <Link href="/dinero/rentabilidad" className="underline opacity-80 hover:opacity-100">
+          Ver la rentabilidad por cliente y por proyecto →
+        </Link>
+      </p>
+
       <h2 className="pt-2 text-lg font-semibold">Facturas</h2>
 
       {facturas.length === 0 ? (
