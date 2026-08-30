@@ -5,6 +5,7 @@ import { CalendarClock, Clock } from "lucide-react";
 
 import { ExceptionsEditor } from "@/app/(dashboard)/ajustes/horarios/exceptions-editor";
 import { SalonScheduleEditor } from "@/app/(dashboard)/ajustes/horarios/salon-schedule-editor";
+import { SalonExceptionsEditor } from "./salon-exceptions-editor";
 import { ScheduleEditor } from "@/app/(dashboard)/ajustes/horarios/schedule-editor";
 import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
 import {
@@ -43,6 +44,13 @@ const HORARIO_TABS = [
  * cada profesional es independiente, por eso todo se scopea por el profesional
  * elegido en el selector superior.
  */
+/** Hoy en local `YYYY-MM-DD`: una excepción pasada ya no cambia ninguna agenda. */
+function hoyLocal(): string {
+  const d = new Date();
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 export function HorariosView({
   salonId,
 }: HorariosViewProps): React.ReactElement {
@@ -92,6 +100,24 @@ export function HorariosView({
           </CardHeader>
           <CardContent>
             <SalonScheduleEditor salonId={salonId} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Días sueltos. Va justo debajo del horario semanal porque es donde se
+          busca cuando el semanal no encaja: "esta tarde concreta sí abrimos".
+          Antes, ese caso obligaba a abrir todos los martes del año. */}
+      {tab === "clinica" ? (
+        <Card className="mt-4 animate-fade-up">
+          <CardHeader>
+            <CardTitle className="text-lg">Días sueltos</CardTitle>
+            <CardDescription>
+              Excepciones para una fecha concreta: abrir un turno extra o cerrar por vacaciones.
+              Vale tanto para la agenda como para la recepcionista.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SalonExceptionsEditor salonId={salonId} today={hoyLocal()} />
           </CardContent>
         </Card>
       ) : null}

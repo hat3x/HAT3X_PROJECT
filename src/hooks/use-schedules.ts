@@ -4,11 +4,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   createException,
+  createSalonOpeningException,
   deleteException,
+  deleteSalonOpeningException,
   saveSalonSchedule,
   saveWeeklySchedule,
+  type SalonOpeningExceptionInput,
 } from "@/app/(dashboard)/ajustes/horarios/actions";
 import {
+  fetchSalonOpeningExceptions,
   fetchSalonSchedule,
   fetchScheduleExceptions,
   fetchWeeklySchedule,
@@ -120,6 +124,53 @@ export function useDeleteException(salonId: string, professionalId: string) {
       void queryClient.invalidateQueries({
         queryKey: scheduleKeys.exceptions(salonId, professionalId),
       });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Excepciones del horario de la CLÍNICA
+// ---------------------------------------------------------------------------
+
+/** Cierres y turnos extra de la clínica, de hoy en adelante. */
+export function useSalonOpeningExceptions(salonId: string, desde: string) {
+  return useQuery({
+    queryKey: [...scheduleKeys.salonExceptions(salonId), desde],
+    queryFn: () => fetchSalonOpeningExceptions(salonId, desde),
+  });
+}
+
+/**
+ * Al crear o borrar se invalida TAMBIÉN la agenda: una excepción cambia qué
+ * huecos existen, y dejar la agenda con la respuesta anterior haría dudar de si
+ * el cambio se guardó.
+ */
+export function useCreateSalonOpeningException(salonId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SalonOpeningExceptionInput) => {
+      const result = await createSalonOpeningException(input);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: scheduleKeys.salonExceptions(salonId) });
+      void queryClient.invalidateQueries({ queryKey: ["availability"] });
+    },
+  });
+}
+
+export function useDeleteSalonOpeningException(salonId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const result = await deleteSalonOpeningException(id);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: scheduleKeys.salonExceptions(salonId) });
+      void queryClient.invalidateQueries({ queryKey: ["availability"] });
     },
   });
 }

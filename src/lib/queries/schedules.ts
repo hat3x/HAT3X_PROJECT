@@ -21,6 +21,9 @@ export const scheduleKeys = {
       ...scheduleKeys.professional(salonId, professionalId),
       "exceptions",
     ] as const,
+  /** Excepciones del horario de la clínica (cierres y turnos extra). */
+  salonExceptions: (salonId: string) =>
+    [...scheduleKeys.all(salonId), "salon-exceptions"] as const,
   /** Horario de apertura de la clínica (a nivel de salón). */
   salon: (salonId: string) =>
     [...scheduleKeys.all(salonId), "salon-opening-hours"] as const,
@@ -94,4 +97,42 @@ export async function fetchScheduleExceptions(
     throw new Error(error.message);
   }
   return data;
+}
+
+/** Fila de excepción del horario de la clínica. */
+export interface SalonOpeningException {
+  id: string;
+  exception_date: string;
+  is_open: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  reason: string | null;
+}
+
+/**
+ * Excepciones del horario de la clínica, de la más próxima a la más lejana.
+ *
+ * Se piden desde hoy en adelante: una excepción pasada ya no cambia ninguna
+ * agenda, y arrastrarlas convierte la lista en un archivo en el que no se
+ * encuentra lo que sí importa.
+ */
+export async function fetchSalonOpeningExceptions(
+  salonId: string,
+  desde: string,
+): Promise<SalonOpeningException[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("salon_opening_exceptions")
+    .select("id, exception_date, is_open, start_time, end_time, reason")
+    .eq("salon_id", salonId)
+    .gte("exception_date", desde)
+    .order("exception_date", { ascending: true })
+    .order("start_time", { ascending: true, nullsFirst: true })
+    .returns<SalonOpeningException[]>();
+
+  if (error !== null) {
+    throw new Error(error.message);
+  }
+  return data ?? [];
 }
