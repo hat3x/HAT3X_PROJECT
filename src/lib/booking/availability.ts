@@ -114,7 +114,7 @@ function timeToMinutes(time: string): number {
 }
 
 /** Convierte minutos desde medianoche a "HH:MM". */
-function minutesToTime(total: number): string {
+export function minutesToTime(total: number): string {
   const h = Math.floor(total / 60);
   const m = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
@@ -146,6 +146,58 @@ function intersectRanges(
     }
   }
   return out.sort((x, y) => x.start - y.start);
+}
+
+/** Excepción del horario de la CLÍNICA para una fecha concreta. */
+export interface SalonOpeningException {
+  exception_date: string;
+  /** `false` = cerrado ese día. `true` = turno EXTRA con horas. */
+  is_open: boolean;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+/**
+ * Los tramos en que la clínica está abierta una fecha concreta.
+ *
+ * Nace de un caso real: Nicolás pasa consulta un martes por la tarde, pero solo
+ * ese martes. Meterlo en el horario semanal abriría la clínica todos los martes
+ * del año. Y sin poder abrirlo, su turno desaparecía —el motor cruza
+ * profesional ∩ clínica, y la clínica cerraba a las 14:00—.
+ *
+ * Dos reglas, y la segunda es la que da sentido a la palabra "extra":
+ *
+ *  · **Un cierre manda sobre todo.** Si ese día la clínica cierra, da igual el
+ *    horario semanal y da igual que alguien hubiera apuntado un turno extra
+ *    antes: cerrado es cerrado.
+ *  · **Un turno extra SE SUMA al horario semanal**, no lo sustituye. Añadir una
+ *    tarde no debería obligar a reescribir la mañana de siempre.
+ */
+export function resolveSalonRanges(
+  date: string,
+  weekly: readonly ScheduleSlot[],
+  exceptions: readonly SalonOpeningException[],
+): Array<{ start: number; end: number }> {
+  const delDia = exceptions.filter((e) => e.exception_date === date);
+
+  // El cierre se comprueba primero, y sobre TODAS las excepciones del día: si
+  // hay un cierre, no hay nada que abrir.
+  if (delDia.some((e) => !e.is_open)) return [];
+
+  const weekday = weekdayOfLocalDate(date);
+  const semanales = weekly
+    .filter((s) => s.weekday === weekday)
+    .map((s) => ({ start: timeToMinutes(s.start_time), end: timeToMinutes(s.end_time) }));
+
+  const extra = delDia
+    .filter((e) => e.start_time !== null && e.end_time !== null)
+    .map((e) => ({
+      start: timeToMinutes(e.start_time as string),
+      end: timeToMinutes(e.end_time as string),
+    }));
+
+  // Ordenados: la rejilla de huecos se pinta en este orden.
+  return [...semanales, ...extra].sort((a, b) => a.start - b.start);
 }
 
 function resolveWorkingRanges(

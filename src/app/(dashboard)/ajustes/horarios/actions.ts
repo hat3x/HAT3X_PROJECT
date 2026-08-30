@@ -312,3 +312,112 @@ export async function deleteException(
   revalidatePath("/ajustes/horarios");
   return { ok: true, data: null };
 }
+
+// ---------------------------------------------------------------------------
+// Excepciones del horario de la CLÍNICA (no del profesional)
+//
+// Nacen de un caso concreto: Nicolás pasa consulta un martes por la tarde, pero
+// SOLO ese martes. Antes la única forma de abrir era el horario semanal, que
+// habría abierto la clínica todos los martes del año. Y sin poder abrir, el
+// turno del profesional desaparecía —el motor cruza profesional ∩ clínica— sin
+// que nada avisara de que esa configuración no iba a aplicarse.
+// ---------------------------------------------------------------------------
+
+export interface SalonOpeningExceptionInput {
+  /** ISO `YYYY-MM-DD`. */
+  exception_date: string;
+  /** `false` = la clínica cierra ese día. `true` = turno extra, con horas. */
+  is_open: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+  reason?: string | null;
+}
+
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Crea una excepción del horario de la clínica.
+ *
+ * Se valida antes de escribir porque una excepción incoherente no falla: se
+ * guarda y el motor tiene que adivinar qué se quiso decir. Adivinar sobre
+ * horarios termina en citas a puerta cerrada, que es justo lo que ya pasó una
+ * vez.
+ */
+export async function createSalonOpeningException(
+  input: SalonOpeningExceptionInput,
+): Promise<ActionResult<{ id: string }>> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.exception_date)) {
+    return { ok: false, error: "Elige una fecha válida" };
+  }
+
+  const inicio = input.start_time ?? null;
+  const fin = input.end_time ?? null;
+
+  if (input.is_open) {
+    // "Abierto de null a null" no significa nada.
+    if (inicio === null || fin === null) {
+      return { ok: false, error: "Indica desde qué hora hasta qué hora abre" };
+    }
+    if (!HORA.test(inicio) || !HORA.test(fin)) {
+      return { ok: false, error: "Escribe las horas como HH:MM" };
+    }
+    if (fin <= inicio) {
+      return { ok: false, error: "La hora de fin tiene que ser posterior a la de inicio" };
+    }
+  } else if (inicio !== null || fin !== null) {
+    // Cerrado es cerrado: unas horas ahí solo confundirían a quien lo lea.
+    return { ok: false, error: "Un día cerrado no lleva horario" };
+  }
+
+  const auth = await requireManagerSalonId();
+  if (!auth.ok) {
+    return { ok: false, error: auth.error };
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("salon_opening_exceptions")
+    .insert({
+      salon_id: auth.salonId,
+      exception_date: input.exception_date,
+      is_open: input.is_open,
+      start_time: input.is_open ? inicio : null,
+      end_time: input.is_open ? fin : null,
+      reason: input.reason?.trim() || null,
+    })
+    .select("id")
+    .single();
+
+  if (error !== null || data === null) {
+    return { ok: false, error: error?.message ?? "No se pudo guardar la excepción" };
+  }
+
+  revalidatePath("/ajustes/horarios");
+  revalidatePath("/appointments");
+  return { ok: true, data: { id: data.id } };
+}
+
+/** Borra una excepción del horario de la clínica. */
+export async function deleteSalonOpeningException(
+  exceptionId: string,
+): Promise<ActionResult<null>> {
+  const auth = await requireManagerSalonId();
+  if (!auth.ok) {
+    return { ok: false, error: auth.error };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("salon_opening_exceptions")
+    .delete()
+    .eq("id", exceptionId)
+    .eq("salon_id", auth.salonId);
+
+  if (error !== null) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/ajustes/horarios");
+  revalidatePath("/appointments");
+  return { ok: true, data: null };
+}

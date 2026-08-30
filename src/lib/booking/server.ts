@@ -12,9 +12,11 @@ import {
   type BusyInterval,
   type DaySlot,
   type GenerateSlotsInput,
+  minutesToTime,
+  resolveSalonRanges,
 } from "@/lib/booking/availability";
 import { normalizeEmail, type CreateBookingInput } from "@/lib/booking/schema";
-import { localDateInZone, zonedWallTimeToUtc } from "@/lib/booking/timezone";
+import { localDateInZone, weekdayOfLocalDate, zonedWallTimeToUtc } from "@/lib/booking/timezone";
 import { normalizePhone } from "@/lib/customers/normalize-phone";
 import type {
   BookingBootstrap,
@@ -297,7 +299,7 @@ async function loadProfessionalDayInputs(
     blocksQuery = blocksQuery.neq("appointment_id", excludeAppointmentId);
   }
 
-  const [schedulesRes, exceptionRes, blocksRes, salonHoursRes] = await Promise.all([
+  const [schedulesRes, exceptionRes, blocksRes, salonHoursRes, salonExcRes] = await Promise.all([
     admin
       .from("professional_schedules")
       .select("weekday, start_time, end_time")
@@ -317,6 +319,14 @@ async function loadProfessionalDayInputs(
       .from("salon_opening_hours")
       .select("weekday, start_time, end_time")
       .eq("salon_id", salon.id),
+    // Excepciones de la CLÍNICA para ese día: cierres y turnos extra. Sin esto,
+    // configurar un turno suelto no servía de nada — se aceptaba y no se
+    // aplicaba, que es peor que no dejarlo poner.
+    admin
+      .from("salon_opening_exceptions")
+      .select("exception_date, is_open, start_time, end_time")
+      .eq("salon_id", salon.id)
+      .eq("exception_date", date),
   ]);
 
   if (schedulesRes.error || blocksRes.error) {
@@ -333,11 +343,24 @@ async function loadProfessionalDayInputs(
   //   · el salón NO tiene horario (0 filas) → dato conocido y legítimo: ese salón no usa
   //     horario de clínica. Se pasa `undefined` y el motor usa solo el del profesional
   //     (retrocompatibilidad de los salones anteriores a `salon_opening_hours`).
-  if (salonHoursRes.error) {
+  if (salonHoursRes.error || salonExcRes.error) {
     throw new BookingError(500, "Error al cargar el horario de la clínica.");
   }
   const salonRows = salonHoursRes.data ?? [];
-  const salonSchedules = salonRows.length > 0 ? salonRows : undefined;
+  const salonExceptions = salonExcRes.data ?? [];
+
+  // Las excepciones resuelven el día: un cierre lo vacía, un turno extra se
+  // suma al horario semanal. Solo se pasa `undefined` —"este salón no usa
+  // horario de clínica"— cuando NO hay ni horario semanal ni excepciones; en
+  // cuanto hay algo, manda lo que resuelva `resolveSalonRanges`.
+  const salonSchedules =
+    salonRows.length === 0 && salonExceptions.length === 0
+      ? undefined
+      : resolveSalonRanges(date, salonRows, salonExceptions).map((r) => ({
+          weekday: weekdayOfLocalDate(date),
+          start_time: minutesToTime(r.start),
+          end_time: minutesToTime(r.end),
+        }));
 
   const busy: BusyInterval[] = (blocksRes.data ?? []).map((b) =>
     parseTstzRange(b.occupied_range),

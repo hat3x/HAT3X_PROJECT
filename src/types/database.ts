@@ -4082,6 +4082,39 @@ export interface Database {
       // no es 'draft' (trigger prescription_item_guard en BD).
       // Trazabilidad de implantes y esterilizacion (A3) —
       // 20260829110000_implant_traceability.
+      // Excepciones del horario de la CLINICA (20260830110000).
+      // is_open=false -> cerrado ese dia; is_open=true + horas -> turno EXTRA
+      // que se suma al horario semanal.
+      salon_opening_exceptions: {
+        Row: {
+          id: string;
+          salon_id: string;
+          exception_date: string;
+          is_open: boolean;
+          start_time: string | null;
+          end_time: string | null;
+          reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          salon_id: string;
+          exception_date: string;
+          is_open: boolean;
+          start_time?: string | null;
+          end_time?: string | null;
+          reason?: string | null;
+        };
+        Update: {
+          exception_date?: string;
+          is_open?: boolean;
+          start_time?: string | null;
+          end_time?: string | null;
+          reason?: string | null;
+        };
+        Relationships: [];
+      };
       implant_placement: {
         Row: {
           id: string;
