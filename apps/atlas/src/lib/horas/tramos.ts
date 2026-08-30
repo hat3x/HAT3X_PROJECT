@@ -48,12 +48,15 @@ function agrupar(
   tramos: Tramo[],
   ahoraMs: number,
   clave: (t: Tramo) => string | null,
-  nombre: (t: Tramo) => string | null
+  nombre: (t: Tramo) => string | null,
+  rotuloPorDefecto: string = SIN_ASIGNAR
 ): FilaHoras[] {
   const filas = new Map<string | null, FilaHoras>();
   for (const t of tramos) {
     const id = clave(t);
-    const fila = filas.get(id) ?? { id, nombre: nombre(t) ?? SIN_ASIGNAR, minutos: 0 };
+    // Si no hay nombre pero sí hay ID, es "Sin nombre"; si ni ID ni nombre, es "Sin asignar".
+    const nombreUsado = nombre(t) ?? (id ? rotuloPorDefecto : SIN_ASIGNAR);
+    const fila = filas.get(id) ?? { id, nombre: nombreUsado, minutos: 0 };
     fila.minutos += minutosDe(t, ahoraMs);
     filas.set(id, fila);
   }
@@ -80,9 +83,9 @@ export function resumir(tramos: Tramo[], ahoraMs: number): ResumenHoras {
     medidosMin: medidos,
     anadidosMin: anadidos,
     // Los tres agrupan los MISMOS tramos: si no suman igual, hay uno perdido.
-    porCliente: agrupar(tramos, ahoraMs, (t) => t.clienteId, (t) => t.clienteNombre),
-    porProyecto: agrupar(tramos, ahoraMs, (t) => t.proyectoId, (t) => t.proyectoNombre),
-    porPersona: agrupar(tramos, ahoraMs, (t) => t.usuarioId, (t) => t.usuarioNombre),
+    porCliente: agrupar(tramos, ahoraMs, (t) => t.clienteId, (t) => t.clienteNombre, SIN_ASIGNAR),
+    porProyecto: agrupar(tramos, ahoraMs, (t) => t.proyectoId, (t) => t.proyectoNombre, SIN_ASIGNAR),
+    porPersona: agrupar(tramos, ahoraMs, (t) => t.usuarioId, (t) => t.usuarioNombre, "Sin nombre"),
     ultimoInicio: ultimo,
     sospechosos,
   };

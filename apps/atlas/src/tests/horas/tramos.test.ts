@@ -94,6 +94,14 @@ describe("resumir", () => {
     const r = resumir([tramo(), tramo({ id: "t2", inicio: new Date(AHORA - min(10)).toISOString(), fin: null })], AHORA);
     expect(r.ultimoInicio).toBe(new Date(AHORA - min(10)).toISOString());
   });
+
+  it("usuario sin nombre pero con ID usa «Sin nombre» en porPersona; sin cliente usa «Sin asignar» en porCliente", () => {
+    const r = resumir([tramo({ usuarioNombre: null }), tramo({ id: "t2", clienteId: null, clienteNombre: null })], AHORA);
+    const sinNombrePersona = r.porPersona.find((f) => f.nombre === "Sin nombre");
+    expect(sinNombrePersona?.id).toBe("u1");
+    const sinAsignarCliente = r.porCliente.find((f) => f.nombre === "Sin asignar");
+    expect(sinAsignarCliente?.id).toBeNull();
+  });
 });
 
 describe("formatearMinutos", () => {
