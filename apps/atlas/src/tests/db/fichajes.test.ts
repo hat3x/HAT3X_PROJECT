@@ -11,6 +11,7 @@ import {
   listarTramos,
 } from "@/lib/db/fichajes";
 import type { Database } from "@/types/supabase";
+import type { Tramo } from "@/lib/horas/tramos";
 
 const URL_API = "http://127.0.0.1:54321";
 const ANON =
@@ -35,6 +36,14 @@ let idDuenyo = "";
 let idColab = "";
 let idProyecto = "";
 let idCliente = "";
+
+// El propietario ve TODAS las filas de `fichajes`, no solo las de este fichero;
+// sin este filtro, otro test que inserte en el mismo rango de fechas (p.ej.
+// `esquema/fichajes.test.ts`) podría colarse en el aserto.
+function soloMios(tramos: Tramo[]): Tramo[] {
+  const mios = new Set([idDuenyo, idColab]);
+  return tramos.filter((t) => mios.has(t.usuarioId));
+}
 
 async function altaUsuario(correo: string, propietario: boolean, clave: string) {
   const creado = await admin.auth.admin.createUser({
@@ -198,7 +207,7 @@ describe("fichar", () => {
       AHORA
     );
     expect(r).toEqual({ ok: true });
-    const [t] = await listarTramos(sbDuenyo, RANGO);
+    const [t] = soloMios(await listarTramos(sbDuenyo, RANGO));
     expect(t?.origen).toBe("anadido");
     expect(t?.nota).toBe("llamada");
   });
@@ -210,7 +219,7 @@ describe("fichar", () => {
       AHORA
     );
     expect(r.ok).toBe(false);
-    expect(await listarTramos(sbDuenyo, RANGO)).toEqual([]);
+    expect(soloMios(await listarTramos(sbDuenyo, RANGO))).toEqual([]);
   });
 });
 
@@ -226,10 +235,9 @@ describe("quién ve qué (RLS, con usuarios reales)", () => {
       { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T11:00:00Z" },
       AHORA
     );
-    const mios = new Set([idDuenyo, idColab]);
-    const veColab = (await listarTramos(sbColab, RANGO)).filter((t) => mios.has(t.usuarioId));
+    const veColab = soloMios(await listarTramos(sbColab, RANGO));
     expect(veColab.map((t) => t.usuarioId)).toEqual([idColab]);
-    const veDuenyo = (await listarTramos(sbDuenyo, RANGO)).filter((t) => mios.has(t.usuarioId));
+    const veDuenyo = soloMios(await listarTramos(sbDuenyo, RANGO));
     expect(veDuenyo).toHaveLength(2);
     // El nombre viaja con el tramo: el propietario sabe de quién es cada hora.
     expect(veDuenyo.map((t) => t.usuarioNombre).sort()).toEqual(["Colab", "Dueño"]);

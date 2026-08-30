@@ -156,7 +156,14 @@ export async function anadirTramo(sb: Sb, e: EntradaTramo, ahoraMs: number): Pro
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
-/** Los tramos cuyo inicio cae en el rango. Quién los ve lo decide RLS. */
+/**
+ * Los tramos cuyo inicio cae en el rango. Quién los ve lo decide RLS.
+ *
+ * El corte es por `inicio`, no por `fin`: un tramo que empieza el 31 a las
+ * 23:00 y termina el 1 a las 02:00 cuenta entero en el mes en que empezó.
+ * Es a propósito — así un mismo tramo nunca se cuenta dos veces, ni se
+ * parte entre dos listados.
+ */
 export async function listarTramos(
   sb: Sb,
   rango: { desde: string; hasta: string }
