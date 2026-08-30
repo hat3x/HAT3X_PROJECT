@@ -75,3 +75,41 @@ export function desglosar(
   const cuota = Math.round((baseCentimos * tipoIva) / 100);
   return { base: baseCentimos, cuota, total: baseCentimos + cuota };
 }
+
+/**
+ * El mes `AAAA-MM` como instantes ISO: la medianoche de Madrid del día 1 y la
+ * del día 1 siguiente, en UTC. Se calcula el desfase en CADA frontera porque
+ * en marzo y octubre cambia dentro del mes. Es la única función que corta
+ * meses: horas y rentabilidad la comparten para no cuadrar distinto.
+ */
+export function limitesMesMadrid(mes: string): { desde: string; hasta: string } {
+  const a = Number(mes.slice(0, 4));
+  const m = Number(mes.slice(5, 7));
+  const PARTES = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Madrid", hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+  const desfase = (d: Date) => {
+    const p = PARTES.formatToParts(d);
+    const g = (t: string) => Number(p.find((x) => x.type === t)?.value);
+    // `hour12:false` puede dar «24» a medianoche en algunos motores.
+    return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute")) - d.getTime();
+  };
+  const ini = new Date(Date.UTC(a, m - 1, 1));
+  const fin = new Date(Date.UTC(a, m, 1));
+  return {
+    desde: new Date(ini.getTime() - desfase(ini)).toISOString(),
+    hasta: new Date(fin.getTime() - desfase(fin)).toISOString(),
+  };
+}
+
+export function mesDe(hoy: string): string {
+  return hoy.slice(0, 7);
+}
+
+export function mesVecino(mes: string, delta: -1 | 1): string {
+  const a = Number(mes.slice(0, 4));
+  const m = Number(mes.slice(5, 7)) + delta;
+  const d = new Date(Date.UTC(a, m - 1, 1));
+  return d.toISOString().slice(0, 7);
+}

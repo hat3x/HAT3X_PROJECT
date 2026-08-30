@@ -1,6 +1,6 @@
 // src/tests/dinero.test.ts
 import { describe, it, expect } from "vitest";
-import { aCentimos, formatear, desglosar } from "@/lib/dinero";
+import { aCentimos, formatear, desglosar, limitesMesMadrid, mesDe, mesVecino } from "@/lib/dinero";
 
 describe("a céntimos", () => {
   it("acepta enteros y decimales", () => {
@@ -75,5 +75,25 @@ describe("desglosar", () => {
 
   it("con IVA cero la cuota es cero", () => {
     expect(desglosar(29000, 0)).toEqual({ base: 29000, cuota: 0, total: 29000 });
+  });
+});
+
+describe("limitesMesMadrid", () => {
+  it("agosto (CEST) empieza a las 22:00Z del 31 de julio", () => {
+    expect(limitesMesMadrid("2026-08")).toEqual({ desde: "2026-07-31T22:00:00.000Z", hasta: "2026-08-31T22:00:00.000Z" });
+  });
+  it("enero (CET) empieza a las 23:00Z del 31 de diciembre", () => {
+    expect(limitesMesMadrid("2026-01")).toEqual({ desde: "2025-12-31T23:00:00.000Z", hasta: "2026-01-31T23:00:00.000Z" });
+  });
+  it("octubre cambia de hora dentro del mes y cada frontera lleva su desfase", () => {
+    expect(limitesMesMadrid("2026-10")).toEqual({ desde: "2026-09-30T22:00:00.000Z", hasta: "2026-10-31T23:00:00.000Z" });
+  });
+});
+
+describe("mesDe y mesVecino", () => {
+  it("recorta y se mueve, también en el cambio de año", () => {
+    expect(mesDe("2026-08-30")).toBe("2026-08");
+    expect(mesVecino("2026-01", -1)).toBe("2025-12");
+    expect(mesVecino("2026-12", 1)).toBe("2027-01");
   });
 });

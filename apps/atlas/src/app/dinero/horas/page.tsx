@@ -7,7 +7,7 @@ import { listarTramos, ultimoInicio } from "@/lib/db/fichajes";
 import { nombresDeProyectos } from "@/lib/db/proyectos";
 import { nombresDeClientes } from "@/lib/db/clientes";
 import { resumir, formatearMinutos, minutosDe, type FilaHoras } from "@/lib/horas/tramos";
-import { hoyEnMadrid } from "@/lib/dinero";
+import { hoyEnMadrid, limitesMesMadrid, mesDe } from "@/lib/dinero";
 import { FormTramo } from "@/components/dinero/FormTramo";
 import { BotonBorrarTramo } from "@/components/dinero/BotonBorrarTramo";
 import { Distintivo } from "@/components/ui/Distintivo";
@@ -19,36 +19,6 @@ const FECHA_HORA = new Intl.DateTimeFormat("es-ES", {
   minute: "2-digit",
   timeZone: "Europe/Madrid",
 });
-
-/**
- * El mes en curso, en Madrid, como instantes ISO. Se resta el desfase de la
- * zona para que «el día 1 a las 00:00» sea el de Madrid y no el de UTC: a
- * medianoche del día 1 en Madrid aún es día 30 en UTC.
- */
-function mesEnCurso(hoy: string): { desde: string; hasta: string } {
-  // `hoy` es siempre "AAAA-MM-DD" (lo garantiza `hoyEnMadrid`): se lee por
-  // `slice` y no por `split(...).map(Number)` con desestructuración porque
-  // con `noUncheckedIndexedAccess` esta última tipa cada hueco como
-  // `number | undefined`, y aquí no hay nada opcional que reflejar.
-  const a = Number(hoy.slice(0, 4));
-  const m = Number(hoy.slice(5, 7));
-  const desfase = (d: Date) => {
-    const madrid = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Madrid",
-      hour12: false,
-      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-    }).formatToParts(d);
-    const g = (t: string) => Number(madrid.find((p) => p.type === t)?.value);
-    const comoUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"));
-    return comoUtc - d.getTime();
-  };
-  const inicioUtc = new Date(Date.UTC(a, m - 1, 1));
-  const finUtc = new Date(Date.UTC(a, m, 1));
-  return {
-    desde: new Date(inicioUtc.getTime() - desfase(inicioUtc)).toISOString(),
-    hasta: new Date(finUtc.getTime() - desfase(finUtc)).toISOString(),
-  };
-}
 
 function Desglose({ titulo, filas }: { titulo: string; filas: FilaHoras[] }) {
   return (
@@ -79,7 +49,7 @@ export default async function PaginaHoras() {
   // propietario las de todos, y eso lo decide RLS al leer, no esta pantalla.
   const esPropietario = perfil?.esPropietario ?? false;
 
-  const rango = mesEnCurso(hoyEnMadrid());
+  const rango = limitesMesMadrid(mesDe(hoyEnMadrid()));
   // `nombresDe*` y no `listar*`: los desplegables solo necesitan id y nombre,
   // y `listar*` arrastra contratos, cuotas y estados que aquí nadie lee.
   //
