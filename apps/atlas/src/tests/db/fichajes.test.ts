@@ -199,8 +199,8 @@ describe("fichar", () => {
     );
     expect(r).toEqual({ ok: true });
     const [t] = await listarTramos(sbDuenyo, RANGO);
-    expect(t.origen).toBe("anadido");
-    expect(t.nota).toBe("llamada");
+    expect(t?.origen).toBe("anadido");
+    expect(t?.nota).toBe("llamada");
   });
 
   it("un tramo inválido no llega a la base", async () => {

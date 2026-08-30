@@ -26,7 +26,7 @@ describe("abiertosDemasiado", () => {
       AHORA
     );
     expect(r.map((a) => a.fichajeId)).toEqual(["f1"]);
-    expect(r[0].horas).toBe(11);
+    expect(r[0]?.horas).toBe(11);
   });
 
   it("el umbral es inclusivo: justo a las diez horas avisa", () => {
@@ -36,15 +36,15 @@ describe("abiertosDemasiado", () => {
 
   it("el título dice cuánto y de qué; sin proyecto ni cliente, dice «sin asignar»", () => {
     const [con] = abiertosDemasiado([abierto()], AHORA);
-    expect(con.titulo).toBe("Llevas 11 horas fichado en Kairos · Biodental");
+    expect(con?.titulo).toBe("Llevas 11 horas fichado en Kairos · Biodental");
     const [sin] = abiertosDemasiado([abierto({ proyectoNombre: null, clienteNombre: null })], AHORA);
-    expect(sin.titulo).toBe("Llevas 11 horas fichado sin asignar");
-    expect(sin.cuerpo).toMatch(/ciérralo/i);
+    expect(sin?.titulo).toBe("Llevas 11 horas fichado sin asignar");
+    expect(sin?.cuerpo).toMatch(/ciérralo/i);
   });
 
   it("las horas se redondean hacia abajo", () => {
     const [a] = abiertosDemasiado([abierto({ inicio: new Date(AHORA - h(10.9)).toISOString() })], AHORA);
-    expect(a.horas).toBe(10);
+    expect(a?.horas).toBe(10);
   });
 
   it("admite otro límite", () => {
