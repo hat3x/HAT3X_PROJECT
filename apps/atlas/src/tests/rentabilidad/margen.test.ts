@@ -62,6 +62,9 @@ describe("calcularMargen", () => {
     // y la línea de factura sin proyecto es facturado sin proyecto
     expect(r.porProyecto.find((f) => f.id === "sin-proyecto")).toBeUndefined();
     expect(r.total.facturadoCentimos - r.porProyecto.reduce((t, f) => t + f.facturadoCentimos, 0)).toBe(10000);
+    // La línea de fClub, sin proyecto: su facturado no cae en ninguna fila de
+    // `porProyecto`, pero tampoco desaparece — vive en su propio campo.
+    expect(r.facturadoSinProyectoCentimos).toBe(10000);
   });
 
   it("la estructura es lo que no tiene ningún contador, una sola vez", () => {
@@ -78,8 +81,7 @@ describe("calcularMargen", () => {
     const sumaClientes = r.porCliente.reduce((t, f) => t + f.margenCentimos, 0);
     expect(sumaClientes - r.sinCliente.gastosCentimos - r.sinCliente.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
     const sumaProyectos = r.porProyecto.reduce((t, f) => t + f.margenCentimos, 0);
-    const facturadoSinProyecto = 10000;
-    expect(sumaProyectos + facturadoSinProyecto - r.sinProyecto.gastosCentimos - r.sinProyecto.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
+    expect(sumaProyectos + r.facturadoSinProyectoCentimos - r.sinProyecto.gastosCentimos - r.sinProyecto.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
   });
 
   it("ordena de más a menos margen", () => {

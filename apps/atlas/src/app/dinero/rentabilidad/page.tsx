@@ -13,12 +13,22 @@ import { Distintivo } from "@/components/ui/Distintivo";
 
 const MES = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric", timeZone: "Europe/Madrid" });
 
-function Tabla({ titulo, filas, eje, lineaExtra, extraNombre, estructura }: {
-  titulo: string; filas: FilaMargen[]; eje: string; lineaExtra: Linea; extraNombre: string; estructura: Linea;
+function Tabla({ titulo, filas, eje, facturadoSinEje, lineaExtra, extraNombre, estructura }: {
+  titulo: string; filas: FilaMargen[]; eje: string;
+  // Solo lo usa la tabla «Por proyecto»: es facturado puro (una línea de
+  // factura sin proyecto), no gastos ni minutos, así que no encaja en el
+  // tipo `Linea` que comparten `lineaExtra` y `estructura`.
+  facturadoSinEje?: number;
+  lineaExtra: Linea; extraNombre: string; estructura: Linea;
 }) {
   const th = "px-4 py-2 font-medium";
   const td = "whitespace-nowrap px-4 py-2.5 tabular-nums text-right";
   const total = (l: Linea) => l.gastosCentimos + l.horasCentimos;
+  // Ronda de arreglo 1: una línea «sin repartir» con coste de la hora en cero
+  // puede tener minutos y ningún céntimo (gastos y horas a 0): `total() > 0`
+  // la escondía igual que si no hubiera pasado nada ese mes. Los minutos
+  // cuentan como actividad aunque no cuesten dinero.
+  const hayActividad = (l: Linea) => total(l) > 0 || l.minutos > 0;
   return (
     <div className="space-y-2">
       <h2 className="pt-2 text-lg font-semibold">{titulo}</h2>
@@ -49,9 +59,24 @@ function Tabla({ titulo, filas, eje, lineaExtra, extraNombre, estructura }: {
                 <td className={`${td} font-semibold`} style={f.margenCentimos < 0 ? { color: "var(--estado-caido)" } : undefined}>{formatear(f.margenCentimos)}</td>
               </tr>
             ))}
+            {/* Solo en «Por proyecto»: el facturado de una línea sin proyecto
+                (§2A: el proyecto vive en la línea) no tiene fila propia, pero
+                sí cuenta en el total — sin esta fila la tabla no cuadraba a
+                la vista. Es facturado puro: nada que repartir en las demás
+                columnas. */}
+            {typeof facturadoSinEje === "number" && facturadoSinEje > 0 && (
+              <tr style={{ color: "var(--texto-tenue)" }}>
+                <td className="px-4 py-2.5">Sin proyecto</td>
+                <td className={td}>{formatear(facturadoSinEje)}</td>
+                <td className={td}>—</td>
+                <td className={td}>—</td>
+                <td className={td}>—</td>
+                <td className={td}>—</td>
+              </tr>
+            )}
             {/* Las dos líneas de abajo NO se reparten (§6.3): repartirlas
                 inventaría una precisión por cliente que el dato no tiene. */}
-            {total(lineaExtra) > 0 && (
+            {hayActividad(lineaExtra) && (
               <tr style={{ color: "var(--texto-tenue)" }}>
                 <td className="px-4 py-2.5">{extraNombre}</td>
                 <td className={td}>—</td>
@@ -92,6 +117,20 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
   const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sb, mes);
   const esActual = mes === mesActual;
 
+  // Ronda de arreglo 1: tipado explícito y no un array de tuplas sin tipo —
+  // `String(t)` y `Number(v)` tapaban que el título y el valor podían ser
+  // cualquier cosa, y el rojo comparaba contra el literal del título en vez
+  // de decidirse una sola vez aquí, junto al dato que lo justifica. El orden
+  // es el mismo que el de las columnas de las tablas de abajo, para que
+  // arriba y abajo signifiquen lo mismo mirado en la misma fila.
+  const kpis: { etiqueta: string; texto: string; enRojo?: boolean }[] = [
+    { etiqueta: "Facturado (base)", texto: formatear(r.total.facturadoCentimos) },
+    { etiqueta: "Gastos (base)", texto: formatear(r.total.gastosCentimos) },
+    { etiqueta: "Horas", texto: formatearMinutos(r.total.minutos) },
+    { etiqueta: "Coste horas", texto: formatear(r.total.horasCentimos) },
+    { etiqueta: "Resultado del negocio", texto: formatear(r.total.margenCentimos), enRojo: r.total.margenCentimos < 0 },
+  ];
+
   return (
     <section className="max-w-5xl space-y-4">
       <header>
@@ -121,24 +160,19 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
         {!esActual && <BotonCierreMes mes={mes} cerrado={cerrado !== null} />}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        {[
-          ["Facturado (base)", r.total.facturadoCentimos],
-          ["Gastos (base)", r.total.gastosCentimos],
-          ["Horas", r.total.horasCentimos],
-          ["Resultado del negocio", r.total.margenCentimos],
-        ].map(([t, v]) => (
-          <div key={String(t)} className="cristal cristal-denso p-4">
-            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>{t}</div>
-            <div className="mt-1 text-xl font-semibold tabular-nums" style={Number(v) < 0 && t === "Resultado del negocio" ? { color: "var(--estado-caido)" } : undefined}>{formatear(Number(v))}</div>
+      <div className="grid gap-3 sm:grid-cols-5">
+        {kpis.map((k) => (
+          <div key={k.etiqueta} className="cristal cristal-denso p-4">
+            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>{k.etiqueta}</div>
+            <div className="mt-1 text-xl font-semibold tabular-nums" style={k.enRojo ? { color: "var(--estado-caido)" } : undefined}>{k.texto}</div>
           </div>
         ))}
       </div>
 
       <Tabla titulo="Por cliente" eje="Cliente" filas={r.porCliente} lineaExtra={r.sinCliente} extraNombre="De proyectos sin cliente" estructura={r.estructura} />
-      <Tabla titulo="Por proyecto" eje="Proyecto" filas={r.porProyecto} lineaExtra={r.sinProyecto} extraNombre="De clientes sin proyecto" estructura={r.estructura} />
+      <Tabla titulo="Por proyecto" eje="Proyecto" filas={r.porProyecto} facturadoSinEje={r.facturadoSinProyectoCentimos} lineaExtra={r.sinProyecto} extraNombre="De clientes sin proyecto" estructura={r.estructura} />
       <p className="text-xs" style={{ color: "var(--texto-tenue)" }}>
-        Lo facturado sin proyecto en las líneas no aparece en la tabla de proyectos; sí en el total.
+        La estructura es la misma línea en las dos tablas: se resta una sola vez del resultado.
       </p>
     </section>
   );

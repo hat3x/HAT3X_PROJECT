@@ -58,6 +58,16 @@ export type Rentabilidad = {
   sinProyecto: Linea;
   /** Sin ningún contador. Una sola vez. */
   estructura: Linea;
+  // El facturado de una línea sin proyecto (2A: el
+  // proyecto vive en la LÍNEA, no en la factura) no cae en ninguna fila de
+  // `porProyecto` -- no tiene id de proyecto que lo agrupe -- pero sí en
+  // `total.facturadoCentimos`. Sin este campo la tabla por proyecto no
+  // cuadraba a la vista: la suma de sus filas quedaba por debajo del total y
+  // parecía un error, no una omisión a propósito. Solo facturado: el gasto y
+  // los minutos que le correspondan a un cliente sin proyecto ya viven en
+  // `sinProyecto`, y los que no tengan ni cliente ni proyecto, en
+  // `estructura`.
+  facturadoSinProyectoCentimos: number;
   total: { facturadoCentimos: number; gastosCentimos: number; minutos: number; horasCentimos: number; margenCentimos: number };
 };
 
@@ -104,6 +114,7 @@ export function calcularMargen(e: {
   let sinProyectoG = 0, sinProyectoMin = 0;
   let estructuraG = 0, estructuraMin = 0;
   let facturadoTotal = 0, gastosTotal = 0, minutosTotal = 0;
+  let facturadoSinProyecto = 0;
 
   for (const f of e.facturas) {
     toma(clientes, f.clienteId, f.clienteNombre).facturado += f.baseCentimos;
@@ -111,6 +122,7 @@ export function calcularMargen(e: {
     // El proyecto vive en la LÍNEA (2A): una factura puede mezclar dos.
     for (const l of f.lineas) {
       if (l.proyectoId !== null) toma(proyectos, l.proyectoId, l.proyectoNombre).facturado += l.importeCentimos;
+      else facturadoSinProyecto += l.importeCentimos;
     }
   }
 
@@ -169,6 +181,7 @@ export function calcularMargen(e: {
     porProyecto: filasProyecto,
     sinProyecto: lineaSinProyecto,
     estructura: lineaEstructura,
+    facturadoSinProyectoCentimos: facturadoSinProyecto,
     total: {
       facturadoCentimos: facturadoTotal,
       gastosCentimos: gastosTotal,
