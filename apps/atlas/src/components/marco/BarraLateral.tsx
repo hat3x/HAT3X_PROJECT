@@ -27,7 +27,7 @@ export function BarraLateral({
   return (
     <nav
       aria-label="Navegación principal"
-      className="cristal m-3 flex w-56 shrink-0 flex-col gap-1 p-3"
+      className="cristal flex flex-col gap-1 p-3"
     >
       <div className="px-2 pb-3 text-sm font-bold tracking-widest">ATLAS</div>
       {ENTRADAS.map(({ href, etiqueta, Icono }) => {
