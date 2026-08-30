@@ -34,4 +34,14 @@ describe("convertir", () => {
       ["2026-08-01T16:00:00.000Z", "2026-08-01T20:00:00.000Z"],
     ]);
   });
+
+  it("un resto de partición por debajo del minuto se descarta, no se inserta", () => {
+    // 16 h y 30 s: el tramo de 16 h completo se guarda, el resto de 30 s no
+    // llega al mínimo y se cuenta como descartado, no como una fila más.
+    const r = convertir([{ entrada: "2026-08-01T00:00:00Z", salida: "2026-08-01T16:00:30Z", cliente_principal: "biodental" }], CLIENTES);
+    expect(r.filas.map((f) => [f.inicio, f.fin])).toEqual([
+      ["2026-08-01T00:00:00.000Z", "2026-08-01T16:00:00.000Z"],
+    ]);
+    expect(r.descartados).toBe(1);
+  });
 });

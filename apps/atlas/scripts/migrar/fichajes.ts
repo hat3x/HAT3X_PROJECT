@@ -51,7 +51,14 @@ export function convertir(
       filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(ini + TOPE_MS).toISOString(), clienteId, clienteSlug: slug });
       ini += TOPE_MS;
     }
-    filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(fin).toISOString(), clienteId, clienteSlug: slug });
+    // El resto de la partición pasa por la misma regla que un tramo entero:
+    // 16 h y 30 s deja un resto de 30 s, y eso no es trabajo, es ruido. Se
+    // descarta en vez de insertar una fila de menos de un minuto.
+    if (fin - ini < MINIMO_MS) {
+      descartados++;
+    } else {
+      filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(fin).toISOString(), clienteId, clienteSlug: slug });
+    }
   }
   return { filas, sinCliente: [...sinCliente], descartados };
 }
@@ -61,7 +68,10 @@ async function main() {
   await pg.connect();
   try {
     if (process.argv.includes("--limpiar")) {
-      const r = await pg.query(`DELETE FROM fichajes WHERE nota = $1`, [NOTA]);
+      // `nota` sola no basta de guarda: alguien podría escribir a mano esa
+      // misma frase en la nota de un fichaje real. `origen = 'anadido'` es la
+      // marca que solo este script pone, así que solo eso es lo que retira.
+      const r = await pg.query(`DELETE FROM fichajes WHERE nota = $1 AND origen = 'anadido'`, [NOTA]);
       console.log(`Retirados ${r.rowCount} tramos importados.`);
       return;
     }
