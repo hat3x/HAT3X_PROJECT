@@ -3643,6 +3643,7 @@ export interface Database {
           executed_at: string | null;
           executed_by: string | null;
           finding_id: string | null;
+          pos_sale_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -3666,6 +3667,7 @@ export interface Database {
           executed_at?: string | null;
           executed_by?: string | null;
           finding_id?: string | null;
+          pos_sale_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -3689,6 +3691,7 @@ export interface Database {
           executed_at?: string | null;
           executed_by?: string | null;
           finding_id?: string | null;
+          pos_sale_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -4519,6 +4522,25 @@ export interface Database {
           p_token: string;
         };
         Returns: undefined;
+      };
+      // RPC create_sale_from_plan_items. Ver migración
+      // 20260831130000_rpc_sale_from_plan.sql: pasa líneas de un presupuesto a
+      // un ticket ABIERTO del TPV de forma atómica, bloqueando las líneas para
+      // que dos personas no puedan cobrarle dos veces al mismo paciente.
+      create_sale_from_plan_items: {
+        Args: {
+          p_salon_id: string;
+          p_customer_id: string;
+          p_item_ids: string[];
+          p_lines: Json;
+          p_subtotal_cents: number;
+          p_discount_cents: number;
+          p_tax_cents: number;
+          p_total_cents: number;
+          p_professional_id?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: string;
       };
       create_ortho_payment_plan: {
         Args: {

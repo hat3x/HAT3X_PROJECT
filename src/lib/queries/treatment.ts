@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import type { SaleStatus } from "@/lib/dental/billing";
 import type { PlanItem, PlanPhase, TreatmentPlan } from "@/types/database";
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,13 @@ export interface TreatmentPlanDetail {
   plan: TreatmentPlan;
   phases: PlanPhase[];
   items: PlanItem[];
+  /**
+   * Estado de las ventas que arrastran líneas de este plan, indexado por id de
+   * venta. Es lo que permite derivar el estado de COBRO de cada línea sin
+   * guardarlo: si un ticket se anula desde la caja, la línea vuelve sola a
+   * estar por cobrar (ver `derivePlanItemBilling`).
+   */
+  sales: Record<string, { status: SaleStatus; hasInvoice: boolean }>;
 }
 
 /**
@@ -84,7 +92,32 @@ export async function fetchPlan(
 
   if (itemsError !== null) throw new Error(itemsError.message);
 
-  return { plan, phases: phases ?? [], items: items ?? [] };
+  // ── Estado de cobro de las líneas ────────────────────────────────────────
+  // Solo se consulta si alguna línea ha pasado por caja. En un plan recién
+  // hecho —que es el caso normal— esto no añade ni una consulta.
+  const saleIds = [...new Set((items ?? []).map((i) => i.pos_sale_id).filter((id): id is string => id !== null))];
+
+  const sales: TreatmentPlanDetail["sales"] = {};
+  if (saleIds.length > 0) {
+    const { data: ventas, error: ventasError } = await supabase
+      .from("pos_sales")
+      .select("id, status, pos_invoices(id)")
+      .eq("salon_id", salonId)
+      .in("id", saleIds);
+
+    if (ventasError !== null) throw new Error(ventasError.message);
+
+    for (const v of ventas ?? []) {
+      sales[v.id] = {
+        status: v.status as SaleStatus,
+        // `pos_invoices` llega como array por la relación: una venta puede
+        // tener factura o no. Con una basta para decir "cobrado con factura".
+        hasInvoice: Array.isArray(v.pos_invoices) && v.pos_invoices.length > 0,
+      };
+    }
+  }
+
+  return { plan, phases: phases ?? [], items: items ?? [], sales };
 }
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ function item(overrides: Partial<PlanItem> & { id: string; phase_id: string | nu
     executed_at: null,
     executed_by: null,
     finding_id: null,
+    pos_sale_id: null,
     created_at: "2026-08-01T00:00:00.000Z",
     updated_at: "2026-08-01T00:00:00.000Z",
     ...overrides,

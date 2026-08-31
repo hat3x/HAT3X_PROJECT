@@ -30,7 +30,16 @@
 
 begin;
 
-create or replace function app.create_sale_from_plan_items(
+-- Vive en `public` y no en `app` porque PostgREST solo expone los esquemas de su
+-- configuracion, y `app` no esta entre ellos: desde `supabase.rpc()` una funcion
+-- en `app` sencillamente no existe. El resto de RPC que llama la aplicacion
+-- (salon_sales_summary, salon_invoices_filtered...) estan en `public` por lo
+-- mismo; las de `app` son de uso interno de la base.
+drop function if exists app.create_sale_from_plan_items(
+  uuid, uuid, uuid[], jsonb, integer, integer, integer, integer, uuid, text
+);
+
+create or replace function public.create_sale_from_plan_items(
   p_salon_id        uuid,
   p_customer_id     uuid,
   p_item_ids        uuid[],
@@ -135,10 +144,10 @@ begin
 end;
 $$;
 
-comment on function app.create_sale_from_plan_items is
+comment on function public.create_sale_from_plan_items is
   'Pasa líneas de un presupuesto a un ticket ABIERTO del TPV, de forma atómica. Bloquea las líneas para que dos personas no puedan crear dos tickets con las mismas y cobrarle dos veces al paciente. Los importes llegan calculados por la aplicación: la aritmética de IVA vive en un solo sitio.';
 
-grant execute on function app.create_sale_from_plan_items(
+grant execute on function public.create_sale_from_plan_items(
   uuid, uuid, uuid[], jsonb, integer, integer, integer, integer, uuid, text
 ) to authenticated;
 

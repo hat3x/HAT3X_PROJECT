@@ -1,7 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { addOdontogramFinding } from "@/app/(dashboard)/odontograma/actions";
+import { isChargeable } from "@/lib/dental/billing";
 import { canDeletePlan, canTransitionItem, mapServiceToFindingType } from "@/lib/dental/treatment";
+import { computeSaleTotals, type SaleLineInput } from "@/lib/payments";
 import { getActiveMembership, getActiveSalon } from "@/lib/salon";
 import { applyMovement, movementDelta } from "@/lib/stock";
 import { createClient } from "@/lib/supabase/server";
@@ -580,4 +584,142 @@ export async function updatePlanStatus(
 
   if (error !== null) return { ok: false, error: error.message };
   return { ok: true, data };
+}
+
+// ---------------------------------------------------------------------------
+// Pasar líneas del presupuesto a caja
+// ---------------------------------------------------------------------------
+
+/**
+ * Crea un ticket ABIERTO en el TPV con las líneas indicadas del presupuesto.
+ *
+ * ── LO QUE ESTO ES Y LO QUE NO ──────────────────────────────────────────────
+ * Esto CREA el ticket; no cobra. Cobrar pasa en la caja, con el paciente
+ * delante y un método de pago, y ahí ya está todo lo que hace falta —
+ * fidelización, cupones, exención de IVA. Duplicar ese camino aquí sería tener
+ * dos formas de cobrar que se irían separando.
+ *
+ * ── LA ARITMÉTICA, UNA SOLA VEZ ─────────────────────────────────────────────
+ * Los totales salen de `computeSaleTotals`, el mismo que usa el TPV. La base de
+ * datos recibe los importes ya calculados en lugar de recalcularlos: dos
+ * implementaciones del mismo redondeo acabarían difiriendo en un céntimo, y un
+ * céntimo entre lo que enseña la pantalla y lo que guarda la base es un
+ * descuadre de caja.
+ */
+export async function createSaleFromPlanItems(
+  itemIds: readonly string[],
+): Promise<ActionResult<{ saleId: string; totalCents: number }>> {
+  const access = await assertPlanAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+
+  if (itemIds.length === 0) {
+    return { ok: false, error: "Selecciona al menos una línea para pasar a caja." };
+  }
+
+  const supabase = createClient();
+
+  // Se leen los precios de la BASE, nunca del navegador: si viniesen del
+  // cliente, cualquiera podría cobrarse una corona a un euro.
+  const { data: items, error: itemsError } = await supabase
+    .from("plan_item")
+    .select(
+      "id, description, quantity, unit_price_cents, discount_cents, tax_rate, line_total_cents, service_id, pos_sale_id, plan_id, treatment_plan!inner(customer_id)",
+    )
+    .in("id", itemIds as string[])
+    .eq("salon_id", access.salonId);
+
+  if (itemsError !== null) {
+    return { ok: false, error: `No se pudieron leer las líneas: ${itemsError.message}` };
+  }
+  if (items === null || items.length !== itemIds.length) {
+    return { ok: false, error: "Alguna línea no existe o no es de esta clínica." };
+  }
+
+  // Todas tienen que ser del MISMO paciente: un ticket es de una persona, y
+  // mezclar dos pacientes en una venta rompería el histórico de los dos.
+  const pacientes = new Set(
+    items.map((i) => (i.treatment_plan as unknown as { customer_id: string }).customer_id),
+  );
+  if (pacientes.size !== 1) {
+    return { ok: false, error: "No se pueden mezclar líneas de pacientes distintos en un ticket." };
+  }
+  const customerId = [...pacientes][0] as string;
+
+  // Estado de las ventas que ya arrastran estas líneas, para no cobrar dos veces.
+  const ventasPrevias = items
+    .map((i) => i.pos_sale_id)
+    .filter((id): id is string => id !== null);
+
+  const estados = new Map<string, "open" | "completed" | "voided" | "refunded">();
+  if (ventasPrevias.length > 0) {
+    const { data: ventas, error: ventasError } = await supabase
+      .from("pos_sales")
+      .select("id, status")
+      .in("id", ventasPrevias)
+      .eq("salon_id", access.salonId);
+    if (ventasError !== null) {
+      // Falla en CERRADO: si no se puede comprobar si ya está cobrado, no se
+      // cobra. Lo contrario le cobraría dos veces al paciente.
+      return { ok: false, error: "No se pudo comprobar el estado de los cobros. Inténtalo de nuevo." };
+    }
+    for (const v of ventas ?? []) {
+      estados.set(v.id, v.status as "open" | "completed" | "voided" | "refunded");
+    }
+  }
+
+  const yaCobradas = items.filter(
+    (i) =>
+      !isChargeable({
+        posSaleId: i.pos_sale_id,
+        saleStatus: i.pos_sale_id === null ? null : (estados.get(i.pos_sale_id) ?? null),
+        hasInvoice: false,
+        lineTotalCents: i.line_total_cents ?? 0,
+      }),
+  );
+  if (yaCobradas.length > 0) {
+    return {
+      ok: false,
+      error: `${yaCobradas.length === 1 ? "Una línea ya está" : `${yaCobradas.length} líneas ya están`} en un ticket. Actualiza la pantalla.`,
+    };
+  }
+
+  // ── Totales, con el mismo cálculo que la caja ─────────────────────────────
+  const lineas: SaleLineInput[] = items.map((i) => ({
+    quantity: Number(i.quantity ?? 1),
+    unitPriceCents: i.unit_price_cents ?? 0,
+    vatRate: Number(i.tax_rate ?? 0),
+    discountCents: i.discount_cents ?? 0,
+  }));
+  const totales = computeSaleTotals(lineas);
+
+  const payload = items.map((i, idx) => ({
+    service_id: i.service_id ?? "",
+    description: (i.description ?? "Concepto sin nombre").slice(0, 200),
+    quantity: lineas[idx]!.quantity,
+    unit_price_cents: lineas[idx]!.unitPriceCents,
+    discount_cents: lineas[idx]!.discountCents ?? 0,
+    vat_rate: lineas[idx]!.vatRate ?? 0,
+    line_total_cents: i.line_total_cents ?? 0,
+  }));
+
+  // La escritura va entera dentro de la función de base de datos: crear la
+  // venta, sus líneas y marcar el presupuesto es todo o nada, y allí las líneas
+  // se bloquean para que dos personas no creen dos tickets con las mismas.
+  const { data: saleId, error: rpcError } = await supabase.rpc("create_sale_from_plan_items", {
+    p_salon_id: access.salonId,
+    p_customer_id: customerId,
+    p_item_ids: itemIds as string[],
+    p_lines: payload,
+    p_subtotal_cents: totales.subtotalCents,
+    p_discount_cents: totales.discountCents,
+    p_tax_cents: totales.taxCents,
+    p_total_cents: totales.totalCents,
+  });
+
+  if (rpcError !== null) {
+    return { ok: false, error: rpcError.message };
+  }
+
+  revalidatePath("/customers");
+  return { ok: true, data: { saleId: saleId as string, totalCents: totales.totalCents } };
 }

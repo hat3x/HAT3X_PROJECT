@@ -99,6 +99,7 @@ function planItem(overrides: Partial<PlanItem> & { id: string }): PlanItem {
     executed_at: null,
     executed_by: null,
     finding_id: null,
+    pos_sale_id: null,
     created_at: "2026-01-01T10:00:00.000Z",
     updated_at: "2026-01-01T10:00:00.000Z",
     ...overrides,
