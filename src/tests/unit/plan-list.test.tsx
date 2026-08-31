@@ -101,3 +101,76 @@ describe("PlanList · lista y selección", () => {
     expect(screen.getByText("Sin planes de tratamiento")).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Borrado de planes
+//
+// El caso que lo motiva: la accion `deletePlan` existia y estaba probada, pero
+// ninguna pantalla la llamaba — no habia forma de borrar un borrador desde la
+// aplicacion. Y borrar arrastra fases y lineas en cascada, asi que la lista
+// solo ofrece el boton donde `canDeletePlan` dice que es inocuo.
+// ---------------------------------------------------------------------------
+
+describe("PlanList · borrado", () => {
+  it("ofrece eliminar un borrador y avisa con el id de ESE plan", () => {
+    const onDelete = vi.fn();
+    const plans: TreatmentPlan[] = [plan({ id: "borrador", status: "draft" })];
+
+    render(createElement(PlanList, { plans, onSelect: vi.fn(), onDelete }));
+    fireEvent.click(screen.getByRole("button", { name: /eliminar plan/i }));
+
+    expect(onDelete).toHaveBeenCalledWith("borrador");
+  });
+
+  it("tambien deja eliminar un plan anulado", () => {
+    const plans: TreatmentPlan[] = [plan({ id: "anulado", status: "cancelled" })];
+
+    render(createElement(PlanList, { plans, onSelect: vi.fn(), onDelete: vi.fn() }));
+
+    expect(screen.getByRole("button", { name: /eliminar plan/i })).toBeInTheDocument();
+  });
+
+  it.each(["proposed", "accepted", "in_progress", "completed"] as const)(
+    "no ofrece eliminar un plan %s: ya arrastra historia, se anula",
+    (status) => {
+      const plans: TreatmentPlan[] = [plan({ id: "vivo", status })];
+
+      render(createElement(PlanList, { plans, onSelect: vi.fn(), onDelete: vi.fn() }));
+
+      expect(screen.queryByRole("button", { name: /eliminar plan/i })).toBeNull();
+    },
+  );
+
+  it("sin onDelete no aparece el boton: quien no puede borrar no lo ve", () => {
+    const plans: TreatmentPlan[] = [plan({ id: "borrador", status: "draft" })];
+
+    render(createElement(PlanList, { plans, onSelect: vi.fn() }));
+
+    expect(screen.queryByRole("button", { name: /eliminar plan/i })).toBeNull();
+  });
+
+  it("eliminar no selecciona el plan: son dos acciones distintas", () => {
+    const onSelect = vi.fn();
+    const plans: TreatmentPlan[] = [plan({ id: "borrador", status: "draft" })];
+
+    render(createElement(PlanList, { plans, onSelect, onDelete: vi.fn() }));
+    fireEvent.click(screen.getByRole("button", { name: /eliminar plan/i }));
+
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("mientras borra, el boton queda desactivado para no repetir la peticion", () => {
+    const plans: TreatmentPlan[] = [plan({ id: "borrador", status: "draft" })];
+
+    render(
+      createElement(PlanList, {
+        plans,
+        onSelect: vi.fn(),
+        onDelete: vi.fn(),
+        deletingId: "borrador",
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: /eliminar plan/i })).toBeDisabled();
+  });
+});

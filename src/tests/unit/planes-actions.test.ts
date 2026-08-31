@@ -715,17 +715,55 @@ describe("deletePlanItem / deletePlan", () => {
     expect(result).toEqual({ ok: true, data: { id: ITEM_ID } });
   });
 
-  it("deletePlan: manager ⇒ borra el plan", async () => {
+  it("deletePlan: manager ⇒ borra el plan en borrador", async () => {
     salon("odontologia");
     membership("manager");
+    // El DELETE lleva `.select("id")`: PostgREST devuelve las filas borradas, y
+    // esa es la única forma de distinguir "borrado" de "no encontró nada que
+    // borrar" — un DELETE que no casa ninguna fila NO es un error.
     fromMock.mockImplementation((table: string) => {
-      if (table === "treatment_plan") return chain({ data: null, error: null });
+      if (table === "treatment_plan") return chain({ data: [{ id: PLAN_ID }], error: null });
       throw new Error(`tabla inesperada: ${table}`);
     });
 
     const result = await deletePlan(PLAN_ID);
 
     expect(result).toEqual({ ok: true, data: { id: PLAN_ID } });
+  });
+
+  it("deletePlan: si el estado no permite borrar, 0 filas ⇒ error explicando qué hacer", async () => {
+    salon("odontologia");
+    membership("owner");
+    // El filtro de estado va en la propia sentencia, así que un plan aceptado
+    // sale como "ninguna fila borrada", no como excepción.
+    fromMock.mockImplementation((table: string) => {
+      if (table === "treatment_plan") return chain({ data: [], error: null });
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    const result = await deletePlan(PLAN_ID);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/borrador|anulado/i);
+    }
+  });
+
+  it("deletePlan: acota el borrado a los estados borrables y al salón", async () => {
+    salon("odontologia");
+    membership("owner");
+    const c = chain({ data: [{ id: PLAN_ID }], error: null });
+    fromMock.mockImplementation((table: string) => {
+      if (table === "treatment_plan") return c;
+      throw new Error(`tabla inesperada: ${table}`);
+    });
+
+    await deletePlan(PLAN_ID);
+
+    // Sin el filtro de estado, un plan con trabajo ejecutado se borraría en
+    // cascada; sin el de salón, se borraría el de otra clínica.
+    expect(c.in).toHaveBeenCalledWith("status", ["draft", "cancelled"]);
+    expect(c.eq).toHaveBeenCalledWith("salon_id", SALON_ID);
   });
 
   it("deletePlan: staff ⇒ { ok:false } (solo owner/manager)", async () => {

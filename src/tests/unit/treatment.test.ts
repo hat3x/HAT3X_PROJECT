@@ -3,6 +3,7 @@ import {
   PLAN_ITEM_TRANSITIONS,
   PLAN_ITEM_STATE_LABELS,
   PLAN_STATUS_LABELS,
+  canDeletePlan,
   canTransitionItem,
   computePlanTotals,
   formatCents,
@@ -207,5 +208,32 @@ describe("mapServiceToFindingType", () => {
     expect(mapServiceToFindingType({ name: "Limpieza dental", category: "Higiene" })).toBe(
       "nota",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// canDeletePlan
+// ---------------------------------------------------------------------------
+
+describe("canDeletePlan", () => {
+  it("un borrador se puede borrar: no hay nada que perder", () => {
+    expect(canDeletePlan("draft")).toBe(true);
+  });
+
+  it("un plan anulado se puede borrar: ya se decidio que no se hace", () => {
+    expect(canDeletePlan("cancelled")).toBe(true);
+  });
+
+  it.each<TreatmentPlanStatus>(["proposed", "accepted", "in_progress", "completed"])(
+    "%s NO se puede borrar: el plan ya salio del cajon y arrastra historia",
+    (status) => {
+      expect(canDeletePlan(status)).toBe(false);
+    },
+  );
+
+  it("cubre todos los estados del enum, para que anadir uno obligue a decidir", () => {
+    const todos = Object.keys(PLAN_STATUS_LABELS) as TreatmentPlanStatus[];
+    expect(todos.every((s) => typeof canDeletePlan(s) === "boolean")).toBe(true);
+    expect(todos.filter(canDeletePlan).sort()).toEqual(["cancelled", "draft"]);
   });
 });

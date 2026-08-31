@@ -14,6 +14,14 @@ import {
 
 import { addPlanPhase, type AddPlanPhaseInput } from "@/app/(dashboard)/planes/actions";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +37,7 @@ import {
   useAddPlanItem,
   useCreatePlan,
   usePlan,
+  useDeletePlan,
   usePlans,
 } from "@/hooks/use-treatment";
 import { treatmentKeys } from "@/lib/queries/treatment";
@@ -54,6 +63,12 @@ export interface PlanWorkspaceProps {
    * (por defecto `false`) para conservar el flujo de cambio de paciente.
    */
   hideChangePatient?: boolean;
+  /**
+   * Si el usuario puede borrar planes (owner/manager). Se resuelve en servidor
+   * y baja como prop: sin esto la lista ofrecería un botón que la server action
+   * rechaza, y el usuario se llevaría un error en lugar de una decisión.
+   */
+  canDeletePlans?: boolean;
 }
 
 /**
@@ -82,12 +97,35 @@ export function PlanWorkspace({
   salonId,
   customerId,
   hideChangePatient = false,
+  canDeletePlans = false,
 }: PlanWorkspaceProps): React.ReactElement {
   const plansQuery = usePlans(salonId, customerId);
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const createPlanMutation = useCreatePlan(salonId, customerId);
+  // Borrado de un plan entero. Arrastra fases y líneas en cascada, así que pasa
+  // por confirmación: `pendingDeleteId` es el plan sobre el que se preguntó.
+  const deletePlanMutation = useDeletePlan(salonId, customerId);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  function handleConfirmDelete() {
+    const planId = pendingDeleteId;
+    if (planId === null) return;
+    setDeleteError(null);
+    deletePlanMutation.mutate(planId, {
+      onSuccess: () => {
+        setPendingDeleteId(null);
+        // Si el plan borrado era el que se estaba mirando, la columna derecha
+        // se queda sin sujeto: volver al estado "ningún plan seleccionado".
+        setActivePlanId((actual) => (actual === planId ? null : actual));
+      },
+      onError: (err: unknown) => {
+        setDeleteError(err instanceof Error ? err.message : "No se pudo eliminar el plan.");
+      },
+    });
+  }
   const planDetailQuery = usePlan(salonId, activePlanId ?? "");
 
   function handleCreatePlan() {
@@ -162,6 +200,15 @@ export function PlanWorkspace({
               plans={plansQuery.data ?? []}
               onSelect={setActivePlanId}
               selectedId={activePlanId ?? undefined}
+              onDelete={
+                canDeletePlans
+                  ? (planId) => {
+                      setDeleteError(null);
+                      setPendingDeleteId(planId);
+                    }
+                  : undefined
+              }
+              deletingId={deletePlanMutation.isPending ? pendingDeleteId : null}
             />
           )}
         </div>
@@ -210,6 +257,54 @@ export function PlanWorkspace({
           )}
         </div>
       </div>
+
+      {/* Confirmación de borrado. Un plan borrado se lleva por delante sus
+          fases y sus líneas (ON DELETE CASCADE), y eso no tiene vuelta atrás:
+          por eso hay una pregunta explícita en lugar de un borrado directo. */}
+      <Dialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteId(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Eliminar este plan?</DialogTitle>
+            <DialogDescription>
+              Se borrará el plan con todas sus fases y todas sus líneas de
+              presupuesto. No se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError !== null && (
+            <p role="alert" className="text-sm text-destructive">
+              {deleteError}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPendingDeleteId(null);
+                setDeleteError(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deletePlanMutation.isPending}
+              onClick={handleConfirmDelete}
+            >
+              {deletePlanMutation.isPending ? "Eliminando…" : "Eliminar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

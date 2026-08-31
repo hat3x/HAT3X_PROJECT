@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { CustomerDetailView } from "@/app/(dashboard)/customers/[id]/customer-detail-view";
 import {
   activeSalonHasFeature,
+  getActiveMembership,
   getActiveSalonId,
   getActiveSalonSector,
   getSessionUser,
@@ -63,10 +64,15 @@ export default async function CustomerDetailPage({
   // Gating BARATO de UI: solo mostramos el acceso a fidelización si el salón tiene
   // contratado el add-on. El gate real de datos ya vive en el servidor (la ruta y
   // `lookupByQr` devuelven 403 si no), esto solo evita ofrecer un enlace inútil.
-  const [loyaltyEnabled, salonSector] = await Promise.all([
+  const [loyaltyEnabled, salonSector, membership] = await Promise.all([
     activeSalonHasFeature("loyalty"),
     getActiveSalonSector(),
+    getActiveMembership(),
   ]);
+
+  // Borrar un plan de tratamiento es owner/manager, igual que en la server
+  // action. Se resuelve aquí para no ofrecer un botón que el servidor rechaza.
+  const canDeletePlans = membership?.role === "owner" || membership?.role === "manager";
 
   return (
     <CustomerDetailView
@@ -75,6 +81,7 @@ export default async function CustomerDetailPage({
       initialCustomer={customer}
       loyaltyEnabled={loyaltyEnabled}
       salonSector={salonSector}
+      canDeletePlans={canDeletePlans}
     />
   );
 }

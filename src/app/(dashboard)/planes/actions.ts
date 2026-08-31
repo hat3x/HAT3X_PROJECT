@@ -1,7 +1,7 @@
 "use server";
 
 import { addOdontogramFinding } from "@/app/(dashboard)/odontograma/actions";
-import { canTransitionItem, mapServiceToFindingType } from "@/lib/dental/treatment";
+import { canDeletePlan, canTransitionItem, mapServiceToFindingType } from "@/lib/dental/treatment";
 import { getActiveMembership, getActiveSalon } from "@/lib/salon";
 import { applyMovement, movementDelta } from "@/lib/stock";
 import { createClient } from "@/lib/supabase/server";
@@ -30,6 +30,15 @@ const WRITE_ROLES: readonly MemberRole[] = ["owner", "manager", "staff"];
 
 /** Roles con permiso de borrado (items y planes). `staff` queda excluido. */
 const DELETE_ROLES: readonly MemberRole[] = ["owner", "manager"];
+
+/**
+ * Estados en los que `deletePlan` acepta borrar, derivados de `canDeletePlan`
+ * para que la pantalla y el servidor no puedan discrepar. El orden es el del
+ * enum, y el filtro va literal a la consulta.
+ */
+const DELETABLE_PLAN_STATUSES: TreatmentPlanStatus[] = (
+  ["draft", "proposed", "accepted", "in_progress", "completed", "cancelled"] as const
+).filter(canDeletePlan);
 
 type SupabaseServerClient = ReturnType<typeof createClient>;
 
@@ -480,19 +489,40 @@ export async function deletePlanItem(itemId: string): Promise<ActionResult<{ id:
   return { ok: true, data: { id: itemId } };
 }
 
-/** Elimina un plan completo (cascada a fases/items vía FK ON DELETE CASCADE). Requiere rol owner/manager. */
+/**
+ * Elimina un plan completo (cascada a fases/líneas vía FK ON DELETE CASCADE).
+ * Requiere rol owner/manager Y que el plan esté en un estado borrable
+ * (`canDeletePlan`): borrar arrastra lo presupuestado y lo ejecutado, así que
+ * solo se permite mientras el plan no ha salido del cajón.
+ *
+ * El estado se filtra DENTRO de la sentencia, no con una lectura previa: entre
+ * comprobar y borrar cabe que alguien acepte el plan, y entonces se borraría
+ * uno que ya no era borrable. Así el propio DELETE no encuentra fila.
+ *
+ * `.select("id")` es lo que permite distinguir "borrado" de "no había nada que
+ * borrar": para Postgres un DELETE que no casa ninguna fila no es un error.
+ */
 export async function deletePlan(planId: string): Promise<ActionResult<{ id: string }>> {
   const access = await assertPlanAccess(DELETE_ROLES);
   if (!access.ok) return { ok: false, error: access.error };
 
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("treatment_plan")
     .delete()
     .eq("id", planId)
-    .eq("salon_id", access.salonId);
+    .eq("salon_id", access.salonId)
+    .in("status", DELETABLE_PLAN_STATUSES)
+    .select("id");
 
   if (error !== null) return { ok: false, error: error.message };
+  if (data === null || data.length === 0) {
+    return {
+      ok: false,
+      error:
+        "Solo se pueden eliminar planes en borrador o anulados. Un plan que ya se presentó al paciente guarda lo presupuestado y lo hecho: anúlalo en lugar de borrarlo.",
+    };
+  }
   return { ok: true, data: { id: planId } };
 }
 

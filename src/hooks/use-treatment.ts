@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addPlanItem,
   createPlan,
+  deletePlan,
   deletePlanItem,
   transitionPlanItem,
   type AddPlanItemInput,
@@ -94,6 +95,29 @@ export function useDeletePlanItem(salonId: string, planId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: treatmentKeys.plan(salonId, planId),
+      });
+    },
+  });
+}
+
+/**
+ * Borra un plan entero. Invalida la LISTA de planes del paciente (no el
+ * detalle: el plan que se estaba mirando ya no existe).
+ *
+ * El servidor solo acepta borradores y planes anulados; si el estado cambió
+ * entre que se pintó el botón y se pulsó, llega su mensaje explicando por qué.
+ */
+export function useDeletePlan(salonId: string, customerId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (planId: string) => {
+      const result = await deletePlan(planId);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: treatmentKeys.plans(salonId, customerId),
       });
     },
   });

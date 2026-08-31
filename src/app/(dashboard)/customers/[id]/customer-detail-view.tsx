@@ -90,6 +90,8 @@ interface CustomerDetailViewProps {
   loyaltyEnabled: boolean;
   /** Sector del salón activo (null si no pudo resolverse). Gate de UI para ficha clínica. */
   salonSector: SalonSector | null;
+  /** Si el rol puede borrar planes de tratamiento (owner/manager). */
+  canDeletePlans?: boolean;
 }
 
 export function CustomerDetailView({
@@ -98,6 +100,7 @@ export function CustomerDetailView({
   initialCustomer,
   loyaltyEnabled,
   salonSector,
+  canDeletePlans = false,
 }: CustomerDetailViewProps): React.ReactElement {
   const router = useRouter();
   const pathname = usePathname();
@@ -405,7 +408,12 @@ export function CustomerDetailView({
 
           {activeTab === "planes" ? (
             <div className="animate-fade-up">
-              <PlanWorkspace salonId={salonId} customerId={customerId} hideChangePatient />
+              <PlanWorkspace
+                salonId={salonId}
+                customerId={customerId}
+                hideChangePatient
+                canDeletePlans={canDeletePlans}
+              />
             </div>
           ) : null}
 

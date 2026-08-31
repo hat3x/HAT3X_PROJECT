@@ -99,6 +99,23 @@ export const PLAN_ITEM_STATE_LABELS: Record<PlanItemState, string> = {
   anulado: "Anulado",
 };
 
+/**
+ * Estados en los que un plan puede BORRARSE del todo.
+ *
+ * Borrar arrastra fases y líneas (`on delete cascade`), y con ellas el registro
+ * de lo presupuestado y lo ejecutado. Eso solo es inocuo mientras el plan no ha
+ * salido del cajón: un borrador a medio escribir o uno ya anulado. En cuanto se
+ * propone al paciente, el plan es historia clínica y económica — para eso está
+ * anularlo (`cancelled`), que lo retira sin destruir lo que pasó.
+ *
+ * Vive aquí, y no repartido entre la server action y la pantalla, porque las
+ * dos tienen que decir lo mismo: si la interfaz ofrece un botón que el servidor
+ * va a rechazar, el usuario se lleva un error en vez de una decisión.
+ */
+export function canDeletePlan(status: TreatmentPlanStatus): boolean {
+  return status === "draft" || status === "cancelled";
+}
+
 export const PLAN_STATUS_LABELS: Record<TreatmentPlanStatus, string> = {
   draft: "Borrador",
   proposed: "Propuesto",
