@@ -17,8 +17,17 @@ export function Superficie({ fondo, radio, style, testID, children }: {
   // El borde SOLO se dibuja sobre color y degradado. Cuando el fondo es arte,
   // el marco lo pone la propia imagen: añadirle encima un borde algorítmico
   // que el tema no puede apagar arruinaría cualquier skin ilustrado.
+  //
+  // El borde del arte se apaga con `borderWidth: 0` explicito, NUNCA quitando
+  // la clave del estilo: en Android con la Nueva Arquitectura, si un View con
+  // `overflow: 'hidden'` pierde la clave `borderWidth` en una actualizacion
+  // (cambio de tema en caliente), todo su subarbol deja de pintarse — la
+  // pantalla entera queda en blanco porque este View es la raiz de cada
+  // Pantalla. Reproducido y bisecado en emulador con el APK release; con el 0
+  // explicito el mismo cambio de tema pinta bien.
   const base: ViewStyle = { borderRadius: radio, overflow: 'hidden', ...style }
   const conBorde: ViewStyle = { ...base, borderWidth: 1, borderColor: t.color.borde }
+  const sinBorde: ViewStyle = { ...base, borderWidth: 0, borderColor: 'transparent' }
 
   if (fondo.tipo === 'color') {
     return <View testID={testID} style={[conBorde, { backgroundColor: fondo.valor }]}>{children}</View>
@@ -32,7 +41,7 @@ export function Superficie({ fondo, radio, style, testID, children }: {
     // captura—, porque su altura la decidia el contenido y no el `aspectRatio`
     // del contenedor. Asi la imagen llena siempre exactamente la tarjeta.
     return (
-      <View testID={testID} style={base}>
+      <View testID={testID} style={sinBorde}>
         <Image
           source={fondo.fuente}
           capInsets={r ? { top: r.arriba, left: r.izquierda, bottom: r.abajo, right: r.derecha } : undefined}

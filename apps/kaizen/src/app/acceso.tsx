@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { TextInput, Platform, View } from 'react-native'
+import { useRouter } from 'expo-router'
 import { Texto } from '@/design/componentes/texto'
 import { Boton } from '@/design/componentes/boton'
 import { Pantalla } from '@/design/componentes/pantalla'
@@ -13,6 +14,7 @@ const SEPARACION_MARCA = 6
 
 export default function Acceso() {
   const t = useTema()
+  const router = useRouter()
   const [correo, setCorreo] = useState('')
   const [contrasena, setContrasena] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -24,8 +26,15 @@ export default function Acceso() {
     // funcionado, y el usuario ve un error tras algo que salió bien.
     if (ocupado) return
     setOcupado(true)
-    setError((await accion()).error)
+    const resultado = (await accion()).error
+    setError(resultado)
     setOcupado(false)
+    // La puerta del layout raiz cambia de navegador al llegar la sesion, pero
+    // NO cambia la ruta: sin este replace, la URL sigue siendo /acceso y el
+    // usuario se queda mirando el formulario ya vacio despues de entrar.
+    // Reproducido en emulador con el APK release; en el arranque con sesion
+    // previa no pasa porque la ruta inicial ya es «/».
+    if (resultado === null) router.replace('/')
   }
 
   const campo = {
