@@ -172,6 +172,32 @@ function renderTaxBreakdown(rows: DocumentTaxRow[], currency: string): string {
 /**
  * Construye el documento HTML imprimible completo de una factura.
  */
+/** `true` si TODO el documento es una operación exenta de IVA. */
+function isVatExempt(data: InvoiceDocumentData): boolean {
+  // Una factura a cero no es una operación exenta: es que no hay operación.
+  if (data.totalCents <= 0 || data.taxBreakdown.length === 0) return false;
+  // Basta una línea con tipo o cuota para que la factura NO sea exenta: en una
+  // factura mixta la mención sería falsa para la mitad del documento.
+  return data.taxCents === 0 && data.taxBreakdown.every((r) => r.vat_rate === 0 && r.cuota_cents === 0);
+}
+
+/**
+ * Mención legal de la exención.
+ *
+ * El Reglamento de Facturación (RD 1619/2012, art. 6.1.j) obliga a hacer
+ * constar el precepto por el que la operación está exenta. Sin esa mención, una
+ * factura con cuota cero está formalmente incompleta.
+ *
+ * Se cita el 20.Uno.3º LIVA —asistencia sanitaria— porque es el supuesto por el
+ * que una clínica emite sin IVA. Un tratamiento puramente estético NO está
+ * exento y va al 21 %: por eso la casilla de la caja es una decisión por venta
+ * y no un ajuste permanente del salón.
+ */
+function renderExemptionNotice(data: InvoiceDocumentData): string {
+  if (!isVatExempt(data)) return "";
+  return `<p class="exemption">Operación exenta de IVA en virtud del artículo 20.Uno.3.º de la Ley 37/1992, del Impuesto sobre el Valor Añadido.</p>`;
+}
+
 export function buildInvoiceDocumentHtml(
   data: InvoiceDocumentData,
   options: InvoiceDocumentOptions = {},
@@ -249,6 +275,7 @@ export function buildInvoiceDocumentHtml(
     border-bottom: 2px solid var(--ink);
   }
   .issuer .legal-name { font-size: 18px; font-weight: 700; margin: 0 0 2px; }
+  .exemption { margin: 14px 0 0; padding: 8px 10px; border-left: 3px solid #666; font-size: 11px; line-height: 1.45; }
   .issuer p { margin: 0; color: var(--muted); }
   .doc-meta { text-align: right; min-width: 200px; }
   .doc-meta .doc-type {
@@ -349,6 +376,8 @@ export function buildInvoiceDocumentHtml(
       <div class="row"><span>Total IVA</span><span>${money(data.taxCents, data.currency)}</span></div>
       <div class="row grand"><span>Total</span><span>${money(data.totalCents, data.currency)}</span></div>
     </div>
+
+    ${renderExemptionNotice(data)}
 
   </main>
 </body>

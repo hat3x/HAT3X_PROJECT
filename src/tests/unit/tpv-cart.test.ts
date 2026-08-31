@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  blankManualLine,
   centsToEuroInput,
   computeTicketTotals,
   isLineComplete,
@@ -182,5 +183,58 @@ describe("lineFromService / lineFromProduct", () => {
       unitPrice: "8,50",
       vatRate: "10",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Exención de IVA en el ticket
+//
+// Hay pacientes cuya factura debe salir sin IVA. Como el precio de Kairos es
+// BRUTO (lleva el IVA dentro), lo que NO puede pasar es que marcar la casilla
+// baje el total: la corona de 290 € sigue costando 290 €, pero esos 290 € pasan
+// a ser base imponible entera con cuota 0.
+// ---------------------------------------------------------------------------
+
+describe("computeTicketTotals · exento de IVA", () => {
+  const LINEAS = [
+    { ...blankManualLine(), description: "Corona", quantity: "1", unitPrice: "290,00", vatRate: "21" },
+    { ...blankManualLine(), description: "Limpieza", quantity: "1", unitPrice: "60,00", vatRate: "10" },
+  ];
+
+  it("por defecto NO esta exento: se comporta igual que siempre", () => {
+    const t = computeTicketTotals(LINEAS, null);
+
+    expect(t.taxCents).toBeGreaterThan(0);
+  });
+
+  it("marcado, el total no cambia", () => {
+    const normal = computeTicketTotals(LINEAS, null);
+    const exento = computeTicketTotals(LINEAS, null, true);
+
+    expect(exento.totalCents).toBe(normal.totalCents);
+    expect(exento.totalCents).toBe(35000);
+  });
+
+  it("marcado, la cuota es cero y la base es el total", () => {
+    const t = computeTicketTotals(LINEAS, null, true);
+
+    expect(t.taxCents).toBe(0);
+    expect(t.subtotalCents).toBe(t.totalCents);
+  });
+
+  it("marcado, el desglose queda en un unico tipo al 0 %", () => {
+    const t = computeTicketTotals(LINEAS, null, true);
+
+    expect(t.vatBreakdown).toHaveLength(1);
+    expect(t.vatBreakdown[0]?.vatRate).toBe(0);
+  });
+
+  it("la exencion convive con el cupon: descuenta y sigue sin IVA", () => {
+    const t = computeTicketTotals(LINEAS, 10, true);
+
+    expect(t.couponDiscountCents).toBe(3500);
+    expect(t.totalCents).toBe(31500);
+    expect(t.taxCents).toBe(0);
+    expect(t.subtotalCents).toBe(31500);
   });
 });

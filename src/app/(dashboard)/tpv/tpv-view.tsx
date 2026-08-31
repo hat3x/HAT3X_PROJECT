@@ -53,6 +53,7 @@ import {
 } from "@/components/facturacion/emit-invoice-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -192,6 +193,9 @@ export function TpvView({
   const [tab, setTab] = useState<"services" | "products">("services");
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
+  // Operación exenta de IVA (p. ej. asistencia sanitaria). NO baja el total: los
+  // mismos euros pasan a ser base imponible entera con cuota 0.
+  const [vatExempt, setVatExempt] = useState(false);
   const [receipt, setReceipt] = useState<SaleReceipt | null>(null);
   // "Foto" de la venta cerrada para imprimir su ticket, y ancho de rollo elegido.
   const [ticketSale, setTicketSale] = useState<TicketSaleSnapshot | null>(null);
@@ -230,8 +234,8 @@ export function TpvView({
   const retryLoyalty = useRetrySaleLoyalty(salonId);
 
   const totals = useMemo(
-    () => computeTicketTotals(lines, appliedCoupon?.coupon.percent_off ?? null),
-    [lines, appliedCoupon],
+    () => computeTicketTotals(lines, appliedCoupon?.coupon.percent_off ?? null, vatExempt),
+    [lines, appliedCoupon, vatExempt],
   );
   const completeLines = lines.filter(isLineComplete);
   const canCharge = completeLines.length > 0 && totals.totalCents > 0;
@@ -290,6 +294,8 @@ export function TpvView({
     setNotes("");
     setSearch("");
     setAppliedCoupon(null);
+    // La exención es de ESTA venta: la siguiente arranca con IVA normal.
+    setVatExempt(false);
     loyalty.reset(); // vuelve el panel de fidelización a reposo tras la venta
     createSale.reset();
   }
@@ -317,7 +323,10 @@ export function TpvView({
         description: l.description,
         quantity: l.quantity,
         unitPrice: l.unitPrice,
-        vatRate: l.vatRate,
+        // Exento: se manda el tipo 0 explícito. El servidor recalcula los
+        // totales desde estas líneas, así que la venta guardada queda sin
+        // cuota — no es un maquillaje de la pantalla.
+        vatRate: vatExempt ? "0" : l.vatRate,
       })),
       tenders: tenders.map((t) => ({
         method: t.method,
@@ -637,6 +646,24 @@ export function TpvView({
                   <dd className="tabular-nums">{formatMoney(entry.taxCents)}</dd>
                 </div>
               ))}
+              {/* Exención de IVA. Va PEGADA al desglose porque su efecto se ve
+                  justo ahí: la cuota desaparece y la base pasa a ser el total.
+                  El importe que paga el paciente no se mueve. */}
+              <div className="flex items-start gap-2 pt-1">
+                <Checkbox
+                  id="tpv-exento-iva"
+                  checked={vatExempt}
+                  onCheckedChange={(v) => setVatExempt(v === true)}
+                  className="mt-0.5"
+                />
+                <label htmlFor="tpv-exento-iva" className="cursor-pointer select-none text-xs leading-snug">
+                  <span className="font-medium">Operación exenta de IVA</span>
+                  <span className="block text-muted-foreground">
+                    El total no cambia; la factura sale sin cuota.
+                  </span>
+                </label>
+              </div>
+
               <div className="mt-1.5 flex items-baseline justify-between border-t border-border/70 pt-3">
                 <dt className="text-base font-semibold">Total</dt>
                 <dd className="text-2xl font-bold tabular-nums tracking-tight">

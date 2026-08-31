@@ -127,6 +127,32 @@ export function computeLineTotals(line: SaleLineInput): SaleLineTotals {
  * Agrega una venta completa a partir de sus líneas: totales para `pos_sales` y
  * el desglose de IVA por tipo para la factura. Una venta sin líneas suma cero.
  */
+/**
+ * Devuelve las líneas como OPERACIÓN EXENTA de IVA: mismo precio, tipo 0.
+ *
+ * ── La sutileza que hay detrás ───────────────────────────────────────────────
+ * En Kairos el precio es BRUTO: los 290 € de una corona ya llevan el IVA dentro
+ * y la cuota se EXTRAE de ahí. Por eso "quitar el IVA" tiene dos lecturas
+ * opuestas, y solo una es la correcta:
+ *
+ *   · restar la cuota  → el paciente pagaría 239,67 € en vez de 290 €. Eso no
+ *     es una exención, es regalarle a la clínica el 21 % de cada trabajo.
+ *   · poner el tipo a 0 → sigue pagando 290 €, pero esos 290 € son base
+ *     imponible entera con cuota 0. Esto es lo que significa exento: el
+ *     honorario es el honorario y la operación no lleva impuesto.
+ *
+ * Se aplica a TODAS las líneas porque la exención es de la operación, no de un
+ * concepto suelto. Devuelve líneas nuevas: no toca las que recibe, para que el
+ * ticket en pantalla pueda volver a mostrarse con IVA si se desmarca la
+ * casilla.
+ *
+ * Ojo, quien emita la factura debe hacer constar el motivo de la exención: una
+ * factura exenta sin la mención legal está formalmente incompleta.
+ */
+export function applyVatExemption(lines: readonly SaleLineInput[]): SaleLineInput[] {
+  return lines.map((line) => ({ ...line, vatRate: 0 }));
+}
+
 export function computeSaleTotals(lines: readonly SaleLineInput[]): SaleTotals {
   const byRate = new Map<number, VatBreakdownEntry>();
   let subtotalCents = 0;

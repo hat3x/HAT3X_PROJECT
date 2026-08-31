@@ -1,5 +1,6 @@
 import { computeCouponDiscountCents } from "@/lib/loyalty/points";
 import {
+  applyVatExemption,
   computeSaleTotals,
   prorateDiscountAcrossLines,
   type SaleTotals,
@@ -103,12 +104,21 @@ export interface TicketTotals extends SaleTotals {
 export function computeTicketTotals(
   lines: readonly TicketLine[],
   couponPercentOff?: number | null,
+  /**
+   * Operación exenta de IVA. El precio de Kairos es BRUTO, así que exento NO
+   * baja el total: los mismos euros pasan a ser base imponible entera con
+   * cuota 0. Ver `applyVatExemption`.
+   */
+  vatExempt = false,
 ): TicketTotals {
-  const inputs = lines.filter(isLineComplete).map((line) => ({
+  const crudas = lines.filter(isLineComplete).map((line) => ({
     quantity: parseQuantity(line.quantity)!,
     unitPriceCents: parseEuroToCents(line.unitPrice)!,
     vatRate: Number.parseFloat(line.vatRate.replace(",", ".")) || 0,
   }));
+  // La exención se aplica ANTES de prorratear el cupón: así el descuento se
+  // reparte ya sobre líneas exentas y la base sigue cuadrando con el total.
+  const inputs = vatExempt ? applyVatExemption(crudas) : crudas;
 
   const base = computeSaleTotals(inputs);
 

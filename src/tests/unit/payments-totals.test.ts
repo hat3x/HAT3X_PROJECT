@@ -12,6 +12,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  applyVatExemption,
   computeLineTotals,
   computeSaleTotals,
   distributeProportionally,
@@ -229,5 +230,82 @@ describe("prorateDiscountAcrossLines — descuento de ticket coherente", () => {
   it("rechaza descuentos negativos o no enteros", () => {
     expect(() => prorateDiscountAcrossLines(lines, -1)).toThrow();
     expect(() => prorateDiscountAcrossLines(lines, 1.5)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyVatExemption — operación exenta de IVA
+//
+// El caso real (Biodental): hay pacientes cuya factura debe salir SIN IVA. En
+// Kairos los precios son BRUTOS (llevan el IVA dentro), y de ahí la sutileza
+// que fija este bloque: exento NO significa que el paciente pague menos.
+//
+// Una corona de 290 € sigue costando 290 €. Lo que cambia es que esos 290 €
+// pasan a ser base imponible entera con cuota 0, en vez de 239,67 + 50,33.
+// Si "quitar el IVA" bajara el total, la clínica se estaría regalando el 21 %
+// de cada trabajo exento, que es justo lo contrario de lo que se pide.
+// ---------------------------------------------------------------------------
+
+describe("applyVatExemption", () => {
+  const LINEAS: SaleLineInput[] = [
+    { quantity: 1, unitPriceCents: 29000, vatRate: 21 },
+    { quantity: 2, unitPriceCents: 9000, vatRate: 10 },
+  ];
+
+  it("el total que paga el paciente NO cambia", () => {
+    const antes = computeSaleTotals(LINEAS);
+    const despues = computeSaleTotals(applyVatExemption(LINEAS));
+
+    expect(despues.totalCents).toBe(antes.totalCents);
+  });
+
+  it("la cuota de IVA pasa a cero", () => {
+    const t = computeSaleTotals(applyVatExemption(LINEAS));
+
+    expect(t.taxCents).toBe(0);
+  });
+
+  it("toda la base imponible es el total: 290 € siguen siendo 290 €", () => {
+    const t = computeSaleTotals(applyVatExemption(LINEAS));
+
+    expect(t.subtotalCents).toBe(t.totalCents);
+    expect(t.subtotalCents).toBe(29000 + 18000);
+  });
+
+  it("el desglose queda en un unico tipo, el 0 %", () => {
+    const t = computeSaleTotals(applyVatExemption(LINEAS));
+
+    expect(t.vatBreakdown).toHaveLength(1);
+    expect(t.vatBreakdown[0]?.vatRate).toBe(0);
+    expect(t.vatBreakdown[0]?.taxCents).toBe(0);
+  });
+
+  it("respeta los descuentos de linea: solo toca el tipo de IVA", () => {
+    const conDto: SaleLineInput[] = [
+      { quantity: 1, unitPriceCents: 29000, vatRate: 21, discountCents: 5000 },
+    ];
+    const t = computeSaleTotals(applyVatExemption(conDto));
+
+    expect(t.discountCents).toBe(5000);
+    expect(t.totalCents).toBe(24000);
+    expect(t.subtotalCents).toBe(24000);
+  });
+
+  it("no muta las lineas originales", () => {
+    const originales: SaleLineInput[] = [{ quantity: 1, unitPriceCents: 29000, vatRate: 21 }];
+    applyVatExemption(originales);
+
+    expect(originales[0]?.vatRate).toBe(21);
+  });
+
+  it("una linea sin vatRate (que por defecto es 21) tambien queda exenta", () => {
+    const t = computeSaleTotals(applyVatExemption([{ quantity: 1, unitPriceCents: 10000 }]));
+
+    expect(t.taxCents).toBe(0);
+    expect(t.totalCents).toBe(10000);
+  });
+
+  it("sin lineas devuelve una lista vacia", () => {
+    expect(applyVatExemption([])).toEqual([]);
   });
 });

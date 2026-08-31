@@ -9,6 +9,7 @@
 // ── Cálculo de totales e IVA (fuente única para caja y facturación) ───────────
 export {
   computeLineTotals,
+  applyVatExemption,
   computeSaleTotals,
   prorateDiscountAcrossLines,
   type SaleLineInput,

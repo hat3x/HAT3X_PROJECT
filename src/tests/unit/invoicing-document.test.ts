@@ -111,3 +111,71 @@ describe("buildInvoiceDocumentHtml — seguridad", () => {
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Operación exenta de IVA
+//
+// El Reglamento de Facturación (RD 1619/2012, art. 6.1.j) exige que una factura
+// sin IVA HAGA CONSTAR el motivo de la exención. Una factura con la cuota a
+// cero y sin la mención está formalmente incompleta, y eso se le reprocha a la
+// clínica, no a nosotros.
+//
+// La exención se DEDUCE del documento —cuota cero y todo el desglose al 0 %—
+// para no depender de una marca aparte que se pueda quedar sin poner.
+// ---------------------------------------------------------------------------
+
+describe("buildInvoiceDocumentHtml — exención de IVA", () => {
+  const EXENTA: InvoiceDocumentData = {
+    ...COMPLETA,
+    taxBreakdown: [{ vat_rate: 0, base_cents: 29000, cuota_cents: 0, total_cents: 29000 }],
+    taxableBaseCents: 29000,
+    taxCents: 0,
+    totalCents: 29000,
+  };
+
+  it("hace constar el motivo de la exención", () => {
+    const html = buildInvoiceDocumentHtml(EXENTA);
+
+    expect(html).toContain("exenta");
+    expect(html).toContain("20.Uno.3");
+  });
+
+  it("cita la ley del IVA, no solo el artículo", () => {
+    const html = buildInvoiceDocumentHtml(EXENTA);
+
+    expect(html).toMatch(/37\/1992/);
+  });
+
+  it("una factura con IVA NO lleva la mención", () => {
+    const html = buildInvoiceDocumentHtml(COMPLETA);
+
+    expect(html).not.toContain("exenta");
+  });
+
+  it("una factura a cero euros no se declara exenta: no hay operación", () => {
+    const cero: InvoiceDocumentData = {
+      ...COMPLETA,
+      taxBreakdown: [],
+      taxableBaseCents: 0,
+      taxCents: 0,
+      totalCents: 0,
+    };
+
+    expect(buildInvoiceDocumentHtml(cero)).not.toContain("exenta");
+  });
+
+  it("si hay una linea con IVA, no es exenta aunque la cuota total sea baja", () => {
+    const mixta: InvoiceDocumentData = {
+      ...COMPLETA,
+      taxBreakdown: [
+        { vat_rate: 0, base_cents: 29000, cuota_cents: 0, total_cents: 29000 },
+        { vat_rate: 21, base_cents: 1000, cuota_cents: 210, total_cents: 1210 },
+      ],
+      taxableBaseCents: 30000,
+      taxCents: 210,
+      totalCents: 30210,
+    };
+
+    expect(buildInvoiceDocumentHtml(mixta)).not.toContain("exenta");
+  });
+});
