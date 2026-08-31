@@ -1,0 +1,114 @@
+{
+  "name": "De Nueve a Nueve — Cancelar Cita",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "denueveanueve-cancelar-cita",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet body;\nif (raw.arguments !== undefined) {\n  body = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  body = raw;\n}\n\nconst telefono = String(body.telefono || '').trim();\nconst fecha = String(body.fecha || '').trim();\nconst hora = String(body.hora || '').trim();\n\n// Formatear fecha para mensaje\nconst fechaObj = new Date(fecha + 'T00:00:00');\nconst diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\nconst meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];\nconst diaSemana = diasSemana[fechaObj.getUTCDay()];\nconst diaMes = fechaObj.getUTCDate();\nconst mes = meses[fechaObj.getUTCMonth()];\n\n// Calcular ventana de búsqueda (día completo + margen)\nconst fechaInicioDia = new Date(fecha + 'T00:00:00').toISOString();\nconst fechaFinDia = new Date(fecha + 'T23:59:59').toISOString();\n\nreturn [{ json: { \n  telefono, \n  fecha, \n  hora, \n  diaSemana, \n  diaMes, \n  mes,\n  fechaInicioDia,\n  fechaFinDia\n}}];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendarId": "primary",
+        "options": {
+          "timeMin": "={{ $json.fechaInicioDia }}",
+          "timeMax": "={{ $json.fechaFinDia }}",
+          "singleEvents": true,
+          "q": "={{ $json.telefono }}"
+        }
+      },
+      "id": "gcal-search-node",
+      "name": "Google Calendar - Buscar Evento",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [440, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const eventos = $('Google Calendar - Buscar Evento').all();\nconst datos = $('Parsear Argumentos').first().json;\n\n// Buscar evento que coincida con la hora aproximada\nconst eventoEncontrado = eventos.find(e => {\n  const start = e.json.start?.dateTime || e.json.start?.date;\n  if (!start) return false;\n  const horaEvento = start.split('T')[1]?.substring(0, 5);\n  return horaEvento === datos.hora;\n});\n\nif (!eventoEncontrado) {\n  return [{\n    json: {\n      cancelado: false,\n      error: 'No se encontró la cita en Google Calendar',\n      mensaje: 'No encontré esa cita en el calendario. ¿Estás seguro de la fecha y hora?'\n    }\n  }];\n}\n\nreturn [{ json: {\n  ...datos,\n  evento_id: eventoEncontrado.json.id,\n  evento_summary: eventoEncontrado.json.summary\n}}];"
+      },
+      "id": "find-event-node",
+      "name": "Filtrar Evento por Hora",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "delete",
+        "calendarId": "primary",
+        "eventId": "={{ $json.evento_id }}",
+        "options": {}
+      },
+      "id": "gcal-delete-node",
+      "name": "Google Calendar - Eliminar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [880, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const deleteResult = $('Google Calendar - Eliminar').first().json;\nconst datos = $('Filtrar Evento por Hora').first().json;\n\nif (deleteResult === undefined || deleteResult === null || deleteResult.success !== false) {\n  const mensaje = `Tu cita del ${datos.diaSemana} ${datos.diaMes} de ${datos.mes} a las ${datos.hora} ha quedado cancelada. ¡Hasta la próxima!`;\n  \n  return [{\n    json: {\n      cancelado: true,\n      resumen: `Cita de ${datos.evento_summary} cancelada`,\n      mensaje: mensaje,\n      google_calendar_event_id: datos.evento_id\n    }\n  }];\n} else {\n  return [{\n    json: {\n      cancelado: false,\n      error: 'No se pudo eliminar el evento',\n      mensaje: 'Hubo un problema al cancelar la cita. Por favor, llama al salón.'\n    }\n  }];\n}"
+      },
+      "id": "response-node",
+      "name": "Construir Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1320, 300]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": { "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]] },
+    "Parsear Argumentos": { "main": [[{ "node": "Google Calendar - Buscar Evento", "type": "main", "index": 0 }]] },
+    "Google Calendar - Buscar Evento": { "main": [[{ "node": "Filtrar Evento por Hora", "type": "main", "index": 0 }]] },
+    "Filtrar Evento por Hora": { "main": [[{ "node": "Google Calendar - Eliminar", "type": "main", "index": 0 }]] },
+    "Google Calendar - Eliminar": { "main": [[{ "node": "Construir Respuesta", "type": "main", "index": 0 }]] },
+    "Construir Respuesta": { "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

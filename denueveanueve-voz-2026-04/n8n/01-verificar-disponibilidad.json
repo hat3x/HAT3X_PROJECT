@@ -1,0 +1,148 @@
+{
+  "name": "De Nueve a Nueve — Verificar Disponibilidad",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "denueveanueve-verificar-disponibilidad",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Retell Tool Call",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Retell Tool Call').first().json.body || $('Retell Tool Call').first().json;\nlet args;\nif (raw.arguments !== undefined) {\n  args = typeof raw.arguments === 'string' ? JSON.parse(raw.arguments) : raw.arguments;\n} else {\n  args = raw;\n}\n\nconst sede = args.sede;\nconst servicio = args.servicio;\nconst fecha = args.fecha;\nconst hora = args.hora;\nconst empleado = args.empleado || '';\n\n// Location IDs\nconst LOCATION_IDS = {\n  'collado_villalba': '4159c713-3507-49ba-8319-c4b7ed4f38b2',\n  'alpedrete': '61865f3b-976b-427b-b5f1-c856e7b97cdf'\n};\n\n// Calendarios por empleado\nconst CALENDARIOS_POR_SEDE = {\n  'collado_villalba': [\n    { nombre: 'Fernando', nombreNorm: 'fernando', id: '06136cb5016a75da20e0292649097ca53d818c3145984831dda2d02311d929f4@group.calendar.google.com' },\n    { nombre: 'Almudena', nombreNorm: 'almudena', id: 'aade57f8bb3504fdc3582de697f8892c71817b94a2e32cebf8a891d8a1d48c2b@group.calendar.google.com' },\n    { nombre: 'Johanna', nombreNorm: 'johanna', id: 'c35d85ddf7afa97e4edb360ef99552b6289a2d95e9b939745bff7505557b73e2@group.calendar.google.com' },\n    { nombre: 'Isabel', nombreNorm: 'isabel', id: 'df5a40b3c772d155e8451db37483283cb815d71914dfd7af21750266da3eec48@group.calendar.google.com' },\n    { nombre: 'Tania', nombreNorm: 'tania', id: '3e70700c207422d765f314fa80988edf99922c02bca81b62e0398347e15be65c@group.calendar.google.com' },\n    { nombre: 'Macarena', nombreNorm: 'macarena', id: '293331e0b723181277b20c87228b119f9701886dd1d3645a2747c7ee22b850e8@group.calendar.google.com' },\n    { nombre: 'Alí', nombreNorm: 'ali', id: '01dabb00d1abb92b2313be55204645f2a6862e37f18779821045f3b1874250e1@group.calendar.google.com' },\n    { nombre: 'María', nombreNorm: 'maria', id: '968ca744f4a0356d6948ae097d54127b373c9cc5efcc889479381101773ee8e7@group.calendar.google.com' },\n    { nombre: 'María2', nombreNorm: 'maria2', id: 'd70f48f63430635525a6ad0e7f835a32ae68a6e77aeb74810fd8ba9c4de836a2@group.calendar.google.com' },\n    { nombre: 'Marian', nombreNorm: 'marian', id: '4cace839a6b98a4c7f5c910f4e898c1e0ebda5712c45939783b8e720543c9d5e@group.calendar.google.com' }\n  ],\n  'alpedrete': [\n    { nombre: 'Ana', nombreNorm: 'ana', id: '7ced6d3e137d513c4cc58b517ad1fa344efbb883cdd3dbce8fd0046ac053c924@group.calendar.google.com' },\n    { nombre: 'Cristina', nombreNorm: 'cristina', id: '62b7d9a94d9f7a745d1d7c65448838ceecaa5ab4e999e3ace21546c913f7a710@group.calendar.google.com' },\n    { nombre: 'María', nombreNorm: 'maria', id: 'd70f48f63430635525a6ad0e7f835a32ae68a6e77aeb74810fd8ba9c4de836a2@group.calendar.google.com' }\n  ]\n};\n\n// Tiempos de exposición por servicio\nconst TIEMPOS_EXPOSICION = {\n  'Meches completas': { application: 45, exposure: 35, post: 10, total: 90 },\n  'Meches tendencia': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Balayage': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Babylight': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Medias mechas': { application: 35, exposure: 35, post: 10, total: 80 },\n  'Color Raíz': { application: 30, exposure: 25, post: 5, total: 60 },\n  'Tinte raíz': { application: 30, exposure: 25, post: 5, total: 60 },\n  'Baño de color orgánico': { application: 20, exposure: 35, post: 5, total: 60 },\n  'Aplicación barros': { application: 40, exposure: 60, post: 10, total: 110 },\n  'Tratamiento Keratina': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Tratamiento Antifrizz': { application: 60, exposure: 80, post: 20, total: 160 },\n  'Alisado': { application: 60, exposure: 80, post: 20, total: 160 },\n  'Permanente': { application: 40, exposure: 40, post: 10, total: 90 },\n  'Desrizado frontal': { application: 20, exposure: 5, post: 5, total: 30 },\n  'Tratamiento ligero intensivo': { application: 10, exposure: 5, post: 5, total: 20 },\n  'Tratamiento premium': { application: 15, exposure: 10, post: 5, total: 30 },\n  'Tratamiento slow repair': { application: 20, exposure: 20, post: 5, total: 45 },\n  'Tratamiento détox cuero cabelludo': { application: 15, exposure: 10, post: 5, total: 30 },\n  'Tratamiento détox mechas': { application: 15, exposure: 10, post: 5, total: 30 },\n  'Tratamiento anticaída': { application: 10, exposure: 0, post: 5, total: 15 },\n  'Manicura semipermanente': { application: 35, exposure: 5, post: 5, total: 45 },\n  'Pedicura semipermanente': { application: 45, exposure: 10, post: 5, total: 60 },\n  'Pedicura normal': { application: 40, exposure: 0, post: 5, total: 45 },\n  'Tinte cejas': { application: 5, exposure: 3, post: 2, total: 10 },\n  'Servicio Estrella': { application: 60, exposure: 45, post: 15, total: 120 }\n};\n\n// Duraciones simples\nconst DURACIONES_SIMPLES = {\n  'Corte Señora': 45, 'Corte Caballero': 30, 'Corte flequillo': 10,\n  'Corte niño/a': 20, 'Lavado + Secado': 20, 'Peinado': 30,\n  'Difusor': 15, 'Quitar humedad': 5, 'Cejas': 15,\n  'Depilación axilas': 10, 'Depilación brazos': 20, 'Depilación ingles': 15,\n  'Depilación ingles integral': 20, 'Depilación piernas': 30, 'Depilación espalda': 30,\n  'Manicura normal': 30, 'Entrecejo': 10, 'Labio': 10\n};\n\n// Obtener tiempos del servicio\nlet applicationMin, exposureMin, postMin, totalMin;\nconst tiempos = TIEMPOS_EXPOSICION[servicio];\nif (tiempos) {\n  applicationMin = tiempos.application;\n  exposureMin = tiempos.exposure;\n  postMin = tiempos.post;\n  totalMin = tiempos.total;\n} else {\n  applicationMin = DURACIONES_SIMPLES[servicio] || 60;\n  exposureMin = 0;\n  postMin = 0;\n  totalMin = applicationMin;\n}\n\n// Calcular fechas\nconst fechaInicio = new Date(`${fecha}T${hora}:00`);\nconst fechaFin = new Date(fechaInicio.getTime() + totalMin * 60000);\nconst finApplication = new Date(fechaInicio.getTime() + applicationMin * 60000);\nconst inicioPost = new Date(finApplication.getTime() + exposureMin * 60000);\n\nconst diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\nconst meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];\nconst diaSemana = diasSemana[fechaInicio.getUTCDay()];\nconst diaMes = fechaInicio.getUTCDate();\nconst mes = meses[fechaInicio.getUTCMonth()];\n\n// Filtrar calendarios por empleado si se especifica\nlet calendariosSede = CALENDARIOS_POR_SEDE[sede] || CALENDARIOS_POR_SEDE['collado_villalba'];\nif (empleado) {\n  const empleadoNorm = empleado.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  calendariosSede = calendariosSede.filter(c => c.nombreNorm === empleadoNorm || empleadoNorm.includes(c.nombreNorm));\n}\n\nconst locationId = LOCATION_IDS[sede] || LOCATION_IDS['collado_villalba'];\n\nreturn [{ json: {\n  sede,\n  servicio,\n  fecha,\n  hora,\n  empleado,\n  location_id: locationId,\n  calendarios_sede: calendariosSede,\n  applicationMin,\n  exposureMin,\n  postMin,\n  totalMin,\n  fechaInicio: fechaInicio.toISOString(),\n  fechaFin: fechaFin.toISOString(),\n  finApplication: finApplication.toISOString(),\n  inicioPost: inicioPost.toISOString(),\n  fechaTexto: `${diaSemana} ${diaMes} de ${mes}`,\n  horaFin: fechaFin.toISOString().split('T')[1].substring(0, 5),\n  tiempo_activo_empleado: applicationMin + postMin\n}}];"
+      },
+      "id": "parse-node",
+      "name": "Parsear Argumentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.STAFF_APP_SUPABASE_URL }}/rest/v1/rpc/get_empleados_de_turno",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.STAFF_APP_SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=`Bearer ${$env.STAFF_APP_SUPABASE_ANON_KEY}`" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "p_location_id", "value": "={{ $json.location_id }}" },
+            { "name": "p_fecha", "value": "={{ $json.fecha }}" },
+            { "name": "p_hora_inicio", "value": "={{ $json.hora }}" },
+            { "name": "p_hora_fin", "value": "={{ $json.horaFin }}" }
+          ]
+        },
+        "options": { "timeout": 5000 }
+      },
+      "id": "staff-api-node",
+      "name": "Consultar Staff App (Turnos)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsedData = $('Parsear Argumentos').first().json;\nconst staffApiResult = $('Consultar Staff App (Turnos)').first();\n\nconst calendariosSede = parsedData.calendarios_sede;\n\nfunction normalizarNombre(str) {\n  return str.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nlet calendariosFinales;\nlet staffAppUsada = false;\nlet empleadosDeTurno = [];\n\nconst apiOk = !staffApiResult.json.error && Array.isArray(staffApiResult.json);\n\nif (apiOk && staffApiResult.json.length > 0) {\n  staffAppUsada = true;\n  empleadosDeTurno = staffApiResult.json.map(e => normalizarNombre(e.name || e.nombre || ''));\n\n  calendariosFinales = calendariosSede.filter(cal => {\n    const nombreNorm = normalizarNombre(cal.nombre);\n    return empleadosDeTurno.some(turno =>\n      turno === nombreNorm || turno.includes(nombreNorm) || nombreNorm.includes(turno)\n    );\n  });\n\n  if (calendariosFinales.length === 0) {\n    calendariosFinales = calendariosSede;\n    staffAppUsada = false;\n  }\n} else {\n  calendariosFinales = calendariosSede;\n}\n\nreturn [{ json: {\n  ...parsedData,\n  calendarios: calendariosFinales.map(c => c.id),\n  empleados_activos: calendariosFinales.map(c => c.nombre),\n  staff_app_usada: staffAppUsada,\n  empleados_de_turno_raw: empleadosDeTurno\n}}];"
+      },
+      "id": "filter-node",
+      "name": "Filtrar Empleados de Turno",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Filtrar Empleados de Turno').first().json;\nconst calendarios = data.calendarios;\nconst fechaInicio = data.fechaInicio;\nconst fechaFin = data.fechaFin;\n\nreturn calendarios.map(calId => ({\n  json: {\n    calendar_id: calId,\n    fechaInicio,\n    fechaFin,\n    applicationMin: data.applicationMin,\n    exposureMin: data.exposureMin,\n    postMin: data.postMin,\n    totalMin: data.totalMin,\n    servicio: data.servicio,\n    fecha: data.fecha,\n    hora: data.hora\n  }\n}));"
+      },
+      "id": "split-node",
+      "name": "Preparar Split por Calendarios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendarId": "={{ $json.calendar_id }}",
+        "options": {
+          "timeMin": "={{ new Date(new Date($json.fechaInicio).getTime() - 24 * 60 * 60 * 1000).toISOString() }}",
+          "timeMax": "={{ new Date(new Date($json.fechaFin).getTime() + 24 * 60 * 60 * 1000).toISOString() }}",
+          "singleEvents": true
+        }
+      },
+      "id": "gcal-node",
+      "name": "Google Calendar - Consultar Hueco",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [1100, 300],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "PLACEHOLDER_CREDENTIALS_ID",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Filtrar Empleados de Turno').first().json;\nconst resultados = $('Google Calendar - Consultar Hueco').all();\n\nconst newStart = new Date(input.fechaInicio);\nconst newEnd = new Date(input.fechaFin);\n\n// Parsea los tiempos de exposición de la descripción de un evento existente.\n// Los HH:MM en la descripción fueron escritos con .toISOString() → son UTC.\n// Devuelve { finApplication, inicioPost } como fechas UTC, o null si no aplica.\nfunction parsearTiemposExposicion(desc, eventoStart) {\n  const exposureMatch = desc.match(/Empleado libre:\\\\s*(\\\\d+)\\\\s*min/);\n  if (!exposureMatch) return null;\n  const exposureMin = parseInt(exposureMatch[1]);\n  if (exposureMin === 0) return null;\n\n  const finAppMatch = desc.match(/Fin aplicaci[oó]n:\\\\s*(\\\\d{2}:\\\\d{2})/);\n  const vuelveMatch = desc.match(/Vuelve empleado:\\\\s*(\\\\d{2}:\\\\d{2})/);\n  if (!finAppMatch || !vuelveMatch) return null;\n\n  const fechaUTC = eventoStart.toISOString().split('T')[0];\n  return {\n    finApplication: new Date(`${fechaUTC}T${finAppMatch[1]}:00Z`),\n    inicioPost: new Date(`${fechaUTC}T${vuelveMatch[1]}:00Z`)\n  };\n}\n\n// Función para verificar si un calendario tiene disponibilidad\nfunction verificarCalendario(resultadoCalendario) {\n  const eventos = resultadoCalendario.json || [];\n  const eventosActivos = Array.isArray(eventos)\n    ? eventos.filter(e => e.status !== 'cancelled')\n    : [];\n\n  // Si no hay eventos, el calendario está disponible\n  if (eventosActivos.length === 0) return true;\n\n  // Verificar cada evento para detectar conflictos\n  for (const evento of eventosActivos) {\n    const eventoStart = new Date(evento.start?.dateTime || evento.start?.date + 'T00:00:00Z');\n    const eventoEnd = new Date(evento.end?.dateTime || evento.end?.date + 'T00:00:00Z');\n\n    // Verificar si hay solapamiento entre la nueva cita y el evento existente\n    const haySolapamiento = newStart < eventoEnd && newEnd > eventoStart;\n    \n    if (haySolapamiento) {\n      // Hay solapamiento, verificar si la nueva cita cabe en el tiempo de exposición\n      const desc = evento.description || '';\n      const tiempos = parsearTiemposExposicion(desc, eventoStart);\n\n      if (!tiempos) {\n        // Sin información de exposición → conflicto real\n        return false;\n      }\n\n      // Verificar si la nueva cita cabe COMPLETAMENTE dentro del tiempo libre\n      const { finApplication, inicioPost } = tiempos;\n      const cabeEnExposicion = newStart >= finApplication && newEnd <= inicioPost;\n\n      if (!cabeEnExposicion) {\n        // No cabe en la ventana libre → conflicto real\n        return false;\n      }\n      // Si cabe en la exposición, continuar verificando otros eventos\n    }\n  }\n\n  // Si llegamos aquí, ningún evento genera conflicto\n  return true;\n}\n\n// Verificar cada calendario y contar los disponibles\nconst calendariosDisponibles = [];\nconst calendariosConflictivos = [];\n\nresultados.forEach((resultado, index) => {\n  const calendarioId = input.calendarios[index];\n  const empleadoNombre = input.empleados_activos[index];\n  \n  if (verificarCalendario(resultado)) {\n    calendariosDisponibles.push({\n      calendario_id: calendarioId,\n      empleado: empleadoNombre\n    });\n  } else {\n    calendariosConflictivos.push({\n      calendario_id: calendarioId,\n      empleado: empleadoNombre\n    });\n  }\n});\n\n// Determinar respuesta final\nif (calendariosDisponibles.length > 0) {\n  // Hay al menos un empleado disponible\n  return [{\n    json: {\n      disponible: true,\n      fecha: input.fecha,\n      hora: input.hora,\n      horaFin: input.horaFin,\n      servicio: input.servicio,\n      sede: input.sede,\n      empleados_libres: calendariosDisponibles.length,\n      empleados_disponibles: calendariosDisponibles.map(e => e.empleado),\n      empleados_conflictivos: calendariosConflictivos.map(e => e.empleado),\n      empleados_consultados: input.empleados_activos,\n      staff_app_usada: input.staff_app_usada,\n      tiempos_servicio: {\n        application_min: input.applicationMin,\n        exposure_min: input.exposureMin,\n        post_min: input.postMin,\n        total_min: input.totalMin,\n        tiempo_activo_empleado: input.applicationMin + input.postMin\n      },\n      mensaje: `Hay disponibilidad el ${input.fechaTexto} a las ${input.hora} en ${input.sede.replace('_', ' ')}. Empleados disponibles: ${calendariosDisponibles.map(e => e.empleado).join(', ')}`\n    }\n  }];\n} else {\n  // Ningún empleado disponible - buscar siguiente hueco\n  const fechaInicio = new Date(input.fechaInicio);\n  fechaInicio.setHours(fechaInicio.getHours() + 1);\n\n  const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\n  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];\n  const nuevaFecha = fechaInicio.toISOString().split('T')[0];\n  const nuevaHora = fechaInicio.toISOString().split('T')[1].substring(0, 5);\n  const diaSemana = diasSemana[fechaInicio.getUTCDay()];\n  const diaMes = fechaInicio.getUTCDate();\n  const mes = meses[fechaInicio.getUTCMonth()];\n\n  return [{\n    json: {\n      disponible: false,\n      empleados_consultados: input.empleados_consultados,\n      empleados_conflictivos: calendariosConflictivos.map(e => e.empleado),\n      staff_app_usada: input.staff_app_usada,\n      tiempos_servicio: {\n        application_min: input.applicationMin,\n        exposure_min: input.exposureMin,\n        post_min: input.postMin,\n        total_min: input.totalMin,\n        tiempo_activo_empleado: input.applicationMin + input.postMin\n      },\n      mensaje: `No hay disponibilidad a esa hora. El siguiente hueco es el ${diaSemana} ${diaMes} de ${mes} a las ${nuevaHora}`,\n      siguiente_disponible: { fecha: nuevaFecha, hora: nuevaHora }\n    }\n  }];\n}"
+      },
+      "id": "merge-node",
+      "name": "Consolidar Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-node",
+      "name": "Responder a Retell",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1540, 300]
+    }
+  ],
+  "connections": {
+    "Retell Tool Call": {
+      "main": [[{ "node": "Parsear Argumentos", "type": "main", "index": 0 }]]
+    },
+    "Parsear Argumentos": {
+      "main": [[{ "node": "Consultar Staff App (Turnos)", "type": "main", "index": 0 }]]
+    },
+    "Consultar Staff App (Turnos)": {
+      "main": [[{ "node": "Filtrar Empleados de Turno", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Empleados de Turno": {
+      "main": [[{ "node": "Preparar Split por Calendarios", "type": "main", "index": 0 }]]
+    },
+    "Preparar Split por Calendarios": {
+      "main": [[{ "node": "Google Calendar - Consultar Hueco", "type": "main", "index": 0 }]]
+    },
+    "Google Calendar - Consultar Hueco": {
+      "main": [[{ "node": "Consolidar Resultados", "type": "main", "index": 0 }]]
+    },
+    "Consolidar Resultados": {
+      "main": [[{ "node": "Responder a Retell", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

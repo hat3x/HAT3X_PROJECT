@@ -1,0 +1,93 @@
+{
+  "_comment": "YA DESPLEGADO -> llm_id: llm_0ceec9dee59de562abf0f63ab21f. Referencia de la config creada via API (POST https://api.retellai.com/create-retell-llm, Authorization: Bearer $RETELL_API_KEY). {{N8N_BASE_URL}} real = https://hat3xia.app.n8n.cloud. general_prompt = contenido de retell/system-prompt.md (incluye la variable {{current_time_Europe/Madrid}}).",
+  "model": "gpt-5.5",
+  "general_prompt": "<<< PEGAR AQUI EL CONTENIDO COMPLETO DE retell/system-prompt.md >>>",
+  "begin_message": "Hola, buenas. Has llamado a De Nueve a Nueve, soy Noa. ¿En qué puedo ayudarte?",
+  "general_tools": [
+    {
+      "type": "custom",
+      "name": "verificar_disponibilidad",
+      "description": "Consulta si hay hueco para el servicio en la sede, fecha y hora indicadas. Devuelve si está disponible y, si no, alternativas. Llamar SIEMPRE antes de crear o modificar una cita.",
+      "speak_during_execution": true,
+      "speak_during_execution_message": "Un momento, que miro la agenda.",
+      "url": "{{N8N_BASE_URL}}/webhook/denueveanueve-verificar-disponibilidad",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sede": { "type": "string", "enum": ["collado_villalba", "alpedrete"], "description": "Sede de la cita." },
+          "servicio": { "type": "string", "description": "Nombre del servicio (ej: 'Mechas completas', 'Corte Señora', 'Tinte raíz')." },
+          "fecha": { "type": "string", "description": "Fecha deseada en formato AAAA-MM-DD." },
+          "hora": { "type": "string", "description": "Hora deseada en formato HH:MM (24h)." }
+        },
+        "required": ["sede", "servicio", "fecha", "hora"]
+      }
+    },
+    {
+      "type": "custom",
+      "name": "crear_cita",
+      "description": "Crea la cita. Llamar SOLO tras verificar disponibilidad con resultado positivo y tras confirmar los datos en voz alta con la clienta.",
+      "speak_during_execution": true,
+      "speak_during_execution_message": "Perfecto, te apunto ahora mismo.",
+      "url": "{{N8N_BASE_URL}}/webhook/denueveanueve-crear-cita-verificado",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "nombre": { "type": "string", "description": "Nombre completo de la clienta." },
+          "telefono": { "type": "string", "description": "Teléfono de contacto (9 dígitos)." },
+          "sede": { "type": "string", "enum": ["collado_villalba", "alpedrete"] },
+          "servicio": { "type": "string", "description": "Nombre del servicio." },
+          "fecha": { "type": "string", "description": "Fecha en formato AAAA-MM-DD." },
+          "hora": { "type": "string", "description": "Hora en formato HH:MM (24h)." },
+          "notas": { "type": "string", "description": "Notas adicionales. Cadena vacía si no hay." },
+          "empleado": { "type": "string", "description": "Nombre del profesional solicitado (opcional; vacío si le da igual). Ej: Fernando, Almudena, Johanna, Isabel, Tania, Macarena, Alí, María, Marian, Ana, Cristina." },
+          "email": { "type": "string", "description": "Email de la clienta (opcional; vacío si no lo da)." }
+        },
+        "required": ["nombre", "telefono", "sede", "servicio", "fecha", "hora", "notas"]
+      }
+    },
+    {
+      "type": "custom",
+      "name": "cancelar_cita",
+      "description": "Cancela una cita existente, identificada por teléfono y fecha (y hora si se conoce). Confirmar con la clienta los datos antes de cancelar.",
+      "speak_during_execution": true,
+      "speak_during_execution_message": "Ahora mismo la cancelo.",
+      "url": "{{N8N_BASE_URL}}/webhook/denueveanueve-cancelar-cita",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "telefono": { "type": "string", "description": "Teléfono de la titular de la cita." },
+          "fecha": { "type": "string", "description": "Fecha de la cita en AAAA-MM-DD." },
+          "hora": { "type": "string", "description": "Hora de la cita en HH:MM (opcional si no se conoce)." }
+        },
+        "required": ["telefono", "fecha"]
+      }
+    },
+    {
+      "type": "custom",
+      "name": "modificar_cita",
+      "description": "Cambia la fecha/hora de una cita existente. Verificar disponibilidad del nuevo hueco antes de llamar.",
+      "speak_during_execution": true,
+      "speak_during_execution_message": "Déjame actualizar tu cita.",
+      "url": "{{N8N_BASE_URL}}/webhook/denueveanueve-modificar-cita",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "telefono": { "type": "string", "description": "Teléfono de la titular." },
+          "fecha_actual": { "type": "string", "description": "Fecha actual de la cita en AAAA-MM-DD." },
+          "hora_actual": { "type": "string", "description": "Hora actual de la cita en HH:MM." },
+          "nueva_fecha": { "type": "string", "description": "Nueva fecha en AAAA-MM-DD." },
+          "nueva_hora": { "type": "string", "description": "Nueva hora en HH:MM." }
+        },
+        "required": ["telefono", "fecha_actual", "nueva_fecha", "nueva_hora"]
+      }
+    },
+    {
+      "type": "transfer_call",
+      "name": "transferir_al_salon",
+      "description": "Transferir la llamada al salón cuando la clienta lo pida, tenga una reclamación, o la consulta se salga de las funciones de Noa.",
+      "number": "+34918502012",
+      "speak_during_execution": true,
+      "speak_during_execution_message": "Ahora te paso con el salón, un momentito."
+    }
+  ]
+}

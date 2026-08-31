@@ -1,0 +1,1 @@
+UPDATE public.subscriptions SET plan = 'LADIES_39' WHERE plan = 'LADIES_59';

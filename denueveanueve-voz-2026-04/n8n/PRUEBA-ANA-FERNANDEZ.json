@@ -1,0 +1,18 @@
+{
+  "name": "PRUEBA - Ana Fernández - Corte flequillo 8 abril 10:30",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Payload de prueba para Ana Fernández\n// Servicio: Corte flequillo\n// Fecha: 8 de abril 2026\n// Hora: 10:30\n// Empleado: Isabel\n\nreturn [{\n  json: {\n    arguments: {\n      nombre: 'Ana Fernández',\n      telefono: '612345678',\n      sede: 'collado_villalba',\n      servicio: 'Corte flequillo',\n      fecha: '2026-04-08',\n      hora: '10:30',\n      empleado: 'Isabel'\n    }\n  }\n}];"
+      },
+      "id": "test-payload-node",
+      "name": "Payload Prueba Ana Fernández",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 300]
+    }
+  ],
+  "connections": {},
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

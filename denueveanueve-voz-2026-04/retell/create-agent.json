@@ -1,0 +1,18 @@
+{
+  "_comment": "YA DESPLEGADO -> agent_id: agent_b30c174da9d247be01206d9685. Referencia de la config creada via API (POST https://api.retellai.com/create-agent). Voz cartesia-Elena (femenina, ES-ES). {{N8N_BASE_URL}} real = https://hat3xia.app.n8n.cloud.",
+  "agent_name": "Noa — Recepcionista De Nueve a Nueve",
+  "response_engine": { "type": "retell-llm", "llm_id": "llm_0ceec9dee59de562abf0f63ab21f" },
+  "voice_id": "cartesia-Elena",
+  "language": "es-ES",
+  "interruption_sensitivity": 0.8,
+  "enable_backchannel": true,
+  "backchannel_frequency": 0.4,
+  "backchannel_words": ["Entendido", "Claro", "Perfecto", "De acuerdo", "Sí"],
+  "ambient_sound": "coffee-shop",
+  "ambient_sound_volume": 0.06,
+  "end_call_after_silence_ms": 20000,
+  "max_call_duration_ms": 600000,
+  "end_call_phrases": ["hasta luego", "que tengas un buen día", "adiós", "hasta pronto"],
+  "webhook_url": "{{N8N_BASE_URL}}/webhook/denueveanueve-post-llamada",
+  "opt_out_sensitive_data_storage": false
+}
