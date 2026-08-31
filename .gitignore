@@ -36,3 +36,9 @@ dist/
 
 # Estado local de la CLI de Supabase (referencia al proyecto enlazado).
 **/supabase/.temp/
+
+# Proyectos de cliente con repositorio propio (ver clients/projects/README.md)
+clients/projects/salon-os/
+clients/projects/interno/
+clients/projects/kairos-admin/
+clients/projects/denueveanueve-staff/

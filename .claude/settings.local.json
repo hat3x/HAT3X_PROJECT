@@ -54,8 +54,6 @@
       "Bash(npm run:*)",
       "WebFetch(domain:hat3x.com)",
       "Bash(npx supabase:*)",
-      "Bash(SUPABASE_ACCESS_TOKEN=sbp_74fc41a042a42c9a181afea716905361bdd89661 npx supabase functions list --project-ref cpocwvedqlxtwazwoyfn)",
-      "Bash(SUPABASE_ACCESS_TOKEN=sbp_74fc41a042a42c9a181afea716905361bdd89661 npx supabase functions deploy retell-webhook --project-ref cpocwvedqlxtwazwoyfn --no-verify-jwt)",
       "Bash(npx tsc *)",
       "PowerShell(Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force; Write-Host \"Killed PID $_\" })",
       "PowerShell(New-Item -ItemType Directory -Force -Path \"C:\\\\Users\\\\josem\\\\Desktop\\\\HAT3X\\\\CLAUDE\\\\HAT3X\\\\supabase\\\\migrations\")",
@@ -121,7 +119,9 @@
       "Read(//c/Users/josem/.claude/projects/c--Users-josem-Desktop-HAT3X-CLAUDE-HAT3X/**)",
       "Bash(python deploy_kairos.py)",
       "Bash(mkdir -p \"c:/Users/josem/Desktop/HAT3X/CLAUDE/HAT3X/clients/projects/mtdi/propuesta\" && echo \"carpeta creada\" && ls -la \"c:/Users/josem/Desktop/HAT3X/CLAUDE/HAT3X/clients/projects/mtdi\")",
-      "Read(//c/Users/josem/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/brainstorming/**)"
+      "Read(//c/Users/josem/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/brainstorming/**)",
+      "Bash(xargs -n1 basename)",
+      "Bash(grep -vE \"\\\\.\\(json|csv\\)$\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\josem\\Desktop\\HAT3X\\CLAUDE\\HAT3X\\clients\\projects\\mtdi"
