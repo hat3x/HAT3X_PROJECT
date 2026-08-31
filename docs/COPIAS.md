@@ -45,9 +45,30 @@ para que la próxima vez no dependa de acordarse.
 
 ## Secretos
 
-Nunca en el repositorio. Ni en `.env`, ni en ficheros de configuración, ni
-dentro de reglas de permisos de herramientas — ahí se coló un token de Supabase
-y estuvo commiteado desde mayo.
+Los `.env` **no** se suben en claro, ni siquiera a un repositorio privado: la
+visibilidad de un repo se cambia con un clic, y en estos ficheros hay siete
+claves `service_role` (saltan el RLS), las de facturación de OpenAI, Anthropic,
+ElevenLabs, Retell y Twilio, y la `DATABASE_URL`.
 
-Si se escapa uno: **revocarlo es lo único que arregla el problema**. Borrarlo del
-fichero no sirve, porque sigue en el historial de git.
+Van cifrados, en un único fichero `secretos.enc` que sí está versionado:
+
+```sh
+./scripts/secretos.sh guardar     # empaqueta los .env y los cifra
+./scripts/secretos.sh restaurar   # los devuelve a su sitio
+./scripts/secretos.sh listar      # ve qué hay dentro, sin escribir nada
+```
+
+En una máquina nueva: clonas, ejecutas `restaurar`, escribes la contraseña y ya
+tienes los 18 `.env` en su carpeta. No hace falta instalar nada — OpenSSL viene
+con Git para Windows.
+
+**Cuando cambies una clave, vuelve a ejecutar `guardar` y commitea** el
+`secretos.enc` nuevo. Si no, la copia se queda vieja.
+
+La contraseña no está en ningún sitio del repositorio, a propósito. Guárdala en
+tu gestor de contraseñas: es lo único que no puede vivir solo en este disco.
+
+### Si se escapa un secreto
+
+**Revocarlo es lo único que arregla el problema.** Borrarlo del fichero no
+sirve: sigue en el historial de git, y quien lo haya copiado ya lo tiene.
