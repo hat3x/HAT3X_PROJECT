@@ -25,6 +25,7 @@ import { usarPerfil } from '@/features/perfil/usar-perfil'
 import { usarFechaDeHoy } from '@/features/dia/usar-fecha-de-hoy'
 import { usarObjetivos } from '@/features/objetivos/usar-objetivos'
 import { usarHabitos } from '@/features/habitos/usar-habitos'
+import { medidasDe } from '@/design/medidas'
 
 // Separador de miles con punto y coma decimal a la española, sin tirar de
 // `Intl`: el soporte de locales en Hermes es irregular entre plataformas, y
@@ -51,25 +52,6 @@ function enLitros(ml: number): string {
 // alguien de un trago, no como se ve la app.
 const VASOS_ML = [250, 500] as const
 
-
-/**
- * Las medidas originales de una imagen empaquetada.
- *
- * `Image.resolveAssetSource` NO existe en React Native Web —revienta con «is
- * not a function»—, y en web el `require` de una imagen ya devuelve un objeto
- * con `width` y `height`. Se mira primero ahí y solo se llama al método cuando
- * existe. Sin la proporción no se puede dar ancho sin deformar el arte, así que
- * el último recurso es un 2:1, que es la forma de casi todos estos botones.
- */
-function medidasDe(fuente: ImageSourcePropType): { width: number; height: number } {
-  if (typeof fuente === 'object' && fuente !== null && !Array.isArray(fuente)) {
-    const posible = fuente as { width?: number; height?: number }
-    if (posible.width && posible.height) return { width: posible.width, height: posible.height }
-  }
-  const resuelto = Image.resolveAssetSource?.(fuente)
-  if (resuelto?.width && resuelto?.height) return { width: resuelto.width, height: resuelto.height }
-  return { width: 2, height: 1 }
-}
 
 /**
  * Un botón que ES una imagen, con su texto ya pintado dentro.

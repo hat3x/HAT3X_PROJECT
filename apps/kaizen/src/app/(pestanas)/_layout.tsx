@@ -27,6 +27,31 @@ const SOBRESALIENTE_MAS = 18
 function BotonAnadir() {
   const t = useTema()
   const router = useRouter()
+  const { width } = useWindowDimensions()
+
+  // Con arte propio, el botón ES la bola: se recorta en círculo para que las
+  // esquinas del recorte no tapen el aro que la barra ya trae dibujado. El
+  // diámetro sale del alto del arte de la barra, no de LADO_MAS: la bola debe
+  // llenar el aro central de la ilustración, y ese aro escala con la barra.
+  const arte = t.decoracion.botonMas
+  if (arte && t.superficie.barraInferior.tipo === 'recurso') {
+    const diametro = altoBarra(t, width) * 0.72
+    return (
+      <Pressable
+        onPress={() => router.push('/anadir')}
+        accessibilityRole="button"
+        accessibilityLabel="Añadir registro"
+        style={{ width: diametro, height: diametro, borderRadius: diametro / 2, overflow: 'hidden' }}
+      >
+        <Image
+          source={arte}
+          resizeMode="cover"
+          style={{ width: '100%', height: '100%' }}
+        />
+      </Pressable>
+    )
+  }
+
   return (
     <Pressable
       onPress={() => router.push('/anadir')}
@@ -53,11 +78,10 @@ export default function LayoutPestanas() {
   const margen = useContext(SafeAreaInsetsContext)
 
   // Con arte, el alto sale de la proporción de la imagen; sin arte, se deja el
-  // de react-navigation. Se suma el margen inferior del dispositivo porque la
-  // barra va en `position: absolute` y nadie lo hace por ella.
+  // de react-navigation.
   const alto = altoBarra(t, width)
-  const conArte = alto !== ALTO_BARRA_SIN_ARTE
-  const altoTotal = conArte ? alto + (margen?.bottom ?? 0) : undefined
+  const barra = t.superficie.barraInferior
+  const conArte = alto !== ALTO_BARRA_SIN_ARTE && barra.tipo === 'recurso'
 
   // El contenido va DENTRO de los huecos del arte, que empiezan al 19% del alto
   // de la imagen y acaban al 79%. Sin este empujón, react-navigation coloca
@@ -75,7 +99,14 @@ export default function LayoutPestanas() {
           position: 'absolute',
           borderTopWidth: 0,
           backgroundColor: 'transparent',
-          ...(altoTotal ? { height: altoTotal, paddingBottom: margen?.bottom ?? 0 } : null),
+          // La barra mide EXACTAMENTE el arte y flota por encima del margen
+          // seguro, no lo absorbe. Sumándoselo, el arte se estiraba hasta esa
+          // altura y los huecos bajaban: los iconos se salían de sus marcos.
+          // Y rellenar esa franja con un color del tema tampoco vale —todos
+          // los que hay son semitransparentes y se veía el Home por debajo de
+          // la barra. Flotando, bajo la barra queda el fondo ilustrado, que es
+          // lo que el arte espera.
+          ...(conArte ? { height: alto, bottom: margen?.bottom ?? 0, paddingBottom: 0 } : null),
         },
         ...(dentroDelHueco ? { tabBarItemStyle: dentroDelHueco } : null),
         tabBarBackground: () => (
