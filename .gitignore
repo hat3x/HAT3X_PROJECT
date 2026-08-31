@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment — nunca versionar secretos
+.env
+.env.*
+!.env.example
