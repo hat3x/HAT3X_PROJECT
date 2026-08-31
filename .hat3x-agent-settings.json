@@ -1,0 +1,1 @@
+{"permissions":{"deny":["Bash(vercel*)","Bash(npx vercel*)","Bash(netlify*)","Bash(git push*)","Bash(gh release*)","WebFetch"]}}
