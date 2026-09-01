@@ -95,6 +95,22 @@ vi.mock("@/hooks/use-odontogram", () => ({
   }),
 }));
 
+// El odontograma monta `ToothBudgetCard` al seleccionar un diente, y esa
+// tarjeta consulta lo presupuestado. Aquí no hay QueryClientProvider —estos
+// tests son del cableado del gráfico, no del presupuesto—, así que se stubea
+// vacío: sin líneas, la tarjeta no pinta nada y no estorba.
+vi.mock("@/hooks/use-treatment", () => ({
+  useToothBudget: () => ({
+    data: { items: [], sales: {} },
+    isPending: false,
+    isError: false,
+  }),
+}));
+
+vi.mock("@/hooks/use-services", () => ({
+  useServices: () => ({ data: [], isPending: false, isError: false }),
+}));
+
 import { OdontogramChart } from "@/components/dental/odontogram-chart";
 
 afterEach(() => {

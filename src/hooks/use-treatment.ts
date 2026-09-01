@@ -12,7 +12,7 @@ import {
   type AddPlanItemInput,
   type CreatePlanInput,
 } from "@/app/(dashboard)/planes/actions";
-import { fetchPlan, fetchPlans, treatmentKeys } from "@/lib/queries/treatment";
+import { fetchPlan, fetchPlans, fetchToothBudget, treatmentKeys } from "@/lib/queries/treatment";
 import type { PlanItemState } from "@/types/database";
 
 /** Lista de planes de tratamiento de un paciente, más recientes primero. */
@@ -30,6 +30,19 @@ export function usePlan(salonId: string, planId: string) {
     queryKey: treatmentKeys.plan(salonId, planId),
     queryFn: () => fetchPlan(salonId, planId),
     enabled: planId.length > 0,
+  });
+}
+
+/**
+ * Lo presupuestado a un paciente diente a diente, de todos sus planes. Es lo
+ * que el odontograma necesita: la pregunta va del diente al presupuesto, no al
+ * revés.
+ */
+export function useToothBudget(salonId: string, customerId: string) {
+  return useQuery({
+    queryKey: treatmentKeys.toothBudget(salonId, customerId),
+    queryFn: () => fetchToothBudget(salonId, customerId),
+    enabled: customerId.length > 0,
   });
 }
 

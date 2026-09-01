@@ -12,6 +12,8 @@ export const treatmentKeys = {
     [...treatmentKeys.all(salonId), "plans", customerId] as const,
   plan: (salonId: string, planId: string) =>
     [...treatmentKeys.all(salonId), "plan", planId] as const,
+  toothBudget: (salonId: string, customerId: string) =>
+    [...treatmentKeys.all(salonId), "tooth-budget", customerId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -118,6 +120,74 @@ export async function fetchPlan(
   }
 
   return { plan, phases: phases ?? [], items: items ?? [], sales };
+}
+
+/**
+ * Lo presupuestado a un paciente **diente a diente**, de todos sus planes.
+ *
+ * ── POR QUÉ NO SIRVE `fetchPlan` ────────────────────────────────────────────
+ * `fetchPlan` responde a "qué lleva ESTE plan". Desde el odontograma la
+ * pregunta es la inversa y no la puede contestar: al pulsar el 26 el dentista
+ * quiere ver lo presupuestado en ese diente **venga del plan que venga** — un
+ * paciente puede tener el plan de la endodoncia de marzo y el de la corona de
+ * septiembre, y en la boca son el mismo diente.
+ *
+ * Solo trae líneas con `fdi_code`: lo que no está en un diente concreto (una
+ * limpieza, una ortodoncia) no se puede pintar en el odontograma.
+ */
+export interface ToothBudget {
+  items: PlanItem[];
+  /** Igual que en `TreatmentPlanDetail`: para derivar el estado de cobro. */
+  sales: TreatmentPlanDetail["sales"];
+}
+
+export async function fetchToothBudget(
+  salonId: string,
+  customerId: string,
+): Promise<ToothBudget> {
+  const supabase = createClient();
+
+  // `treatment_plan!inner(customer_id)` filtra por paciente sin traerse antes
+  // la lista de planes: una consulta en vez de dos.
+  const { data: items, error: itemsError } = await supabase
+    .from("plan_item")
+    .select("*, treatment_plan!inner(customer_id)")
+    .eq("salon_id", salonId)
+    .eq("treatment_plan.customer_id", customerId)
+    .not("fdi_code", "is", null)
+    .order("created_at", { ascending: true });
+
+  if (itemsError !== null) throw new Error(itemsError.message);
+
+  const saleIds = [
+    ...new Set(
+      (items ?? []).map((i) => i.pos_sale_id).filter((id): id is string => id !== null),
+    ),
+  ];
+
+  const sales: ToothBudget["sales"] = {};
+  if (saleIds.length > 0) {
+    const { data: ventas, error: ventasError } = await supabase
+      .from("pos_sales")
+      .select("id, status, pos_invoices(id)")
+      .eq("salon_id", salonId)
+      .in("id", saleIds);
+
+    if (ventasError !== null) throw new Error(ventasError.message);
+
+    for (const v of ventas ?? []) {
+      sales[v.id] = {
+        status: v.status as SaleStatus,
+        hasInvoice: Array.isArray(v.pos_invoices) && v.pos_invoices.length > 0,
+      };
+    }
+  }
+
+  // El join deja `treatment_plan` colgando de cada fila; fuera, que no es parte
+  // de `PlanItem` y ensuciaría todo lo que consuma esto.
+  const limpios = (items ?? []).map(({ treatment_plan: _plan, ...item }) => item as PlanItem);
+
+  return { items: limpios, sales };
 }
 
 // ---------------------------------------------------------------------------

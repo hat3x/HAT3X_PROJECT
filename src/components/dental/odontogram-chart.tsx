@@ -16,6 +16,7 @@ import { useOdontogramFindings, useAddFinding } from "@/hooks/use-odontogram";
 import type { OdontogramFindingInsert } from "@/types/database";
 import { ToothSvg } from "./tooth-svg";
 import { FindingPanel } from "./finding-panel";
+import { ToothBudgetCard } from "./tooth-budget-card";
 import { EvolutionDatePicker } from "./evolution-date-picker";
 
 // ---------------------------------------------------------------------------
@@ -325,6 +326,19 @@ export function OdontogramChart({
           onClose={() => setSelectedFdi(null)}
           onSave={handleSave}
           isSaving={addFinding.isPending}
+        />
+      )}
+
+      {/* Lo presupuestado en ese diente, de todos sus planes. Se muestra
+          también en modo histórico: el presupuesto de un diente no depende de
+          la fecha que se esté mirando, y ahí no se edita nada. La tarjeta se
+          devuelve a sí misma como `null` si el diente no tiene nada. */}
+      {selectedFdi !== null && clinicalRecordId.length > 0 && (
+        <ToothBudgetCard
+          key={`presupuesto-${selectedFdi}`}
+          salonId={salonId}
+          clinicalRecordId={clinicalRecordId}
+          fdi={selectedFdi}
         />
       )}
 
