@@ -16,6 +16,29 @@ GitHub es la copia en la nube. Seis repositorios, todos privados:
 Los cuatro últimos viven anidados dentro de `clients/projects/`. Ver
 [`clients/projects/README.md`](../clients/projects/README.md).
 
+## Montar el proyecto en una máquina nueva
+
+```sh
+git clone https://github.com/hat3x/HAT3X_PROJECT.git
+cd HAT3X_PROJECT
+scripts\secretos.bat restaurar     # o ./scripts/secretos.sh restaurar
+npm install                        # en cada app que vayas a tocar
+```
+
+Los cuatro proyectos de cliente con repositorio propio se clonan aparte — ver
+[`clients/projects/README.md`](../clients/projects/README.md).
+
+### Lo que un `clone` NO te trae
+
+| Qué | Por qué | Cómo recuperarlo |
+|---|---|---|
+| `node_modules/`, `dist/`, `.next/` | Se regeneran | `npm install` |
+| Los `.env` | Nunca en claro en el repositorio | `secretos.bat restaurar` |
+| `apps/kaizen/assets/skins/` y `personal.skin.ts` | El arte de la piel personal **no puede** entrar en el repositorio ni en el paquete público | `D:\BACKUP-HAT3X\<fecha>\kaizen_piel-personal.tar.gz` |
+| `apps/kaizen/capturas/` | Capturas generadas | `node scripts/captura.mjs` |
+
+Todo lo demás —incluidas las specs de `.superpowers/sdd/`— sí viene en el clone.
+
 ## El push es automático
 
 Hay un hook `post-commit` en `~/.githooks/post-commit`, compartido por los seis
