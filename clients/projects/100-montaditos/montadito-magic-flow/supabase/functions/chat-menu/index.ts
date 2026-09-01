@@ -51,7 +51,9 @@ Deno.serve(async (req) => {
     );
     const desayunoAbierto = madridHour >= 10 && madridHour < 12;
 
-    // Horario de cocina (Madrid): L-J y D cierra 23:30; V y S cierra 00:30.
+    // Horarios (Madrid) — deben coincidir con src/lib/kitchen-hours.ts:
+    //   COCINA:  L-J y D cierra 22:30; V y S cierra 23:30.
+    //   BEBIDAS: L-J y D cierra 23:00; V y S cierra 24:00 (cierre del local).
     const mParts = new Intl.DateTimeFormat("en-GB", {
       timeZone: "Europe/Madrid", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false,
     }).formatToParts(new Date());
@@ -60,15 +62,10 @@ Deno.serve(async (req) => {
     const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
     const dow = dowMap[wd] ?? 1;
     const minsNow = madridHour * 60 + mm;
-    let cocinaAbierta: boolean;
-    if (minsNow < 360) {
-      const prev = (dow + 6) % 7;
-      cocinaAbierta = prev === 5 || prev === 6 ? minsNow < 30 : false;
-    } else if (dow === 5 || dow === 6) {
-      cocinaAbierta = true;
-    } else {
-      cocinaAbierta = minsNow < 23 * 60 + 30;
-    }
+    const esFinde = dow === 5 || dow === 6; // viernes y sábado
+    const abierto = minsNow >= 6 * 60; // antes de las 06:00 es madrugada: cerrado
+    const cocinaAbierta = abierto && minsNow < (esFinde ? 23 * 60 + 30 : 22 * 60 + 30);
+    const bebidasAbierta = abierto && minsNow < (esFinde ? 24 * 60 : 23 * 60);
     const esAperitivoBarra = (n: string) => /aceituna|gilda|cucurucho/i.test(n);
 
     void esAperitivoBarra; // (clasificación disponible si se necesita)
@@ -107,6 +104,7 @@ REGLAS:
 - PROMOCIONES: "5€ La vida tiesa, la vida mejor" — 8 combos distintos, todos por 5€ (con jarra premium +0,50€ si aplica), en la sección "Promociones": Jarra Quijote+Cucurucho+Monty, Montadito Clásico+2 Especiales, 2 Jarras Quijote+Aceitunas, 2 Jarras Sancho, 2 Para Picar (de 2,50€), Coca-Cola+Especial+Aceitunas, Clásico+Especial+MontyCookie, y Jarra Sancho+Cucurucho+Gilda. NO uses [[add:]] para ninguno: dirige siempre al cliente a la sección "Promociones" para elegir sus opciones.
 - CAFÉ E INFUSIONES: disponibles a CUALQUIER hora (ya no hay restricción horaria). Al pedir un café se elige el tipo (Solo, Cortado, Con leche o Bombón) y si se quiere descafeinado, en un selector que se abre en la app; tú puedes recomendarlo con [[add:]] usando su nombre exacto del menú. Las MontyCookies (montaditos dulces #68–#70) cuestan 1,80€.
 - ACEITUNAS: es un aperitivo de barra (1€) con DOS variantes a elegir, "de la abuela" y "manzanilla"; el sabor se escoge en un selector de la app. Se pueden pedir aunque la cocina esté cerrada. Igual que las Gildas, que también tienen variante (boquerón o anchoa).
+- LOCAL: ${bebidasAbierta ? "abierto ahora mismo." : "CERRADO del todo (ya ha cerrado también la barra). Puedes INFORMAR de la carta, pero NO uses la etiqueta [[add:]] para NADA: hoy ya no se puede pedir. Avisa de que volvemos mañana e indica el horario: cocina hasta las 22:30 (23:30 viernes y sábados) y bebidas hasta las 23:00 (24:00 viernes y sábados)."}
 - COCINA: ${cocinaAbierta ? "abierta ahora mismo." : "CERRADA ahora mismo. SÍ puedes INFORMAR sobre cualquier producto del menú (qué montaditos hay, ingredientes, etc.), pero NO uses la etiqueta [[add:]] para NADA que vaya a cocina (montaditos, raciones, ensaladas, montyruedas, nachos, patatas, alitas, croquetas, promos, desayunos…), porque ahora no se pueden pedir. Avisa de que la cocina ya ha cerrado y que en este momento SOLO se pueden PEDIR bebidas y los 3 aperitivos de barra (aceitunas, cucurucho de patatas, gildas) — para esos sí puedes usar [[add:]]."}
 - Si pregunta por algo que no está en la carta, dilo claramente.
 - Mantén el texto BREVE (1-3 frases). NO escribas listas de productos en el texto, los productos se mostrarán como botones aparte.

@@ -14,7 +14,7 @@ import { DesayunoComboCard } from '@/components/client/DesayunoComboCard';
 import { SECTION_IMAGES } from '@/lib/section-images';
 import { useQuery } from '@tanstack/react-query';
 import { PROMO_NACHOS_PRODUCT_ID } from '@/lib/promo';
-import { isCocinaOpen } from '@/lib/kitchen-hours';
+import { isCocinaOpen, isBebidasOpen, MSG_LOCAL_CERRADO } from '@/lib/kitchen-hours';
 import { SectionTabs } from '@/components/client/SectionTabs';
 import { ProductCard } from '@/components/client/ProductCard';
 import { MontyRuedaCard } from '@/components/client/MontyRuedaCard';
@@ -497,6 +497,13 @@ const ClientApp = () => {
 
       const hasBebidas = cart.items.some((i) => lineDestino(i) === 'bebidas');
       const hasCocina = cart.items.some((i) => lineDestino(i) === 'cocina' || !!i.extraCocina);
+
+      // Cierre del local: cuando cierran las bebidas ya no se admite ningún pedido.
+      if (!isBebidasOpen()) {
+        toast.error(MSG_LOCAL_CERRADO);
+        setIsCheckingOut(false);
+        return;
+      }
 
       // Horario de cocina: si está cerrada, no se puede crear un pedido con comida de cocina.
       if (hasCocina && !isCocinaOpen()) {

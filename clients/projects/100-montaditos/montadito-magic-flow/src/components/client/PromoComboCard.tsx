@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Plus, Tag, Star, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCartStore, useAgeGate } from '@/lib/cart-store';
-import { isCocinaOpen } from '@/lib/kitchen-hours';
+import { isCocinaOpen, isBebidasOpen, MSG_LOCAL_CERRADO } from '@/lib/kitchen-hours';
 import { useAgotados } from '@/hooks/use-agotados';
 import { useProducts } from '@/hooks/use-menu';
 import { MONTADITO_IMAGES_BY_NUMERO, PRODUCT_IMAGES } from '@/lib/product-images';
@@ -77,6 +77,10 @@ export function PromoComboCard({ product, def, index }: Props) {
   const [seccionSelected, setSeccionSelected] = useState<string[]>([]);
 
   const start = () => {
+    if (!isBebidasOpen()) {
+      toast.error(MSG_LOCAL_CERRADO);
+      return;
+    }
     const necesitaCocina = def.destino === 'cocina' || def.extraCocinaStepIndex !== undefined;
     if (necesitaCocina && !isCocinaOpen()) {
       toast.error('La cocina está cerrada ahora mismo. Este combo incluye comida de cocina.');

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Minus } from 'lucide-react';
 import { toast } from 'sonner';
-import { isCocinaOpen } from '@/lib/kitchen-hours';
+import { isCocinaOpen, isBebidasOpen, MSG_LOCAL_CERRADO } from '@/lib/kitchen-hours';
 import { useCartStore } from '@/lib/cart-store';
 import { getRueda, ruedaComponentes, ruedaAgotada, compLabel, type RuedaMontadito } from '@/lib/ruedas';
 import { RuedaGourmetDialog } from './RuedaGourmetDialog';
@@ -69,6 +69,10 @@ export function MontyRuedaCard({ product, montaditos, isProductoAgotado, index }
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (agotado) return;
+    if (!isBebidasOpen()) {
+      toast.error(MSG_LOCAL_CERRADO);
+      return;
+    }
     if (!isCocinaOpen()) {
       toast.error('La cocina está cerrada ahora mismo. Solo bebidas y aperitivos de barra.');
       return;

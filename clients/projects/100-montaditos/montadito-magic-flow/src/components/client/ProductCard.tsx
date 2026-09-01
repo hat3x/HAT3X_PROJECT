@@ -5,7 +5,7 @@ import { useCartStore, useAgeGate } from '@/lib/cart-store';
 import { useAllergenFilter } from '@/lib/allergen-filter';
 import { getDrinkIcon } from '@/lib/drink-icon';
 import { getDrinkImage } from '@/lib/drink-image';
-import { isCocinaOpen, esAperitivoBarra } from '@/lib/kitchen-hours';
+import { isCocinaOpen, isBebidasOpen, esAperitivoBarra, MSG_LOCAL_CERRADO } from '@/lib/kitchen-hours';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import jarraQuijoteImg from '@/assets/drinks/jarra-quijote.png';
@@ -274,6 +274,10 @@ export function ProductCard({ product, index, variant = 'default', hideAllergens
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (efectivoAgotado) return; // producto agotado: no se puede añadir
+    if (!isBebidasOpen()) {
+      toast.error(MSG_LOCAL_CERRADO);
+      return;
+    }
     if (cocinaCerrada) {
       toast.error('La cocina está cerrada ahora mismo. Solo bebidas y aperitivos de barra.');
       return;

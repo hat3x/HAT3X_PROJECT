@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Plus, Tag, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCartStore, useAgeGate } from '@/lib/cart-store';
-import { isCocinaOpen } from '@/lib/kitchen-hours';
+import { isCocinaOpen, isBebidasOpen, MSG_LOCAL_CERRADO } from '@/lib/kitchen-hours';
 import { PRODUCT_IMAGES } from '@/lib/product-images';
 import { PROMO_JARRAS, promoPrice, type PromoJarra } from '@/lib/promo';
 import {
@@ -40,6 +40,10 @@ export function PromoCard({ product, index, nachosId }: Props) {
   const [first, setFirst] = useState<PromoJarra | null>(null);
 
   const start = () => {
+    if (!isBebidasOpen()) {
+      toast.error(MSG_LOCAL_CERRADO);
+      return;
+    }
     if (!isCocinaOpen()) {
       toast.error('La cocina está cerrada ahora mismo. La promo incluye nachos, no se puede pedir.');
       return;
