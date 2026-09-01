@@ -246,6 +246,7 @@ export function PlanWorkspace({
                 plan={planDetailQuery.data.plan}
                 phases={planDetailQuery.data.phases}
                 items={planDetailQuery.data.items}
+                sales={planDetailQuery.data.sales}
               />
               <AddItemForm
                 salonId={salonId}

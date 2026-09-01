@@ -19,11 +19,13 @@ import type { PlanItem, PlanPhase, TreatmentPlan } from "@/types/database";
 const m = vi.hoisted(() => ({
   transition: { mutate: vi.fn(), isPending: false },
   del: { mutate: vi.fn(), isPending: false },
+  sale: { mutate: vi.fn(), isPending: false },
 }));
 
 vi.mock("@/hooks/use-treatment", () => ({
   useTransitionPlanItem: () => m.transition,
   useDeletePlanItem: () => m.del,
+  useCreateSaleFromPlanItems: () => m.sale,
 }));
 
 vi.mock("@/hooks/use-services", () => ({
@@ -41,6 +43,8 @@ beforeEach(() => {
   m.transition.isPending = false;
   m.del.mutate = vi.fn();
   m.del.isPending = false;
+  m.sale.mutate = vi.fn();
+  m.sale.isPending = false;
 });
 
 afterEach(() => {
@@ -289,5 +293,122 @@ describe("PlanDetail · fases, items y presupuesto", () => {
       "item-1",
       expect.objectContaining({ onError: expect.any(Function) }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// El eje de COBRO
+//
+// Lo que se prueba aquí no es que se pinte un badge: es que la pantalla no
+// ofrezca cobrar dos veces lo mismo. El estado de cobro se DERIVA de la venta
+// enganchada a cada línea, así que un ticket anulado tiene que devolver la
+// línea al mercado sin que nadie desenganche nada a mano.
+// ---------------------------------------------------------------------------
+
+/** Línea ya enganchada a una venta. */
+const ITEM_EN_TICKET = planItem({
+  id: "item-3",
+  phase_id: "phase-1",
+  description: "Corona",
+  quantity: 1,
+  unit_price_cents: 30000,
+  line_total_cents: 30000,
+  state: "aceptado",
+  pos_sale_id: "sale-1",
+});
+
+describe("PlanDetail · eje de cobro", () => {
+  it("ofrece casilla solo en las líneas que no han pasado por caja", () => {
+    render(
+      createElement(PlanDetail, {
+        salonId: "salon-1",
+        plan: treatmentPlan(),
+        phases: [PHASE_1],
+        items: [ITEM_PROPUESTO, ITEM_EN_TICKET],
+        sales: { "sale-1": { status: "open", hasInvoice: false } },
+      }),
+    );
+
+    expect(
+      within(itemRow("Empaste composite")).queryByRole("checkbox"),
+    ).toBeInTheDocument();
+    expect(within(itemRow("Corona")).queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("etiqueta la línea que espera cobro en un ticket abierto", () => {
+    render(
+      createElement(PlanDetail, {
+        salonId: "salon-1",
+        plan: treatmentPlan(),
+        phases: [PHASE_1],
+        items: [ITEM_EN_TICKET],
+        sales: { "sale-1": { status: "open", hasInvoice: false } },
+      }),
+    );
+
+    expect(within(itemRow("Corona")).getByText("Pendiente de cobrar")).toBeInTheDocument();
+  });
+
+  it("una venta anulada devuelve la línea a cobrable", () => {
+    render(
+      createElement(PlanDetail, {
+        salonId: "salon-1",
+        plan: treatmentPlan(),
+        phases: [PHASE_1],
+        items: [ITEM_EN_TICKET],
+        sales: { "sale-1": { status: "voided", hasInvoice: false } },
+      }),
+    );
+
+    expect(within(itemRow("Corona")).getByRole("checkbox")).toBeInTheDocument();
+  });
+
+  it("sin selección, el botón de pasar a caja está deshabilitado", () => {
+    render(
+      createElement(PlanDetail, {
+        salonId: "salon-1",
+        plan: treatmentPlan(),
+        phases: [PHASE_1],
+        items: [ITEM_PROPUESTO],
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: /Pasar a caja/ })).toBeDisabled();
+  });
+
+  it("al marcar una línea y pulsar, manda solo esos ids a la mutación", () => {
+    render(
+      createElement(PlanDetail, {
+        salonId: "salon-1",
+        plan: treatmentPlan(),
+        phases: [PHASE_1],
+        items: [ITEM_PROPUESTO, ITEM_EN_CURSO],
+      }),
+    );
+
+    fireEvent.click(within(itemRow("Empaste composite")).getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /Pasar a caja/ }));
+
+    expect(m.sale.mutate).toHaveBeenCalledTimes(1);
+    expect(m.sale.mutate).toHaveBeenCalledWith(
+      ["item-1"],
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+  });
+
+  it("reparte los importes del plan por estado de cobro", () => {
+    render(
+      createElement(PlanDetail, {
+        salonId: "salon-1",
+        plan: treatmentPlan(),
+        phases: [PHASE_1],
+        // 15,00 sin pasar · 300,00 cobrado
+        items: [ITEM_PROPUESTO, ITEM_EN_TICKET],
+        sales: { "sale-1": { status: "completed", hasInvoice: false } },
+      }),
+    );
+
+    expect(statBlock("Sin pasar a caja")).toHaveTextContent("15,00");
+    expect(statBlock("Cobrado")).toHaveTextContent("300,00");
   });
 });

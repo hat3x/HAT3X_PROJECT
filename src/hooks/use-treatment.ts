@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addPlanItem,
   createPlan,
+  createSaleFromPlanItems,
   deletePlan,
   deletePlanItem,
   transitionPlanItem,
@@ -72,6 +73,32 @@ export function useTransitionPlanItem(salonId: string, planId: string) {
   return useMutation({
     mutationFn: async (input: { itemId: string; toState: PlanItemState }) => {
       const result = await transitionPlanItem(input.itemId, input.toState);
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: treatmentKeys.plan(salonId, planId),
+      });
+    },
+  });
+}
+
+/**
+ * Pasa las líneas seleccionadas del presupuesto a un ticket ABIERTO del TPV.
+ *
+ * No cobra: crear el ticket y cobrarlo son dos actos distintos, y el segundo
+ * ocurre en la caja con el paciente delante (ver `createSaleFromPlanItems`).
+ *
+ * Invalida el detalle del plan porque el estado de cobro de cada línea se
+ * DERIVA de la venta a la que queda enganchada — sin refrescar, la pantalla
+ * seguiría ofreciendo "pasar a caja" sobre líneas que ya están en un ticket.
+ */
+export function useCreateSaleFromPlanItems(salonId: string, planId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (itemIds: readonly string[]) => {
+      const result = await createSaleFromPlanItems(itemIds);
       if (!result.ok) throw new Error(result.error);
       return result.data;
     },
