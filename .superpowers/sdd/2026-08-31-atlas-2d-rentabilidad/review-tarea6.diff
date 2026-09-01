@@ -1,0 +1,278 @@
+diff --git a/apps/atlas/MANTENIMIENTO.md b/apps/atlas/MANTENIMIENTO.md
+index abfa383..f8a65f7 100644
+--- a/apps/atlas/MANTENIMIENTO.md
++++ b/apps/atlas/MANTENIMIENTO.md
+@@ -129,6 +129,22 @@ Es el aviso que caza el fichaje que se dejó abierto (una jornada real, o un olv
+ 
+ ---
+ 
++## «La rentabilidad no cuadra»
++
++Antes de sospechar de `calcularMargen`, mira estas cuatro cosas en orden — son las que explican casi todos los descuadres:
++
++1. **El coste de la hora.** `/ajustes/economia` fija el que se usa en un mes **abierto**. Si alguien lo cambió a media pantalla, las horas de todo el mes en curso cambian de golpe, no solo las de a partir de ahora.
++2. **Si el mes está cerrado con otro coste.** Un mes cerrado (`cierres_mes`) tiene su coste **congelado** en el momento del cierre: cambiar `/ajustes/economia` después no lo mueve, a propósito. Si el número no coincide con el coste actual, comprueba si ese mes está cerrado:
++   ```sql
++   select mes, coste_hora, cerrado_en from cierres_mes order by mes desc;
++   ```
++3. **Los tramos abiertos no cuentan.** `rentabilidadDelMes` solo suma fichajes con `fin` (§6.3): un fichaje que sigue abierto no aporta minutos hasta que se cierra, aunque lleve horas corriendo. No es un fallo, es la regla — evita contar un tramo dos veces si se corrige antes de cerrarlo.
++4. **Se calcula con bases, no con totales.** Facturas y gastos entran por su `base` (sin IVA): el IVA no es ingreso ni es coste, solo pasa por caja. Si comparas contra un total con IVA, va a parecer que falta dinero.
++
++**Cómo reabrir un mes:** el botón «Reabrir» de `/dinero/rentabilidad` (`reabrirMesAccion`) borra el cierre de `cierres_mes` para ese mes; a partir de ahí vuelve a seguir el coste vigente en `/ajustes/economia` hasta que se cierre de nuevo. Solo lo puede hacer el propietario.
++
++**`ajustes_economia` es de una fila.** Toda lectura y escritura filtra por `id = 1`; no se crea una fila nueva ni se cambia ese id — no hay «histórico de costes» fuera de lo que ya congelaron los cierres de mes.
++
+ ## «Kairos tiene un salón nuevo y Atlas no lo vigila»
+ 
+ O al revés: se dio de baja un cliente y Atlas sigue alertando de su 404. Lo resuelve el descubridor, que pasa **cada hora al minuto 23**. Si lleva más de eso sin moverse, mira lo que dejó escrito:
+diff --git a/apps/atlas/README.md b/apps/atlas/README.md
+index 8fff190..fba3eb9 100644
+--- a/apps/atlas/README.md
++++ b/apps/atlas/README.md
+@@ -87,6 +87,14 @@ Cada pasada queda escrita en `descubrimientos`, salga bien o mal. Sin eso, uno q
+ 
+ Si falta alguna, la pasada no revienta: lo anota en `descubrimientos` diciendo cuál falta y dónde ponerla. Eso lo decide `src/lib/descubrir/ajustes.ts`.
+ 
++## El dinero: rentabilidad y cierre de mes
++
++`/dinero/rentabilidad` enseña el margen del mes, por cliente y por proyecto: lo facturado, los gastos directos, las horas a su coste y lo que queda. Solo lo ve el propietario. El coste de la hora (y los datos de facturación) se fija en `/ajustes/economia`, una fila única (`ajustes_economia`, `id = 1`) que cualquier cambio sobrescribe para todos los meses abiertos.
++
++**Cerrar un mes** (`cerrarMesAccion`) congela en `cierres_mes` el coste de la hora vigente en ese instante: cambiar el coste después no mueve un mes ya cerrado, así que el histórico no se reescribe con retroactividad. **Reabrirlo** (`reabrirMesAccion`) borra ese cierre y el mes vuelve a seguir el coste actual.
++
++La regla de los dos ejes del margen (`src/lib/rentabilidad/margen.ts`): cliente y proyecto son ejes independientes, cada uno con su propio contador — lo directo de un eje no se reparte en el otro, y lo que no tiene ningún contador va a una línea aparte con nombre honesto, nunca prorrateado.
++
+ ## Arrancar en local
+ 
+ Hace falta Docker en marcha.
+diff --git a/apps/atlas/src/app/clientes/[slug]/page.tsx b/apps/atlas/src/app/clientes/[slug]/page.tsx
+index 2d53713..7760341 100644
+--- a/apps/atlas/src/app/clientes/[slug]/page.tsx
++++ b/apps/atlas/src/app/clientes/[slug]/page.tsx
+@@ -4,8 +4,11 @@ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { obtenerCliente, serviciosDeCliente } from "@/lib/db/clientes";
+ import { estadoDeServicios } from "@/lib/db/servicios-estado";
++import { margenDe } from "@/lib/db/rentabilidad";
+ import { formatearUptime } from "@/lib/uptime/calcular";
++import { mesDe, hoyEnMadrid } from "@/lib/dinero";
+ import { Distintivo } from "@/components/ui/Distintivo";
++import { ResumenMargen } from "@/components/dinero/ResumenMargen";
+ import type { EstadoCheck } from "@/lib/incidencias/maquina";
+ import type { EstadoVisual } from "@/components/ui/Distintivo";
+ 
+@@ -54,6 +57,10 @@ export default async function FichaCliente({
+   ]);
+   if (!cliente) notFound();
+   const verImportes = perfil?.esPropietario ?? false;
++  // No se llama a `margenDe` si no es propietario: se ahorra la consulta, y
++  // RLS la lanzaría igual si se intentase.
++  const mes = mesDe(hoyEnMadrid());
++  const margen = verImportes ? await margenDe(sb, { clienteId: cliente.id }, mes) : null;
+ 
+   // Lo suyo, y cómo está ahora mismo. Es la pregunta que trae a alguien a esta
+   // pantalla: «¿le está pasando algo a este cliente?».
+@@ -194,6 +201,10 @@ export default async function FichaCliente({
+         )}
+       </section>
+ 
++      {margen && (
++        <ResumenMargen fila={margen} mes={mes} costeHoraCentimos={margen.costeHoraCentimos} />
++      )}
++
+       <section className="cristal p-4">
+         <h2
+           className="mb-3 text-xs font-semibold uppercase tracking-wider"
+diff --git a/apps/atlas/src/app/proyectos/[slug]/page.tsx b/apps/atlas/src/app/proyectos/[slug]/page.tsx
+index 90907e2..4aca03d 100644
+--- a/apps/atlas/src/app/proyectos/[slug]/page.tsx
++++ b/apps/atlas/src/app/proyectos/[slug]/page.tsx
+@@ -4,10 +4,13 @@ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { obtenerProyecto } from "@/lib/db/proyectos";
+ import { listarClientes } from "@/lib/db/clientes";
++import { margenDe } from "@/lib/db/rentabilidad";
++import { mesDe, hoyEnMadrid } from "@/lib/dinero";
+ import { Portada } from "@/components/proyectos/Portada";
+ import { Distintivo } from "@/components/ui/Distintivo";
+ import { FormServicio } from "@/components/proyectos/FormServicio";
+ import { FormContrato } from "@/components/proyectos/FormContrato";
++import { ResumenMargen } from "@/components/dinero/ResumenMargen";
+ import { formatearUptime } from "@/lib/uptime/calcular";
+ import type { EstadoCheck } from "@/lib/incidencias/maquina";
+ import type { EstadoVisual } from "@/components/ui/Distintivo";
+@@ -51,6 +54,10 @@ export default async function FichaProyecto({
+   ]);
+   if (!proyecto) notFound();
+   const verImportes = perfil?.esPropietario ?? false;
++  // No se llama a `margenDe` si no es propietario: se ahorra la consulta, y
++  // RLS la lanzaría igual si se intentase.
++  const mes = mesDe(hoyEnMadrid());
++  const margen = verImportes ? await margenDe(sb, { proyectoId: proyecto.id }, mes) : null;
+   // A los formularios solo viaja lo que necesitan para poblar un desplegable.
+   const elegibles = clientes.map((c) => ({ id: c.id, nombre: c.nombre }));
+   const enProduccion =
+@@ -183,6 +190,10 @@ export default async function FichaProyecto({
+             )}
+           </section>
+ 
++          {margen && (
++            <ResumenMargen fila={margen} mes={mes} costeHoraCentimos={margen.costeHoraCentimos} />
++          )}
++
+           {(proyecto.enlaces.length > 0 || proyecto.repoUrl) && (
+             <section className="cristal p-4">
+               <h2
+diff --git a/apps/atlas/src/components/dinero/ResumenMargen.tsx b/apps/atlas/src/components/dinero/ResumenMargen.tsx
+new file mode 100644
+index 0000000..5552d04
+--- /dev/null
++++ b/apps/atlas/src/components/dinero/ResumenMargen.tsx
+@@ -0,0 +1,34 @@
++// src/components/dinero/ResumenMargen.tsx
++import Link from "next/link";
++import { formatear } from "@/lib/dinero";
++import { formatearMinutos } from "@/lib/horas/tramos";
++import type { FilaMargen } from "@/lib/rentabilidad/margen";
++
++/**
++ * El dinero del mes en la ficha (§8): lo que se quiere tener delante justo
++ * antes de llamar. Solo se monta para el propietario: quien lo renderiza ya
++ * lo ha comprobado, y RLS lo garantiza igualmente.
++ */
++export function ResumenMargen({ fila, mes, costeHoraCentimos }: { fila: FilaMargen; mes: string; costeHoraCentimos: number }) {
++  const celda = (t: string, v: string, rojo = false) => (
++    <div>
++      <div className="text-[11px] uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>{t}</div>
++      <div className="font-semibold tabular-nums" style={rojo ? { color: "var(--estado-caido)" } : undefined}>{v}</div>
++    </div>
++  );
++  return (
++    <section className="cristal p-4">
++      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Este mes</h2>
++      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
++        {celda("Facturado", formatear(fila.facturadoCentimos))}
++        {celda("Gastos directos", formatear(fila.gastosCentimos))}
++        {celda("Horas", `${formatearMinutos(fila.minutos)} · ${formatear(fila.horasCentimos)}`)}
++        {celda("Margen", formatear(fila.margenCentimos), fila.margenCentimos < 0)}
++      </div>
++      <p className="mt-2 text-xs" style={{ color: "var(--texto-tenue)" }}>
++        {costeHoraCentimos === 0 ? "Sin coste de la hora configurado: las horas cuentan cero. " : ""}
++        <Link href={`/dinero/rentabilidad?mes=${mes}`} className="underline">Ver el mes entero →</Link>
++      </p>
++    </section>
++  );
++}
+diff --git a/apps/atlas/src/lib/db/acciones-economia.ts b/apps/atlas/src/lib/db/acciones-economia.ts
+index 7d34820..bf4d625 100644
+--- a/apps/atlas/src/lib/db/acciones-economia.ts
++++ b/apps/atlas/src/lib/db/acciones-economia.ts
+@@ -18,6 +18,10 @@ export async function guardarAjustesEconomia(entrada: EntradaAjustes): Promise<O
+   if (!r.ok) return r;
+   revalidatePath("/ajustes/economia");
+   revalidatePath("/dinero/rentabilidad");
++  // Las fichas leen `margenDe` con el coste vigente: sin esto seguirían
++  // enseñando el margen calculado con el coste anterior hasta su próxima carga.
++  revalidatePath("/clientes", "layout");
++  revalidatePath("/proyectos", "layout");
+   return { ok: true };
+ }
+ 
+@@ -32,6 +36,10 @@ export async function cerrarMesAccion(mes: string): Promise<Ok> {
+   const r = await cerrarMes(sb, mes, ajustes.costeHoraCentimos, Date.now());
+   if (!r.ok) return r;
+   revalidatePath("/dinero/rentabilidad");
++  // Cerrar congela el coste del mes: las fichas también deben dejar de
++  // enseñar el margen con el coste que tenían abierto.
++  revalidatePath("/clientes", "layout");
++  revalidatePath("/proyectos", "layout");
+   return { ok: true };
+ }
+ 
+@@ -40,5 +48,8 @@ export async function reabrirMesAccion(mes: string): Promise<Ok> {
+   const r = await reabrirMes(sb, mes);
+   if (!r.ok) return r;
+   revalidatePath("/dinero/rentabilidad");
++  // Reabrir vuelve al coste actual (§ arriba): mismo motivo para las fichas.
++  revalidatePath("/clientes", "layout");
++  revalidatePath("/proyectos", "layout");
+   return { ok: true };
+ }
+diff --git a/apps/atlas/src/lib/db/rentabilidad.ts b/apps/atlas/src/lib/db/rentabilidad.ts
+index e1ddc28..1f0bccc 100644
+--- a/apps/atlas/src/lib/db/rentabilidad.ts
++++ b/apps/atlas/src/lib/db/rentabilidad.ts
+@@ -13,7 +13,7 @@ import { leerAjustes } from "./ajustes-economia";
+ import { cierreDe, type Cierre } from "./cierres";
+ import { limitesMesMadrid, mesVecino } from "@/lib/dinero";
+ import { minutosDe } from "@/lib/horas/tramos";
+-import { calcularMargen, type Rentabilidad, type FacturaMes, type GastoMes, type TramoMes } from "@/lib/rentabilidad/margen";
++import { calcularMargen, type Rentabilidad, type FacturaMes, type GastoMes, type TramoMes, type FilaMargen } from "@/lib/rentabilidad/margen";
+ 
+ const cent = (n: number) => Math.round(n * 100);
+ 
+@@ -71,3 +71,24 @@ export async function rentabilidadDelMes(
+   const costeHoraCentimos = cerrado ? cerrado.costeHoraCentimos : ajustes.costeHoraCentimos;
+   return { r: calcularMargen({ facturas: facturasMes, gastos: gastosMes, tramos: tramosMes, costeHoraCentimos }), costeHoraCentimos, cerrado };
+ }
++
++/**
++ * La fila de un cliente o de un proyecto en el mes, o ceros si no aparece —
++ * la ficha del cliente/proyecto pide esto, no el mes entero: reutiliza
++ * `rentabilidadDelMes` y busca por id, en vez de duplicar la consulta.
++ */
++export async function margenDe(
++  sb: Sb,
++  eje: { clienteId: string } | { proyectoId: string },
++  mes: string
++): Promise<FilaMargen & { costeHoraCentimos: number; cerrado: boolean }> {
++  const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sb, mes);
++  const filas = "clienteId" in eje ? r.porCliente : r.porProyecto;
++  const id = "clienteId" in eje ? eje.clienteId : eje.proyectoId;
++  // Sin factura, gasto ni tramo ese mes, el id no aparece en la lista: no es
++  // un error, es que no hubo nada que contar, así que ceros y no una excepción.
++  const f = filas.find((x) => x.id === id) ?? { id, nombre: "", facturadoCentimos: 0, gastosCentimos: 0, minutos: 0, horasCentimos: 0, margenCentimos: 0 };
++  // `cerrado` aquí es solo si el mes está cerrado (booleano): la ficha no
++  // necesita el objeto `Cierre` completo, solo saber si el coste está congelado.
++  return { ...f, costeHoraCentimos, cerrado: cerrado !== null };
++}
+diff --git a/apps/atlas/src/tests/db/rentabilidad.test.ts b/apps/atlas/src/tests/db/rentabilidad.test.ts
+index abc049b..3ff5dfd 100644
+--- a/apps/atlas/src/tests/db/rentabilidad.test.ts
++++ b/apps/atlas/src/tests/db/rentabilidad.test.ts
+@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
+ import { Client } from "pg";
+ import { leerAjustes, escribirAjustes, validarAjustes } from "@/lib/db/ajustes-economia";
+ import { cierreDe, cerrarMes, reabrirMes } from "@/lib/db/cierres";
+-import { rentabilidadDelMes } from "@/lib/db/rentabilidad";
++import { rentabilidadDelMes, margenDe } from "@/lib/db/rentabilidad";
+ import type { Database } from "@/types/supabase";
+ 
+ const URL_API = "http://127.0.0.1:54321";
+@@ -153,6 +153,27 @@ describe("rentabilidadDelMes", () => {
+   });
+ });
+ 
++describe("margenDe", () => {
++  it("la fila de un cliente en el mes, con el coste vigente (mes abierto)", async () => {
++    // El test anterior deja el coste en 3000 y MES sin cerrar todavía: el
++    // margen esperado (25000) es el mismo que calcula `rentabilidadDelMes`.
++    const m = await margenDe(sbDuenyo, { clienteId: idCliente }, MES);
++    expect(m.margenCentimos).toBe(25000);
++    expect(m.costeHoraCentimos).toBe(3000);
++    expect(m.cerrado).toBe(false);
++  });
++
++  it("la fila de un proyecto en el mes", async () => {
++    const m = await margenDe(sbDuenyo, { proyectoId: idProyecto }, MES);
++    expect(m.facturadoCentimos).toBe(29000);
++  });
++
++  it("un id que no aparece ese mes devuelve ceros, no un error", async () => {
++    const m = await margenDe(sbDuenyo, { clienteId: "00000000-0000-0000-0000-000000000000" }, MES);
++    expect(m).toMatchObject({ facturadoCentimos: 0, gastosCentimos: 0, minutos: 0, horasCentimos: 0, margenCentimos: 0 });
++  });
++});
++
+ describe("cierres", () => {
+   it("no se cierra el mes en curso ni uno futuro", async () => {
+     const r = await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA);

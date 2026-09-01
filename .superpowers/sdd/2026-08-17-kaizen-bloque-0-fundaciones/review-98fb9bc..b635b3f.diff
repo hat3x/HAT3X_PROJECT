@@ -1,0 +1,491 @@
+# Review package: 98fb9bc..b635b3f
+
+## Commits
+b635b3f fix(kaizen): ola final de arreglos del bloque 0 (arranque, cierre de sesion, cache y mutaciones offline)
+
+## Files changed
+ apps/kaizen/AGENTS.md                             |  6 ++
+ apps/kaizen/src/app/_layout.tsx                   | 20 ++++-
+ apps/kaizen/src/datos/claves-mutacion.ts          | 12 +++
+ apps/kaizen/src/datos/cliente-consultas.ts        | 37 ++++++++-
+ apps/kaizen/src/features/perfil/ajustes.tsx       | 32 ++++++++
+ apps/kaizen/src/features/perfil/borrar-cuenta.tsx |  9 +++
+ apps/kaizen/src/features/perfil/usar-perfil.ts    |  5 ++
+ apps/kaizen/src/layout-raiz.test.tsx              | 97 +++++++++++++++++++++++
+ 8 files changed, 215 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/apps/kaizen/AGENTS.md b/apps/kaizen/AGENTS.md
+index 45d3cf1..e6d06ec 100644
+--- a/apps/kaizen/AGENTS.md
++++ b/apps/kaizen/AGENTS.md
+@@ -21,10 +21,16 @@ El proyecto usa una configuración específica de Jest que **no puede cambiar**
+ **Por qué:** v14 de @testing-library/react-native importa un módulo llamado `test-renderer` (un alias de `react-test-renderer`), pero ese alias no existe en el árbol de dependencias de jest-expo@57. Sin él, Jest falla en tiempo de require con "Cannot find module 'test-renderer'". v13 es stable con jest-expo y no tiene ese requisito. Si futuras tareas necesitan APIs nuevas de v14, habrá que revisar todo el stack de Jest/Expo — no es un cambio puntual.
+ 
+ ### 3. Configuración de Jest dividida (dos ficheros)
+ 
+ **Restricción:** 
+ - Configuración unitaria en `jest.config.js` (preset jest-expo, moduleNameMapper para test-renderer)
+ - Configuración integración en `jest.integracion.config.js` (preset diferente, conn pool PostgreSQL)
+ - NO incrustada en `package.json` (causa conflicto "multiple configurations")
+ 
+ **Por qué:** El `moduleNameMapper` solo es necesario para unitarios (mockea test-renderer), pero rompería las pruebas de integración que hablan con base datos real. Tener dos ficheros evita esa colisión. Jest rechaza múltiples configuraciones simultáneas si una está en package.json y otra en jest.config.js — la solución stable es que SOLO viva en jest.config.js.
++
++### 4. Toda mutación nueva necesita `mutationKey` + `setMutationDefaults`
++
++**Restricción:** cualquier `useMutation()` que escriba datos de usuario debe declarar `mutationKey`, y su `mutationFn` debe registrarse también con `clienteConsultas.setMutationDefaults(clave, { mutationFn })` en `src/datos/cliente-consultas.ts` (o donde se cree el `QueryClient`), de forma síncrona al crearlo — nunca dentro de un componente que se monte después de que `PersistQueryClientProvider` rehidrate el estado persistido.
++
++**Por qué:** el persistidor de la cola offline (`@tanstack/query-async-storage-persister`) guarda una mutación pausada con su `mutationKey`, su `state` y sus metadatos — **nunca la función**. Al rehidratar, `resumePausedMutations()` solo puede reconstruir un `mutationFn` ejecutable si encuentra unos defaults registrados para esa `mutationKey` (`QueryClient.getMutationDefaults`). Sin `mutationKey`, o con el registro llegando tarde, la mutación reconstruida se queda sin función; `resumePausedMutations()` la ejecuta igual, falla con «No mutationFn found», y ese rechazo lo traga un `catch` interno de la propia librería — el cambio se pierde sin ningún aviso en pantalla. Pasó con la única mutación de usuario que había en el bloque 0 (guardar ajustes del perfil) y nadie lo detectó hasta una revisión final expresa: este agujero solo estaba anotado en la bitácora del proceso, no aquí. Que no vuelva a pasar con la siguiente mutación.
+diff --git a/apps/kaizen/src/app/_layout.tsx b/apps/kaizen/src/app/_layout.tsx
+index e9f879b..66611e1 100644
+--- a/apps/kaizen/src/app/_layout.tsx
++++ b/apps/kaizen/src/app/_layout.tsx
+@@ -1,25 +1,41 @@
+-import { Stack, Redirect } from 'expo-router'
++import { Stack, Redirect, Slot } from 'expo-router'
+ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+ import { ProveedorSesion, useSesion } from '@/datos/sesion'
+ import { crearClienteConsultas, persistidor } from '@/datos/cliente-consultas'
+ import { Pantalla } from '@/design/componentes/pantalla'
+ import { ProveedorTemaDelPerfil } from '@/features/perfil/proveedor-tema-del-perfil'
+ 
+ const cliente = crearClienteConsultas()
+ 
+ function Puerta() {
+   const { sesion, cargando } = useSesion()
+   // Nunca `null`: sin nada montado se ve el fondo por defecto de React Native
+   // —blanco— y en una app oscura eso es un fogonazo en cada arranque lento.
+   if (cargando) return <Pantalla />
+-  if (!sesion) return <Redirect href="/acceso" />
++  if (!sesion) {
++    // El layout raíz SIEMPRE tiene que renderizar un navegador de expo-router
++    // para que la ruta a la que redirige pueda montarse. `return <Redirect
++    // .../>` a secas no renderiza ningún navegador: el árbol queda sin
++    // resolver para siempre. Reproducido, no razonado: monta así y el
++    // proceso agota los 4 GB de heap con «Ineffective mark-compacts near
++    // heap limit»; con `<Slot/>` conviviendo con el `<Redirect/>`, verde en
++    // 50 ms. Pasa en el primer arranque sin sesión y justo después de
++    // borrar la cuenta, porque el `signOut()` de esa pantalla dispara esta
++    // misma rama.
++    return (
++      <>
++        <Redirect href="/acceso" />
++        <Slot />
++      </>
++    )
++  }
+   return (
+     <Stack screenOptions={{ headerShown: false }}>
+       <Stack.Screen name="(pestanas)" />
+       <Stack.Screen name="anadir" options={{ presentation: 'modal' }} />
+     </Stack>
+   )
+ }
+ 
+ export default function Raiz() {
+   return (
+diff --git a/apps/kaizen/src/datos/claves-mutacion.ts b/apps/kaizen/src/datos/claves-mutacion.ts
+new file mode 100644
+index 0000000..69a5eb8
+--- /dev/null
++++ b/apps/kaizen/src/datos/claves-mutacion.ts
+@@ -0,0 +1,12 @@
++/**
++ * Claves de las mutaciones de usuario que existen hoy. Vive en su propio
++ * módulo, sin importar nada nativo (AsyncStorage, NetInfo, el `QueryClient`),
++ * para que cualquier hook pueda usarla sin arrastrar `cliente-consultas.ts`
++ * completo a tests que no lo necesitan.
++ *
++ * Toda mutación de usuario nueva necesita su propia clave aquí, más su
++ * `mutationFn` registrado con `setMutationDefaults` en `cliente-consultas.ts`
++ * — ver AGENTS.md, sección de restricciones — o la cola offline no la
++ * reproduce.
++ */
++export const CLAVE_MUTACION_GUARDAR_PERFIL = ['perfil', 'guardar'] as const
+diff --git a/apps/kaizen/src/datos/cliente-consultas.ts b/apps/kaizen/src/datos/cliente-consultas.ts
+index 7a30537..8b2eb09 100644
+--- a/apps/kaizen/src/datos/cliente-consultas.ts
++++ b/apps/kaizen/src/datos/cliente-consultas.ts
+@@ -1,19 +1,54 @@
+ import AsyncStorage from '@react-native-async-storage/async-storage'
+ import NetInfo from '@react-native-community/netinfo'
+ import { QueryClient, onlineManager } from '@tanstack/react-query'
+ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
++import { supabase } from './supabase'
++import { CLAVE_MUTACION_GUARDAR_PERFIL } from './claves-mutacion'
+ 
+ onlineManager.setEventListener((setOnline) =>
+   NetInfo.addEventListener((estado) => setOnline(!!estado.isConnected)),
+ )
+ 
+ export function crearClienteConsultas(): QueryClient {
+-  return new QueryClient({
++  const clienteConsultas = new QueryClient({
+     defaultOptions: {
+       queries: { staleTime: 60_000, gcTime: 1000 * 60 * 60 * 24, retry: 2 },
+       mutations: { retry: 3, networkMode: 'offlineFirst' },
+     },
+   })
++
++  // Debe registrarse aquí, de forma síncrona al crear el cliente, y ANTES de
++  // que `PersistQueryClientProvider` rehidrate el estado persistido (ver
++  // `src/app/_layout.tsx`). Si se registrara dentro de un componente que se
++  // monta después, la rehidratación podría llegar antes y la mutación
++  // reconstruida se quedaría sin función igualmente. Este mutationFn no
++  // puede apoyarse en el `id` de sesión de ningún hook —se ejecuta sin que
++  // ningún componente esté montado, potencialmente tras reabrir la app—, así
++  // que resuelve su propia sesión antes de escribir.
++  clienteConsultas.setMutationDefaults(CLAVE_MUTACION_GUARDAR_PERFIL, {
++    mutationFn: async (cambios: Record<string, unknown>) => {
++      const { data } = await supabase.auth.getSession()
++      const id = data.session?.user.id
++      if (!id) throw new Error('No hay sesión activa para guardar los ajustes.')
++      const { error } = await supabase.from('perfiles').update(cambios).eq('id', id)
++      if (error) throw new Error(error.message)
++    },
++  })
++
++  return clienteConsultas
+ }
+ 
+ export const persistidor = createAsyncStoragePersister({ storage: AsyncStorage })
++
++/**
++ * Purga la caché local de React Query: el estado en memoria (`clear`) y la
++ * copia en disco que escribe el persistidor (`removeClient`). Sin las dos
++ * llamadas, el JSON del perfil anterior —nombre, unidades, zona horaria,
++ * tema— sigue siendo legible en el dispositivo hasta que se reinstale la
++ * app. Se llama en los dos caminos que terminan una sesión: cerrar sesión
++ * desde Ajustes y el `signOut()` que sigue al borrado de cuenta.
++ */
++export async function purgarCacheLocal(clienteConsultas: QueryClient): Promise<void> {
++  clienteConsultas.clear()
++  await persistidor.removeClient()
++}
+diff --git a/apps/kaizen/src/features/perfil/ajustes.tsx b/apps/kaizen/src/features/perfil/ajustes.tsx
+index b454235..fc731ad 100644
+--- a/apps/kaizen/src/features/perfil/ajustes.tsx
++++ b/apps/kaizen/src/features/perfil/ajustes.tsx
+@@ -1,19 +1,22 @@
+ import { useEffect, useState, type ReactNode } from 'react'
+ import { View, Pressable, ScrollView, TextInput } from 'react-native'
+ import { useRouter } from 'expo-router'
++import { useQueryClient } from '@tanstack/react-query'
+ import { Texto } from '@/design/componentes/texto'
+ import { Boton } from '@/design/componentes/boton'
+ import { Pantalla } from '@/design/componentes/pantalla'
+ import { Superficie } from '@/design/componentes/superficie'
+ import { useTema } from '@/design/proveedor'
+ import { TEMAS } from '@/design/temas/indice'
++import { salir } from '@/datos/autenticacion'
++import { purgarCacheLocal } from '@/datos/cliente-consultas'
+ import { usarPerfil } from './usar-perfil'
+ 
+ const UNIDADES = [
+   { clave: 'metrico', titulo: 'Métrico' },
+   { clave: 'imperial', titulo: 'Imperial' },
+ ] as const
+ 
+ // 0-12 y 0-23: mismo rango que exige la base de datos en `corte_dia` y
+ // `hora_silencio` (`supabase/migrations/0001_esquema.sql`). Repetir el rango
+ // aquí no lo duplica de mentira: es el que ve el usuario, y si algún día se
+@@ -106,23 +109,26 @@ function SelectorNumerico({ valores, seleccionado, deshabilitado = false, alSele
+           />
+         ))}
+       </View>
+     </ScrollView>
+   )
+ }
+ 
+ export function Ajustes() {
+   const t = useTema()
+   const router = useRouter()
++  const clienteConsultas = useQueryClient()
+   const { perfil, guardar, guardando, errorAlGuardar } = usarPerfil()
+   const [zonaHoraria, setZonaHoraria] = useState('')
+   const [errorZona, setErrorZona] = useState<string | null>(null)
++  const [cerrandoSesion, setCerrandoSesion] = useState(false)
++  const [errorSesion, setErrorSesion] = useState<string | null>(null)
+ 
+   // Sincroniza el campo con lo que llega del servidor, pero solo mientras el
+   // usuario no está escribiendo: si reescribiéramos en cada render, cualquier
+   // guardado en curso de OTRO control (p.ej. el tema) refrescaría la consulta
+   // ['perfil', id] y borraría lo que la persona estuviera tecleando aquí.
+   useEffect(() => {
+     if (perfil) setZonaHoraria(perfil.zona_horaria)
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [perfil?.zona_horaria])
+ 
+@@ -147,20 +153,36 @@ export function Ajustes() {
+   function confirmarZonaHoraria() {
+     if (!perfil || zonaHoraria === perfil.zona_horaria) return
+     if (!esZonaValida(zonaHoraria)) {
+       setErrorZona('Esa zona horaria no existe. Revisa cómo la has escrito.')
+       return
+     }
+     setErrorZona(null)
+     guardar({ zona_horaria: zonaHoraria })
+   }
+ 
++  async function cerrarSesion() {
++    setCerrandoSesion(true)
++    setErrorSesion(null)
++    const { error } = await salir()
++    if (error) {
++      setErrorSesion(error)
++      setCerrandoSesion(false)
++      return
++    }
++    // El `signOut()` de dentro de `salir()` ya ha disparado la redirección a
++    // `/acceso` desde la raíz de la app (ver `src/app/_layout.tsx`); purgar
++    // aquí evita que el JSON del perfil —nombre, unidades, zona horaria,
++    // tema— sobreviva en el disco del dispositivo a la sesión que lo guardó.
++    await purgarCacheLocal(clienteConsultas)
++  }
++
+   function detectarZonaHoraria() {
+     // Lo que devuelve `Intl` en este dispositivo es, por construcción, una
+     // zona que el propio `Intl` acepta: no hace falta validarla.
+     const detectada = Intl.DateTimeFormat().resolvedOptions().timeZone
+     setZonaHoraria(detectada)
+     setErrorZona(null)
+     guardar({ zona_horaria: detectada })
+   }
+ 
+   return (
+@@ -234,15 +256,25 @@ export function Ajustes() {
+                 key={nombre}
+                 titulo={etiquetaTema(nombre)}
+                 seleccionado={perfil.tema === nombre}
+                 deshabilitado={guardando}
+                 alPulsar={() => guardar({ tema: nombre })}
+               />
+             ))}
+           </View>
+         </Seccion>
+ 
++        {errorSesion && (
++          <Texto variante="tenue" style={{ color: t.color.peligro }}>{errorSesion}</Texto>
++        )}
++        <Boton
++          titulo={cerrandoSesion ? 'Cerrando sesión…' : 'Cerrar sesión'}
++          tono="secundario"
++          deshabilitado={cerrandoSesion}
++          alPulsar={cerrarSesion}
++        />
++
+         <Boton titulo="Borrar cuenta" tono="peligro" alPulsar={() => router.push('/borrar-cuenta')} />
+       </ScrollView>
+     </Pantalla>
+   )
+ }
+diff --git a/apps/kaizen/src/features/perfil/borrar-cuenta.tsx b/apps/kaizen/src/features/perfil/borrar-cuenta.tsx
+index cd9c5df..1e9e95d 100644
+--- a/apps/kaizen/src/features/perfil/borrar-cuenta.tsx
++++ b/apps/kaizen/src/features/perfil/borrar-cuenta.tsx
+@@ -1,28 +1,31 @@
+ import { useState } from 'react'
+ import { TextInput } from 'react-native'
++import { useQueryClient } from '@tanstack/react-query'
+ import { Texto } from '@/design/componentes/texto'
+ import { Boton } from '@/design/componentes/boton'
+ import { Pantalla } from '@/design/componentes/pantalla'
+ import { useTema } from '@/design/proveedor'
+ import { supabase } from '@/datos/supabase'
++import { purgarCacheLocal } from '@/datos/cliente-consultas'
+ 
+ const PALABRA_CONFIRMACION = 'BORRAR'
+ 
+ /**
+  * A diferencia de borrar un registro (que va sin confirmación y con
+  * «deshacer»), esto es irreversible y no tiene deshacer: por eso exige
+  * escribir la palabra exacta antes de habilitar el botón, en vez del patrón
+  * habitual de esta app.
+  */
+ export function BorrarCuenta() {
+   const t = useTema()
++  const clienteConsultas = useQueryClient()
+   const [confirmacion, setConfirmacion] = useState('')
+   const [error, setError] = useState<string | null>(null)
+   const [borrando, setBorrando] = useState(false)
+ 
+   const habilitado = confirmacion === PALABRA_CONFIRMACION && !borrando
+ 
+   async function confirmar() {
+     if (!habilitado) return
+     setBorrando(true)
+     setError(null)
+@@ -38,20 +41,26 @@ export function BorrarCuenta() {
+     // saber nada de navegación. Si esto falla, la cuenta ya está borrada de
+     // todos modos: no es el mismo error que el de arriba, y sin este aviso
+     // la pantalla se quedaría en «Borrando…» para siempre sin decir nada.
+     try {
+       await supabase.auth.signOut()
+     } catch {
+       setError(
+         'Tu cuenta se ha borrado, pero no hemos podido cerrar la sesión en este dispositivo. Cierra la app para completar el proceso.',
+       )
+       setBorrando(false)
++    } finally {
++      // La cuenta ya está borrada en el servidor tanto si `signOut()` ha
++      // funcionado como si no: purgar aquí evita que el JSON del perfil
++      // borrado —nombre, unidades, zona horaria, tema— siga siendo legible
++      // en el dispositivo hasta que se reinstale la app.
++      await purgarCacheLocal(clienteConsultas)
+     }
+   }
+ 
+   const campo = {
+     borderWidth: 1, borderColor: t.color.borde, borderRadius: t.radio.boton,
+     padding: t.espaciado[2], color: t.color.texto,
+   }
+ 
+   return (
+     <Pantalla style={{ padding: t.espaciado[5], gap: t.espaciado[2] }}>
+diff --git a/apps/kaizen/src/features/perfil/usar-perfil.ts b/apps/kaizen/src/features/perfil/usar-perfil.ts
+index 45b51fa..acc0225 100644
+--- a/apps/kaizen/src/features/perfil/usar-perfil.ts
++++ b/apps/kaizen/src/features/perfil/usar-perfil.ts
+@@ -1,13 +1,14 @@
+ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+ import { supabase } from '@/datos/supabase'
+ import { useSesion } from '@/datos/sesion'
++import { CLAVE_MUTACION_GUARDAR_PERFIL } from '@/datos/claves-mutacion'
+ 
+ export type Perfil = {
+   id: string
+   nombre: string
+   unidades: string
+   zona_horaria: string
+   corte_dia: number
+   hora_silencio: number
+   tema: string
+ }
+@@ -21,20 +22,24 @@ export function usarPerfil() {
+     queryKey: ['perfil', id],
+     enabled: !!id,
+     queryFn: async () => {
+       const { data, error } = await supabase.from('perfiles').select('*').single()
+       if (error) throw new Error(error.message)
+       return data as Perfil
+     },
+   })
+ 
+   const mutacion = useMutation({
++    // Misma clave que el default registrado en `crearClienteConsultas`: sin
++    // ella, una mutación pausada en modo avión se persiste sin forma de
++    // recuperar su función al rehidratar (ver AGENTS.md).
++    mutationKey: CLAVE_MUTACION_GUARDAR_PERFIL,
+     mutationFn: async (cambios: Partial<Perfil>) => {
+       const { error } = await supabase.from('perfiles').update(cambios).eq('id', id!)
+       if (error) throw new Error(error.message)
+     },
+     onSuccess: () => clienteConsultas.invalidateQueries({ queryKey: ['perfil', id] }),
+   })
+ 
+   return {
+     perfil: consulta.data ?? null,
+     guardar: (cambios: Partial<Perfil>) => mutacion.mutateAsync(cambios),
+diff --git a/apps/kaizen/src/layout-raiz.test.tsx b/apps/kaizen/src/layout-raiz.test.tsx
+new file mode 100644
+index 0000000..571cd0c
+--- /dev/null
++++ b/apps/kaizen/src/layout-raiz.test.tsx
+@@ -0,0 +1,97 @@
++import { screen, waitFor } from '@testing-library/react-native'
++import { renderRouter } from 'expo-router/testing-library'
++
++// Monta el layout raíz DE VERDAD —vía `renderRouter`, que construye el árbol
++// de rutas real de `src/app` sobre `ExpoRoot`— en vez de una pantalla suelta
++// como hace el resto del suite. Es el hueco que dejó escapar el hallazgo A
++// (bloqueante) durante once rondas de revisión: ningún test montaba nunca el
++// navegador de la raíz, así que nada notaba que la rama sin sesión no
++// renderizaba ninguno.
++//
++// Vive fuera de `src/app/` a propósito: `renderRouter` escanea esa carpeta
++// como árbol de rutas real, y cualquier fichero dentro —incluido un test—
++// se registra como ruta. Un test llamado `_layout.test.tsx` colocado ahí
++// dentro choca literalmente con `_layout.tsx` («The layouts... conflict on
++// the route "/_layout"»); comprobado al escribir este fichero.
++//
++// Prefijo `mock` obligatorio: el plugin de hoisting de Jest sube
++// `jest.mock()` por encima de las declaraciones normales y su factoría no
++// puede referenciar variables fuera de su alcance salvo que empiecen por
++// «mock». Mismo patrón que sesion.test.tsx y usar-perfil.test.tsx.
++const mockGetSession = jest.fn()
++const mockOnAuthStateChange = jest.fn()
++const mockPerfilSelectUnico = jest.fn()
++
++// `src/datos/cliente-consultas.ts` importa estos dos módulos nativos para el
++// persistidor offline y el detector de conectividad. Ningún test anterior
++// los necesitaba (nadie montaba `_layout.tsx` hasta este fichero), así que
++// no había mock activo: sin él, `AsyncStorage` revienta con «NativeModule:
++// AsyncStorage is null» en cuanto se importa fuera de un dispositivo real.
++// Mocks oficiales de cada paquete, mismo patrón que el resto del repo usa
++// para dependencias nativas.
++jest.mock('@react-native-async-storage/async-storage', () =>
++  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
++)
++jest.mock('@react-native-community/netinfo', () =>
++  require('@react-native-community/netinfo/jest/netinfo-mock'),
++)
++
++jest.mock('@/datos/supabase', () => ({
++  supabase: {
++    auth: {
++      getSession: (...a: unknown[]) => mockGetSession(...a),
++      onAuthStateChange: (...a: unknown[]) => mockOnAuthStateChange(...a),
++    },
++    from: () => ({
++      select: () => ({ single: () => mockPerfilSelectUnico() }),
++    }),
++  },
++}))
++
++beforeEach(() => {
++  jest.clearAllMocks()
++  mockOnAuthStateChange.mockReturnValue({
++    data: { subscription: { unsubscribe: jest.fn() } },
++  })
++  // Sin sesión no se llega a consultar el perfil (`usarPerfil` la deja
++  // `enabled: false`), pero se deja un valor por si algún camino la dispara.
++  mockPerfilSelectUnico.mockResolvedValue({ data: null, error: null })
++})
++
++// `renderRouter` deja temporizadores falsos activos (`jest.useFakeTimers()`,
++// ver expo-router/build/testing-library/index.js). Sin restaurarlos aquí, el
++// worker de Jest no cierra limpio al terminar este fichero.
++afterEach(() => {
++  jest.useRealTimers()
++})
++
++it('sin sesión, el navegador se monta y se llega a la pantalla de acceso (no una pantalla en blanco)', async () => {
++  mockGetSession.mockResolvedValue({ data: { session: null } })
++
++  renderRouter('src/app', { initialUrl: '/' })
++
++  await waitFor(() => expect(screen.getByText('Entrar en KAIZEN')).toBeTruthy())
++  // No se cuela por la rama de sesión: el armazón de pestañas no está.
++  expect(screen.queryByText('Hola')).toBeNull()
++})
++
++it('con sesión, se llega al armazón de pestañas', async () => {
++  mockGetSession.mockResolvedValue({
++    data: { session: { user: { id: 'u1' } } },
++  })
++  mockPerfilSelectUnico.mockResolvedValue({
++    data: {
++      id: 'u1', nombre: '', unidades: 'metrico', zona_horaria: 'Europe/Madrid',
++      corte_dia: 4, hora_silencio: 22, tema: 'defecto',
++    },
++    error: null,
++  })
++
++  renderRouter('src/app', { initialUrl: '/' })
++
++  // Contenido real de la pestaña activa (Hoy) Y la propia barra de pestañas:
++  // ambas cosas solo existen si `(pestanas)/_layout.tsx` —el `Tabs` real— ha
++  // llegado a montarse.
++  await waitFor(() => expect(screen.getByText('Hola')).toBeTruthy())
++  expect(screen.getByText('Nutrición')).toBeTruthy()
++})

@@ -1,0 +1,250 @@
+# Review package: 38ac2dd..833a051
+
+## Commits
+833a051 fix(kaizen): paginar el borrado de fotos y cubrir los huecos que dejaba
+
+## Files changed
+ .../kaizen/pruebas/aislamiento.integracion.test.ts | 16 +++++
+ apps/kaizen/pruebas/borrado.integracion.test.ts    | 68 ++++++++++++++++++++++
+ apps/kaizen/src/features/perfil/borrar-cuenta.tsx  | 13 ++++-
+ .../supabase/functions/borrar-cuenta/index.ts      | 52 +++++++++++++----
+ 4 files changed, 136 insertions(+), 13 deletions(-)
+
+## Diff
+diff --git a/apps/kaizen/pruebas/aislamiento.integracion.test.ts b/apps/kaizen/pruebas/aislamiento.integracion.test.ts
+index b18db24..dd7e834 100644
+--- a/apps/kaizen/pruebas/aislamiento.integracion.test.ts
++++ b/apps/kaizen/pruebas/aislamiento.integracion.test.ts
+@@ -61,11 +61,27 @@ describe('aislamiento entre usuarios', () => {
+   it('B no puede listar las fotos de A', async () => {
+     const { data } = await b.cliente.storage.from('fotos').list(a.id)
+     expect(data).toEqual([])
+   })
+ 
+   it('B no puede descargar una foto de A', async () => {
+     const { data, error } = await b.cliente.storage.from('fotos').download(`${a.id}/foto-a.txt`)
+     expect(data).toBeNull()
+     expect(error).not.toBeNull()
+   })
++
++  // Las dos anteriores solo ejercitan el `using` de la política (lectura).
++  // Sin estas dos, romper el `with check` (escritura) en un refactor
++  // dejaría la suite en verde con fotos corporales sin protección real.
++  it('B no puede subir un fichero en la carpeta de A', async () => {
++    const { error } = await b.cliente.storage
++      .from('fotos')
++      .upload(`${a.id}/intruso.txt`, Buffer.from('intruso'), { contentType: 'text/plain' })
++    expect(error).not.toBeNull()
++  })
++
++  it('B no puede borrar una foto de A', async () => {
++    await b.cliente.storage.from('fotos').remove([`${a.id}/foto-a.txt`])
++    const { data } = await a.cliente.storage.from('fotos').list(a.id)
++    expect(data).toHaveLength(1)
++  })
+ })
+diff --git a/apps/kaizen/pruebas/borrado.integracion.test.ts b/apps/kaizen/pruebas/borrado.integracion.test.ts
+index 7625f74..577eb0d 100644
+--- a/apps/kaizen/pruebas/borrado.integracion.test.ts
++++ b/apps/kaizen/pruebas/borrado.integracion.test.ts
+@@ -42,10 +42,78 @@ it('borrar la cuenta elimina al usuario y todos sus datos', async () => {
+ 
+   const { count } = await admin.from('pesos').select('*', { count: 'exact', head: true }).eq('user_id', id)
+   expect(count).toBe(0)
+ 
+   // Esta es la comprobación que de verdad prueba la función: el cascade de
+   // auth.users limpia las tablas solo, pero nunca toca Storage. Sin esto, el
+   // test pasaría igual aunque la función no borrase ni un fichero.
+   const { data: ficherosRestantes } = await admin.storage.from(BUCKET).list(id)
+   expect(ficherosRestantes).toEqual([])
+ })
++
++// Caso más frecuente en producción: las fotos son opcionales. Rompería si
++// `list` sobre una carpeta vacía devolviese error en vez de lista vacía —
++// justo la suposición que ya falló una vez en esta tarea (el bucket que no
++// existía). Ahora el bucket existe pero la carpeta del usuario está vacía.
++it('borrar la cuenta funciona igual si nunca se subió ninguna foto', async () => {
++  const admin = createClient(URL, SERVICIO)
++  const correo = `borrar-sin-fotos-${Date.now()}@prueba.local`
++  const { data } = await admin.auth.admin.createUser({
++    email: correo, password: 'contrasena-de-prueba', email_confirm: true,
++  })
++  const id = data.user!.id
++
++  const cliente = createClient(URL, ANON)
++  const { data: acceso } = await cliente.auth.signInWithPassword({
++    email: correo, password: 'contrasena-de-prueba',
++  })
++  await cliente.from('pesos').insert({
++    id: crypto.randomUUID(), user_id: id, fecha_local: '2026-08-17', kg: 80,
++  })
++
++  const respuesta = await fetch(`${URL}/functions/v1/borrar-cuenta`, {
++    method: 'POST',
++    headers: { Authorization: `Bearer ${acceso.session!.access_token}` },
++  })
++  expect(respuesta.status).toBe(200)
++
++  const { data: usuario } = await admin.auth.admin.getUserById(id)
++  expect(usuario.user).toBeNull()
++})
++
++// Este es el test que protege la paginación: `list` devuelve como mucho 100
++// objetos por llamada, así que con una sola llamada el fichero 101
++// sobrevive. Sin este test, esa corrección no está protegida —y ya se
++// verificó a mano que se pone rojo con la versión de una sola llamada (ver
++// el informe de la tarea).
++it('borrar la cuenta borra más de un lote de fotos', async () => {
++  const admin = createClient(URL, SERVICIO)
++  const correo = `borrar-lote-${Date.now()}@prueba.local`
++  const { data } = await admin.auth.admin.createUser({
++    email: correo, password: 'contrasena-de-prueba', email_confirm: true,
++  })
++  const id = data.user!.id
++
++  const cliente = createClient(URL, ANON)
++  const { data: acceso } = await cliente.auth.signInWithPassword({
++    email: correo, password: 'contrasena-de-prueba',
++  })
++
++  const TOTAL = 101
++  const subidas = await Promise.all(
++    Array.from({ length: TOTAL }, (_, i) =>
++      admin.storage
++        .from(BUCKET)
++        .upload(`${id}/foto-${i}.txt`, Buffer.from(`contenido ${i}`), { contentType: 'text/plain' }),
++    ),
++  )
++  expect(subidas.every((s) => s.error === null)).toBe(true)
++
++  const respuesta = await fetch(`${URL}/functions/v1/borrar-cuenta`, {
++    method: 'POST',
++    headers: { Authorization: `Bearer ${acceso.session!.access_token}` },
++  })
++  expect(respuesta.status).toBe(200)
++
++  const { data: ficherosRestantes } = await admin.storage.from(BUCKET).list(id, { limit: 1000 })
++  expect(ficherosRestantes).toEqual([])
++}, 30000)
+diff --git a/apps/kaizen/src/features/perfil/borrar-cuenta.tsx b/apps/kaizen/src/features/perfil/borrar-cuenta.tsx
+index b512613..cd9c5df 100644
+--- a/apps/kaizen/src/features/perfil/borrar-cuenta.tsx
++++ b/apps/kaizen/src/features/perfil/borrar-cuenta.tsx
+@@ -28,22 +28,31 @@ export function BorrarCuenta() {
+     setError(null)
+     const { error: errorFuncion } = await supabase.functions.invoke('borrar-cuenta', { method: 'POST' })
+     if (errorFuncion) {
+       setError('No hemos podido borrar la cuenta. Inténtalo de nuevo.')
+       setBorrando(false)
+       return
+     }
+     // El servidor ya ha borrado el usuario y sus datos: cerrar sesión limpia
+     // el estado local y dispara la redirección a `/acceso` desde la raíz de
+     // la app (ver `src/app/_layout.tsx`), sin que esta pantalla tenga que
+-    // saber nada de navegación.
+-    await supabase.auth.signOut()
++    // saber nada de navegación. Si esto falla, la cuenta ya está borrada de
++    // todos modos: no es el mismo error que el de arriba, y sin este aviso
++    // la pantalla se quedaría en «Borrando…» para siempre sin decir nada.
++    try {
++      await supabase.auth.signOut()
++    } catch {
++      setError(
++        'Tu cuenta se ha borrado, pero no hemos podido cerrar la sesión en este dispositivo. Cierra la app para completar el proceso.',
++      )
++      setBorrando(false)
++    }
+   }
+ 
+   const campo = {
+     borderWidth: 1, borderColor: t.color.borde, borderRadius: t.radio.boton,
+     padding: t.espaciado[2], color: t.color.texto,
+   }
+ 
+   return (
+     <Pantalla style={{ padding: t.espaciado[5], gap: t.espaciado[2] }}>
+       <Texto variante="titulo">Borrar cuenta</Texto>
+diff --git a/apps/kaizen/supabase/functions/borrar-cuenta/index.ts b/apps/kaizen/supabase/functions/borrar-cuenta/index.ts
+index 6c4fc8d..ac9eed5 100644
+--- a/apps/kaizen/supabase/functions/borrar-cuenta/index.ts
++++ b/apps/kaizen/supabase/functions/borrar-cuenta/index.ts
+@@ -1,38 +1,68 @@
+ import { createClient } from 'jsr:@supabase/supabase-js@2'
+ 
+ Deno.serve(async (peticion) => {
++  if (peticion.method !== 'POST') {
++    return new Response('Método no permitido', { status: 405 })
++  }
++
+   const cabecera = peticion.headers.get('Authorization')
+   if (!cabecera) return new Response('Falta autorización', { status: 401 })
+ 
+   const admin = createClient(
+     Deno.env.get('SUPABASE_URL')!,
+     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+   )
+ 
+   // El id de a quién se borra sale SIEMPRE del token verificado por Auth, no
+   // de nada que venga en la petición: así nadie puede borrar la cuenta de
+   // otra persona aunque manipule el cuerpo o la URL.
+   const { data, error } = await admin.auth.getUser(cabecera.replace('Bearer ', ''))
+   if (error || !data.user) return new Response('Sesión no válida', { status: 401 })
+ 
+   const id = data.user.id
+ 
+   // Los objetos de Storage no se borran en cascada: hay que quitarlos a mano.
+-  // Si el listado o el borrado fallan, se aborta AQUÍ, antes de tocar
+-  // auth.users: borrar el usuario y dejar ficheros huérfanos sería peor que
+-  // no borrar nada, porque ya no quedaría dueño al que reclamárselos.
+-  const { data: ficheros, error: errorListado } = await admin.storage.from('fotos').list(id)
+-  if (errorListado) return new Response(errorListado.message, { status: 500 })
+-
+-  if (ficheros?.length) {
+-    const { error: errorFicheros } = await admin.storage
+-      .from('fotos')
+-      .remove(ficheros.map((f) => `${id}/${f.name}`))
+-    if (errorFicheros) return new Response(errorFicheros.message, { status: 500 })
++  const falloFotos = await borrarFotos(admin, id)
++  if (falloFotos) {
++    // No se borra el usuario si quedan ficheros: sin dueño en `auth.users`,
++    // esas fotos corporales quedarían huérfanas y nadie podría reclamarlas.
++    return new Response(`No se han podido borrar las fotos: ${falloFotos}`, { status: 500 })
+   }
+ 
+   const { error: errorBorrado } = await admin.auth.admin.deleteUser(id)
+   if (errorBorrado) return new Response(errorBorrado.message, { status: 500 })
+ 
+   return new Response('ok', { status: 200 })
+ })
++
++/** `list` devuelve como mucho 100 objetos por llamada. */
++const LOTE = 100
++/** Tope de seguridad: 100 vueltas son 10.000 ficheros. Evita girar sin fin. */
++const VUELTAS_MAX = 100
++
++/**
++ * Borra en lotes hasta vaciar la carpeta del usuario. Devuelve el mensaje del
++ * fallo, o `null` si terminó limpio.
++ *
++ * Sin el bucle, alguien con más de 100 fotos —normal tras unos meses de uso
++ * diario— vería «cuenta borrada» y dejaría las demás huérfanas para siempre.
++ */
++async function borrarFotos(
++  admin: ReturnType<typeof createClient>,
++  id: string,
++): Promise<string | null> {
++  for (let vuelta = 0; vuelta < VUELTAS_MAX; vuelta++) {
++    const { data: ficheros, error } = await admin.storage
++      .from('fotos').list(id, { limit: LOTE })
++    if (error) return error.message
++    if (!ficheros || ficheros.length === 0) return null
++
++    const { error: errorBorrado } = await admin.storage
++      .from('fotos').remove(ficheros.map((f) => `${id}/${f.name}`))
++    if (errorBorrado) return errorBorrado.message
++
++    // Menos de un lote entero significa que ya no queda nada detrás.
++    if (ficheros.length < LOTE) return null
++  }
++  return `Quedan ficheros tras ${VUELTAS_MAX} lotes; se aborta sin borrar la cuenta.`
++}

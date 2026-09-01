@@ -1,0 +1,107 @@
+# Review package: db1fdbb..ede2c5f
+
+## Commits
+ede2c5f refactor(atlas): separar rotulosPorDefecto en agrupar - porPersona usa Sin nombre
+
+## Files changed
+ apps/atlas/src/lib/horas/tramos.ts        | 13 ++++++++-----
+ apps/atlas/src/tests/horas/tramos.test.ts |  8 ++++++++
+ 2 files changed, 16 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/src/lib/horas/tramos.ts b/apps/atlas/src/lib/horas/tramos.ts
+index 8a414df..c75c2dd 100644
+--- a/apps/atlas/src/lib/horas/tramos.ts
++++ b/apps/atlas/src/lib/horas/tramos.ts
+@@ -41,26 +41,29 @@ const SIN_ASIGNAR = "Sin asignar";
+ export function minutosDe(t: Tramo, ahoraMs: number): number {
+   const finMs = t.fin === null ? ahoraMs : Date.parse(t.fin);
+   const ms = Math.max(0, finMs - Date.parse(t.inicio));
+   return Math.min(Math.round(ms / 60_000), TOPE_HORAS * 60);
+ }
+ 
+ function agrupar(
+   tramos: Tramo[],
+   ahoraMs: number,
+   clave: (t: Tramo) => string | null,
+-  nombre: (t: Tramo) => string | null
++  nombre: (t: Tramo) => string | null,
++  rotuloPorDefecto: string = SIN_ASIGNAR
+ ): FilaHoras[] {
+   const filas = new Map<string | null, FilaHoras>();
+   for (const t of tramos) {
+     const id = clave(t);
+-    const fila = filas.get(id) ?? { id, nombre: nombre(t) ?? SIN_ASIGNAR, minutos: 0 };
++    // Si no hay nombre pero sí hay ID, es "Sin nombre"; si ni ID ni nombre, es "Sin asignar".
++    const nombreUsado = nombre(t) ?? (id ? rotuloPorDefecto : SIN_ASIGNAR);
++    const fila = filas.get(id) ?? { id, nombre: nombreUsado, minutos: 0 };
+     fila.minutos += minutosDe(t, ahoraMs);
+     filas.set(id, fila);
+   }
+   // De más a menos: lo que más pesa, arriba. Los desgloses se leen de arriba abajo.
+   return [...filas.values()].sort((a, b) => b.minutos - a.minutos);
+ }
+ 
+ export function resumir(tramos: Tramo[], ahoraMs: number): ResumenHoras {
+   let medidos = 0;
+   let anadidos = 0;
+@@ -73,23 +76,23 @@ export function resumir(tramos: Tramo[], ahoraMs: number): ResumenHoras {
+     if (ultimo === null || Date.parse(t.inicio) > Date.parse(ultimo)) ultimo = t.inicio;
+     if (t.fin === null && ahoraMs - Date.parse(t.inicio) >= AVISO_HORAS * 3_600_000) {
+       sospechosos.push(t);
+     }
+   }
+   return {
+     totalMin: medidos + anadidos,
+     medidosMin: medidos,
+     anadidosMin: anadidos,
+     // Los tres agrupan los MISMOS tramos: si no suman igual, hay uno perdido.
+-    porCliente: agrupar(tramos, ahoraMs, (t) => t.clienteId, (t) => t.clienteNombre),
+-    porProyecto: agrupar(tramos, ahoraMs, (t) => t.proyectoId, (t) => t.proyectoNombre),
+-    porPersona: agrupar(tramos, ahoraMs, (t) => t.usuarioId, (t) => t.usuarioNombre),
++    porCliente: agrupar(tramos, ahoraMs, (t) => t.clienteId, (t) => t.clienteNombre, SIN_ASIGNAR),
++    porProyecto: agrupar(tramos, ahoraMs, (t) => t.proyectoId, (t) => t.proyectoNombre, SIN_ASIGNAR),
++    porPersona: agrupar(tramos, ahoraMs, (t) => t.usuarioId, (t) => t.usuarioNombre, "Sin nombre"),
+     ultimoInicio: ultimo,
+     sospechosos,
+   };
+ }
+ 
+ export function formatearMinutos(min: number): string {
+   const h = Math.floor(min / 60);
+   const m = min % 60;
+   if (h === 0) return `${m} min`;
+   if (m === 0) return `${h} h`;
+diff --git a/apps/atlas/src/tests/horas/tramos.test.ts b/apps/atlas/src/tests/horas/tramos.test.ts
+index 7159a47..edd7096 100644
+--- a/apps/atlas/src/tests/horas/tramos.test.ts
++++ b/apps/atlas/src/tests/horas/tramos.test.ts
+@@ -87,20 +87,28 @@ describe("resumir", () => {
+       [tramo({ fin: null, inicio: new Date(AHORA - min(60 * 11)).toISOString() }), tramo({ id: "t2", fin: null })],
+       AHORA
+     );
+     expect(r.sospechosos.map((t) => t.id)).toEqual(["t1"]);
+   });
+ 
+   it("el último inicio es el más reciente, cerrado o no", () => {
+     const r = resumir([tramo(), tramo({ id: "t2", inicio: new Date(AHORA - min(10)).toISOString(), fin: null })], AHORA);
+     expect(r.ultimoInicio).toBe(new Date(AHORA - min(10)).toISOString());
+   });
++
++  it("usuario sin nombre pero con ID usa «Sin nombre» en porPersona; sin cliente usa «Sin asignar» en porCliente", () => {
++    const r = resumir([tramo({ usuarioNombre: null }), tramo({ id: "t2", clienteId: null, clienteNombre: null })], AHORA);
++    const sinNombrePersona = r.porPersona.find((f) => f.nombre === "Sin nombre");
++    expect(sinNombrePersona?.id).toBe("u1");
++    const sinAsignarCliente = r.porCliente.find((f) => f.nombre === "Sin asignar");
++    expect(sinAsignarCliente?.id).toBeNull();
++  });
+ });
+ 
+ describe("formatearMinutos", () => {
+   it("horas y minutos, sin ceros de relleno", () => {
+     expect(formatearMinutos(0)).toBe("0 min");
+     expect(formatearMinutos(45)).toBe("45 min");
+     expect(formatearMinutos(60)).toBe("1 h");
+     expect(formatearMinutos(150)).toBe("2 h 30 min");
+   });
+ });

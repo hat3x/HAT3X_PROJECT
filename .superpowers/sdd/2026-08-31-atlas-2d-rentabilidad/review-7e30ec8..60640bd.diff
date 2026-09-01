@@ -1,0 +1,2155 @@
+# Review package: 7e30ec8..60640bd
+
+## Commits
+60640bd feat(atlas): el dinero del mes en la ficha del cliente y del proyecto
+e8b55ef fix(atlas): rentabilidad — KPIs tipados con coste horas y horas por separado, facturado sin proyecto con fila propia
+a6e6351 fix(atlas): cierres — el mes en curso se decide en Madrid, no en UTC, y el cierre no acepta el coste desde el cliente
+d38892a feat(atlas): la pantalla de rentabilidad, por cliente y por proyecto, con cierre de mes
+c2e1d2a feat(atlas): ajustes de economia — el coste de la hora y el emisor
+a0f3b19 fix(atlas): margen — el total de horas cuadra con la suma de filas, no con el redondeo del total
+8090ff5 feat(atlas): leer el margen del mes, la configuracion economica y los cierres
+b462aaa feat(atlas): el margen de contribucion, puro y sin prorratear
+8448ef4 feat(atlas): la configuracion economica de una fila y los cierres de mes
+
+## Files changed
+ apps/atlas/MANTENIMIENTO.md                        |  16 ++
+ apps/atlas/README.md                               |   8 +
+ apps/atlas/scripts/humo.mjs                        |   1 +
+ apps/atlas/src/app/ajustes/economia/page.tsx       |  32 +++
+ apps/atlas/src/app/ajustes/page.tsx                |   9 +-
+ apps/atlas/src/app/clientes/[slug]/page.tsx        |  11 ++
+ apps/atlas/src/app/dinero/horas/page.tsx           |  34 +---
+ apps/atlas/src/app/dinero/page.tsx                 |   6 +
+ apps/atlas/src/app/dinero/rentabilidad/page.tsx    | 179 +++++++++++++++++
+ apps/atlas/src/app/proyectos/[slug]/page.tsx       |  11 ++
+ apps/atlas/src/components/ajustes/FormEconomia.tsx |  92 +++++++++
+ .../atlas/src/components/dinero/BotonCierreMes.tsx |  44 +++++
+ apps/atlas/src/components/dinero/ResumenMargen.tsx |  34 ++++
+ apps/atlas/src/lib/db/acciones-economia.ts         |  55 ++++++
+ apps/atlas/src/lib/db/ajustes-economia.ts          |  70 +++++++
+ apps/atlas/src/lib/db/cierres.ts                   |  51 +++++
+ apps/atlas/src/lib/db/rentabilidad.ts              |  94 +++++++++
+ apps/atlas/src/lib/dinero.ts                       |  47 +++++
+ apps/atlas/src/lib/rentabilidad/margen.ts          | 193 ++++++++++++++++++
+ .../src/tests/componentes/form-economia.test.tsx   |  34 ++++
+ apps/atlas/src/tests/db/rentabilidad.test.ts       | 218 +++++++++++++++++++++
+ apps/atlas/src/tests/dinero.test.ts                |  22 ++-
+ .../src/tests/esquema/economia-ajustes.test.ts     |  86 ++++++++
+ apps/atlas/src/tests/rentabilidad/margen.test.ts   | 141 +++++++++++++
+ apps/atlas/src/types/supabase.ts                   |  56 ++++++
+ .../migrations/20260831100000_economia_ajustes.sql |  42 ++++
+ 26 files changed, 1552 insertions(+), 34 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/MANTENIMIENTO.md b/apps/atlas/MANTENIMIENTO.md
+index abfa383..f8a65f7 100644
+--- a/apps/atlas/MANTENIMIENTO.md
++++ b/apps/atlas/MANTENIMIENTO.md
+@@ -122,20 +122,36 @@ Es un aviso diario y **no manda nada si no hay nada pendiente**, así que un dí
+ 
+ Es el aviso que caza el fichaje que se dejó abierto (una jornada real, o un olvido: diez horas sin cerrar). Corre cada hora, al minuto 41, y **no manda nada si no hay ningún fichaje abierto desde hace diez horas** — un día sin aviso puede ser un día sin olvidos.
+ 
+ 1. **Qué respondió la Edge Function.** La tarea `atlas-fichajes` llama a `avisar` con `{"fichajes": true}`; la respuesta queda en el registro de la función (`npx supabase functions logs avisar`). Un **500** con `error` es una lectura que falló: la función falla cerrado, igual que `avisarDeCobro`, y no envía nada a propósito. Un 200 con `noComprobados` no vacío es que el candado por fichaje (¿ya se avisó de ESTE?) no se pudo consultar para esas personas y se les saltó esa vuelta.
+ 2. **`ultima_ok_en` en `suscripciones_push`.** El mismo sello que usa el aviso de cobro: si el push sale, se mueve. Si no se mueve con avisos que sí deberían haber salido, sospecha de las claves VAPID.
+ 3. **El aviso va al dueño del fichaje, no al propietario.** A diferencia de `atlas-cobro` (que avisa a todos los propietarios), aquí el destinatario es quien dejó el fichaje abierto: es su olvido y solo él puede cerrarlo. Si un colaborador se queja de que «nadie me avisó», mira `notificaciones` filtrando por su `usuario_id`, no por el propietario.
+ 4. **La hora.** `atlas-fichajes` corre al minuto 41 de cada hora (UTC, pero da igual: se mide en horas transcurridas desde el `inicio` del fichaje, no en hora del día).
+ 
+ ---
+ 
++## «La rentabilidad no cuadra»
++
++Antes de sospechar de `calcularMargen`, mira estas cuatro cosas en orden — son las que explican casi todos los descuadres:
++
++1. **El coste de la hora.** `/ajustes/economia` fija el que se usa en un mes **abierto**. Si alguien lo cambió a media pantalla, las horas de todo el mes en curso cambian de golpe, no solo las de a partir de ahora.
++2. **Si el mes está cerrado con otro coste.** Un mes cerrado (`cierres_mes`) tiene su coste **congelado** en el momento del cierre: cambiar `/ajustes/economia` después no lo mueve, a propósito. Si el número no coincide con el coste actual, comprueba si ese mes está cerrado:
++   ```sql
++   select mes, coste_hora, cerrado_en from cierres_mes order by mes desc;
++   ```
++3. **Los tramos abiertos no cuentan.** `rentabilidadDelMes` solo suma fichajes con `fin` (§6.3): un fichaje que sigue abierto no aporta minutos hasta que se cierra, aunque lleve horas corriendo. No es un fallo, es la regla — evita contar un tramo dos veces si se corrige antes de cerrarlo.
++4. **Se calcula con bases, no con totales.** Facturas y gastos entran por su `base` (sin IVA): el IVA no es ingreso ni es coste, solo pasa por caja. Si comparas contra un total con IVA, va a parecer que falta dinero.
++
++**Cómo reabrir un mes:** el botón «Reabrir» de `/dinero/rentabilidad` (`reabrirMesAccion`) borra el cierre de `cierres_mes` para ese mes; a partir de ahí vuelve a seguir el coste vigente en `/ajustes/economia` hasta que se cierre de nuevo. Solo lo puede hacer el propietario.
++
++**`ajustes_economia` es de una fila.** Toda lectura y escritura filtra por `id = 1`; no se crea una fila nueva ni se cambia ese id — no hay «histórico de costes» fuera de lo que ya congelaron los cierres de mes.
++
+ ## «Kairos tiene un salón nuevo y Atlas no lo vigila»
+ 
+ O al revés: se dio de baja un cliente y Atlas sigue alertando de su 404. Lo resuelve el descubridor, que pasa **cada hora al minuto 23**. Si lleva más de eso sin moverse, mira lo que dejó escrito:
+ 
+ ```sql
+ select ejecutado_en, ok, altas, pausados, reactivados, error
+ from descubrimientos order by ejecutado_en desc limit 10;
+ ```
+ 
+ Esa tabla es el diagnóstico entero. Casos por orden de frecuencia:
+diff --git a/apps/atlas/README.md b/apps/atlas/README.md
+index 8fff190..fba3eb9 100644
+--- a/apps/atlas/README.md
++++ b/apps/atlas/README.md
+@@ -80,20 +80,28 @@ Cada pasada queda escrita en `descubrimientos`, salga bien o mal. Sin eso, uno q
+ 
+ | Dónde | Qué |
+ |---|---|
+ | Supabase de **Kairos** | Pegar [`supabase/kairos/atlas_list_salons.sql`](./supabase/kairos/atlas_list_salons.sql) en su editor SQL |
+ | Atlas → Proyectos | Un proyecto con slug `kairos`, y en su ficha un enlace de tipo `supabase` con la URL del Supabase de Kairos |
+ | Atlas → Ajustes → Llavero | Una credencial `Supabase` / `service_role` **atada a ese proyecto**, con la clave de servicio de Kairos |
+ | Entorno + base | `ATLAS_CRON_KEY`, y el mismo valor en `app.atlas_cron_key`, junto a `app.atlas_web_url` |
+ 
+ Si falta alguna, la pasada no revienta: lo anota en `descubrimientos` diciendo cuál falta y dónde ponerla. Eso lo decide `src/lib/descubrir/ajustes.ts`.
+ 
++## El dinero: rentabilidad y cierre de mes
++
++`/dinero/rentabilidad` enseña el margen del mes, por cliente y por proyecto: lo facturado, los gastos directos, las horas a su coste y lo que queda. Solo lo ve el propietario. El coste de la hora (y los datos de facturación) se fija en `/ajustes/economia`, una fila única (`ajustes_economia`, `id = 1`) que cualquier cambio sobrescribe para todos los meses abiertos.
++
++**Cerrar un mes** (`cerrarMesAccion`) congela en `cierres_mes` el coste de la hora vigente en ese instante: cambiar el coste después no mueve un mes ya cerrado, así que el histórico no se reescribe con retroactividad. **Reabrirlo** (`reabrirMesAccion`) borra ese cierre y el mes vuelve a seguir el coste actual.
++
++La regla de los dos ejes del margen (`src/lib/rentabilidad/margen.ts`): cliente y proyecto son ejes independientes, cada uno con su propio contador — lo directo de un eje no se reparte en el otro, y lo que no tiene ningún contador va a una línea aparte con nombre honesto, nunca prorrateado.
++
+ ## Arrancar en local
+ 
+ Hace falta Docker en marcha.
+ 
+ ```bash
+ npm install
+ cp .env.example .env.local     # y rellenar — ver la sección siguiente
+ npx supabase start
+ npx supabase migration up --local
+ npm run dev                    # http://localhost:3010
+diff --git a/apps/atlas/scripts/humo.mjs b/apps/atlas/scripts/humo.mjs
+index 34ac282..a65d2b5 100644
+--- a/apps/atlas/scripts/humo.mjs
++++ b/apps/atlas/scripts/humo.mjs
+@@ -166,20 +166,21 @@ try {
+     // `exige` con contenido y no vacío: la pantalla se pinta desde tablas que
+     // al principio estarán vacías, y un 200 con el cuerpo en blanco sería
+     // indistinguible de una que funciona.
+     { ruta: "/dinero", exige: ["Dinero", "Coste de estructura"] },
+     // Se exige el texto de los tres desgloses: la pantalla se pinta entera
+     // desde tablas que estaran vacias al principio, y un 200 con el cuerpo en
+     // blanco seria indistinguible de una que funciona.
+     { ruta: "/dinero/gastos", exige: ["Por plataforma", "Por cliente", "Por proyecto"] },
+     { ruta: "/dinero/cobro", exige: ["Cobro"] },
+     { ruta: "/dinero/horas", exige: ["Horas"] },
++    { ruta: "/dinero/rentabilidad", exige: ["Rentabilidad"] },
+     { ruta: "/ajustes", exige: [] },
+     { ruta: "/ajustes/apariencia", exige: [] },
+     { ruta: "/ajustes/notificaciones", exige: [] },
+     { ruta: "/ajustes/usuarios", exige: [] },
+     { ruta: "/ajustes/credenciales", exige: [] },
+     // `exige` con contenido y no vacío: esta pantalla se pinta entera desde una
+     // tabla que casi siempre estará vacía, y un 200 con el cuerpo en blanco
+     // sería indistinguible de una que funciona.
+     { ruta: "/ajustes/descubridor", exige: ["Descubridor"] },
+   ];
+diff --git a/apps/atlas/src/app/ajustes/economia/page.tsx b/apps/atlas/src/app/ajustes/economia/page.tsx
+new file mode 100644
+index 0000000..890b221
+--- /dev/null
++++ b/apps/atlas/src/app/ajustes/economia/page.tsx
+@@ -0,0 +1,32 @@
++import { notFound } from "next/navigation";
++import Link from "next/link";
++import { ChevronLeft } from "lucide-react";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { obtenerPerfil } from "@/lib/db/perfil";
++import { leerAjustes } from "@/lib/db/ajustes-economia";
++import { FormEconomia } from "@/components/ajustes/FormEconomia";
++
++export default async function PaginaEconomia() {
++  const sb = await clienteServidor();
++  const perfil = await obtenerPerfil(sb);
++  // Doble puerta: RLS ya negaría la fila, pero un 404 es más honesto que un error.
++  if (!perfil?.esPropietario) notFound();
++  const actual = await leerAjustes(sb);
++
++  return (
++    <section className="max-w-3xl space-y-4">
++      <header>
++        <Link href="/ajustes" className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100">
++          <ChevronLeft size={15} aria-hidden="true" />
++          Ajustes
++        </Link>
++        <h1 className="text-2xl font-semibold tracking-tight">Economía</h1>
++        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
++          Lo que cuesta una hora de trabajo, y quién emite las facturas. Viven aquí y no en el
++          entorno porque son datos del negocio, y se cambian desde aquí.
++        </p>
++      </header>
++      <FormEconomia actual={actual} />
++    </section>
++  );
++}
+diff --git a/apps/atlas/src/app/ajustes/page.tsx b/apps/atlas/src/app/ajustes/page.tsx
+index e2fb9e4..fc65388 100644
+--- a/apps/atlas/src/app/ajustes/page.tsx
++++ b/apps/atlas/src/app/ajustes/page.tsx
+@@ -1,12 +1,12 @@
+ import Link from "next/link";
+-import { Palette, KeyRound, Users, BellRing, Radar } from "lucide-react";
++import { Palette, KeyRound, Users, BellRing, Radar, Coins } from "lucide-react";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ 
+ // Solo se enseña lo que de verdad funciona: un enlace muerto es peor que un
+ // hueco honesto.
+ const SECCIONES = [
+   {
+     href: "/ajustes/apariencia",
+     titulo: "Apariencia",
+     descripcion: "Tema claro u oscuro y cinco paletas de cristal.",
+@@ -20,20 +20,27 @@ const SECCIONES = [
+     Icono: BellRing,
+     soloPropietario: false,
+   },
+   {
+     href: "/ajustes/credenciales",
+     titulo: "Llavero",
+     descripcion: "Las claves de los servicios, cifradas. Alta, rotación y borrado.",
+     Icono: KeyRound,
+     soloPropietario: true,
+   },
++  {
++    href: "/ajustes/economia",
++    titulo: "Economía",
++    descripcion: "Coste de la hora y datos del emisor.",
++    Icono: Coins,
++    soloPropietario: true,
++  },
+   {
+     href: "/ajustes/usuarios",
+     titulo: "Usuarios y permisos",
+     descripcion: "Quién llega a qué proyecto, y como editor o como lector.",
+     Icono: Users,
+     soloPropietario: true,
+   },
+   {
+     href: "/ajustes/descubridor",
+     titulo: "Descubridor",
+diff --git a/apps/atlas/src/app/clientes/[slug]/page.tsx b/apps/atlas/src/app/clientes/[slug]/page.tsx
+index 2d53713..7760341 100644
+--- a/apps/atlas/src/app/clientes/[slug]/page.tsx
++++ b/apps/atlas/src/app/clientes/[slug]/page.tsx
+@@ -1,18 +1,21 @@
+ import { notFound } from "next/navigation";
+ import Link from "next/link";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { obtenerCliente, serviciosDeCliente } from "@/lib/db/clientes";
+ import { estadoDeServicios } from "@/lib/db/servicios-estado";
++import { margenDe } from "@/lib/db/rentabilidad";
+ import { formatearUptime } from "@/lib/uptime/calcular";
++import { mesDe, hoyEnMadrid } from "@/lib/dinero";
+ import { Distintivo } from "@/components/ui/Distintivo";
++import { ResumenMargen } from "@/components/dinero/ResumenMargen";
+ import type { EstadoCheck } from "@/lib/incidencias/maquina";
+ import type { EstadoVisual } from "@/components/ui/Distintivo";
+ 
+ // Las mismas palabras y los mismos colores que la ficha de proyecto: el mismo
+ // servicio no puede llamarse de dos formas distintas según por dónde entres.
+ const TEXTO_ESTADO: Record<EstadoCheck, string> = {
+   ok: "Bien",
+   degradado: "Lento",
+   caido: "Caído",
+   desconocido: "Sin datos",
+@@ -47,20 +50,24 @@ export default async function FichaCliente({
+ }: {
+   params: { slug: string };
+ }) {
+   const sb = await clienteServidor();
+   const [perfil, cliente] = await Promise.all([
+     obtenerPerfil(sb),
+     obtenerCliente(sb, params.slug),
+   ]);
+   if (!cliente) notFound();
+   const verImportes = perfil?.esPropietario ?? false;
++  // No se llama a `margenDe` si no es propietario: se ahorra la consulta, y
++  // RLS la lanzaría igual si se intentase.
++  const mes = mesDe(hoyEnMadrid());
++  const margen = verImportes ? await margenDe(sb, { clienteId: cliente.id }, mes) : null;
+ 
+   // Lo suyo, y cómo está ahora mismo. Es la pregunta que trae a alguien a esta
+   // pantalla: «¿le está pasando algo a este cliente?».
+   const suyos = await serviciosDeCliente(sb, cliente.id);
+   const estados = await estadoDeServicios(
+     sb,
+     suyos.map((s) => s.id)
+   );
+   const servicios = suyos.map((s) => ({
+     ...s,
+@@ -187,20 +194,24 @@ export default async function FichaCliente({
+                 ))}
+                 <span className="ml-auto tabular-nums font-semibold">
+                   {ct.cuotaMensual !== null ? EUROS.format(ct.cuotaMensual) : "—"}
+                 </span>
+               </li>
+             ))}
+           </ul>
+         )}
+       </section>
+ 
++      {margen && (
++        <ResumenMargen fila={margen} mes={mes} costeHoraCentimos={margen.costeHoraCentimos} />
++      )}
++
+       <section className="cristal p-4">
+         <h2
+           className="mb-3 text-xs font-semibold uppercase tracking-wider"
+           style={{ color: "var(--texto-tenue)" }}
+         >
+           Contactos
+         </h2>
+         {cliente.contactos.length === 0 ? (
+           <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>
+             Sin contactos.
+diff --git a/apps/atlas/src/app/dinero/horas/page.tsx b/apps/atlas/src/app/dinero/horas/page.tsx
+index 2fb6dd0..703e965 100644
+--- a/apps/atlas/src/app/dinero/horas/page.tsx
++++ b/apps/atlas/src/app/dinero/horas/page.tsx
+@@ -1,62 +1,32 @@
+ // src/app/dinero/horas/page.tsx
+ import Link from "next/link";
+ import { ChevronLeft } from "lucide-react";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { listarTramos, ultimoInicio } from "@/lib/db/fichajes";
+ import { nombresDeProyectos } from "@/lib/db/proyectos";
+ import { nombresDeClientes } from "@/lib/db/clientes";
+ import { resumir, formatearMinutos, minutosDe, type FilaHoras } from "@/lib/horas/tramos";
+-import { hoyEnMadrid } from "@/lib/dinero";
++import { hoyEnMadrid, limitesMesMadrid, mesDe } from "@/lib/dinero";
+ import { FormTramo } from "@/components/dinero/FormTramo";
+ import { BotonBorrarTramo } from "@/components/dinero/BotonBorrarTramo";
+ import { Distintivo } from "@/components/ui/Distintivo";
+ 
+ const FECHA_HORA = new Intl.DateTimeFormat("es-ES", {
+   day: "numeric",
+   month: "short",
+   hour: "2-digit",
+   minute: "2-digit",
+   timeZone: "Europe/Madrid",
+ });
+ 
+-/**
+- * El mes en curso, en Madrid, como instantes ISO. Se resta el desfase de la
+- * zona para que «el día 1 a las 00:00» sea el de Madrid y no el de UTC: a
+- * medianoche del día 1 en Madrid aún es día 30 en UTC.
+- */
+-function mesEnCurso(hoy: string): { desde: string; hasta: string } {
+-  // `hoy` es siempre "AAAA-MM-DD" (lo garantiza `hoyEnMadrid`): se lee por
+-  // `slice` y no por `split(...).map(Number)` con desestructuración porque
+-  // con `noUncheckedIndexedAccess` esta última tipa cada hueco como
+-  // `number | undefined`, y aquí no hay nada opcional que reflejar.
+-  const a = Number(hoy.slice(0, 4));
+-  const m = Number(hoy.slice(5, 7));
+-  const desfase = (d: Date) => {
+-    const madrid = new Intl.DateTimeFormat("en-US", {
+-      timeZone: "Europe/Madrid",
+-      hour12: false,
+-      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+-    }).formatToParts(d);
+-    const g = (t: string) => Number(madrid.find((p) => p.type === t)?.value);
+-    const comoUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"));
+-    return comoUtc - d.getTime();
+-  };
+-  const inicioUtc = new Date(Date.UTC(a, m - 1, 1));
+-  const finUtc = new Date(Date.UTC(a, m, 1));
+-  return {
+-    desde: new Date(inicioUtc.getTime() - desfase(inicioUtc)).toISOString(),
+-    hasta: new Date(finUtc.getTime() - desfase(finUtc)).toISOString(),
+-  };
+-}
+-
+ function Desglose({ titulo, filas }: { titulo: string; filas: FilaHoras[] }) {
+   return (
+     <div className="cristal cristal-denso p-4">
+       <h3 className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>
+         {titulo}
+       </h3>
+       {filas.length === 0 ? (
+         <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>Nada este mes.</p>
+       ) : (
+         <ul className="space-y-1 text-sm">
+@@ -72,21 +42,21 @@ function Desglose({ titulo, filas }: { titulo: string; filas: FilaHoras[] }) {
+   );
+ }
+ 
+ export default async function PaginaHoras() {
+   const sb = await clienteServidor();
+   const perfil = await obtenerPerfil(sb);
+   // Sin doble puerta: aquí entra cualquiera. Un colaborador ve sus horas y el
+   // propietario las de todos, y eso lo decide RLS al leer, no esta pantalla.
+   const esPropietario = perfil?.esPropietario ?? false;
+ 
+-  const rango = mesEnCurso(hoyEnMadrid());
++  const rango = limitesMesMadrid(mesDe(hoyEnMadrid()));
+   // `nombresDe*` y no `listar*`: los desplegables solo necesitan id y nombre,
+   // y `listar*` arrastra contratos, cuotas y estados que aquí nadie lee.
+   //
+   // «Último fichaje» se pide aparte y sin rango: si saliera de los tramos del
+   // mes, el día 1 diría «Nunca» aunque se fichara ayer.
+   const [tramos, proyectos, clientes, ultimo] = await Promise.all([
+     listarTramos(sb, rango),
+     nombresDeProyectos(sb),
+     nombresDeClientes(sb),
+     ultimoInicio(sb),
+diff --git a/apps/atlas/src/app/dinero/page.tsx b/apps/atlas/src/app/dinero/page.tsx
+index a755e9c..3bc274f 100644
+--- a/apps/atlas/src/app/dinero/page.tsx
++++ b/apps/atlas/src/app/dinero/page.tsx
+@@ -101,20 +101,26 @@ export default async function PaginaDinero() {
+           Ver lo que falta por facturar y por cobrar →
+         </Link>
+       </p>
+ 
+       <p className="text-sm">
+         <Link href="/dinero/horas" className="underline opacity-80 hover:opacity-100">
+           Ver las horas del mes →
+         </Link>
+       </p>
+ 
++      <p className="text-sm">
++        <Link href="/dinero/rentabilidad" className="underline opacity-80 hover:opacity-100">
++          Ver la rentabilidad por cliente y por proyecto →
++        </Link>
++      </p>
++
+       <h2 className="pt-2 text-lg font-semibold">Facturas</h2>
+ 
+       {facturas.length === 0 ? (
+         <div className="cristal p-8 text-center">
+           <p className="font-medium">Todavía no hay ninguna factura.</p>
+           <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+             Aquí aparecerán las que registres, con lo que falta por cobrar.
+           </p>
+         </div>
+       ) : (
+diff --git a/apps/atlas/src/app/dinero/rentabilidad/page.tsx b/apps/atlas/src/app/dinero/rentabilidad/page.tsx
+new file mode 100644
+index 0000000..9146189
+--- /dev/null
++++ b/apps/atlas/src/app/dinero/rentabilidad/page.tsx
+@@ -0,0 +1,179 @@
++// src/app/dinero/rentabilidad/page.tsx
++import { notFound } from "next/navigation";
++import Link from "next/link";
++import { ChevronLeft } from "lucide-react";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { obtenerPerfil } from "@/lib/db/perfil";
++import { rentabilidadDelMes } from "@/lib/db/rentabilidad";
++import { formatear, hoyEnMadrid, mesDe, mesVecino } from "@/lib/dinero";
++import { formatearMinutos } from "@/lib/horas/tramos";
++import type { FilaMargen, Linea } from "@/lib/rentabilidad/margen";
++import { BotonCierreMes } from "@/components/dinero/BotonCierreMes";
++import { Distintivo } from "@/components/ui/Distintivo";
++
++const MES = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric", timeZone: "Europe/Madrid" });
++
++function Tabla({ titulo, filas, eje, facturadoSinEje, lineaExtra, extraNombre, estructura }: {
++  titulo: string; filas: FilaMargen[]; eje: string;
++  // Solo lo usa la tabla «Por proyecto»: es facturado puro (una línea de
++  // factura sin proyecto), no gastos ni minutos, así que no encaja en el
++  // tipo `Linea` que comparten `lineaExtra` y `estructura`.
++  facturadoSinEje?: number;
++  lineaExtra: Linea; extraNombre: string; estructura: Linea;
++}) {
++  const th = "px-4 py-2 font-medium";
++  const td = "whitespace-nowrap px-4 py-2.5 tabular-nums text-right";
++  const total = (l: Linea) => l.gastosCentimos + l.horasCentimos;
++  // Ronda de arreglo 1: una línea «sin repartir» con coste de la hora en cero
++  // puede tener minutos y ningún céntimo (gastos y horas a 0): `total() > 0`
++  // la escondía igual que si no hubiera pasado nada ese mes. Los minutos
++  // cuentan como actividad aunque no cuesten dinero.
++  const hayActividad = (l: Linea) => total(l) > 0 || l.minutos > 0;
++  return (
++    <div className="space-y-2">
++      <h2 className="pt-2 text-lg font-semibold">{titulo}</h2>
++      <div className="cristal cristal-denso overflow-x-auto">
++        <table className="w-full text-sm">
++          <caption className="sr-only">{titulo}</caption>
++          <thead>
++            <tr className="border-b text-left text-xs uppercase tracking-wider" style={{ borderColor: "var(--cristal-borde)", color: "var(--texto-tenue)" }}>
++              <th scope="col" className={th}>{eje}</th>
++              <th scope="col" className={`${th} text-right`}>Facturado</th>
++              <th scope="col" className={`${th} text-right`}>Gastos directos</th>
++              <th scope="col" className={`${th} text-right`}>Horas</th>
++              <th scope="col" className={`${th} text-right`}>Coste horas</th>
++              <th scope="col" className={`${th} text-right`}>Margen</th>
++            </tr>
++          </thead>
++          <tbody className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
++            {filas.length === 0 && (
++              <tr><td colSpan={6} className="px-4 py-4 text-center" style={{ color: "var(--texto-tenue)" }}>Nada este mes.</td></tr>
++            )}
++            {filas.map((f) => (
++              <tr key={f.id}>
++                <td className="px-4 py-2.5">{f.nombre}</td>
++                <td className={td}>{formatear(f.facturadoCentimos)}</td>
++                <td className={td}>{formatear(f.gastosCentimos)}</td>
++                <td className={td}>{formatearMinutos(f.minutos)}</td>
++                <td className={td}>{formatear(f.horasCentimos)}</td>
++                <td className={`${td} font-semibold`} style={f.margenCentimos < 0 ? { color: "var(--estado-caido)" } : undefined}>{formatear(f.margenCentimos)}</td>
++              </tr>
++            ))}
++            {/* Solo en «Por proyecto»: el facturado de una línea sin proyecto
++                (§2A: el proyecto vive en la línea) no tiene fila propia, pero
++                sí cuenta en el total — sin esta fila la tabla no cuadraba a
++                la vista. Es facturado puro: nada que repartir en las demás
++                columnas. */}
++            {typeof facturadoSinEje === "number" && facturadoSinEje > 0 && (
++              <tr style={{ color: "var(--texto-tenue)" }}>
++                <td className="px-4 py-2.5">Sin proyecto</td>
++                <td className={td}>{formatear(facturadoSinEje)}</td>
++                <td className={td}>—</td>
++                <td className={td}>—</td>
++                <td className={td}>—</td>
++                <td className={td}>—</td>
++              </tr>
++            )}
++            {/* Las dos líneas de abajo NO se reparten (§6.3): repartirlas
++                inventaría una precisión por cliente que el dato no tiene. */}
++            {hayActividad(lineaExtra) && (
++              <tr style={{ color: "var(--texto-tenue)" }}>
++                <td className="px-4 py-2.5">{extraNombre}</td>
++                <td className={td}>—</td>
++                <td className={td}>{formatear(lineaExtra.gastosCentimos)}</td>
++                <td className={td}>{formatearMinutos(lineaExtra.minutos)}</td>
++                <td className={td}>{formatear(lineaExtra.horasCentimos)}</td>
++                <td className={td}>−{formatear(total(lineaExtra))}</td>
++              </tr>
++            )}
++            <tr style={{ color: "var(--texto-tenue)" }}>
++              <td className="px-4 py-2.5">Estructura, sin repartir</td>
++              <td className={td}>—</td>
++              <td className={td}>{formatear(estructura.gastosCentimos)}</td>
++              <td className={td}>{formatearMinutos(estructura.minutos)}</td>
++              <td className={td}>{formatear(estructura.horasCentimos)}</td>
++              <td className={td}>−{formatear(total(estructura))}</td>
++            </tr>
++          </tbody>
++        </table>
++      </div>
++    </div>
++  );
++}
++
++export default async function PaginaRentabilidad({ searchParams }: { searchParams: { mes?: string } }) {
++  const sb = await clienteServidor();
++  const perfil = await obtenerPerfil(sb);
++  if (!perfil?.esPropietario) notFound();
++
++  const hoy = hoyEnMadrid();
++  const mesActual = mesDe(hoy);
++  // Un `mes` que no sea AAAA-MM no rompe: se vuelve al actual. Se guarda en
++  // variable aparte y sin `!`: el `test` ya deja acotado que, si pasa, la
++  // cadena original es un `AAAA-MM` válido, pero afirmarlo con `!` sería
++  // fiarse del regex sin que el compilador lo compruebe.
++  const mesPedido = searchParams.mes;
++  const mes = mesPedido && /^\d{4}-(0[1-9]|1[0-2])$/.test(mesPedido) ? mesPedido : mesActual;
++  const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sb, mes);
++  const esActual = mes === mesActual;
++
++  // Ronda de arreglo 1: tipado explícito y no un array de tuplas sin tipo —
++  // `String(t)` y `Number(v)` tapaban que el título y el valor podían ser
++  // cualquier cosa, y el rojo comparaba contra el literal del título en vez
++  // de decidirse una sola vez aquí, junto al dato que lo justifica. El orden
++  // es el mismo que el de las columnas de las tablas de abajo, para que
++  // arriba y abajo signifiquen lo mismo mirado en la misma fila.
++  const kpis: { etiqueta: string; texto: string; enRojo?: boolean }[] = [
++    { etiqueta: "Facturado (base)", texto: formatear(r.total.facturadoCentimos) },
++    { etiqueta: "Gastos (base)", texto: formatear(r.total.gastosCentimos) },
++    { etiqueta: "Horas", texto: formatearMinutos(r.total.minutos) },
++    { etiqueta: "Coste horas", texto: formatear(r.total.horasCentimos) },
++    { etiqueta: "Resultado del negocio", texto: formatear(r.total.margenCentimos), enRojo: r.total.margenCentimos < 0 },
++  ];
++
++  return (
++    <section className="max-w-5xl space-y-4">
++      <header>
++        <Link href="/dinero" className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100">
++          <ChevronLeft size={15} aria-hidden="true" />
++          Dinero
++        </Link>
++        <h1 className="text-2xl font-semibold tracking-tight">Rentabilidad</h1>
++        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
++          Lo que queda de cada cliente después de lo que cuesta atenderlo. Con bases, sin IVA, y sin
++          repartir lo que no tiene contador.
++        </p>
++      </header>
++
++      <div className="flex flex-wrap items-center gap-3">
++        <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, -1)}`} className="text-sm underline opacity-80 hover:opacity-100">← anterior</Link>
++        <span className="text-lg font-semibold capitalize">{MES.format(new Date(`${mes}-01T12:00:00Z`))}</span>
++        {!esActual && <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, 1)}`} className="text-sm underline opacity-80 hover:opacity-100">siguiente →</Link>}
++        {cerrado ? (
++          <Distintivo estado="ok" texto={`Cerrado a ${formatear(cerrado.costeHoraCentimos)}/h`} />
++        ) : costeHoraCentimos === 0 ? (
++          <Distintivo estado="aviso" texto="Sin coste de la hora: las horas cuentan cero" />
++        ) : (
++          <span className="text-sm" style={{ color: "var(--texto-tenue)" }}>{formatear(costeHoraCentimos)}/h</span>
++        )}
++        {/* El mes en curso no se cierra: le faltan días. */}
++        {!esActual && <BotonCierreMes mes={mes} cerrado={cerrado !== null} />}
++      </div>
++
++      <div className="grid gap-3 sm:grid-cols-5">
++        {kpis.map((k) => (
++          <div key={k.etiqueta} className="cristal cristal-denso p-4">
++            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>{k.etiqueta}</div>
++            <div className="mt-1 text-xl font-semibold tabular-nums" style={k.enRojo ? { color: "var(--estado-caido)" } : undefined}>{k.texto}</div>
++          </div>
++        ))}
++      </div>
++
++      <Tabla titulo="Por cliente" eje="Cliente" filas={r.porCliente} lineaExtra={r.sinCliente} extraNombre="De proyectos sin cliente" estructura={r.estructura} />
++      <Tabla titulo="Por proyecto" eje="Proyecto" filas={r.porProyecto} facturadoSinEje={r.facturadoSinProyectoCentimos} lineaExtra={r.sinProyecto} extraNombre="De clientes sin proyecto" estructura={r.estructura} />
++      <p className="text-xs" style={{ color: "var(--texto-tenue)" }}>
++        La estructura es la misma línea en las dos tablas: se resta una sola vez del resultado.
++      </p>
++    </section>
++  );
++}
+diff --git a/apps/atlas/src/app/proyectos/[slug]/page.tsx b/apps/atlas/src/app/proyectos/[slug]/page.tsx
+index 90907e2..4aca03d 100644
+--- a/apps/atlas/src/app/proyectos/[slug]/page.tsx
++++ b/apps/atlas/src/app/proyectos/[slug]/page.tsx
+@@ -1,20 +1,23 @@
+ import { notFound } from "next/navigation";
+ import Link from "next/link";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { obtenerProyecto } from "@/lib/db/proyectos";
+ import { listarClientes } from "@/lib/db/clientes";
++import { margenDe } from "@/lib/db/rentabilidad";
++import { mesDe, hoyEnMadrid } from "@/lib/dinero";
+ import { Portada } from "@/components/proyectos/Portada";
+ import { Distintivo } from "@/components/ui/Distintivo";
+ import { FormServicio } from "@/components/proyectos/FormServicio";
+ import { FormContrato } from "@/components/proyectos/FormContrato";
++import { ResumenMargen } from "@/components/dinero/ResumenMargen";
+ import { formatearUptime } from "@/lib/uptime/calcular";
+ import type { EstadoCheck } from "@/lib/incidencias/maquina";
+ import type { EstadoVisual } from "@/components/ui/Distintivo";
+ 
+ const TEXTO_ESTADO: Record<EstadoCheck, string> = {
+   ok: "Operativo",
+   degradado: "Degradado",
+   caido: "Caído",
+   desconocido: "Sin datos",
+ };
+@@ -44,20 +47,24 @@ export default async function FichaProyecto({
+   params: { slug: string };
+ }) {
+   const sb = await clienteServidor();
+   const [perfil, proyecto, clientes] = await Promise.all([
+     obtenerPerfil(sb),
+     obtenerProyecto(sb, params.slug),
+     listarClientes(sb),
+   ]);
+   if (!proyecto) notFound();
+   const verImportes = perfil?.esPropietario ?? false;
++  // No se llama a `margenDe` si no es propietario: se ahorra la consulta, y
++  // RLS la lanzaría igual si se intentase.
++  const mes = mesDe(hoyEnMadrid());
++  const margen = verImportes ? await margenDe(sb, { proyectoId: proyecto.id }, mes) : null;
+   // A los formularios solo viaja lo que necesitan para poblar un desplegable.
+   const elegibles = clientes.map((c) => ({ id: c.id, nombre: c.nombre }));
+   const enProduccion =
+     proyecto.estado === "produccion" || proyecto.estado === "mantenimiento";
+ 
+   return (
+     <article className="space-y-4">
+       <header className="cristal overflow-hidden">
+         <div className="h-32">
+           <Portada
+@@ -176,20 +183,24 @@ export default async function FichaProyecto({
+             )}
+             {/* Un contrato lleva dinero: solo el propietario. La acción lo
+                 rechaza igualmente, pero no se enseña lo que no se puede usar. */}
+             {verImportes && (
+               <div className="mt-3">
+                 <FormContrato proyectoId={proyecto.id} clientes={elegibles} />
+               </div>
+             )}
+           </section>
+ 
++          {margen && (
++            <ResumenMargen fila={margen} mes={mes} costeHoraCentimos={margen.costeHoraCentimos} />
++          )}
++
+           {(proyecto.enlaces.length > 0 || proyecto.repoUrl) && (
+             <section className="cristal p-4">
+               <h2
+                 className="mb-3 text-xs font-semibold uppercase tracking-wider"
+                 style={{ color: "var(--texto-tenue)" }}
+               >
+                 Ir a
+               </h2>
+               <div className="flex flex-wrap gap-2">
+                 {proyecto.repoUrl && (
+diff --git a/apps/atlas/src/components/ajustes/FormEconomia.tsx b/apps/atlas/src/components/ajustes/FormEconomia.tsx
+new file mode 100644
+index 0000000..f8a19aa
+--- /dev/null
++++ b/apps/atlas/src/components/ajustes/FormEconomia.tsx
+@@ -0,0 +1,92 @@
++"use client";
++
++import { useState } from "react";
++import { guardarAjustesEconomia } from "@/lib/db/acciones-economia";
++import { aCentimos } from "@/lib/dinero";
++import type { AjustesEconomia } from "@/lib/db/ajustes-economia";
++
++/**
++ * El coste de la hora y los datos fiscales del emisor. El coste es un número
++ * que fija el propietario (decisión 8), no un derivado: por eso es un campo y
++ * no un cálculo. Los datos fiscales pueden quedar vacíos hasta que 2E los exija.
++ */
++export function FormEconomia({ actual }: { actual: AjustesEconomia }) {
++  const [error, setError] = useState<string | null>(null);
++  const [enviando, setEnviando] = useState(false);
++  const [guardado, setGuardado] = useState(false);
++
++  async function alEnviar(e: React.FormEvent<HTMLFormElement>) {
++    e.preventDefault();
++    const datos = new FormData(e.currentTarget);
++    setError(null);
++    setGuardado(false);
++    const coste = aCentimos(String(datos.get("costeHora") ?? ""));
++    if (coste === null) return setError("El coste de la hora no es un importe.");
++    const texto = (n: string) => {
++      const t = String(datos.get(n) ?? "").trim();
++      return t === "" ? null : t;
++    };
++    setEnviando(true);
++    try {
++      const r = await guardarAjustesEconomia({
++        razonSocial: texto("razonSocial"),
++        cif: texto("cif"),
++        direccion: texto("direccion"),
++        costeHoraCentimos: coste,
++      });
++      if (r.ok) setGuardado(true);
++      else setError(r.error);
++    } catch {
++      // Igual que en FormGasto: un fallo de red en el `await` de arriba no
++      // debe dejar el botón deshabilitado para siempre ni al usuario sin
++      // explicación de por qué nada se guardó.
++      setError("No se pudo guardar. Comprueba la conexión e inténtalo otra vez.");
++    } finally {
++      // En un `finally` y no al final del `try`: así corre también cuando la
++      // acción de servidor rechaza en vez de devolver `{ ok: false }`.
++      setEnviando(false);
++    }
++  }
++
++  const euros = (actual.costeHoraCentimos / 100).toFixed(2).replace(".", ",");
++
++  return (
++    <form onSubmit={alEnviar} className="cristal space-y-3 p-4">
++      <label className="block text-sm">
++        <span className="mb-1 block">Coste de la hora (€)</span>
++        {/* Solo `aria-label`: el `<span>` de arriba y este atributo nombran el
++            mismo campo con textos distintos, y `getByLabelText` encontraría
++            dos coincidencias. El texto visible ya está en el `<span>`. */}
++        <input
++          name="costeHora"
++          inputMode="decimal"
++          defaultValue={euros}
++          aria-label="Coste de la hora"
++          className="w-full rounded-lg px-2 py-1.5 sm:w-48"
++        />
++      </label>
++      <p className="text-xs" style={{ color: "var(--texto-tenue)" }}>
++        Se aplica a los meses abiertos. Un mes cerrado conserva el coste con el que se cerró.
++      </p>
++      <div className="grid gap-3 sm:grid-cols-3">
++        <label className="block text-sm">
++          <span className="mb-1 block">Razón social</span>
++          <input name="razonSocial" defaultValue={actual.razonSocial ?? ""} className="w-full rounded-lg px-2 py-1.5" />
++        </label>
++        <label className="block text-sm">
++          <span className="mb-1 block">CIF</span>
++          <input name="cif" defaultValue={actual.cif ?? ""} className="w-full rounded-lg px-2 py-1.5" />
++        </label>
++        <label className="block text-sm">
++          <span className="mb-1 block">Dirección</span>
++          <input name="direccion" defaultValue={actual.direccion ?? ""} className="w-full rounded-lg px-2 py-1.5" />
++        </label>
++      </div>
++      {error && <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>{error}</p>}
++      {guardado && <p role="status" className="text-sm">Guardado.</p>}
++      <button type="submit" disabled={enviando} className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
++        Guardar
++      </button>
++    </form>
++  );
++}
+diff --git a/apps/atlas/src/components/dinero/BotonCierreMes.tsx b/apps/atlas/src/components/dinero/BotonCierreMes.tsx
+new file mode 100644
+index 0000000..0c6174d
+--- /dev/null
++++ b/apps/atlas/src/components/dinero/BotonCierreMes.tsx
+@@ -0,0 +1,44 @@
++// src/components/dinero/BotonCierreMes.tsx
++"use client";
++
++import { useState } from "react";
++import { Lock, LockOpen } from "lucide-react";
++import { cerrarMesAccion, reabrirMesAccion } from "@/lib/db/acciones-economia";
++
++/**
++ * Cerrar un mes congela el coste de la hora con el que se calculó. Reabrirlo
++ * vuelve al coste actual. Son dos botones y no un conmutador para que cada
++ * acción diga lo que hace.
++ */
++export function BotonCierreMes({ mes, cerrado }: { mes: string; cerrado: boolean }) {
++  const [error, setError] = useState<string | null>(null);
++  const [enviando, setEnviando] = useState(false);
++
++  async function ejecutar(accion: () => Promise<{ ok: true } | { ok: false; error: string }>) {
++    setError(null);
++    setEnviando(true);
++    try {
++      const r = await accion();
++      if (!r.ok) setError(r.error);
++    } catch {
++      setError("No se pudo guardar. Comprueba la conexión.");
++    } finally {
++      setEnviando(false);
++    }
++  }
++
++  return (
++    <div className="flex items-center gap-3">
++      {cerrado ? (
++        <button type="button" disabled={enviando} onClick={() => ejecutar(() => reabrirMesAccion(mes))} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
++          <LockOpen size={14} aria-hidden="true" /> Reabrir el mes
++        </button>
++      ) : (
++        <button type="button" disabled={enviando} onClick={() => ejecutar(() => cerrarMesAccion(mes))} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
++          <Lock size={14} aria-hidden="true" /> Cerrar el mes
++        </button>
++      )}
++      {error && <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>{error}</p>}
++    </div>
++  );
++}
+diff --git a/apps/atlas/src/components/dinero/ResumenMargen.tsx b/apps/atlas/src/components/dinero/ResumenMargen.tsx
+new file mode 100644
+index 0000000..5552d04
+--- /dev/null
++++ b/apps/atlas/src/components/dinero/ResumenMargen.tsx
+@@ -0,0 +1,34 @@
++// src/components/dinero/ResumenMargen.tsx
++import Link from "next/link";
++import { formatear } from "@/lib/dinero";
++import { formatearMinutos } from "@/lib/horas/tramos";
++import type { FilaMargen } from "@/lib/rentabilidad/margen";
++
++/**
++ * El dinero del mes en la ficha (§8): lo que se quiere tener delante justo
++ * antes de llamar. Solo se monta para el propietario: quien lo renderiza ya
++ * lo ha comprobado, y RLS lo garantiza igualmente.
++ */
++export function ResumenMargen({ fila, mes, costeHoraCentimos }: { fila: FilaMargen; mes: string; costeHoraCentimos: number }) {
++  const celda = (t: string, v: string, rojo = false) => (
++    <div>
++      <div className="text-[11px] uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>{t}</div>
++      <div className="font-semibold tabular-nums" style={rojo ? { color: "var(--estado-caido)" } : undefined}>{v}</div>
++    </div>
++  );
++  return (
++    <section className="cristal p-4">
++      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Este mes</h2>
++      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
++        {celda("Facturado", formatear(fila.facturadoCentimos))}
++        {celda("Gastos directos", formatear(fila.gastosCentimos))}
++        {celda("Horas", `${formatearMinutos(fila.minutos)} · ${formatear(fila.horasCentimos)}`)}
++        {celda("Margen", formatear(fila.margenCentimos), fila.margenCentimos < 0)}
++      </div>
++      <p className="mt-2 text-xs" style={{ color: "var(--texto-tenue)" }}>
++        {costeHoraCentimos === 0 ? "Sin coste de la hora configurado: las horas cuentan cero. " : ""}
++        <Link href={`/dinero/rentabilidad?mes=${mes}`} className="underline">Ver el mes entero →</Link>
++      </p>
++    </section>
++  );
++}
+diff --git a/apps/atlas/src/lib/db/acciones-economia.ts b/apps/atlas/src/lib/db/acciones-economia.ts
+new file mode 100644
+index 0000000..bf4d625
+--- /dev/null
++++ b/apps/atlas/src/lib/db/acciones-economia.ts
+@@ -0,0 +1,55 @@
++// src/lib/db/acciones-economia.ts
++"use server";
++
++import { revalidatePath } from "next/cache";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { escribirAjustes, leerAjustes, type EntradaAjustes } from "./ajustes-economia";
++import { cerrarMes, reabrirMes } from "./cierres";
++import type { Ok } from "./proyectos";
++
++// Envoltorios del límite HTTP; validar y escribir es de los módulos que
++// reciben `sb`. Un módulo "use server" expone TODO lo exportado, así que
++// aquí no hay nada más que estas tres funciones: ninguna lógica que no deba
++// ser un endpoint público.
++
++export async function guardarAjustesEconomia(entrada: EntradaAjustes): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await escribirAjustes(sb, entrada);
++  if (!r.ok) return r;
++  revalidatePath("/ajustes/economia");
++  revalidatePath("/dinero/rentabilidad");
++  // Las fichas leen `margenDe` con el coste vigente: sin esto seguirían
++  // enseñando el margen calculado con el coste anterior hasta su próxima carga.
++  revalidatePath("/clientes", "layout");
++  revalidatePath("/proyectos", "layout");
++  return { ok: true };
++}
++
++// Recibe solo `mes`, no el coste: lo que llega por la red no decide con qué
++// coste se congela un mes. Una pestaña abierta antes de cambiar el coste en
++// Ajustes mandaría aquí un valor obsoleto si el cliente lo escogiera; leerlo
++// en el servidor, justo antes de cerrar, es la única fuente que puede ser el
++// coste vigente en ese instante.
++export async function cerrarMesAccion(mes: string): Promise<Ok> {
++  const sb = await clienteServidor();
++  const ajustes = await leerAjustes(sb);
++  const r = await cerrarMes(sb, mes, ajustes.costeHoraCentimos, Date.now());
++  if (!r.ok) return r;
++  revalidatePath("/dinero/rentabilidad");
++  // Cerrar congela el coste del mes: las fichas también deben dejar de
++  // enseñar el margen con el coste que tenían abierto.
++  revalidatePath("/clientes", "layout");
++  revalidatePath("/proyectos", "layout");
++  return { ok: true };
++}
++
++export async function reabrirMesAccion(mes: string): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await reabrirMes(sb, mes);
++  if (!r.ok) return r;
++  revalidatePath("/dinero/rentabilidad");
++  // Reabrir vuelve al coste actual (§ arriba): mismo motivo para las fichas.
++  revalidatePath("/clientes", "layout");
++  revalidatePath("/proyectos", "layout");
++  return { ok: true };
++}
+diff --git a/apps/atlas/src/lib/db/ajustes-economia.ts b/apps/atlas/src/lib/db/ajustes-economia.ts
+new file mode 100644
+index 0000000..f9b966d
+--- /dev/null
++++ b/apps/atlas/src/lib/db/ajustes-economia.ts
+@@ -0,0 +1,70 @@
++// src/lib/db/ajustes-economia.ts
++//
++// La configuración económica: una fila (§4.8). Recibe `sb` para probarse; el
++// envoltorio "use server" está en `acciones-economia.ts`.
++//
++import type { Sb } from "./clientes";
++import type { Ok } from "./proyectos";
++
++export type AjustesEconomia = {
++  razonSocial: string | null;
++  cif: string | null;
++  direccion: string | null;
++  costeHoraCentimos: number;
++};
++
++export type EntradaAjustes = AjustesEconomia;
++
++const limpia = (s: string | null) => {
++  const t = (s ?? "").trim();
++  return t === "" ? null : t;
++};
++
++/** Puro. Una acción de servidor es un endpoint público: se valida aquí, no en el formulario. */
++export function validarAjustes(e: EntradaAjustes): Ok {
++  if (!Number.isInteger(e.costeHoraCentimos) || e.costeHoraCentimos < 0) {
++    return { ok: false, error: "El coste de la hora tiene que ser un importe de cero o más." };
++  }
++  if (e.costeHoraCentimos > 99_999_999) {
++    return { ok: false, error: "El coste de la hora no cabe en la base." };
++  }
++  return { ok: true };
++}
++
++export async function leerAjustes(sb: Sb): Promise<AjustesEconomia> {
++  const { data, error } = await sb
++    .from("ajustes_economia")
++    .select("razon_social, cif, direccion, coste_hora")
++    .eq("id", 1)
++    .maybeSingle();
++  if (error) throw error;
++  // RLS devuelve cero filas al colaborador. Lanzar y no devolver ceros: unos
++  // ceros parecerían «no configurado» y no «no tienes permiso».
++  if (!data) throw new Error("No hay configuración económica visible para este usuario.");
++  return {
++    razonSocial: data.razon_social,
++    cif: data.cif,
++    direccion: data.direccion,
++    // numeric(8,2) → céntimos, una sola vez.
++    costeHoraCentimos: Math.round(Number(data.coste_hora) * 100),
++  };
++}
++
++export async function escribirAjustes(sb: Sb, e: EntradaAjustes): Promise<Ok> {
++  const valido = validarAjustes(e);
++  if (!valido.ok) return valido;
++  const { data, error } = await sb
++    .from("ajustes_economia")
++    .update({
++      razon_social: limpia(e.razonSocial),
++      cif: limpia(e.cif),
++      direccion: limpia(e.direccion),
++      coste_hora: e.costeHoraCentimos / 100,
++      actualizado_en: new Date().toISOString(),
++    })
++    .eq("id", 1)
++    .select("id");
++  if (error) return { ok: false, error: error.message };
++  if (!data || data.length === 0) return { ok: false, error: "No tienes permiso para cambiar la configuración." };
++  return { ok: true };
++}
+diff --git a/apps/atlas/src/lib/db/cierres.ts b/apps/atlas/src/lib/db/cierres.ts
+new file mode 100644
+index 0000000..38bf419
+--- /dev/null
++++ b/apps/atlas/src/lib/db/cierres.ts
+@@ -0,0 +1,51 @@
++// src/lib/db/cierres.ts
++//
++// Cerrar un mes congela el coste de la hora con el que se calculó (§4.8).
++//
++import type { Sb } from "./clientes";
++import type { Ok } from "./proyectos";
++import { mesDe, mesEnMadrid } from "@/lib/dinero";
++
++export type Cierre = { mes: string; costeHoraCentimos: number; cerradoEn: string };
++
++export async function cierreDe(sb: Sb, mes: string): Promise<Cierre | null> {
++  const { data, error } = await sb
++    .from("cierres_mes")
++    .select("mes, coste_hora, cerrado_en")
++    .eq("mes", `${mes}-01`)
++    .maybeSingle();
++  if (error) throw error;
++  return data
++    ? { mes: mesDe(data.mes), costeHoraCentimos: Math.round(Number(data.coste_hora) * 100), cerradoEn: data.cerrado_en }
++    : null;
++}
++
++export async function cerrarMes(sb: Sb, mes: string, costeHoraCentimos: number, ahoraMs: number): Promise<Ok> {
++  // El mes en curso no se cierra: le faltan días. Se compara por texto de mes
++  // porque el instante viene por parámetro y así se prueba sin esperar. Se
++  // corta en Madrid, no en UTC: el resto de la app (`limitesMesMadrid`,
++  // `hoyEnMadrid`) corta meses ahí, y entre las 00:00 y las ~02:00 de Madrid
++  // del día 1, el mes que acaba de terminar todavía es el anterior en UTC —
++  // con `toISOString` esa ventana de dos horas impediría cerrar un mes que sí
++  // ha terminado.
++  const mesActual = mesEnMadrid(ahoraMs);
++  if (mes >= mesActual) return { ok: false, error: "No se cierra un mes que no ha terminado." };
++  const {
++    data: { user },
++  } = await sb.auth.getUser();
++  const { error } = await sb.from("cierres_mes").insert({
++    mes: `${mes}-01`,
++    coste_hora: costeHoraCentimos / 100,
++    cerrado_por: user?.id ?? null,
++  });
++  if (!error) return { ok: true };
++  if (error.code === "23505") return { ok: false, error: "Ese mes ya está cerrado." };
++  return { ok: false, error: error.message };
++}
++
++export async function reabrirMes(sb: Sb, mes: string): Promise<Ok> {
++  const { data, error } = await sb.from("cierres_mes").delete().eq("mes", `${mes}-01`).select("mes");
++  if (error) return { ok: false, error: error.message };
++  if (!data || data.length === 0) return { ok: false, error: "Ese mes no estaba cerrado." };
++  return { ok: true };
++}
+diff --git a/apps/atlas/src/lib/db/rentabilidad.ts b/apps/atlas/src/lib/db/rentabilidad.ts
+new file mode 100644
+index 0000000..1f0bccc
+--- /dev/null
++++ b/apps/atlas/src/lib/db/rentabilidad.ts
+@@ -0,0 +1,94 @@
++// src/lib/db/rentabilidad.ts
++//
++// Trae lo que el margen necesita y lo convierte a céntimos. No decide nada:
++// decide `calcularMargen`. No filtra por permisos: RLS deja fuera al
++// colaborador en las cuatro tablas, y `leerAjustes` lanza si no ve la fila.
++//
++import type { Sb } from "./clientes";
++import { listarFacturas } from "./facturas";
++import { listarGastos } from "./gastos";
++import { listarTramos } from "./fichajes";
++import { nombresDeProyectos } from "./proyectos";
++import { leerAjustes } from "./ajustes-economia";
++import { cierreDe, type Cierre } from "./cierres";
++import { limitesMesMadrid, mesVecino } from "@/lib/dinero";
++import { minutosDe } from "@/lib/horas/tramos";
++import { calcularMargen, type Rentabilidad, type FacturaMes, type GastoMes, type TramoMes, type FilaMargen } from "@/lib/rentabilidad/margen";
++
++const cent = (n: number) => Math.round(n * 100);
++
++export async function rentabilidadDelMes(
++  sb: Sb,
++  mes: string
++): Promise<{ r: Rentabilidad; costeHoraCentimos: number; cerrado: Cierre | null }> {
++  const desdeDia = `${mes}-01`;
++  const hastaDia = `${mesVecino(mes, 1)}-01`; // primer día del mes siguiente
++  const rango = limitesMesMadrid(mes);
++
++  const [ajustes, cerrado, facturas, gastos, tramos, proyectos] = await Promise.all([
++    leerAjustes(sb),
++    cierreDe(sb, mes),
++    listarFacturas(sb, {}),
++    listarGastos(sb, { desde: desdeDia, hasta: hastaDia }),
++    listarTramos(sb, rango),
++    // `LineaFactura` solo trae `proyectoId` (no `proyectoNombre`): se resuelve
++    // aquí una sola vez con un Map, en vez de tocar `facturas.ts` — el brief
++    // pide no modificarlo, y una consulta por línea sería una N+1.
++    nombresDeProyectos(sb),
++  ]);
++  const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]));
++
++  // `listarFacturas` no filtra por fecha: trae las últimas 200 EN TOTAL (no
++  // 200 del mes), así que un mes antiguo puede perder facturas en silencio en
++  // cuanto el negocio pase de 200 facturas totales. Aquí solo se filtra por
++  // mes de emisión y estado sobre lo que llegó; ampliar `listarFacturas` con
++  // un filtro de fecha (para no depender del límite de 200) es de
++  // `facturas.ts`, no de aquí.
++  const facturasMes: FacturaMes[] = facturas
++    .filter((f) => f.estado === "emitida" && f.fechaEmision >= desdeDia && f.fechaEmision < hastaDia)
++    .map((f) => ({
++      clienteId: f.clienteId,
++      clienteNombre: f.clienteNombre,
++      baseCentimos: cent(f.base),
++      lineas: f.lineas.map((l) => ({
++        proyectoId: l.proyectoId,
++        proyectoNombre: l.proyectoId ? (nombreProyecto.get(l.proyectoId) ?? null) : null,
++        importeCentimos: cent(l.importe),
++      })),
++    }));
++
++  // `listarGastos` con `hasta` INCLUSIVE (`lte`): trae también el día 1 del mes
++  // siguiente, así que se recorta aquí con `<` para no contarlo dos veces.
++  const gastosMes: GastoMes[] = gastos
++    .filter((g) => g.fecha < hastaDia)
++    .map((g) => ({ clienteId: g.clienteId, clienteNombre: g.clienteNombre, proyectoId: g.proyectoId, proyectoNombre: g.proyectoNombre, baseCentimos: cent(g.base) }));
++
++  // Solo cerrados (§6.3). Un abierto está en curso y se contará al cerrarse.
++  const tramosMes: TramoMes[] = tramos
++    .filter((t) => t.fin !== null)
++    .map((t) => ({ clienteId: t.clienteId, clienteNombre: t.clienteNombre, proyectoId: t.proyectoId, proyectoNombre: t.proyectoNombre, minutos: minutosDe(t, 0) }));
++
++  const costeHoraCentimos = cerrado ? cerrado.costeHoraCentimos : ajustes.costeHoraCentimos;
++  return { r: calcularMargen({ facturas: facturasMes, gastos: gastosMes, tramos: tramosMes, costeHoraCentimos }), costeHoraCentimos, cerrado };
++}
++
++/**
++ * La fila de un cliente o de un proyecto en el mes, o ceros si no aparece —
++ * la ficha del cliente/proyecto pide esto, no el mes entero: reutiliza
++ * `rentabilidadDelMes` y busca por id, en vez de duplicar la consulta.
++ */
++export async function margenDe(
++  sb: Sb,
++  eje: { clienteId: string } | { proyectoId: string },
++  mes: string
++): Promise<FilaMargen & { costeHoraCentimos: number; cerrado: boolean }> {
++  const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sb, mes);
++  const filas = "clienteId" in eje ? r.porCliente : r.porProyecto;
++  const id = "clienteId" in eje ? eje.clienteId : eje.proyectoId;
++  // Sin factura, gasto ni tramo ese mes, el id no aparece en la lista: no es
++  // un error, es que no hubo nada que contar, así que ceros y no una excepción.
++  const f = filas.find((x) => x.id === id) ?? { id, nombre: "", facturadoCentimos: 0, gastosCentimos: 0, minutos: 0, horasCentimos: 0, margenCentimos: 0 };
++  // `cerrado` aquí es solo si el mes está cerrado (booleano): la ficha no
++  // necesita el objeto `Cierre` completo, solo saber si el coste está congelado.
++  return { ...f, costeHoraCentimos, cerrado: cerrado !== null };
++}
+diff --git a/apps/atlas/src/lib/dinero.ts b/apps/atlas/src/lib/dinero.ts
+index a939f43..d35b50d 100644
+--- a/apps/atlas/src/lib/dinero.ts
++++ b/apps/atlas/src/lib/dinero.ts
+@@ -20,20 +20,29 @@ const EUROS = new Intl.NumberFormat("es-ES", {
+ // o una factura con la fecha de ayer — y el día 1 del mes, eso la saca del
+ // mes que le tocaba. «en-CA» se elige porque da AAAA-MM-DD, el formato que
+ // esperan los `<input type="date">` y la base.
+ const DIA_MADRID = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" });
+ 
+ /** AAAA-MM-DD del día de hoy en Madrid, sin pasar por el día UTC. */
+ export function hoyEnMadrid(): string {
+   return DIA_MADRID.format(new Date());
+ }
+ 
++// El mismo desfase que `hoyEnMadrid`, pero para un instante cualquiera y
++// recortado a mes: lo usa `cerrarMes` para decidir si un mes «ya terminó» en
++// Madrid, no en UTC. Entre las 00:00 y las ~02:00 de Madrid del día 1, el mes
++// que acaba de terminar todavía es el anterior en UTC — sin esto, esa
++// ventana de dos horas impediría cerrar el mes que sí ha terminado.
++export function mesEnMadrid(ms: number): string {
++  return DIA_MADRID.format(new Date(ms)).slice(0, 7);
++}
++
+ // Tope de `aCentimos`: el máximo que cabe en `numeric(12,2)`, el tipo de las
+ // columnas de importe en la base (migración de la Tarea 2). No es un número
+ // redondo elegido a ojo: es ese máximo exacto, para que el límite de
+ // TypeScript y el de Postgres sean el mismo número y no puedan divergir. Por
+ // encima, `aCentimos("1e21")` daría `1e+23` — ya no un entero exacto, que es
+ // justo el fallo que este módulo existe para impedir.
+ const MAX_CENTIMOS = 999_999_999_999;
+ 
+ /**
+  * Texto de un formulario → céntimos.
+@@ -68,10 +77,48 @@ export function formatear(centimos: number): string {
+  * flotante mucho antes de acercarse a `Number.MAX_SAFE_INTEGER`, así que la
+  * única decisión real es el redondeo, y es al alza en el medio céntimo.
+  */
+ export function desglosar(
+   baseCentimos: number,
+   tipoIva: number
+ ): { base: number; cuota: number; total: number } {
+   const cuota = Math.round((baseCentimos * tipoIva) / 100);
+   return { base: baseCentimos, cuota, total: baseCentimos + cuota };
+ }
++
++/**
++ * El mes `AAAA-MM` como instantes ISO: la medianoche de Madrid del día 1 y la
++ * del día 1 siguiente, en UTC. Se calcula el desfase en CADA frontera porque
++ * en marzo y octubre cambia dentro del mes. Es la única función que corta
++ * meses: horas y rentabilidad la comparten para no cuadrar distinto.
++ */
++export function limitesMesMadrid(mes: string): { desde: string; hasta: string } {
++  const a = Number(mes.slice(0, 4));
++  const m = Number(mes.slice(5, 7));
++  const PARTES = new Intl.DateTimeFormat("en-US", {
++    timeZone: "Europe/Madrid", hour12: false,
++    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
++  });
++  const desfase = (d: Date) => {
++    const p = PARTES.formatToParts(d);
++    const g = (t: string) => Number(p.find((x) => x.type === t)?.value);
++    // `hour12:false` puede dar «24» a medianoche en algunos motores.
++    return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute")) - d.getTime();
++  };
++  const ini = new Date(Date.UTC(a, m - 1, 1));
++  const fin = new Date(Date.UTC(a, m, 1));
++  return {
++    desde: new Date(ini.getTime() - desfase(ini)).toISOString(),
++    hasta: new Date(fin.getTime() - desfase(fin)).toISOString(),
++  };
++}
++
++export function mesDe(hoy: string): string {
++  return hoy.slice(0, 7);
++}
++
++export function mesVecino(mes: string, delta: -1 | 1): string {
++  const a = Number(mes.slice(0, 4));
++  const m = Number(mes.slice(5, 7)) + delta;
++  const d = new Date(Date.UTC(a, m - 1, 1));
++  return d.toISOString().slice(0, 7);
++}
+diff --git a/apps/atlas/src/lib/rentabilidad/margen.ts b/apps/atlas/src/lib/rentabilidad/margen.ts
+new file mode 100644
+index 0000000..6bbf3a2
+--- /dev/null
++++ b/apps/atlas/src/lib/rentabilidad/margen.ts
+@@ -0,0 +1,193 @@
++// src/lib/rentabilidad/margen.ts
++//
++// El margen de contribución (§6.3). Pura: entran céntimos, salen céntimos.
++//
++// No se prorratea NADA. Hay dos preguntas y cada una tiene su eje:
++//   ¿me interesa este cliente?  → lo que ingresa menos lo que desaparecería
++//                                 si lo dejara: lo que tiene SU contador.
++//   ¿vive el negocio?           → la suma de márgenes menos la estructura
++//                                 entera, una sola vez.
++// Lo directo depende del eje: por cliente cuenta lo que tiene cliente_id, por
++// proyecto lo que tiene proyecto_id. Lo que no tiene el eje va a una línea
++// aparte con nombre honesto, nunca repartido: repartir inventa precisión.
++//
++
++export type FacturaMes = {
++  clienteId: string;
++  clienteNombre: string;
++  /** Base, sin IVA: el IVA no es ingreso. */
++  baseCentimos: number;
++  lineas: { proyectoId: string | null; proyectoNombre: string | null; importeCentimos: number }[];
++};
++
++export type GastoMes = {
++  clienteId: string | null;
++  clienteNombre: string | null;
++  proyectoId: string | null;
++  proyectoNombre: string | null;
++  /** Base, sin IVA: el IVA es deducible, no coste. */
++  baseCentimos: number;
++};
++
++export type TramoMes = {
++  clienteId: string | null;
++  clienteNombre: string | null;
++  proyectoId: string | null;
++  proyectoNombre: string | null;
++  minutos: number;
++};
++
++export type Linea = { gastosCentimos: number; minutos: number; horasCentimos: number };
++
++export type FilaMargen = {
++  id: string;
++  nombre: string;
++  facturadoCentimos: number;
++  gastosCentimos: number;
++  minutos: number;
++  horasCentimos: number;
++  margenCentimos: number;
++};
++
++export type Rentabilidad = {
++  porCliente: FilaMargen[];
++  /** Con proyecto pero sin cliente. No se reparte. */
++  sinCliente: Linea;
++  porProyecto: FilaMargen[];
++  /** Con cliente pero sin proyecto. No se reparte. */
++  sinProyecto: Linea;
++  /** Sin ningún contador. Una sola vez. */
++  estructura: Linea;
++  // El facturado de una línea sin proyecto (2A: el
++  // proyecto vive en la LÍNEA, no en la factura) no cae en ninguna fila de
++  // `porProyecto` -- no tiene id de proyecto que lo agrupe -- pero sí en
++  // `total.facturadoCentimos`. Sin este campo la tabla por proyecto no
++  // cuadraba a la vista: la suma de sus filas quedaba por debajo del total y
++  // parecía un error, no una omisión a propósito. Solo facturado: el gasto y
++  // los minutos que le correspondan a un cliente sin proyecto ya viven en
++  // `sinProyecto`, y los que no tengan ni cliente ni proyecto, en
++  // `estructura`.
++  facturadoSinProyectoCentimos: number;
++  total: { facturadoCentimos: number; gastosCentimos: number; minutos: number; horasCentimos: number; margenCentimos: number };
++};
++
++/** Se redondea UNA vez, aquí, por fila: sumar redondeos parciales acumula error. */
++export function costeDeMinutos(minutos: number, costeHoraCentimos: number): number {
++  return Math.round((minutos * costeHoraCentimos) / 60);
++}
++
++type Acumulado = { nombre: string; facturado: number; gastos: number; minutos: number };
++
++function fila(id: string, a: Acumulado, coste: number): FilaMargen {
++  const horasCentimos = costeDeMinutos(a.minutos, coste);
++  return {
++    id,
++    nombre: a.nombre,
++    facturadoCentimos: a.facturado,
++    gastosCentimos: a.gastos,
++    minutos: a.minutos,
++    horasCentimos,
++    margenCentimos: a.facturado - a.gastos - horasCentimos,
++  };
++}
++
++function linea(gastos: number, minutos: number, coste: number): Linea {
++  return { gastosCentimos: gastos, minutos, horasCentimos: costeDeMinutos(minutos, coste) };
++}
++
++export function calcularMargen(e: {
++  facturas: FacturaMes[];
++  gastos: GastoMes[];
++  tramos: TramoMes[];
++  costeHoraCentimos: number;
++}): Rentabilidad {
++  const coste = e.costeHoraCentimos;
++  const clientes = new Map<string, Acumulado>();
++  const proyectos = new Map<string, Acumulado>();
++  const toma = (m: Map<string, Acumulado>, id: string, nombre: string | null) => {
++    const a = m.get(id) ?? { nombre: nombre ?? "Sin nombre", facturado: 0, gastos: 0, minutos: 0 };
++    m.set(id, a);
++    return a;
++  };
++
++  let sinClienteG = 0, sinClienteMin = 0;
++  let sinProyectoG = 0, sinProyectoMin = 0;
++  let estructuraG = 0, estructuraMin = 0;
++  let facturadoTotal = 0, gastosTotal = 0, minutosTotal = 0;
++  let facturadoSinProyecto = 0;
++
++  for (const f of e.facturas) {
++    toma(clientes, f.clienteId, f.clienteNombre).facturado += f.baseCentimos;
++    facturadoTotal += f.baseCentimos;
++    // El proyecto vive en la LÍNEA (2A): una factura puede mezclar dos.
++    for (const l of f.lineas) {
++      if (l.proyectoId !== null) toma(proyectos, l.proyectoId, l.proyectoNombre).facturado += l.importeCentimos;
++      else facturadoSinProyecto += l.importeCentimos;
++    }
++  }
++
++  for (const g of e.gastos) {
++    gastosTotal += g.baseCentimos;
++    if (g.clienteId !== null) toma(clientes, g.clienteId, g.clienteNombre).gastos += g.baseCentimos;
++    else if (g.proyectoId !== null) sinClienteG += g.baseCentimos;
++    else estructuraG += g.baseCentimos;
++    if (g.proyectoId !== null) toma(proyectos, g.proyectoId, g.proyectoNombre).gastos += g.baseCentimos;
++    else if (g.clienteId !== null) sinProyectoG += g.baseCentimos;
++  }
++
++  for (const t of e.tramos) {
++    minutosTotal += t.minutos;
++    if (t.clienteId !== null) toma(clientes, t.clienteId, t.clienteNombre).minutos += t.minutos;
++    else if (t.proyectoId !== null) sinClienteMin += t.minutos;
++    else estructuraMin += t.minutos;
++    if (t.proyectoId !== null) toma(proyectos, t.proyectoId, t.proyectoNombre).minutos += t.minutos;
++    else if (t.clienteId !== null) sinProyectoMin += t.minutos;
++  }
++
++  const ordenar = (m: Map<string, Acumulado>) =>
++    [...m.entries()].map(([id, a]) => fila(id, a, coste)).sort((x, y) => y.margenCentimos - x.margenCentimos);
++
++  const filasCliente = ordenar(clientes);
++  const filasProyecto = ordenar(proyectos);
++  const lineaSinCliente = linea(sinClienteG, sinClienteMin, coste);
++  const lineaSinProyecto = linea(sinProyectoG, sinProyectoMin, coste);
++  const lineaEstructura = linea(estructuraG, estructuraMin, coste);
++
++  // Ronda de arreglo 1: el total de horas se SUMA a partir de las filas ya
++  // redondeadas del eje de cliente (porCliente + sinCliente + estructura); no
++  // se redondea aparte sobre el total de minutos. Con coste no exacto y
++  // minutos que no son múltiplos de 60 los dos números difieren: con coste
++  // 3333 y dos clientes de 1 minuto cada uno, las filas dan 56 + 56 = 112
++  // pero redondear el total de minutos (2) da 111. La pantalla enseña las
++  // filas y el total juntos, y un total que no cuadra con lo que se ve
++  // encima parece un error de verdad aunque no lo sea.
++  //
++  // El eje de proyectos cuadra con el mismo número por construcción, no por
++  // coincidencia: son las mismas líneas (tramos) las que alimentan
++  // porProyecto + sinProyecto + estructura, solo agrupadas por otra clave.
++  // Mientras los tramos de un cliente no se repartan entre varios proyectos
++  // (ni un proyecto entre varios clientes) de forma que un eje junte lo que
++  // el otro separa, cada grupo del eje de cliente tiene un grupo espejo en
++  // el de proyecto con exactamente los mismos minutos, y el mismo redondeo
++  // por grupo da la misma suma en los dos ejes.
++  const horasTotal =
++    filasCliente.reduce((t, f) => t + f.horasCentimos, 0) +
++    lineaSinCliente.horasCentimos +
++    lineaEstructura.horasCentimos;
++
++  return {
++    porCliente: filasCliente,
++    sinCliente: lineaSinCliente,
++    porProyecto: filasProyecto,
++    sinProyecto: lineaSinProyecto,
++    estructura: lineaEstructura,
++    facturadoSinProyectoCentimos: facturadoSinProyecto,
++    total: {
++      facturadoCentimos: facturadoTotal,
++      gastosCentimos: gastosTotal,
++      minutos: minutosTotal,
++      horasCentimos: horasTotal,
++      margenCentimos: facturadoTotal - gastosTotal - horasTotal,
++    },
++  };
++}
+diff --git a/apps/atlas/src/tests/componentes/form-economia.test.tsx b/apps/atlas/src/tests/componentes/form-economia.test.tsx
+new file mode 100644
+index 0000000..a21d687
+--- /dev/null
++++ b/apps/atlas/src/tests/componentes/form-economia.test.tsx
+@@ -0,0 +1,34 @@
++import { describe, it, expect, vi, beforeEach } from "vitest";
++import { render, screen, fireEvent, waitFor } from "@testing-library/react";
++import { FormEconomia } from "@/components/ajustes/FormEconomia";
++
++const acciones = vi.hoisted(() => ({ guardarAjustesEconomia: vi.fn() }));
++vi.mock("@/lib/db/acciones-economia", () => acciones);
++
++const ACTUAL = { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3000 };
++
++beforeEach(() => acciones.guardarAjustesEconomia.mockReset().mockResolvedValue({ ok: true }));
++
++describe("FormEconomia", () => {
++  it("enseña el coste actual en euros", () => {
++    render(<FormEconomia actual={ACTUAL} />);
++    expect(screen.getByLabelText(/coste de la hora/i)).toHaveValue("30,00");
++  });
++
++  it("manda céntimos, no euros, y los textos vacíos como null", async () => {
++    render(<FormEconomia actual={ACTUAL} />);
++    fireEvent.change(screen.getByLabelText(/coste de la hora/i), { target: { value: "32,5" } });
++    fireEvent.click(screen.getByRole("button", { name: /guardar/i }));
++    await waitFor(() =>
++      expect(acciones.guardarAjustesEconomia).toHaveBeenCalledWith({ razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3250 })
++    );
++  });
++
++  it("un coste que no es un importe no llega a la acción", async () => {
++    render(<FormEconomia actual={ACTUAL} />);
++    fireEvent.change(screen.getByLabelText(/coste de la hora/i), { target: { value: "treinta" } });
++    fireEvent.click(screen.getByRole("button", { name: /guardar/i }));
++    expect(await screen.findByRole("alert")).toHaveTextContent(/importe/i);
++    expect(acciones.guardarAjustesEconomia).not.toHaveBeenCalled();
++  });
++});
+diff --git a/apps/atlas/src/tests/db/rentabilidad.test.ts b/apps/atlas/src/tests/db/rentabilidad.test.ts
+new file mode 100644
+index 0000000..3ff5dfd
+--- /dev/null
++++ b/apps/atlas/src/tests/db/rentabilidad.test.ts
+@@ -0,0 +1,218 @@
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import { leerAjustes, escribirAjustes, validarAjustes } from "@/lib/db/ajustes-economia";
++import { cierreDe, cerrarMes, reabrirMes } from "@/lib/db/cierres";
++import { rentabilidadDelMes, margenDe } from "@/lib/db/rentabilidad";
++import type { Database } from "@/types/supabase";
++
++const URL_API = "http://127.0.0.1:54321";
++const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++
++const CORREO_DUENYO = "duenyo-rentabilidad@atlas.test";
++const CORREO_COLAB = "colab-rentabilidad@atlas.test";
++const SLUG = "rentabilidad-prueba";
++// Un mes lejano que ningún otro test toca: la rentabilidad se filtra por fecha
++// y el propietario ve TODO, así que el aislamiento es por mes, no por fila.
++const MES = "2090-03";
++const AHORA = Date.parse("2090-05-15T12:00:00Z");
++// Ronda de arreglo 1: el corte de mes de `cerrarMes` debe ser en Madrid, no
++// en UTC (igual que `limitesMesMadrid`/`hoyEnMadrid`). A las 00:30 Madrid del
++// 1 de junio (verano, UTC+2) todavía es 31 de mayo en UTC: con un corte por
++// UTC, mayo seguiría pareciendo el mes en curso y no se podría cerrar aunque
++// en Madrid ya haya terminado. El literal en UTC de este instante es
++// "2090-05-31T22:30:00Z" — no "2090-06-01T00:30:00Z", que ya es junio en
++// ambos calendarios y no ejercitaría el caso.
++const AHORA_LIMITE = Date.parse("2090-05-31T22:30:00Z");
++
++let pg: Client;
++let admin: ReturnType<typeof createClient<Database>>;
++let sbDuenyo: ReturnType<typeof createClient<Database>>;
++let sbColab: ReturnType<typeof createClient<Database>>;
++let idDuenyo = "";
++let idColab = "";
++let idCliente = "";
++let idProyecto = "";
++let idFactura = "";
++let costeOriginal = 0;
++
++async function altaUsuario(correo: string, propietario: boolean, clave: string) {
++  const creado = await admin.auth.admin.createUser({ email: correo, password: "contrasena-de-prueba", email_confirm: true });
++  if (creado.error) throw creado.error;
++  await pg.query(`INSERT INTO perfiles (id, es_propietario) VALUES ($1,$2)`, [creado.data.user.id, propietario]);
++  const sb = createClient<Database>(URL_API, ANON, { auth: { persistSession: false, autoRefreshToken: false, storageKey: clave } });
++  const { error } = await sb.auth.signInWithPassword({ email: correo, password: "contrasena-de-prueba" });
++  if (error) throw error;
++  return { sb, id: creado.data.user.id };
++}
++
++async function limpiarDatos() {
++  await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, [`${MES}-01`]);
++  // El cierre de mayo que ejercita el corte Madrid/UTC (más abajo): un mes
++  // distinto de MES, así que necesita su propia limpieza.
++  await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, ["2090-05-01"]);
++  await pg.query(`DELETE FROM fichajes WHERE inicio >= '2090-03-01' AND inicio < '2090-04-01'`);
++  await pg.query(`DELETE FROM gastos WHERE fecha >= '2090-03-01' AND fecha < '2090-04-01'`);
++  await pg.query(`DELETE FROM facturas WHERE fecha_emision >= '2090-03-01' AND fecha_emision < '2090-04-01'`);
++  await pg.query(`DELETE FROM proyectos WHERE slug = $1`, [SLUG]);
++  await pg.query(`DELETE FROM clientes WHERE slug = $1`, [SLUG]);
++}
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
++  const { data: listado } = await admin.auth.admin.listUsers();
++  for (const u of listado?.users ?? []) {
++    if (u.email === CORREO_DUENYO || u.email === CORREO_COLAB) {
++      await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [u.id]);
++      await admin.auth.admin.deleteUser(u.id);
++    }
++  }
++  await limpiarDatos();
++  const { rows } = await pg.query(`SELECT coste_hora FROM ajustes_economia WHERE id = 1`);
++  costeOriginal = Math.round(Number(rows[0].coste_hora) * 100);
++
++  const d = await altaUsuario(CORREO_DUENYO, true, "rt-d");
++  const c = await altaUsuario(CORREO_COLAB, false, "rt-c");
++  sbDuenyo = d.sb; idDuenyo = d.id; sbColab = c.sb; idColab = c.id;
++
++  idCliente = (await pg.query(`INSERT INTO clientes (nombre, slug) VALUES ('Cliente rentabilidad', $1) RETURNING id`, [SLUG])).rows[0].id;
++  idProyecto = (await pg.query(`INSERT INTO proyectos (nombre, slug, tipo, estado) VALUES ('Proyecto rentabilidad', $1, 'web-app', 'produccion') RETURNING id`, [SLUG])).rows[0].id;
++
++  // Una factura emitida de 350 € base (dos líneas: 290 al proyecto, 60 sin proyecto),
++  // un borrador que NO debe contar, un gasto con cliente de 40 € base, un gasto
++  // de estructura de 20 €, un tramo cerrado de 2 h al cliente y uno ABIERTO que no cuenta.
++  idFactura = (await pg.query(
++    `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado)
++     VALUES ('externa','RT',1,$1,'2090-03-10',350,21,73.5,423.5,'emitida') RETURNING id`, [idCliente])).rows[0].id;
++  await pg.query(`INSERT INTO factura_lineas (factura_id, orden, concepto, cantidad, precio_unitario, importe, proyecto_id) VALUES ($1,0,'Sara',1,290,290,$2), ($1,1,'Otro',1,60,60,NULL)`, [idFactura, idProyecto]);
++  await pg.query(`INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado) VALUES ('externa','RT',NULL,$1,'2090-03-11',999,21,0,999,'borrador')`, [idCliente]);
++  await pg.query(`INSERT INTO gastos (fecha, concepto, base, iva, total, categoria, cliente_id) VALUES ('2090-03-05','Minutos',40,8.4,48.4,'ia',$1)`, [idCliente]);
++  await pg.query(`INSERT INTO gastos (fecha, concepto, base, iva, total, categoria) VALUES ('2090-03-06','Vercel',20,4.2,24.2,'infraestructura')`);
++  await pg.query(`INSERT INTO fichajes (usuario_id, cliente_id, proyecto_id, inicio, fin) VALUES ($1,$2,$3,'2090-03-07T08:00:00Z','2090-03-07T10:00:00Z')`, [idDuenyo, idCliente, idProyecto]);
++  await pg.query(`INSERT INTO fichajes (usuario_id, cliente_id, inicio) VALUES ($1,$2,'2090-03-08T08:00:00Z')`, [idDuenyo, idCliente]);
++});
++
++afterAll(async () => {
++  try {
++    try { await limpiarDatos(); } catch { /* ya no está */ }
++    try { await pg.query(`UPDATE ajustes_economia SET coste_hora = $1 WHERE id = 1`, [costeOriginal / 100]); } catch { /* ya no está */ }
++    for (const id of [idDuenyo, idColab]) {
++      if (id === "") continue;
++      try { await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [id]); } catch { /* ya no está */ }
++      try { await admin.auth.admin.deleteUser(id); } catch { /* ya no está */ }
++    }
++  } finally {
++    await pg.end();
++  }
++});
++
++describe("ajustes", () => {
++  it("validar: el coste no puede ser negativo ni el CIF una cadena vacía disfrazada", () => {
++    expect(validarAjustes({ razonSocial: null, cif: null, direccion: null, costeHoraCentimos: -1 }).ok).toBe(false);
++    expect(validarAjustes({ razonSocial: "  ", cif: "", direccion: null, costeHoraCentimos: 0 })).toEqual({ ok: true });
++  });
++
++  it("el propietario fija el coste de la hora y lo relee en céntimos", async () => {
++    const r = await escribirAjustes(sbDuenyo, { razonSocial: "HAT3X S.L.", cif: null, direccion: null, costeHoraCentimos: 3000 });
++    expect(r).toEqual({ ok: true });
++    const a = await leerAjustes(sbDuenyo);
++    expect(a.costeHoraCentimos).toBe(3000);
++    expect(a.razonSocial).toBe("HAT3X S.L.");
++  });
++
++  it("un colaborador no lee ni escribe", async () => {
++    await expect(leerAjustes(sbColab)).rejects.toThrow(/no hay configuración|permission|row/i);
++    const r = await escribirAjustes(sbColab, { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 1 });
++    expect(r.ok).toBe(false);
++  });
++});
++
++describe("rentabilidadDelMes", () => {
++  it("cuenta la factura emitida (no el borrador), los gastos por base y solo el tramo cerrado", async () => {
++    await escribirAjustes(sbDuenyo, { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3000 });
++    const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sbDuenyo, MES);
++    expect(cerrado).toBeNull();
++    expect(costeHoraCentimos).toBe(3000);
++    const c = r.porCliente.find((f) => f.id === idCliente)!;
++    expect(c.facturadoCentimos).toBe(35000);
++    expect(c.gastosCentimos).toBe(4000);
++    expect(c.minutos).toBe(120);
++    expect(c.horasCentimos).toBe(6000);
++    expect(c.margenCentimos).toBe(25000);
++    const p = r.porProyecto.find((f) => f.id === idProyecto)!;
++    expect(p.facturadoCentimos).toBe(29000);
++    expect(r.estructura.gastosCentimos).toBeGreaterThanOrEqual(2000);
++  });
++
++  it("un colaborador no ve nada del margen", async () => {
++    await expect(rentabilidadDelMes(sbColab, MES)).rejects.toThrow();
++  });
++});
++
++describe("margenDe", () => {
++  it("la fila de un cliente en el mes, con el coste vigente (mes abierto)", async () => {
++    // El test anterior deja el coste en 3000 y MES sin cerrar todavía: el
++    // margen esperado (25000) es el mismo que calcula `rentabilidadDelMes`.
++    const m = await margenDe(sbDuenyo, { clienteId: idCliente }, MES);
++    expect(m.margenCentimos).toBe(25000);
++    expect(m.costeHoraCentimos).toBe(3000);
++    expect(m.cerrado).toBe(false);
++  });
++
++  it("la fila de un proyecto en el mes", async () => {
++    const m = await margenDe(sbDuenyo, { proyectoId: idProyecto }, MES);
++    expect(m.facturadoCentimos).toBe(29000);
++  });
++
++  it("un id que no aparece ese mes devuelve ceros, no un error", async () => {
++    const m = await margenDe(sbDuenyo, { clienteId: "00000000-0000-0000-0000-000000000000" }, MES);
++    expect(m).toMatchObject({ facturadoCentimos: 0, gastosCentimos: 0, minutos: 0, horasCentimos: 0, margenCentimos: 0 });
++  });
++});
++
++describe("cierres", () => {
++  it("no se cierra el mes en curso ni uno futuro", async () => {
++    const r = await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA);
++    expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });
++  });
++
++  it("el mes en curso se decide en Madrid, no en UTC", async () => {
++    // A las 00:30 Madrid del 1 de junio (AHORA_LIMITE), mayo ya ha terminado
++    // en Madrid aunque en UTC siga siendo 31 de mayo: mayo se puede cerrar, y
++    // junio (el mes en curso en Madrid) no.
++    try {
++      expect(await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA_LIMITE)).toEqual({ ok: true });
++      const r = await cerrarMes(sbDuenyo, "2090-06", 3000, AHORA_LIMITE);
++      expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });
++    } finally {
++      // Este cierre es ajeno a MES ("2090-03"): limpiarDatos() en afterAll no
++      // lo toca, así que se retira aquí para no dejarlo en la base.
++      await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, ["2090-05-01"]);
++    }
++  });
++
++  it("cerrar congela el coste: cambiarlo después no mueve el mes cerrado", async () => {
++    expect(await cerrarMes(sbDuenyo, MES, 3000, AHORA)).toEqual({ ok: true });
++    await escribirAjustes(sbDuenyo, { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 9900 });
++    const { costeHoraCentimos, cerrado } = await rentabilidadDelMes(sbDuenyo, MES);
++    expect(costeHoraCentimos).toBe(3000);
++    expect(cerrado?.mes).toBe(MES);
++    expect(await cierreDe(sbDuenyo, MES)).not.toBeNull();
++  });
++
++  it("cerrar dos veces lo dice", async () => {
++    const r = await cerrarMes(sbDuenyo, MES, 3000, AHORA);
++    expect(r).toEqual({ ok: false, error: "Ese mes ya está cerrado." });
++  });
++
++  it("reabrir vuelve al coste actual", async () => {
++    expect(await reabrirMes(sbDuenyo, MES)).toEqual({ ok: true });
++    const { costeHoraCentimos } = await rentabilidadDelMes(sbDuenyo, MES);
++    expect(costeHoraCentimos).toBe(9900);
++    expect(await reabrirMes(sbDuenyo, MES)).toEqual({ ok: false, error: "Ese mes no estaba cerrado." });
++  });
++});
+diff --git a/apps/atlas/src/tests/dinero.test.ts b/apps/atlas/src/tests/dinero.test.ts
+index 59d315c..ca962c7 100644
+--- a/apps/atlas/src/tests/dinero.test.ts
++++ b/apps/atlas/src/tests/dinero.test.ts
+@@ -1,13 +1,13 @@
+ // src/tests/dinero.test.ts
+ import { describe, it, expect } from "vitest";
+-import { aCentimos, formatear, desglosar } from "@/lib/dinero";
++import { aCentimos, formatear, desglosar, limitesMesMadrid, mesDe, mesVecino } from "@/lib/dinero";
+ 
+ describe("a céntimos", () => {
+   it("acepta enteros y decimales", () => {
+     expect(aCentimos("350")).toBe(35000);
+     expect(aCentimos("350.90")).toBe(35090);
+     expect(aCentimos(290)).toBe(29000);
+   });
+ 
+   // El teclado español pone coma. Rechazarla sería una trampa para el usuario.
+   it("acepta la coma decimal", () => {
+@@ -70,10 +70,30 @@ describe("desglosar", () => {
+ 
+   it("el total es siempre base más cuota, sin recalcular", () => {
+     const d = desglosar(12345, 21);
+     expect(d.total).toBe(d.base + d.cuota);
+   });
+ 
+   it("con IVA cero la cuota es cero", () => {
+     expect(desglosar(29000, 0)).toEqual({ base: 29000, cuota: 0, total: 29000 });
+   });
+ });
++
++describe("limitesMesMadrid", () => {
++  it("agosto (CEST) empieza a las 22:00Z del 31 de julio", () => {
++    expect(limitesMesMadrid("2026-08")).toEqual({ desde: "2026-07-31T22:00:00.000Z", hasta: "2026-08-31T22:00:00.000Z" });
++  });
++  it("enero (CET) empieza a las 23:00Z del 31 de diciembre", () => {
++    expect(limitesMesMadrid("2026-01")).toEqual({ desde: "2025-12-31T23:00:00.000Z", hasta: "2026-01-31T23:00:00.000Z" });
++  });
++  it("octubre cambia de hora dentro del mes y cada frontera lleva su desfase", () => {
++    expect(limitesMesMadrid("2026-10")).toEqual({ desde: "2026-09-30T22:00:00.000Z", hasta: "2026-10-31T23:00:00.000Z" });
++  });
++});
++
++describe("mesDe y mesVecino", () => {
++  it("recorta y se mueve, también en el cambio de año", () => {
++    expect(mesDe("2026-08-30")).toBe("2026-08");
++    expect(mesVecino("2026-01", -1)).toBe("2025-12");
++    expect(mesVecino("2026-12", 1)).toBe("2027-01");
++  });
++});
+diff --git a/apps/atlas/src/tests/esquema/economia-ajustes.test.ts b/apps/atlas/src/tests/esquema/economia-ajustes.test.ts
+new file mode 100644
+index 0000000..f5372ff
+--- /dev/null
++++ b/apps/atlas/src/tests/esquema/economia-ajustes.test.ts
+@@ -0,0 +1,86 @@
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import type { Database } from "@/types/supabase";
++
++const URL_API = "http://127.0.0.1:54321";
++const ANON =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++const CORREO_COLAB = "colab-economia-esquema@atlas.test";
++const MES_PRUEBA = "2091-01-01"; // un mes que ningún otro test cierra
++
++let pg: Client;
++let admin: ReturnType<typeof createClient<Database>>;
++let sbColab: ReturnType<typeof createClient<Database>>;
++let idColab = "";
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
++  const { data: listado } = await admin.auth.admin.listUsers();
++  for (const u of listado?.users ?? []) {
++    if (u.email === CORREO_COLAB) await admin.auth.admin.deleteUser(u.id);
++  }
++  await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, [MES_PRUEBA]);
++  const creado = await admin.auth.admin.createUser({ email: CORREO_COLAB, password: "contrasena-de-prueba", email_confirm: true });
++  if (creado.error) throw creado.error;
++  idColab = creado.data.user.id;
++  await pg.query(`INSERT INTO perfiles (id, es_propietario) VALUES ($1, false)`, [idColab]);
++  sbColab = createClient<Database>(URL_API, ANON, { auth: { persistSession: false, autoRefreshToken: false, storageKey: "ee-c" } });
++  const { error } = await sbColab.auth.signInWithPassword({ email: CORREO_COLAB, password: "contrasena-de-prueba" });
++  if (error) throw error;
++});
++
++afterAll(async () => {
++  try {
++    try {
++      await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, [MES_PRUEBA]);
++    } catch {
++      /* ya no está */
++    }
++    if (idColab !== "") {
++      try {
++        await admin.auth.admin.deleteUser(idColab);
++      } catch {
++        /* ya no está */
++      }
++    }
++  } finally {
++    await pg.end();
++  }
++});
++
++describe("ajustes_economia", () => {
++  it("nace con una fila y coste cero", async () => {
++    const { rows } = await pg.query(`SELECT id, coste_hora FROM ajustes_economia`);
++    expect(rows).toHaveLength(1);
++    expect(Number(rows[0].coste_hora)).toBe(0);
++  });
++
++  it("no admite una segunda fila", async () => {
++    await expect(pg.query(`INSERT INTO ajustes_economia (id) VALUES (2)`)).rejects.toThrow(/ajustes_economia_id_check/);
++  });
++
++  it("un colaborador no la ve", async () => {
++    const { data } = await sbColab.from("ajustes_economia").select("coste_hora");
++    expect(data).toEqual([]);
++  });
++});
++
++describe("cierres_mes", () => {
++  it("solo admite el día 1", async () => {
++    await expect(pg.query(`INSERT INTO cierres_mes (mes, coste_hora) VALUES ('2091-01-15', 30)`)).rejects.toThrow(/cierres_mes_mes_check/);
++  });
++
++  it("un colaborador ni ve ni cierra", async () => {
++    await pg.query(`INSERT INTO cierres_mes (mes, coste_hora) VALUES ($1, 30)`, [MES_PRUEBA]);
++    const { data } = await sbColab.from("cierres_mes").select("mes").eq("mes", MES_PRUEBA);
++    expect(data).toEqual([]);
++    const { error } = await sbColab.from("cierres_mes").insert({ mes: "2091-02-01", coste_hora: 30 });
++    expect(error?.message).toMatch(/row-level security/);
++  });
++});
+diff --git a/apps/atlas/src/tests/rentabilidad/margen.test.ts b/apps/atlas/src/tests/rentabilidad/margen.test.ts
+new file mode 100644
+index 0000000..35de63a
+--- /dev/null
++++ b/apps/atlas/src/tests/rentabilidad/margen.test.ts
+@@ -0,0 +1,141 @@
++// src/tests/rentabilidad/margen.test.ts
++import { describe, it, expect } from "vitest";
++import { calcularMargen, costeDeMinutos, type FacturaMes, type GastoMes, type TramoMes } from "@/lib/rentabilidad/margen";
++
++const COSTE = 3000; // 30 €/h en céntimos
++
++const fBio: FacturaMes = {
++  clienteId: "c-bio", clienteNombre: "Biodental", baseCentimos: 35000,
++  lineas: [
++    { proyectoId: "p-sara", proyectoNombre: "Sara", importeCentimos: 29000 },
++    { proyectoId: "p-kairos", proyectoNombre: "Kairos", importeCentimos: 6000 },
++  ],
++};
++const fClub: FacturaMes = {
++  clienteId: "c-club", clienteNombre: "Club", baseCentimos: 10000,
++  lineas: [{ proyectoId: null, proyectoNombre: null, importeCentimos: 10000 }],
++};
++const gastos: GastoMes[] = [
++  { clienteId: "c-bio", clienteNombre: "Biodental", proyectoId: "p-sara", proyectoNombre: "Sara", baseCentimos: 4830 },
++  { clienteId: null, clienteNombre: null, proyectoId: "p-kairos", proyectoNombre: "Kairos", baseCentimos: 2500 }, // Supabase de Kairos
++  { clienteId: "c-club", clienteNombre: "Club", proyectoId: null, proyectoNombre: null, baseCentimos: 940 },
++  { clienteId: null, clienteNombre: null, proyectoId: null, proyectoNombre: null, baseCentimos: 2000 }, // Vercel
++];
++const tramos: TramoMes[] = [
++  { clienteId: "c-bio", clienteNombre: "Biodental", proyectoId: "p-sara", proyectoNombre: "Sara", minutos: 120 },
++  { clienteId: null, clienteNombre: null, proyectoId: "p-kairos", proyectoNombre: "Kairos", minutos: 60 },
++  { clienteId: null, clienteNombre: null, proyectoId: null, proyectoNombre: null, minutos: 30 },
++];
++
++describe("costeDeMinutos", () => {
++  it("redondea una sola vez, al céntimo", () => {
++    expect(costeDeMinutos(60, 3000)).toBe(3000);
++    expect(costeDeMinutos(1, 3000)).toBe(50);
++    expect(costeDeMinutos(7, 3333)).toBe(389); // 388,85 → 389
++    expect(costeDeMinutos(0, 3000)).toBe(0);
++  });
++});
++
++describe("calcularMargen", () => {
++  const r = calcularMargen({ facturas: [fBio, fClub], gastos, tramos, costeHoraCentimos: COSTE });
++
++  it("por cliente: facturado − gastos con su cliente − horas con su cliente", () => {
++    const bio = r.porCliente.find((f) => f.id === "c-bio")!;
++    expect(bio).toEqual({ id: "c-bio", nombre: "Biodental", facturadoCentimos: 35000, gastosCentimos: 4830, minutos: 120, horasCentimos: 6000, margenCentimos: 24170 });
++    const club = r.porCliente.find((f) => f.id === "c-club")!;
++    expect(club.margenCentimos).toBe(10000 - 940);
++  });
++
++  it("lo que tiene proyecto pero no cliente va a «sin cliente», sin repartir", () => {
++    expect(r.sinCliente).toEqual({ gastosCentimos: 2500, minutos: 60, horasCentimos: 3000 });
++  });
++
++  it("por proyecto: el facturado sale de las líneas, y el Supabase de Kairos sí es directo aquí", () => {
++    const kairos = r.porProyecto.find((f) => f.id === "p-kairos")!;
++    expect(kairos).toEqual({ id: "p-kairos", nombre: "Kairos", facturadoCentimos: 6000, gastosCentimos: 2500, minutos: 60, horasCentimos: 3000, margenCentimos: 500 });
++    const sara = r.porProyecto.find((f) => f.id === "p-sara")!;
++    expect(sara.facturadoCentimos).toBe(29000);
++  });
++
++  it("lo que tiene cliente pero no proyecto va a «sin proyecto»", () => {
++    expect(r.sinProyecto.gastosCentimos).toBe(940);
++    // y la línea de factura sin proyecto es facturado sin proyecto
++    expect(r.porProyecto.find((f) => f.id === "sin-proyecto")).toBeUndefined();
++    expect(r.total.facturadoCentimos - r.porProyecto.reduce((t, f) => t + f.facturadoCentimos, 0)).toBe(10000);
++    // La línea de fClub, sin proyecto: su facturado no cae en ninguna fila de
++    // `porProyecto`, pero tampoco desaparece — vive en su propio campo.
++    expect(r.facturadoSinProyectoCentimos).toBe(10000);
++  });
++
++  it("la estructura es lo que no tiene ningún contador, una sola vez", () => {
++    expect(r.estructura).toEqual({ gastosCentimos: 2000, minutos: 30, horasCentimos: 1500 });
++  });
++
++  it("los dos ejes cuadran con el total del negocio", () => {
++    const total = r.total;
++    expect(total.facturadoCentimos).toBe(45000);
++    expect(total.gastosCentimos).toBe(4830 + 2500 + 940 + 2000);
++    expect(total.minutos).toBe(210);
++    expect(total.horasCentimos).toBe(10500);
++    expect(total.margenCentimos).toBe(45000 - 10270 - 10500);
++    const sumaClientes = r.porCliente.reduce((t, f) => t + f.margenCentimos, 0);
++    expect(sumaClientes - r.sinCliente.gastosCentimos - r.sinCliente.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
++    const sumaProyectos = r.porProyecto.reduce((t, f) => t + f.margenCentimos, 0);
++    expect(sumaProyectos + r.facturadoSinProyectoCentimos - r.sinProyecto.gastosCentimos - r.sinProyecto.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
++  });
++
++  it("ordena de más a menos margen", () => {
++    expect(r.porCliente.map((f) => f.id)).toEqual(["c-bio", "c-club"]);
++  });
++
++  it("con coste cero, las horas cuentan cero pero los minutos se ven", () => {
++    const sin = calcularMargen({ facturas: [fBio], gastos: [], tramos, costeHoraCentimos: 0 });
++    expect(sin.porCliente[0]?.horasCentimos).toBe(0);
++    expect(sin.porCliente[0]?.minutos).toBe(120);
++  });
++
++  it("un cliente con gastos u horas pero sin factura aparece con facturado cero", () => {
++    const solo = calcularMargen({ facturas: [], gastos: [gastos[0]!], tramos: [], costeHoraCentimos: COSTE });
++    expect(solo.porCliente).toEqual([{ id: "c-bio", nombre: "Biodental", facturadoCentimos: 0, gastosCentimos: 4830, minutos: 0, horasCentimos: 0, margenCentimos: -4830 }]);
++  });
++
++  // Ronda de arreglo 1: con coste no exacto (3333) y minutos que no son
++  // múltiplos de 60, redondear el total de minutos de una sola vez YA NO
++  // cuadra con la suma de las filas: 2 clientes de 1 minuto cada uno dan
++  // 56 + 56 = 112 en las filas, pero redondear el total (2 minutos) da 111.
++  // `total.horasCentimos` se define como la suma de filas — no el redondeo
++  // del total — para que la pantalla, que enseña las dos cosas juntas,
++  // nunca muestre un total que no cuadre con lo que hay encima.
++  it("con coste y minutos que no cuadran al redondear el total, el total es la suma de las filas, en los dos ejes", () => {
++    const COSTE_IMPAR = 3333;
++    const tramosImpares: TramoMes[] = [
++      { clienteId: "c1", clienteNombre: "Uno", proyectoId: "p1", proyectoNombre: "Proyecto Uno", minutos: 1 },
++      { clienteId: "c2", clienteNombre: "Dos", proyectoId: "p2", proyectoNombre: "Proyecto Dos", minutos: 7 },
++      // Sin cliente, con proyecto: alimenta `sinCliente` en el eje de
++      // cliente y una fila de `porProyecto` propia en el eje de proyecto.
++      { clienteId: null, clienteNombre: null, proyectoId: "p3", proyectoNombre: "Proyecto Tres", minutos: 13 },
++      // Ni cliente ni proyecto: estructura, la misma línea en los dos ejes.
++      { clienteId: null, clienteNombre: null, proyectoId: null, proyectoNombre: null, minutos: 1 },
++    ];
++    const r2 = calcularMargen({ facturas: [], gastos: [], tramos: tramosImpares, costeHoraCentimos: COSTE_IMPAR });
++
++    // Las filas, calculadas a mano: 56, 389, 722 y 56.
++    const sumaEjeCliente = r2.porCliente.reduce((t, f) => t + f.horasCentimos, 0) + r2.sinCliente.horasCentimos + r2.estructura.horasCentimos;
++    const sumaEjeProyecto = r2.porProyecto.reduce((t, f) => t + f.horasCentimos, 0) + r2.sinProyecto.horasCentimos + r2.estructura.horasCentimos;
++    expect(r2.total.horasCentimos).toBe(1223);
++    expect(sumaEjeCliente).toBe(1223);
++    expect(sumaEjeProyecto).toBe(1223);
++
++    // Y no el redondeo directo del total de minutos (1222): las dos formas
++    // de cuadrar difieren aquí a propósito, para fijar cuál gana.
++    expect(costeDeMinutos(r2.total.minutos, COSTE_IMPAR)).toBe(1222);
++    expect(r2.total.horasCentimos).not.toBe(costeDeMinutos(r2.total.minutos, COSTE_IMPAR));
++
++    // Y el margen del total cuadra por los dos ejes, con este total de horas.
++    const sumaMargenClientes = r2.porCliente.reduce((t, f) => t + f.margenCentimos, 0);
++    expect(sumaMargenClientes - r2.sinCliente.gastosCentimos - r2.sinCliente.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
++    const sumaMargenProyectos = r2.porProyecto.reduce((t, f) => t + f.margenCentimos, 0);
++    const facturadoSinProyecto2 = 0;
++    expect(sumaMargenProyectos + facturadoSinProyecto2 - r2.sinProyecto.gastosCentimos - r2.sinProyecto.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
++  });
++});
+diff --git a/apps/atlas/src/types/supabase.ts b/apps/atlas/src/types/supabase.ts
+index b7b3a40..ea00fcd 100644
+--- a/apps/atlas/src/types/supabase.ts
++++ b/apps/atlas/src/types/supabase.ts
+@@ -27,20 +27,47 @@ export type Database = {
+     }
+     Enums: {
+       [_ in never]: never
+     }
+     CompositeTypes: {
+       [_ in never]: never
+     }
+   }
+   public: {
+     Tables: {
++      ajustes_economia: {
++        Row: {
++          actualizado_en: string
++          cif: string | null
++          coste_hora: number
++          direccion: string | null
++          id: number
++          razon_social: string | null
++        }
++        Insert: {
++          actualizado_en?: string
++          cif?: string | null
++          coste_hora?: number
++          direccion?: string | null
++          id: number
++          razon_social?: string | null
++        }
++        Update: {
++          actualizado_en?: string
++          cif?: string | null
++          coste_hora?: number
++          direccion?: string | null
++          id?: number
++          razon_social?: string | null
++        }
++        Relationships: []
++      }
+       check_agregados: {
+         Row: {
+           bucket: string
+           check_id: string
+           granularidad: string
+           latencia_p50: number | null
+           latencia_p95: number | null
+           ok: number
+           total: number
+         }
+@@ -190,20 +217,49 @@ export type Database = {
+           },
+           {
+             foreignKeyName: "checks_servicio_id_fkey"
+             columns: ["servicio_id"]
+             isOneToOne: false
+             referencedRelation: "servicios"
+             referencedColumns: ["id"]
+           },
+         ]
+       }
++      cierres_mes: {
++        Row: {
++          cerrado_en: string
++          cerrado_por: string | null
++          coste_hora: number
++          mes: string
++        }
++        Insert: {
++          cerrado_en?: string
++          cerrado_por?: string | null
++          coste_hora: number
++          mes: string
++        }
++        Update: {
++          cerrado_en?: string
++          cerrado_por?: string | null
++          coste_hora?: number
++          mes?: string
++        }
++        Relationships: [
++          {
++            foreignKeyName: "cierres_mes_cerrado_por_fkey"
++            columns: ["cerrado_por"]
++            isOneToOne: false
++            referencedRelation: "perfiles"
++            referencedColumns: ["id"]
++          },
++        ]
++      }
+       clientes: {
+         Row: {
+           actualizado_en: string
+           cif: string | null
+           color_acento: string | null
+           creado_en: string
+           direccion: string | null
+           estado: string
+           id: string
+           nombre: string
+diff --git a/apps/atlas/supabase/migrations/20260831100000_economia_ajustes.sql b/apps/atlas/supabase/migrations/20260831100000_economia_ajustes.sql
+new file mode 100644
+index 0000000..9d752a4
+--- /dev/null
++++ b/apps/atlas/supabase/migrations/20260831100000_economia_ajustes.sql
+@@ -0,0 +1,42 @@
++-- apps/atlas/supabase/migrations/20260831100000_economia_ajustes.sql
++--
++-- Dos valores que el bloque necesita y hoy no existen (§4.8): los datos
++-- fiscales del emisor y el coste de la hora. Van en una tabla de UNA fila y no
++-- en variables de entorno: son datos del negocio, se editan desde la interfaz,
++-- y duplicarlos en el entorno crearía una segunda verdad.
++create table ajustes_economia (
++  -- El `check (id = 1)` es lo que hace que solo pueda haber una fila.
++  id            smallint primary key check (id = 1),
++  razon_social  text,
++  cif           text,
++  direccion     text,
++  -- Decisión 8: un número que fija el propietario, no un derivado. Cero hasta
++  -- que lo ponga: la rentabilidad con coste cero es solo ingresos menos
++  -- gastos, y la pantalla avisa de que falta.
++  coste_hora    numeric(8,2) not null default 0 check (coste_hora >= 0),
++  actualizado_en timestamptz not null default now()
++);
++insert into ajustes_economia (id) values (1);
++
++-- El cierre de un mes congela el coste de la hora con el que se calculó. Si no,
++-- cambiarlo mañana reescribiría la rentabilidad de todos los meses pasados, y
++-- un histórico que se mueve solo no sirve para comparar nada.
++create table cierres_mes (
++  mes         date primary key check (extract(day from mes) = 1),
++  coste_hora  numeric(8,2) not null check (coste_hora >= 0),
++  cerrado_en  timestamptz not null default now(),
++  cerrado_por uuid references perfiles(id) on delete set null
++);
++
++grant select, insert, update, delete on ajustes_economia, cierres_mes to authenticated;
++grant all privileges on ajustes_economia, cierres_mes to service_role;
++
++alter table ajustes_economia enable row level security;
++alter table cierres_mes      enable row level security;
++
++-- Solo el propietario. Un colaborador no ve el coste de la hora ni los cierres:
++-- son la mitad del margen, y el margen es del propietario (§5).
++create policy ajustes_economia_propietario on ajustes_economia for all to authenticated
++  using (atlas_es_propietario()) with check (atlas_es_propietario());
++create policy cierres_propietario on cierres_mes for all to authenticated
++  using (atlas_es_propietario()) with check (atlas_es_propietario());

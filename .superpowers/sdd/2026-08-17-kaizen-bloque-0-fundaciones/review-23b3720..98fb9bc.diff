@@ -1,0 +1,428 @@
+# Review package: 23b3720..98fb9bc
+
+## Commits
+98fb9bc fix(kaizen): ronda 1 de arreglos sobre la Tarea 11
+
+## Files changed
+ apps/kaizen/src/app/_layout.tsx                    | 13 +---
+ apps/kaizen/src/features/perfil/ajustes.tsx        | 85 ++++++++++++++++++++--
+ .../features/perfil/proveedor-tema-del-perfil.tsx  | 16 ++++
+ .../src/features/perfil/tema-instantaneo.test.tsx  | 82 +++++++++++++++++++++
+ apps/kaizen/src/features/perfil/usar-perfil.ts     |  6 ++
+ 5 files changed, 182 insertions(+), 20 deletions(-)
+
+## Diff
+diff --git a/apps/kaizen/src/app/_layout.tsx b/apps/kaizen/src/app/_layout.tsx
+index a838bb8..e9f879b 100644
+--- a/apps/kaizen/src/app/_layout.tsx
++++ b/apps/kaizen/src/app/_layout.tsx
+@@ -1,30 +1,19 @@
+-import type { ReactNode } from 'react'
+ import { Stack, Redirect } from 'expo-router'
+ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+ import { ProveedorSesion, useSesion } from '@/datos/sesion'
+ import { crearClienteConsultas, persistidor } from '@/datos/cliente-consultas'
+-import { ProveedorTema } from '@/design/proveedor'
+ import { Pantalla } from '@/design/componentes/pantalla'
+-import { usarPerfil } from '@/features/perfil/usar-perfil'
++import { ProveedorTemaDelPerfil } from '@/features/perfil/proveedor-tema-del-perfil'
+ 
+ const cliente = crearClienteConsultas()
+ 
+-/**
+- * Lee el tema del perfil. Antes de iniciar sesión no hay perfil, así que cae
+- * al de por defecto — que es justo lo que debe verse en la pantalla de acceso.
+- */
+-function ProveedorTemaDelPerfil({ children }: { children: ReactNode }) {
+-  const { perfil } = usarPerfil()
+-  return <ProveedorTema nombre={perfil?.tema ?? 'defecto'}>{children}</ProveedorTema>
+-}
+-
+ function Puerta() {
+   const { sesion, cargando } = useSesion()
+   // Nunca `null`: sin nada montado se ve el fondo por defecto de React Native
+   // —blanco— y en una app oscura eso es un fogonazo en cada arranque lento.
+   if (cargando) return <Pantalla />
+   if (!sesion) return <Redirect href="/acceso" />
+   return (
+     <Stack screenOptions={{ headerShown: false }}>
+       <Stack.Screen name="(pestanas)" />
+       <Stack.Screen name="anadir" options={{ presentation: 'modal' }} />
+diff --git a/apps/kaizen/src/features/perfil/ajustes.tsx b/apps/kaizen/src/features/perfil/ajustes.tsx
+index 760ff44..b454235 100644
+--- a/apps/kaizen/src/features/perfil/ajustes.tsx
++++ b/apps/kaizen/src/features/perfil/ajustes.tsx
+@@ -14,77 +14,115 @@ const UNIDADES = [
+   { clave: 'imperial', titulo: 'Imperial' },
+ ] as const
+ 
+ // 0-12 y 0-23: mismo rango que exige la base de datos en `corte_dia` y
+ // `hora_silencio` (`supabase/migrations/0001_esquema.sql`). Repetir el rango
+ // aquí no lo duplica de mentira: es el que ve el usuario, y si algún día se
+ // amplía en la base, este selector tiene que ampliarse con él.
+ const CORTES_DIA = Array.from({ length: 13 }, (_, i) => i)
+ const HORAS_SILENCIO = Array.from({ length: 24 }, (_, i) => i)
+ 
++// Etiquetas legibles para las claves crudas de `TEMAS`. Un tema que no esté
++// en este mapa (p. ej. el que añade el perfil `personal` de EAS desde fuera
++// del control de versiones, ver `design/temas/indice.ts`) cae a su propia
++// clave con la primera letra en mayúscula, en vez de romper o desaparecer.
++const ETIQUETAS_TEMA: Record<string, string> = {
++  defecto: 'Oscuro',
++  claro: 'Claro',
++}
++
++function etiquetaTema(nombre: string): string {
++  return ETIQUETAS_TEMA[nombre] ?? nombre.charAt(0).toUpperCase() + nombre.slice(1)
++}
++
++/**
++ * Valida contra el mismo mecanismo que después consume la zona horaria
++ * (`fechaLocal`, Tarea 3), no contra una lista propia: si `Intl` la acepta,
++ * el cálculo del día funcionará con ella; si `Intl` la rechaza, aceptarla
++ * aquí solo trasladaría la rotura, en silencio, al cálculo del día entero.
++ */
++function esZonaValida(valor: string): boolean {
++  try {
++    new Intl.DateTimeFormat('en-CA', { timeZone: valor })
++    return true
++  } catch {
++    return false
++  }
++}
++
+ function Seccion({ titulo, ayuda, children }: { titulo: string; ayuda?: string; children: ReactNode }) {
+   const t = useTema()
+   return (
+     <View style={{ gap: t.espaciado[1] }}>
+       <Texto variante="etiqueta">{titulo}</Texto>
+       {children}
+       {ayuda && <Texto variante="tenue">{ayuda}</Texto>}
+     </View>
+   )
+ }
+ 
+-function Ficha({ titulo, seleccionado, alPulsar }: {
++function Ficha({ titulo, seleccionado, deshabilitado = false, alPulsar }: {
+   titulo: string
+   seleccionado: boolean
++  deshabilitado?: boolean
+   alPulsar: () => void
+ }) {
+   const t = useTema()
+   return (
+-    <Pressable onPress={alPulsar} accessibilityRole="button" accessibilityState={{ selected: seleccionado }}>
++    <Pressable
++      onPress={alPulsar}
++      disabled={deshabilitado}
++      accessibilityRole="button"
++      accessibilityState={{ selected: seleccionado, disabled: deshabilitado }}
++      style={{ opacity: deshabilitado ? 0.5 : 1 }}
++    >
+       <Superficie
+         fondo={seleccionado ? t.superficie.botonPrimario : t.superficie.botonSecundario}
+         radio={t.radio.pastilla}
+         style={{ paddingVertical: t.espaciado[1], paddingHorizontal: t.espaciado[2] }}
+       >
+         <Texto style={{ color: seleccionado ? t.color.sobreAcento : t.color.texto }}>{titulo}</Texto>
+       </Superficie>
+     </Pressable>
+   )
+ }
+ 
+-function SelectorNumerico({ valores, seleccionado, alSeleccionar }: {
++function SelectorNumerico({ valores, seleccionado, deshabilitado = false, alSeleccionar }: {
+   valores: number[]
+   seleccionado: number
++  deshabilitado?: boolean
+   alSeleccionar: (valor: number) => void
+ }) {
+   const t = useTema()
+   return (
+     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+       <View style={{ flexDirection: 'row', gap: t.espaciado[1] }}>
+         {valores.map((valor) => (
+           <Ficha
+             key={valor}
+             titulo={String(valor)}
+             seleccionado={valor === seleccionado}
++            deshabilitado={deshabilitado}
+             alPulsar={() => alSeleccionar(valor)}
+           />
+         ))}
+       </View>
+     </ScrollView>
+   )
+ }
+ 
+ export function Ajustes() {
+   const t = useTema()
+   const router = useRouter()
+-  const { perfil, guardar } = usarPerfil()
++  const { perfil, guardar, guardando, errorAlGuardar } = usarPerfil()
+   const [zonaHoraria, setZonaHoraria] = useState('')
++  const [errorZona, setErrorZona] = useState<string | null>(null)
+ 
+   // Sincroniza el campo con lo que llega del servidor, pero solo mientras el
+   // usuario no está escribiendo: si reescribiéramos en cada render, cualquier
+   // guardado en curso de OTRO control (p.ej. el tema) refrescaría la consulta
+   // ['perfil', id] y borraría lo que la persona estuviera tecleando aquí.
+   useEffect(() => {
+     if (perfil) setZonaHoraria(perfil.zona_horaria)
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [perfil?.zona_horaria])
+ 
+@@ -94,85 +132,116 @@ export function Ajustes() {
+         <Texto variante="tenue">Cargando ajustes…</Texto>
+       </Pantalla>
+     )
+   }
+ 
+   const campo = {
+     borderWidth: 1, borderColor: t.color.borde, borderRadius: t.radio.boton,
+     padding: t.espaciado[2], color: t.color.texto,
+   }
+ 
++  function alCambiarZonaHoraria(valor: string) {
++    setZonaHoraria(valor)
++    setErrorZona(null)
++  }
++
+   function confirmarZonaHoraria() {
+-    if (perfil && zonaHoraria !== perfil.zona_horaria) guardar({ zona_horaria: zonaHoraria })
++    if (!perfil || zonaHoraria === perfil.zona_horaria) return
++    if (!esZonaValida(zonaHoraria)) {
++      setErrorZona('Esa zona horaria no existe. Revisa cómo la has escrito.')
++      return
++    }
++    setErrorZona(null)
++    guardar({ zona_horaria: zonaHoraria })
+   }
+ 
+   function detectarZonaHoraria() {
++    // Lo que devuelve `Intl` en este dispositivo es, por construcción, una
++    // zona que el propio `Intl` acepta: no hace falta validarla.
+     const detectada = Intl.DateTimeFormat().resolvedOptions().timeZone
+     setZonaHoraria(detectada)
++    setErrorZona(null)
+     guardar({ zona_horaria: detectada })
+   }
+ 
+   return (
+     <Pantalla>
+       <ScrollView contentContainerStyle={{ padding: t.espaciado[5], gap: t.espaciado[5] }}>
+         <Texto variante="titulo">Ajustes</Texto>
+ 
++        {errorAlGuardar && (
++          <Texto variante="tenue" style={{ color: t.color.peligro }}>{errorAlGuardar}</Texto>
++        )}
++
+         <Seccion titulo="Unidades">
+           <View style={{ flexDirection: 'row', gap: t.espaciado[1] }}>
+             {UNIDADES.map((u) => (
+               <View key={u.clave} style={{ flex: 1 }}>
+                 <Boton
+                   titulo={u.titulo}
+                   tono={perfil.unidades === u.clave ? 'primario' : 'secundario'}
++                  deshabilitado={guardando}
+                   alPulsar={() => guardar({ unidades: u.clave })}
+                 />
+               </View>
+             ))}
+           </View>
+         </Seccion>
+ 
+         <Seccion titulo="Zona horaria">
+           <TextInput
+             style={campo}
+             value={zonaHoraria}
+-            onChangeText={setZonaHoraria}
++            onChangeText={alCambiarZonaHoraria}
+             onBlur={confirmarZonaHoraria}
+             placeholderTextColor={t.color.textoTenue}
+             autoCapitalize="none"
+             autoCorrect={false}
++            editable={!guardando}
++          />
++          {errorZona && (
++            <Texto variante="tenue" style={{ color: t.color.peligro }}>{errorZona}</Texto>
++          )}
++          <Boton
++            titulo="Detectar automáticamente"
++            tono="secundario"
++            deshabilitado={guardando}
++            alPulsar={detectarZonaHoraria}
+           />
+-          <Boton titulo="Detectar automáticamente" tono="secundario" alPulsar={detectarZonaHoraria} />
+         </Seccion>
+ 
+         <Seccion titulo="Corte de día" ayuda="Lo que registres antes de esta hora contará como el día anterior.">
+           <SelectorNumerico
+             valores={CORTES_DIA}
+             seleccionado={perfil.corte_dia}
++            deshabilitado={guardando}
+             alSeleccionar={(valor) => guardar({ corte_dia: valor })}
+           />
+         </Seccion>
+ 
+         <Seccion titulo="Hora de silencio" ayuda="No te avisaremos después de esta hora.">
+           <SelectorNumerico
+             valores={HORAS_SILENCIO}
+             seleccionado={perfil.hora_silencio}
++            deshabilitado={guardando}
+             alSeleccionar={(valor) => guardar({ hora_silencio: valor })}
+           />
+         </Seccion>
+ 
+         <Seccion titulo="Tema">
+           <View style={{ gap: t.espaciado[1] }}>
+             {Object.keys(TEMAS).map((nombre) => (
+               <Ficha
+                 key={nombre}
+-                titulo={nombre}
++                titulo={etiquetaTema(nombre)}
+                 seleccionado={perfil.tema === nombre}
++                deshabilitado={guardando}
+                 alPulsar={() => guardar({ tema: nombre })}
+               />
+             ))}
+           </View>
+         </Seccion>
+ 
+         <Boton titulo="Borrar cuenta" tono="peligro" alPulsar={() => router.push('/borrar-cuenta')} />
+       </ScrollView>
+     </Pantalla>
+   )
+diff --git a/apps/kaizen/src/features/perfil/proveedor-tema-del-perfil.tsx b/apps/kaizen/src/features/perfil/proveedor-tema-del-perfil.tsx
+new file mode 100644
+index 0000000..5e8219e
+--- /dev/null
++++ b/apps/kaizen/src/features/perfil/proveedor-tema-del-perfil.tsx
+@@ -0,0 +1,16 @@
++import type { ReactNode } from 'react'
++import { ProveedorTema } from '@/design/proveedor'
++import { usarPerfil } from './usar-perfil'
++
++/**
++ * Lee el tema del perfil. Antes de iniciar sesión no hay perfil, así que cae
++ * al de por defecto — que es justo lo que debe verse en la pantalla de acceso.
++ *
++ * Vive en su propio fichero (no inline en `src/app/_layout.tsx`) para que
++ * `tema-instantaneo.test.tsx` pueda importar la implementación real y no una
++ * copia: una copia no detectaría una rotura en el original.
++ */
++export function ProveedorTemaDelPerfil({ children }: { children: ReactNode }) {
++  const { perfil } = usarPerfil()
++  return <ProveedorTema nombre={perfil?.tema ?? 'defecto'}>{children}</ProveedorTema>
++}
+diff --git a/apps/kaizen/src/features/perfil/tema-instantaneo.test.tsx b/apps/kaizen/src/features/perfil/tema-instantaneo.test.tsx
+new file mode 100644
+index 0000000..f41640b
+--- /dev/null
++++ b/apps/kaizen/src/features/perfil/tema-instantaneo.test.tsx
+@@ -0,0 +1,82 @@
++import { useEffect } from 'react'
++import { render, screen, waitFor, act } from '@testing-library/react-native'
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
++import { Texto } from '@/design/componentes/texto'
++import { temaDefecto } from '@/design/temas/defecto'
++import { temaClaro } from '@/design/temas/claro'
++import { ProveedorTemaDelPerfil } from './proveedor-tema-del-perfil'
++import { usarPerfil, type Perfil } from './usar-perfil'
++
++// Prefijo `mock` obligatorio: el plugin de hoisting de Jest sube `jest.mock()`
++// por encima de las declaraciones normales, y su factoría no puede referenciar
++// variables fuera de su alcance salvo que empiecen por «mock».
++const mockPerfilFalso: Perfil = {
++  id: 'u1', nombre: '', unidades: 'metrico', zona_horaria: 'Europe/Madrid',
++  corte_dia: 4, hora_silencio: 22, tema: 'defecto',
++}
++
++// El mock devuelve `perfilFalso` al leer y lo muta al escribir: así el
++// refresco disparado por `invalidateQueries` trae de verdad el valor nuevo,
++// igual que ocurriría contra Supabase real.
++jest.mock('@/datos/supabase', () => ({
++  supabase: {
++    from: () => ({
++      select: () => ({ single: () => Promise.resolve({ data: { ...mockPerfilFalso }, error: null }) }),
++      update: (cambios: Partial<Perfil>) => ({
++        eq: () => {
++          Object.assign(mockPerfilFalso, cambios)
++          return Promise.resolve({ error: null })
++        },
++      }),
++    }),
++  },
++}))
++jest.mock('@/datos/sesion', () => ({ useSesion: () => ({ sesion: { user: { id: 'u1' } }, cargando: false }) }))
++
++// Referencia capturada desde dentro de `Sonda`, para disparar `guardar` desde
++// el test sin acoplar la aserción a ningún control concreto de la pantalla
++// real de ajustes — lo que se prueba aquí es la cadena, no un botón.
++let guardarDesdeLaSonda: ((cambios: Partial<Perfil>) => Promise<void>) | null = null
++
++function Sonda() {
++  const { guardar } = usarPerfil()
++  useEffect(() => {
++    guardarDesdeLaSonda = guardar
++  })
++  return <Texto>sonda</Texto>
++}
++
++describe('el cambio de tema se propaga sin reiniciar la app', () => {
++  beforeEach(() => {
++    mockPerfilFalso.tema = 'defecto'
++    guardarDesdeLaSonda = null
++  })
++
++  // Prueba la cadena entera menos la red: guardar → invalidar → releer →
++  // re-renderizar el proveedor → color nuevo en pantalla, sin remontar nada.
++  // Es el criterio central de la Tarea 11: si esto se pone rojo, el selector
++  // de tema de la pantalla de ajustes ha dejado de funcionar de verdad.
++  it('cambiar el tema se ve al instante, sin reiniciar', async () => {
++    const cliente = new QueryClient({ defaultOptions: { queries: { retry: false } } })
++    render(
++      <QueryClientProvider client={cliente}>
++        <ProveedorTemaDelPerfil>
++          <Sonda />
++        </ProveedorTemaDelPerfil>
++      </QueryClientProvider>,
++    )
++
++    // Arranca con el tema oscuro guardado en el perfil.
++    await waitFor(() =>
++      expect(screen.getByText('sonda')).toHaveStyle({ color: temaDefecto.color.texto }))
++
++    // El perfil pasa a tener el tema claro y se guarda.
++    await act(async () => {
++      await guardarDesdeLaSonda?.({ tema: 'claro' })
++    })
++
++    // Sin remontar: el mismo nodo tiene ya el color del tema claro.
++    await waitFor(() =>
++      expect(screen.getByText('sonda')).toHaveStyle({ color: temaClaro.color.texto }))
++  })
++})
+diff --git a/apps/kaizen/src/features/perfil/usar-perfil.ts b/apps/kaizen/src/features/perfil/usar-perfil.ts
+index 30a0be9..45b51fa 100644
+--- a/apps/kaizen/src/features/perfil/usar-perfil.ts
++++ b/apps/kaizen/src/features/perfil/usar-perfil.ts
+@@ -31,12 +31,18 @@ export function usarPerfil() {
+     mutationFn: async (cambios: Partial<Perfil>) => {
+       const { error } = await supabase.from('perfiles').update(cambios).eq('id', id!)
+       if (error) throw new Error(error.message)
+     },
+     onSuccess: () => clienteConsultas.invalidateQueries({ queryKey: ['perfil', id] }),
+   })
+ 
+   return {
+     perfil: consulta.data ?? null,
+     guardar: (cambios: Partial<Perfil>) => mutacion.mutateAsync(cambios),
++    // Sin estos dos, un fallo al guardar es indistinguible de un éxito: la
++    // pantalla no tiene de dónde leerlo y el usuario cree que se guardó.
++    guardando: mutacion.isPending,
++    errorAlGuardar: mutacion.isError
++      ? 'No hemos podido guardar el cambio. Inténtalo de nuevo.'
++      : null,
+   }
+ }

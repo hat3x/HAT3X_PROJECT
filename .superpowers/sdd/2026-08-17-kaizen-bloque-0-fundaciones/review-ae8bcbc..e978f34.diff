@@ -1,0 +1,393 @@
+# Review package: ae8bcbc..e978f34
+
+## Commits
+e978f34 fix(kaizen): ronda 1 de arreglos sobre el proveedor y componentes base
+
+## Files changed
+ apps/kaizen/package-lock.json                      | 12 +++++
+ apps/kaizen/package.json                           |  1 +
+ apps/kaizen/src/design/componentes/anillo.tsx      |  7 ++-
+ apps/kaizen/src/design/componentes/barra.tsx       | 28 ++++++++----
+ apps/kaizen/src/design/componentes/boton.tsx       |  5 +-
+ .../src/design/componentes/componentes.test.tsx    | 53 +++++++++++++++++++++-
+ apps/kaizen/src/design/componentes/superficie.tsx  | 24 ++++++----
+ apps/kaizen/src/design/proveedor.tsx               | 11 +++--
+ 8 files changed, 115 insertions(+), 26 deletions(-)
+
+## Diff
+diff --git a/apps/kaizen/package-lock.json b/apps/kaizen/package-lock.json
+index f6fae5d..57e6705 100644
+--- a/apps/kaizen/package-lock.json
++++ b/apps/kaizen/package-lock.json
+@@ -12,20 +12,21 @@
+         "@react-native-community/netinfo": "12.0.1",
+         "@tanstack/query-async-storage-persister": "^5.101.4",
+         "@tanstack/react-query": "^5.101.4",
+         "@tanstack/react-query-persist-client": "^5.101.4",
+         "expo": "~57.0.14",
+         "expo-apple-authentication": "^57.0.1",
+         "expo-auth-session": "^57.0.7",
+         "expo-blur": "~57.0.2",
+         "expo-constants": "~57.0.12",
+         "expo-crypto": "^57.0.1",
++        "expo-linear-gradient": "~57.0.1",
+         "expo-linking": "~57.0.6",
+         "expo-router": "~57.0.14",
+         "expo-status-bar": "~57.0.1",
+         "expo-web-browser": "^57.0.2",
+         "react": "19.2.3",
+         "react-native": "0.86.2",
+         "react-native-safe-area-context": "~5.7.0",
+         "react-native-screens": "~4.26.0",
+         "react-native-svg": "15.15.4",
+         "react-native-url-polyfill": "^4.0.0"
+@@ -5110,20 +5111,31 @@
+       "version": "57.0.1",
+       "resolved": "https://registry.npmjs.org/expo-glass-effect/-/expo-glass-effect-57.0.1.tgz",
+       "integrity": "sha512-m/n8maxqNcHk6ZDhuqXBfD5Kt1Iz3M8xykVgdB0iSCIXvF70IqWXmQhX8Psswhrp8eZ+3r0mAD0Jh/2gFA3QaA==",
+       "license": "MIT",
+       "peerDependencies": {
+         "expo": "*",
+         "react": "*",
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-linear-gradient": {
++      "version": "57.0.1",
++      "resolved": "https://registry.npmjs.org/expo-linear-gradient/-/expo-linear-gradient-57.0.1.tgz",
++      "integrity": "sha512-CpS8eMqoIWcHVGKV66zbDvzotCw9qYp3f8CuI9N+h1LaO0tMLUzBpkhAKePUsXlpN3yolYlHFSPkfVZ/uSh+iA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*",
++        "react": "*",
++        "react-native": "*"
++      }
++    },
+     "node_modules/expo-linking": {
+       "version": "57.0.6",
+       "resolved": "https://registry.npmjs.org/expo-linking/-/expo-linking-57.0.6.tgz",
+       "integrity": "sha512-NdKjEGk+ywwGRNvgQCq9KettM1eVHfR1+uLov+0ohb6rmmMEgnstfLcc3f0DKMQ0PnROsY5G5+ZkNeiairYRXA==",
+       "license": "MIT",
+       "dependencies": {
+         "expo-constants": "~57.0.11",
+         "invariant": "^2.2.4"
+       },
+       "peerDependencies": {
+diff --git a/apps/kaizen/package.json b/apps/kaizen/package.json
+index e2beed8..be38cde 100644
+--- a/apps/kaizen/package.json
++++ b/apps/kaizen/package.json
+@@ -7,20 +7,21 @@
+     "@react-native-community/netinfo": "12.0.1",
+     "@tanstack/query-async-storage-persister": "^5.101.4",
+     "@tanstack/react-query": "^5.101.4",
+     "@tanstack/react-query-persist-client": "^5.101.4",
+     "expo": "~57.0.14",
+     "expo-apple-authentication": "^57.0.1",
+     "expo-auth-session": "^57.0.7",
+     "expo-blur": "~57.0.2",
+     "expo-constants": "~57.0.12",
+     "expo-crypto": "^57.0.1",
++    "expo-linear-gradient": "~57.0.1",
+     "expo-linking": "~57.0.6",
+     "expo-router": "~57.0.14",
+     "expo-status-bar": "~57.0.1",
+     "expo-web-browser": "^57.0.2",
+     "react": "19.2.3",
+     "react-native": "0.86.2",
+     "react-native-safe-area-context": "~5.7.0",
+     "react-native-screens": "~4.26.0",
+     "react-native-svg": "15.15.4",
+     "react-native-url-polyfill": "^4.0.0"
+diff --git a/apps/kaizen/src/design/componentes/anillo.tsx b/apps/kaizen/src/design/componentes/anillo.tsx
+index 893ffec..73a6452 100644
+--- a/apps/kaizen/src/design/componentes/anillo.tsx
++++ b/apps/kaizen/src/design/componentes/anillo.tsx
+@@ -9,21 +9,26 @@ export function Anillo({ progreso, tamano = 168, grosor = 12, children }: {
+   grosor?: number
+   children?: ReactNode
+ }) {
+   const t = useTema()
+   const recortado = Math.min(1, Math.max(0, progreso))
+   const centro = tamano / 2
+   const radio = centro - grosor / 2 - 6
+   const vuelta = 2 * Math.PI * radio
+ 
+   return (
+-    <View style={{ width: tamano, height: tamano }}>
++    <View
++      style={{ width: tamano, height: tamano }}
++      accessible
++      accessibilityRole="progressbar"
++      accessibilityValue={{ min: 0, max: 100, now: Math.round(recortado * 100) }}
++    >
+       <Svg width={tamano} height={tamano}>
+         <Circle cx={centro} cy={centro} r={radio} fill="none"
+                 stroke={t.color.pista} strokeWidth={grosor} />
+         <Circle cx={centro} cy={centro} r={radio} fill="none"
+                 stroke={t.color.acento} strokeWidth={grosor} strokeLinecap="round"
+                 strokeDasharray={`${vuelta * recortado} ${vuelta}`}
+                 transform={`rotate(-90 ${centro} ${centro})`} />
+         {t.recetas.anillo === 'medidor' &&
+           [0, 0.25, 0.5, 0.75].map((fraccion) => {
+             const angulo = (fraccion * 2 - 0.5) * Math.PI
+diff --git a/apps/kaizen/src/design/componentes/barra.tsx b/apps/kaizen/src/design/componentes/barra.tsx
+index f1ace47..be841d9 100644
+--- a/apps/kaizen/src/design/componentes/barra.tsx
++++ b/apps/kaizen/src/design/componentes/barra.tsx
+@@ -1,32 +1,40 @@
+ import { View } from 'react-native'
+ import { useTema } from '../proveedor'
+ 
+ export function Barra({ progreso, color, alto = 7 }:
+   { progreso: number; color: string; alto?: number }) {
+   const t = useTema()
+   const recortado = Math.min(1, Math.max(0, progreso))
+ 
++  const accesibilidad = {
++    accessibilityRole: 'progressbar' as const,
++    accessibilityValue: { min: 0, max: 100, now: Math.round(recortado * 100) },
++  }
++
+   if (t.recetas.barra === 'segmentada') {
+     const total = 10
+     const llenos = Math.round(recortado * total)
++    // El contenedor ocupa el ancho completo y son los segmentos los que se
++    // encienden o se apagan. Encoger el contenedor al progreso comprimiría
++    // los diez dentro de esa fracción y dejaría el resto de la barra vacío.
+     return (
+-      <View style={{ flexDirection: 'row', gap: 3 }}>
+-        <View testID="barra-relleno" style={{ width: `${recortado * 100}%`, flexDirection: 'row', gap: 3 }}>
+-          {Array.from({ length: total }, (_, i) => (
+-            <View key={i} style={{
+-              flex: 1, height: alto, borderRadius: 2,
+-              backgroundColor: i < llenos ? color : t.color.pista,
+-            }} />
+-          ))}
+-        </View>
++      <View testID="barra-segmentos" {...accesibilidad} style={{ flexDirection: 'row', gap: 3 }}>
++        {Array.from({ length: total }, (_, i) => (
++          <View key={i} testID={i < llenos ? 'segmento-lleno' : 'segmento-vacio'}
++                style={{
++                  flex: 1, height: alto, borderRadius: 2,
++                  backgroundColor: i < llenos ? color : t.color.pista,
++                }} />
++        ))}
+       </View>
+     )
+   }
+ 
+   return (
+-    <View style={{ height: alto, borderRadius: alto, backgroundColor: t.color.pista, overflow: 'hidden' }}>
++    <View {...accesibilidad}
++          style={{ height: alto, borderRadius: alto, backgroundColor: t.color.pista, overflow: 'hidden' }}>
+       <View testID="barra-relleno"
+             style={{ width: `${recortado * 100}%`, height: '100%', borderRadius: alto, backgroundColor: color }} />
+     </View>
+   )
+ }
+diff --git a/apps/kaizen/src/design/componentes/boton.tsx b/apps/kaizen/src/design/componentes/boton.tsx
+index 90731c7..b717478 100644
+--- a/apps/kaizen/src/design/componentes/boton.tsx
++++ b/apps/kaizen/src/design/componentes/boton.tsx
+@@ -18,17 +18,20 @@ export function Boton({ titulo, alPulsar, tono = 'primario' }:
+     <Pressable onPress={alPulsar} accessibilityRole="button">
+       <Superficie
+         fondo={fondo}
+         radio={t.radio.boton}
+         style={{
+           paddingVertical: t.espaciado[1],
+           paddingHorizontal: t.espaciado[2],
+           alignItems: 'center',
+         }}
+       >
+-        <Texto style={{ color: primario ? t.color.sobreAcento : t.color.texto, fontWeight: '700' }}>
++        <Texto style={{
++          color: primario ? t.color.sobreAcento : t.color.texto,
++          fontWeight: t.tipografia.pesoTitular,
++        }}>
+           {titulo}
+         </Texto>
+       </Superficie>
+     </Pressable>
+   )
+ }
+diff --git a/apps/kaizen/src/design/componentes/componentes.test.tsx b/apps/kaizen/src/design/componentes/componentes.test.tsx
+index 4be3953..14530d4 100644
+--- a/apps/kaizen/src/design/componentes/componentes.test.tsx
++++ b/apps/kaizen/src/design/componentes/componentes.test.tsx
+@@ -1,15 +1,19 @@
+ import { render, screen, fireEvent } from '@testing-library/react-native'
+-import { ProveedorTema } from '../proveedor'
++import { Line } from 'react-native-svg'
++import { ProveedorTema, ContextoTema } from '../proveedor'
++import type { Tema } from '../tema'
++import { temaDefecto } from '../temas/defecto'
+ import { Texto } from './texto'
+ import { Boton } from './boton'
+ import { Barra } from './barra'
++import { Anillo } from './anillo'
+ 
+ function envolver(nodo: React.ReactNode) {
+   return render(<ProveedorTema nombre="defecto">{nodo}</ProveedorTema>)
+ }
+ 
+ it('el texto toma el color del tema', () => {
+   envolver(<Texto>Hola</Texto>)
+   expect(screen.getByText('Hola')).toHaveStyle({ color: '#F4F5F2' })
+ })
+ 
+@@ -27,10 +31,57 @@ it('el botón dispara su acción', () => {
+ 
+ it('la barra recorta el progreso al 100 por ciento', () => {
+   envolver(<Barra progreso={1.8} color="#4ECB9C" />)
+   expect(screen.getByTestId('barra-relleno')).toHaveStyle({ width: '100%' })
+ })
+ 
+ it('la barra no acepta progresos negativos', () => {
+   envolver(<Barra progreso={-0.5} color="#4ECB9C" />)
+   expect(screen.getByTestId('barra-relleno')).toHaveStyle({ width: '0%' })
+ })
++
++it('la barra refleja un progreso intermedio', () => {
++  envolver(<Barra progreso={0.5} color="#4ECB9C" />)
++  expect(screen.getByTestId('barra-relleno')).toHaveStyle({ width: '50%' })
++})
++
++it('el anillo se dibuja y anuncia su progreso', () => {
++  envolver(<Anillo progreso={0.82}><Texto>82</Texto></Anillo>)
++  expect(screen.getByText('82')).toBeTruthy()
++  expect(screen.getByRole('progressbar').props.accessibilityValue.now).toBe(82)
++})
++
++it('un tema desconocido cae al tema por defecto en vez de romper', () => {
++  render(<ProveedorTema nombre="no-existe"><Texto>Hola</Texto></ProveedorTema>)
++  expect(screen.getByText('Hola')).toHaveStyle({ color: '#F4F5F2' })
++})
++
++// Las recetas alternativas no las activa ningún tema registrado, así que se
++// inyecta un tema a mano. Sin estos tests, la mitad del sistema de recetas
++// —justo la mitad que usará la piel personal— viajaría sin probar.
++describe('recetas que ningún tema registrado activa', () => {
++  function conReceta(recetas: Partial<Tema['recetas']>, nodo: React.ReactNode) {
++    const tema: Tema = { ...temaDefecto, recetas: { ...temaDefecto.recetas, ...recetas } }
++    return render(<ContextoTema.Provider value={tema}>{nodo}</ContextoTema.Provider>)
++  }
++
++  it('la barra segmentada enciende los segmentos, no encoge la barra', () => {
++    const { toJSON } = conReceta({ barra: 'segmentada' }, <Barra progreso={0.5} color="#4ECB9C" />)
++    // Los diez siguen ahí: cinco encendidos y cinco apagados, ocupando el
++    // ancho completo. Si el contenedor encogiera, los apagados desaparecerían.
++    expect(screen.getAllByTestId('segmento-lleno')).toHaveLength(5)
++    expect(screen.getAllByTestId('segmento-vacio')).toHaveLength(5)
++    // El recuento por sí solo no basta: un envoltorio intermedio que encoja
++    // el ancho seguiría conteniendo los diez segmentos sin que el test lo
++    // note. Comprobar sobre el árbol host serializado que los diez cuelgan
++    // directamente del contenedor de ancho completo (sin ningún nodo
++    // adicional entre medias) es lo que de verdad detecta el encogido.
++    const arbol = toJSON()
++    if (arbol === null || Array.isArray(arbol)) throw new Error('se esperaba un único nodo raíz')
++    expect(arbol.children).toHaveLength(10)
++  })
++
++  it('el anillo medidor dibuja sus marcas de escala', () => {
++    const { UNSAFE_root } = conReceta({ anillo: 'medidor' }, <Anillo progreso={0.5} />)
++    expect(UNSAFE_root.findAllByType(Line)).toHaveLength(4)
++  })
++})
+diff --git a/apps/kaizen/src/design/componentes/superficie.tsx b/apps/kaizen/src/design/componentes/superficie.tsx
+index ac9d6a9..0d7b154 100644
+--- a/apps/kaizen/src/design/componentes/superficie.tsx
++++ b/apps/kaizen/src/design/componentes/superficie.tsx
+@@ -1,33 +1,33 @@
+ import { View, ImageBackground, type ViewStyle } from 'react-native'
+ import { BlurView } from 'expo-blur'
++import { LinearGradient } from 'expo-linear-gradient'
+ import type { ReactNode } from 'react'
+ import type { Fondo } from '../tema'
+ import { useTema } from '../proveedor'
+ 
+ export function Superficie({ fondo, radio, style, children }: {
+   fondo: Fondo
+   radio: number
+   style?: ViewStyle
+   children?: ReactNode
+ }) {
+   const t = useTema()
+-  const base: ViewStyle = {
+-    borderRadius: radio,
+-    borderWidth: 1,
+-    borderColor: t.color.borde,
+-    overflow: 'hidden',
+-    ...style,
+-  }
++
++  // El borde SOLO se dibuja sobre color y degradado. Cuando el fondo es arte,
++  // el marco lo pone la propia imagen: añadirle encima un borde algorítmico
++  // que el tema no puede apagar arruinaría cualquier skin ilustrado.
++  const base: ViewStyle = { borderRadius: radio, overflow: 'hidden', ...style }
++  const conBorde: ViewStyle = { ...base, borderWidth: 1, borderColor: t.color.borde }
+ 
+   if (fondo.tipo === 'color') {
+-    return <View style={[base, { backgroundColor: fondo.valor }]}>{children}</View>
++    return <View style={[conBorde, { backgroundColor: fondo.valor }]}>{children}</View>
+   }
+ 
+   if (fondo.tipo === 'recurso') {
+     const r = fondo.recuadro
+     return (
+       <ImageBackground
+         source={fondo.fuente}
+         capInsets={r ? { top: r.arriba, left: r.izquierda, bottom: r.abajo, right: r.derecha } : undefined}
+         resizeMode="stretch"
+         style={base}
+@@ -35,16 +35,20 @@ export function Superficie({ fondo, radio, style, children }: {
+       >
+         {children}
+       </ImageBackground>
+     )
+   }
+ 
+   return (
+     <BlurView
+       intensity={t.superficie.desenfoque}
+       tint={t.esquema === 'oscuro' ? 'dark' : 'light'}
+-      style={base}
++      style={conBorde}
+     >
+-      <View style={{ backgroundColor: fondo.desde, flex: 1 }}>{children}</View>
++      {/* Degradado de verdad: pintar solo `desde` haría que el tema declarase
++          dos colores y la pantalla mostrase uno. */}
++      <LinearGradient colors={[fondo.desde, fondo.hasta]} style={{ flex: 1 }}>
++        {children}
++      </LinearGradient>
+     </BlurView>
+   )
+ }
+diff --git a/apps/kaizen/src/design/proveedor.tsx b/apps/kaizen/src/design/proveedor.tsx
+index 17f0af9..6e5badd 100644
+--- a/apps/kaizen/src/design/proveedor.tsx
++++ b/apps/kaizen/src/design/proveedor.tsx
+@@ -1,14 +1,19 @@
+ import { createContext, useContext, type ReactNode } from 'react'
+ import type { Tema } from './tema'
+ import { TEMAS } from './temas/indice'
+ 
+-const Contexto = createContext<Tema>(TEMAS.defecto!)
++/**
++ * Se exporta para que los tests puedan inyectar un tema construido a mano y
++ * ejercitar recetas que ningún tema registrado activa (barra segmentada,
++ * anillo medidor). Sin esto, esas ramas no tendrían forma de probarse.
++ */
++export const ContextoTema = createContext<Tema>(TEMAS.defecto!)
+ 
+ export function ProveedorTema({ nombre, children }: { nombre: string; children: ReactNode }) {
+   const tema = TEMAS[nombre] ?? TEMAS.defecto!
+-  return <Contexto.Provider value={tema}>{children}</Contexto.Provider>
++  return <ContextoTema.Provider value={tema}>{children}</ContextoTema.Provider>
+ }
+ 
+ export function useTema(): Tema {
+-  return useContext(Contexto)
++  return useContext(ContextoTema)
+ }

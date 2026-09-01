@@ -1,0 +1,817 @@
+# Review package: 60640bd..84123db
+
+## Commits
+84123db fix(atlas): rentabilidad — ronda final: facturas por rango, un cajón una fila, mes validado
+
+## Files changed
+ apps/atlas/MANTENIMIENTO.md                        |  1 +
+ apps/atlas/src/app/dinero/page.tsx                 |  7 +++
+ apps/atlas/src/app/dinero/rentabilidad/page.tsx    | 58 ++++++++++------------
+ apps/atlas/src/components/dinero/ResumenMargen.tsx |  7 ++-
+ apps/atlas/src/lib/db/cierres.ts                   | 11 ++++
+ apps/atlas/src/lib/db/facturas.ts                  | 16 +++++-
+ apps/atlas/src/lib/db/rentabilidad.ts              | 25 ++++++----
+ apps/atlas/src/lib/rentabilidad/margen.ts          | 39 ++++++++-------
+ apps/atlas/src/tests/db/facturas.test.ts           | 13 +++++
+ apps/atlas/src/tests/db/rentabilidad.test.ts       | 11 ++++
+ .../src/tests/esquema/economia-ajustes.test.ts     |  8 ++-
+ apps/atlas/src/tests/rentabilidad/margen.test.ts   | 17 ++++---
+ 12 files changed, 142 insertions(+), 71 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/MANTENIMIENTO.md b/apps/atlas/MANTENIMIENTO.md
+index f8a65f7..2273994 100644
+--- a/apps/atlas/MANTENIMIENTO.md
++++ b/apps/atlas/MANTENIMIENTO.md
+@@ -133,20 +133,21 @@ Es el aviso que caza el fichaje que se dejó abierto (una jornada real, o un olv
+ 
+ Antes de sospechar de `calcularMargen`, mira estas cuatro cosas en orden — son las que explican casi todos los descuadres:
+ 
+ 1. **El coste de la hora.** `/ajustes/economia` fija el que se usa en un mes **abierto**. Si alguien lo cambió a media pantalla, las horas de todo el mes en curso cambian de golpe, no solo las de a partir de ahora.
+ 2. **Si el mes está cerrado con otro coste.** Un mes cerrado (`cierres_mes`) tiene su coste **congelado** en el momento del cierre: cambiar `/ajustes/economia` después no lo mueve, a propósito. Si el número no coincide con el coste actual, comprueba si ese mes está cerrado:
+    ```sql
+    select mes, coste_hora, cerrado_en from cierres_mes order by mes desc;
+    ```
+ 3. **Los tramos abiertos no cuentan.** `rentabilidadDelMes` solo suma fichajes con `fin` (§6.3): un fichaje que sigue abierto no aporta minutos hasta que se cierra, aunque lleve horas corriendo. No es un fallo, es la regla — evita contar un tramo dos veces si se corrige antes de cerrarlo.
+ 4. **Se calcula con bases, no con totales.** Facturas y gastos entran por su `base` (sin IVA): el IVA no es ingreso ni es coste, solo pasa por caja. Si comparas contra un total con IVA, va a parecer que falta dinero.
++5. **Un mes cerrado congela el coste de la hora, NO los datos.** El cierre solo fija `coste_hora`; las facturas, gastos y tramos con fecha de ese mes se siguen leyendo en vivo. Si un mes cerrado cambia de cifras, es que alguien apuntó, corrigió o borró un gasto, una factura o un fichaje con fecha de ese mes — es alguien moviéndolo, no el sistema. Búscalo por fecha en `gastos`, `facturas` (`fecha_emision`) y `fichajes` (`inicio`).
+ 
+ **Cómo reabrir un mes:** el botón «Reabrir» de `/dinero/rentabilidad` (`reabrirMesAccion`) borra el cierre de `cierres_mes` para ese mes; a partir de ahí vuelve a seguir el coste vigente en `/ajustes/economia` hasta que se cierre de nuevo. Solo lo puede hacer el propietario.
+ 
+ **`ajustes_economia` es de una fila.** Toda lectura y escritura filtra por `id = 1`; no se crea una fila nueva ni se cambia ese id — no hay «histórico de costes» fuera de lo que ya congelaron los cierres de mes.
+ 
+ ## «Kairos tiene un salón nuevo y Atlas no lo vigila»
+ 
+ O al revés: se dio de baja un cliente y Atlas sigue alertando de su 404. Lo resuelve el descubridor, que pasa **cada hora al minuto 23**. Si lleva más de eso sin moverse, mira lo que dejó escrito:
+ 
+ ```sql
+diff --git a/apps/atlas/src/app/dinero/page.tsx b/apps/atlas/src/app/dinero/page.tsx
+index 3bc274f..f030cc1 100644
+--- a/apps/atlas/src/app/dinero/page.tsx
++++ b/apps/atlas/src/app/dinero/page.tsx
+@@ -63,20 +63,27 @@ export default async function PaginaDinero() {
+           céntimos es justo lo que evita el error de coma flotante que se
+           acumularía sumando euros. `Cifra` solo formatea, no vuelve a
+           convertir. */}
+       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+         <Cifra etiqueta="Facturado este mes" centimos={resumen.facturado} />
+         <Cifra etiqueta="Cobrado" centimos={resumen.cobrado} />
+         <Cifra etiqueta="Pendiente" centimos={resumen.pendiente} />
+         <Cifra etiqueta="Gasto directo" centimos={resumen.gastoDirecto} />
+       </div>
+ 
++      {/* Las dos pantallas enseñan el mismo mes con cifras distintas a
++          propósito: aquí caja (con IVA), en Rentabilidad margen (bases).
++          Decirlo evita que parezca un descuadre. */}
++      <p className="text-xs" style={{ color: "var(--texto-tenue)" }}>
++        Aquí, importes totales con IVA: es caja. En Rentabilidad, bases sin IVA: es margen.
++      </p>
++
+       {/* La estructura va aparte y sin repartir, a propósito: cualquier regla
+           de reparto entre clientes sería una elección nuestra, no un dato. */}
+       <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>
+         Coste de estructura del mes:{" "}
+         <strong>{formatear(resumen.gastoEstructura)}</strong>. No se reparte
+         entre clientes.
+       </p>
+ 
+       <h2 className="pt-2 text-lg font-semibold">Registrar factura emitida fuera</h2>
+       <FormFacturaExterna
+diff --git a/apps/atlas/src/app/dinero/rentabilidad/page.tsx b/apps/atlas/src/app/dinero/rentabilidad/page.tsx
+index 9146189..47c4b92 100644
+--- a/apps/atlas/src/app/dinero/rentabilidad/page.tsx
++++ b/apps/atlas/src/app/dinero/rentabilidad/page.tsx
+@@ -6,36 +6,40 @@ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { rentabilidadDelMes } from "@/lib/db/rentabilidad";
+ import { formatear, hoyEnMadrid, mesDe, mesVecino } from "@/lib/dinero";
+ import { formatearMinutos } from "@/lib/horas/tramos";
+ import type { FilaMargen, Linea } from "@/lib/rentabilidad/margen";
+ import { BotonCierreMes } from "@/components/dinero/BotonCierreMes";
+ import { Distintivo } from "@/components/ui/Distintivo";
+ 
+ const MES = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric", timeZone: "Europe/Madrid" });
+ 
+-function Tabla({ titulo, filas, eje, facturadoSinEje, lineaExtra, extraNombre, estructura }: {
++function Tabla({ titulo, filas, eje, lineaExtra, extraNombre, estructura }: {
+   titulo: string; filas: FilaMargen[]; eje: string;
+-  // Solo lo usa la tabla «Por proyecto»: es facturado puro (una línea de
+-  // factura sin proyecto), no gastos ni minutos, así que no encaja en el
+-  // tipo `Linea` que comparten `lineaExtra` y `estructura`.
+-  facturadoSinEje?: number;
+   lineaExtra: Linea; extraNombre: string; estructura: Linea;
+ }) {
+   const th = "px-4 py-2 font-medium";
+   const td = "whitespace-nowrap px-4 py-2.5 tabular-nums text-right";
+-  const total = (l: Linea) => l.gastosCentimos + l.horasCentimos;
++  const coste = (l: Linea) => l.gastosCentimos + l.horasCentimos;
++  // Ronda final (revisión del Ruling 6): el cajón «sin proyecto» factura
++  // (las líneas de factura sin proyecto) Y cuesta (sus gastos y horas), así
++  // que es UNA fila con su margen, que puede ser positivo, y no una fila de
++  // facturado más otra de coste para el mismo cajón. En «sin cliente» y en
++  // estructura el facturado es 0 por construcción (una factura siempre
++  // tiene cliente) y se pinta «—», no «0,00 €»: no es que se facturara cero,
++  // es que ahí no cabe facturar.
++  const margen = (l: Linea) => l.facturadoCentimos - coste(l);
+   // Ronda de arreglo 1: una línea «sin repartir» con coste de la hora en cero
+-  // puede tener minutos y ningún céntimo (gastos y horas a 0): `total() > 0`
++  // puede tener minutos y ningún céntimo (gastos y horas a 0): `coste() > 0`
+   // la escondía igual que si no hubiera pasado nada ese mes. Los minutos
+-  // cuentan como actividad aunque no cuesten dinero.
+-  const hayActividad = (l: Linea) => total(l) > 0 || l.minutos > 0;
++  // cuentan como actividad aunque no cuesten dinero, y el facturado también.
++  const hayActividad = (l: Linea) => coste(l) > 0 || l.minutos > 0 || l.facturadoCentimos > 0;
+   return (
+     <div className="space-y-2">
+       <h2 className="pt-2 text-lg font-semibold">{titulo}</h2>
+       <div className="cristal cristal-denso overflow-x-auto">
+         <table className="w-full text-sm">
+           <caption className="sr-only">{titulo}</caption>
+           <thead>
+             <tr className="border-b text-left text-xs uppercase tracking-wider" style={{ borderColor: "var(--cristal-borde)", color: "var(--texto-tenue)" }}>
+               <th scope="col" className={th}>{eje}</th>
+               <th scope="col" className={`${th} text-right`}>Facturado</th>
+@@ -52,54 +56,39 @@ function Tabla({ titulo, filas, eje, facturadoSinEje, lineaExtra, extraNombre, e
+             {filas.map((f) => (
+               <tr key={f.id}>
+                 <td className="px-4 py-2.5">{f.nombre}</td>
+                 <td className={td}>{formatear(f.facturadoCentimos)}</td>
+                 <td className={td}>{formatear(f.gastosCentimos)}</td>
+                 <td className={td}>{formatearMinutos(f.minutos)}</td>
+                 <td className={td}>{formatear(f.horasCentimos)}</td>
+                 <td className={`${td} font-semibold`} style={f.margenCentimos < 0 ? { color: "var(--estado-caido)" } : undefined}>{formatear(f.margenCentimos)}</td>
+               </tr>
+             ))}
+-            {/* Solo en «Por proyecto»: el facturado de una línea sin proyecto
+-                (§2A: el proyecto vive en la línea) no tiene fila propia, pero
+-                sí cuenta en el total — sin esta fila la tabla no cuadraba a
+-                la vista. Es facturado puro: nada que repartir en las demás
+-                columnas. */}
+-            {typeof facturadoSinEje === "number" && facturadoSinEje > 0 && (
+-              <tr style={{ color: "var(--texto-tenue)" }}>
+-                <td className="px-4 py-2.5">Sin proyecto</td>
+-                <td className={td}>{formatear(facturadoSinEje)}</td>
+-                <td className={td}>—</td>
+-                <td className={td}>—</td>
+-                <td className={td}>—</td>
+-                <td className={td}>—</td>
+-              </tr>
+-            )}
+             {/* Las dos líneas de abajo NO se reparten (§6.3): repartirlas
+                 inventaría una precisión por cliente que el dato no tiene. */}
+             {hayActividad(lineaExtra) && (
+               <tr style={{ color: "var(--texto-tenue)" }}>
+                 <td className="px-4 py-2.5">{extraNombre}</td>
+-                <td className={td}>—</td>
++                <td className={td}>{lineaExtra.facturadoCentimos > 0 ? formatear(lineaExtra.facturadoCentimos) : "—"}</td>
+                 <td className={td}>{formatear(lineaExtra.gastosCentimos)}</td>
+                 <td className={td}>{formatearMinutos(lineaExtra.minutos)}</td>
+                 <td className={td}>{formatear(lineaExtra.horasCentimos)}</td>
+-                <td className={td}>−{formatear(total(lineaExtra))}</td>
++                <td className={td} style={margen(lineaExtra) < 0 ? { color: "var(--estado-caido)" } : undefined}>{formatear(margen(lineaExtra))}</td>
+               </tr>
+             )}
+             <tr style={{ color: "var(--texto-tenue)" }}>
+               <td className="px-4 py-2.5">Estructura, sin repartir</td>
+               <td className={td}>—</td>
+               <td className={td}>{formatear(estructura.gastosCentimos)}</td>
+               <td className={td}>{formatearMinutos(estructura.minutos)}</td>
+               <td className={td}>{formatear(estructura.horasCentimos)}</td>
+-              <td className={td}>−{formatear(total(estructura))}</td>
++              <td className={td}>−{formatear(coste(estructura))}</td>
+             </tr>
+           </tbody>
+         </table>
+       </div>
+     </div>
+   );
+ }
+ 
+ export default async function PaginaRentabilidad({ searchParams }: { searchParams: { mes?: string } }) {
+   const sb = await clienteServidor();
+@@ -108,21 +97,26 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
+ 
+   const hoy = hoyEnMadrid();
+   const mesActual = mesDe(hoy);
+   // Un `mes` que no sea AAAA-MM no rompe: se vuelve al actual. Se guarda en
+   // variable aparte y sin `!`: el `test` ya deja acotado que, si pasa, la
+   // cadena original es un `AAAA-MM` válido, pero afirmarlo con `!` sería
+   // fiarse del regex sin que el compilador lo compruebe.
+   const mesPedido = searchParams.mes;
+   const mes = mesPedido && /^\d{4}-(0[1-9]|1[0-2])$/.test(mesPedido) ? mesPedido : mesActual;
+   const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sb, mes);
+-  const esActual = mes === mesActual;
++  // Ronda final: «pasado» y no «distinto del actual». Con `!esActual`, un
++  // mes futuro tecleado en la URL enseñaba «siguiente →» (que se aleja aún
++  // más) y el botón de cierre (que `cerrarMes` rechaza igual, pero con un
++  // botón que promete lo que no puede hacer). La comparación por texto
++  // AAAA-MM ordena bien porque los dos vienen ya validados.
++  const esPasado = mes < mesActual;
+ 
+   // Ronda de arreglo 1: tipado explícito y no un array de tuplas sin tipo —
+   // `String(t)` y `Number(v)` tapaban que el título y el valor podían ser
+   // cualquier cosa, y el rojo comparaba contra el literal del título en vez
+   // de decidirse una sola vez aquí, junto al dato que lo justifica. El orden
+   // es el mismo que el de las columnas de las tablas de abajo, para que
+   // arriba y abajo signifiquen lo mismo mirado en la misma fila.
+   const kpis: { etiqueta: string; texto: string; enRojo?: boolean }[] = [
+     { etiqueta: "Facturado (base)", texto: formatear(r.total.facturadoCentimos) },
+     { etiqueta: "Gastos (base)", texto: formatear(r.total.gastosCentimos) },
+@@ -141,39 +135,39 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
+         <h1 className="text-2xl font-semibold tracking-tight">Rentabilidad</h1>
+         <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+           Lo que queda de cada cliente después de lo que cuesta atenderlo. Con bases, sin IVA, y sin
+           repartir lo que no tiene contador.
+         </p>
+       </header>
+ 
+       <div className="flex flex-wrap items-center gap-3">
+         <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, -1)}`} className="text-sm underline opacity-80 hover:opacity-100">← anterior</Link>
+         <span className="text-lg font-semibold capitalize">{MES.format(new Date(`${mes}-01T12:00:00Z`))}</span>
+-        {!esActual && <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, 1)}`} className="text-sm underline opacity-80 hover:opacity-100">siguiente →</Link>}
++        {esPasado && <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, 1)}`} className="text-sm underline opacity-80 hover:opacity-100">siguiente →</Link>}
+         {cerrado ? (
+           <Distintivo estado="ok" texto={`Cerrado a ${formatear(cerrado.costeHoraCentimos)}/h`} />
+         ) : costeHoraCentimos === 0 ? (
+           <Distintivo estado="aviso" texto="Sin coste de la hora: las horas cuentan cero" />
+         ) : (
+           <span className="text-sm" style={{ color: "var(--texto-tenue)" }}>{formatear(costeHoraCentimos)}/h</span>
+         )}
+-        {/* El mes en curso no se cierra: le faltan días. */}
+-        {!esActual && <BotonCierreMes mes={mes} cerrado={cerrado !== null} />}
++        {/* El mes en curso no se cierra (le faltan días), y uno futuro menos. */}
++        {esPasado && <BotonCierreMes mes={mes} cerrado={cerrado !== null} />}
+       </div>
+ 
+       <div className="grid gap-3 sm:grid-cols-5">
+         {kpis.map((k) => (
+           <div key={k.etiqueta} className="cristal cristal-denso p-4">
+             <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>{k.etiqueta}</div>
+             <div className="mt-1 text-xl font-semibold tabular-nums" style={k.enRojo ? { color: "var(--estado-caido)" } : undefined}>{k.texto}</div>
+           </div>
+         ))}
+       </div>
+ 
+       <Tabla titulo="Por cliente" eje="Cliente" filas={r.porCliente} lineaExtra={r.sinCliente} extraNombre="De proyectos sin cliente" estructura={r.estructura} />
+-      <Tabla titulo="Por proyecto" eje="Proyecto" filas={r.porProyecto} facturadoSinEje={r.facturadoSinProyectoCentimos} lineaExtra={r.sinProyecto} extraNombre="De clientes sin proyecto" estructura={r.estructura} />
++      <Tabla titulo="Por proyecto" eje="Proyecto" filas={r.porProyecto} lineaExtra={r.sinProyecto} extraNombre="De clientes sin proyecto" estructura={r.estructura} />
+       <p className="text-xs" style={{ color: "var(--texto-tenue)" }}>
+         La estructura es la misma línea en las dos tablas: se resta una sola vez del resultado.
+       </p>
+     </section>
+   );
+ }
+diff --git a/apps/atlas/src/components/dinero/ResumenMargen.tsx b/apps/atlas/src/components/dinero/ResumenMargen.tsx
+index 5552d04..1d6aa70 100644
+--- a/apps/atlas/src/components/dinero/ResumenMargen.tsx
++++ b/apps/atlas/src/components/dinero/ResumenMargen.tsx
+@@ -13,22 +13,25 @@ export function ResumenMargen({ fila, mes, costeHoraCentimos }: { fila: FilaMarg
+   const celda = (t: string, v: string, rojo = false) => (
+     <div>
+       <div className="text-[11px] uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>{t}</div>
+       <div className="font-semibold tabular-nums" style={rojo ? { color: "var(--estado-caido)" } : undefined}>{v}</div>
+     </div>
+   );
+   return (
+     <section className="cristal p-4">
+       <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Este mes</h2>
+       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+-        {celda("Facturado", formatear(fila.facturadoCentimos))}
+-        {celda("Gastos directos", formatear(fila.gastosCentimos))}
++        {/* «(base)»: aquí todo va sin IVA, y la pantalla de Dinero enseña
++            totales con IVA. Sin la etiqueta, las dos cifras del mismo mes
++            parecen contradecirse. */}
++        {celda("Facturado (base)", formatear(fila.facturadoCentimos))}
++        {celda("Gastos (base)", formatear(fila.gastosCentimos))}
+         {celda("Horas", `${formatearMinutos(fila.minutos)} · ${formatear(fila.horasCentimos)}`)}
+         {celda("Margen", formatear(fila.margenCentimos), fila.margenCentimos < 0)}
+       </div>
+       <p className="mt-2 text-xs" style={{ color: "var(--texto-tenue)" }}>
+         {costeHoraCentimos === 0 ? "Sin coste de la hora configurado: las horas cuentan cero. " : ""}
+         <Link href={`/dinero/rentabilidad?mes=${mes}`} className="underline">Ver el mes entero →</Link>
+       </p>
+     </section>
+   );
+ }
+diff --git a/apps/atlas/src/lib/db/cierres.ts b/apps/atlas/src/lib/db/cierres.ts
+index 38bf419..ebb38ec 100644
+--- a/apps/atlas/src/lib/db/cierres.ts
++++ b/apps/atlas/src/lib/db/cierres.ts
+@@ -1,33 +1,43 @@
+ // src/lib/db/cierres.ts
+ //
+ // Cerrar un mes congela el coste de la hora con el que se calculó (§4.8).
+ //
+ import type { Sb } from "./clientes";
+ import type { Ok } from "./proyectos";
+ import { mesDe, mesEnMadrid } from "@/lib/dinero";
+ 
+ export type Cierre = { mes: string; costeHoraCentimos: number; cerradoEn: string };
+ 
++// Se valida ANTES de tocar la base: `${mes}-01` con un `mes` torcido daba un
++// error de Postgres (fecha inválida o el check de `cierres_mes`) con un
++// mensaje que no le dice nada a quien lo lee, y en `reabrirMes` un `mes`
++// malformado simplemente no borraba nada y se confundía con «no estaba
++// cerrado». La pantalla ya filtra, pero la acción es una server action y
++// puede llegar cualquier cadena.
++const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])$/;
++const ERROR_MES = "El mes tiene que ser AAAA-MM.";
++
+ export async function cierreDe(sb: Sb, mes: string): Promise<Cierre | null> {
+   const { data, error } = await sb
+     .from("cierres_mes")
+     .select("mes, coste_hora, cerrado_en")
+     .eq("mes", `${mes}-01`)
+     .maybeSingle();
+   if (error) throw error;
+   return data
+     ? { mes: mesDe(data.mes), costeHoraCentimos: Math.round(Number(data.coste_hora) * 100), cerradoEn: data.cerrado_en }
+     : null;
+ }
+ 
+ export async function cerrarMes(sb: Sb, mes: string, costeHoraCentimos: number, ahoraMs: number): Promise<Ok> {
++  if (!MES_VALIDO.test(mes)) return { ok: false, error: ERROR_MES };
+   // El mes en curso no se cierra: le faltan días. Se compara por texto de mes
+   // porque el instante viene por parámetro y así se prueba sin esperar. Se
+   // corta en Madrid, no en UTC: el resto de la app (`limitesMesMadrid`,
+   // `hoyEnMadrid`) corta meses ahí, y entre las 00:00 y las ~02:00 de Madrid
+   // del día 1, el mes que acaba de terminar todavía es el anterior en UTC —
+   // con `toISOString` esa ventana de dos horas impediría cerrar un mes que sí
+   // ha terminado.
+   const mesActual = mesEnMadrid(ahoraMs);
+   if (mes >= mesActual) return { ok: false, error: "No se cierra un mes que no ha terminado." };
+   const {
+@@ -37,15 +47,16 @@ export async function cerrarMes(sb: Sb, mes: string, costeHoraCentimos: number,
+     mes: `${mes}-01`,
+     coste_hora: costeHoraCentimos / 100,
+     cerrado_por: user?.id ?? null,
+   });
+   if (!error) return { ok: true };
+   if (error.code === "23505") return { ok: false, error: "Ese mes ya está cerrado." };
+   return { ok: false, error: error.message };
+ }
+ 
+ export async function reabrirMes(sb: Sb, mes: string): Promise<Ok> {
++  if (!MES_VALIDO.test(mes)) return { ok: false, error: ERROR_MES };
+   const { data, error } = await sb.from("cierres_mes").delete().eq("mes", `${mes}-01`).select("mes");
+   if (error) return { ok: false, error: error.message };
+   if (!data || data.length === 0) return { ok: false, error: "Ese mes no estaba cerrado." };
+   return { ok: true };
+ }
+diff --git a/apps/atlas/src/lib/db/facturas.ts b/apps/atlas/src/lib/db/facturas.ts
+index 5b443fa..1b1dbdd 100644
+--- a/apps/atlas/src/lib/db/facturas.ts
++++ b/apps/atlas/src/lib/db/facturas.ts
+@@ -98,32 +98,46 @@ function aFactura(f: Fila): Factura {
+         precioUnitario: Number(l.precio_unitario),
+         importe: Number(l.importe),
+         proyectoId: l.proyecto_id,
+       })),
+   };
+ }
+ 
+ /**
+  * El historial. **No filtra por permisos**: de eso se encarga RLS, y hay un
+  * test que lo comprueba con un colaborador en vez de suponerlo.
++ *
++ * `desde` y `hasta` van en ISO `AAAA-MM-DD` sobre `fecha_emision`. `desde` es
++ * INCLUSIVO (`gte`) y `hasta` es EXCLUSIVO (`lt`): así un mes se pide como
++ * `{ desde: "2026-08-01", hasta: "2026-09-01" }` sin tener que calcular el
++ * último día del mes. Ojo: `listarGastos` usa `hasta` inclusivo (`lte`);
++ * quien combine las dos tiene que recortar una de ellas.
++ *
++ * El `limit(200)` sigue ahí para el historial sin filtro (la pantalla de
++ * Dinero): con un rango de fechas, 200 facturas en un mes es más de lo que
++ * este negocio emite, así que el límite no muerde. Sin el rango, la
++ * rentabilidad de un mes antiguo perdía facturas en silencio en cuanto el
++ * total superaba las 200.
+  */
+ export async function listarFacturas(
+   sb: Sb,
+-  filtros: { clienteId?: string; sinCobrar?: boolean }
++  filtros: { clienteId?: string; sinCobrar?: boolean; desde?: string; hasta?: string }
+ ): Promise<Factura[]> {
+   let consulta = sb
+     .from("facturas")
+     .select(CAMPOS)
+     .order("fecha_emision", { ascending: false })
+     .limit(200);
+ 
+   if (filtros.clienteId) consulta = consulta.eq("cliente_id", filtros.clienteId);
++  if (filtros.desde) consulta = consulta.gte("fecha_emision", filtros.desde);
++  if (filtros.hasta) consulta = consulta.lt("fecha_emision", filtros.hasta);
+   if (filtros.sinCobrar) {
+     // Exige 'emitida' y no solo excluye 'anulada': un borrador es algo que
+     // todavia no se ha mandado a nadie, y no es una deuda que perseguir. El
+     // plan 2B construye sobre esta consulta la lista de lo que hay que
+     // reclamar, y un borrador ahi seria un falso positivo.
+     consulta = consulta.is("cobrada_en", null).eq("estado", "emitida");
+   }
+ 
+   const { data, error } = await consulta;
+   if (error) throw error;
+diff --git a/apps/atlas/src/lib/db/rentabilidad.ts b/apps/atlas/src/lib/db/rentabilidad.ts
+index 1f0bccc..46ee063 100644
+--- a/apps/atlas/src/lib/db/rentabilidad.ts
++++ b/apps/atlas/src/lib/db/rentabilidad.ts
+@@ -14,45 +14,52 @@ import { cierreDe, type Cierre } from "./cierres";
+ import { limitesMesMadrid, mesVecino } from "@/lib/dinero";
+ import { minutosDe } from "@/lib/horas/tramos";
+ import { calcularMargen, type Rentabilidad, type FacturaMes, type GastoMes, type TramoMes, type FilaMargen } from "@/lib/rentabilidad/margen";
+ 
+ const cent = (n: number) => Math.round(n * 100);
+ 
+ export async function rentabilidadDelMes(
+   sb: Sb,
+   mes: string
+ ): Promise<{ r: Rentabilidad; costeHoraCentimos: number; cerrado: Cierre | null }> {
++  // Cortes del mes. Facturas y gastos son `date`: se cortan por día, con
++  // `hastaDia` EXCLUSIVO (primer día del mes siguiente). Los tramos son
++  // `timestamptz`: se cortan por instante en Madrid (`limitesMesMadrid`).
++  // `resumen-dinero.ts` corta por día INCLUSIVO (último día del mes) y aquí
++  // por día exclusivo, y no se unifican a propósito: aquel resume caja y solo
++  // maneja `date`, así que el último día le basta; este combina `date` y
++  // `timestamptz`, y el instante «primer día del mes siguiente a las 00:00»
++  // es el único corte que significa lo mismo para los dos tipos.
+   const desdeDia = `${mes}-01`;
+-  const hastaDia = `${mesVecino(mes, 1)}-01`; // primer día del mes siguiente
++  const hastaDia = `${mesVecino(mes, 1)}-01`;
+   const rango = limitesMesMadrid(mes);
+ 
+   const [ajustes, cerrado, facturas, gastos, tramos, proyectos] = await Promise.all([
+     leerAjustes(sb),
+     cierreDe(sb, mes),
+-    listarFacturas(sb, {}),
++    // `hasta` exclusivo en `listarFacturas`: el corte lo hace la base, no
++    // el `limit(200)` — antes se traían las últimas 200 EN TOTAL y un mes
++    // antiguo perdía facturas en silencio.
++    listarFacturas(sb, { desde: desdeDia, hasta: hastaDia }),
+     listarGastos(sb, { desde: desdeDia, hasta: hastaDia }),
+     listarTramos(sb, rango),
+     // `LineaFactura` solo trae `proyectoId` (no `proyectoNombre`): se resuelve
+     // aquí una sola vez con un Map, en vez de tocar `facturas.ts` — el brief
+     // pide no modificarlo, y una consulta por línea sería una N+1.
+     nombresDeProyectos(sb),
+   ]);
+   const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]));
+ 
+-  // `listarFacturas` no filtra por fecha: trae las últimas 200 EN TOTAL (no
+-  // 200 del mes), así que un mes antiguo puede perder facturas en silencio en
+-  // cuanto el negocio pase de 200 facturas totales. Aquí solo se filtra por
+-  // mes de emisión y estado sobre lo que llegó; ampliar `listarFacturas` con
+-  // un filtro de fecha (para no depender del límite de 200) es de
+-  // `facturas.ts`, no de aquí.
++  // El rango ya lo puso la consulta; aquí solo queda el estado: un borrador
++  // no se ha mandado a nadie y una anulada no es ingreso.
+   const facturasMes: FacturaMes[] = facturas
+-    .filter((f) => f.estado === "emitida" && f.fechaEmision >= desdeDia && f.fechaEmision < hastaDia)
++    .filter((f) => f.estado === "emitida")
+     .map((f) => ({
+       clienteId: f.clienteId,
+       clienteNombre: f.clienteNombre,
+       baseCentimos: cent(f.base),
+       lineas: f.lineas.map((l) => ({
+         proyectoId: l.proyectoId,
+         proyectoNombre: l.proyectoId ? (nombreProyecto.get(l.proyectoId) ?? null) : null,
+         importeCentimos: cent(l.importe),
+       })),
+     }));
+diff --git a/apps/atlas/src/lib/rentabilidad/margen.ts b/apps/atlas/src/lib/rentabilidad/margen.ts
+index 6bbf3a2..2f70873 100644
+--- a/apps/atlas/src/lib/rentabilidad/margen.ts
++++ b/apps/atlas/src/lib/rentabilidad/margen.ts
+@@ -30,51 +30,54 @@ export type GastoMes = {
+ };
+ 
+ export type TramoMes = {
+   clienteId: string | null;
+   clienteNombre: string | null;
+   proyectoId: string | null;
+   proyectoNombre: string | null;
+   minutos: number;
+ };
+ 
+-export type Linea = { gastosCentimos: number; minutos: number; horasCentimos: number };
++/**
++ * Un cajón «sin repartir». Lleva `facturadoCentimos` porque el cajón
++ * «con cliente pero sin proyecto» SÍ factura: una línea de factura sin
++ * proyecto (2A: el proyecto vive en la línea) es ingreso de ese cajón, y
++ * tenerlo en un campo aparte de `Rentabilidad` obligaba a la pantalla a
++ * pintar dos filas para el mismo cajón. En `sinCliente` y `estructura` es
++ * siempre 0: una factura tiene cliente por esquema, así que nada sin
++ * cliente puede facturar.
++ */
++export type Linea = { facturadoCentimos: number; gastosCentimos: number; minutos: number; horasCentimos: number };
+ 
+ export type FilaMargen = {
+   id: string;
+   nombre: string;
+   facturadoCentimos: number;
+   gastosCentimos: number;
+   minutos: number;
+   horasCentimos: number;
+   margenCentimos: number;
+ };
+ 
+ export type Rentabilidad = {
+   porCliente: FilaMargen[];
+   /** Con proyecto pero sin cliente. No se reparte. */
+   sinCliente: Linea;
+   porProyecto: FilaMargen[];
+-  /** Con cliente pero sin proyecto. No se reparte. */
++  /**
++   * Con cliente pero sin proyecto. No se reparte. Su `facturadoCentimos` es
++   * la suma de las líneas de factura sin proyecto: sin él la tabla por
++   * proyecto no cuadraba a la vista con el total.
++   */
+   sinProyecto: Linea;
+   /** Sin ningún contador. Una sola vez. */
+   estructura: Linea;
+-  // El facturado de una línea sin proyecto (2A: el
+-  // proyecto vive en la LÍNEA, no en la factura) no cae en ninguna fila de
+-  // `porProyecto` -- no tiene id de proyecto que lo agrupe -- pero sí en
+-  // `total.facturadoCentimos`. Sin este campo la tabla por proyecto no
+-  // cuadraba a la vista: la suma de sus filas quedaba por debajo del total y
+-  // parecía un error, no una omisión a propósito. Solo facturado: el gasto y
+-  // los minutos que le correspondan a un cliente sin proyecto ya viven en
+-  // `sinProyecto`, y los que no tengan ni cliente ni proyecto, en
+-  // `estructura`.
+-  facturadoSinProyectoCentimos: number;
+   total: { facturadoCentimos: number; gastosCentimos: number; minutos: number; horasCentimos: number; margenCentimos: number };
+ };
+ 
+ /** Se redondea UNA vez, aquí, por fila: sumar redondeos parciales acumula error. */
+ export function costeDeMinutos(minutos: number, costeHoraCentimos: number): number {
+   return Math.round((minutos * costeHoraCentimos) / 60);
+ }
+ 
+ type Acumulado = { nombre: string; facturado: number; gastos: number; minutos: number };
+ 
+@@ -84,22 +87,22 @@ function fila(id: string, a: Acumulado, coste: number): FilaMargen {
+     id,
+     nombre: a.nombre,
+     facturadoCentimos: a.facturado,
+     gastosCentimos: a.gastos,
+     minutos: a.minutos,
+     horasCentimos,
+     margenCentimos: a.facturado - a.gastos - horasCentimos,
+   };
+ }
+ 
+-function linea(gastos: number, minutos: number, coste: number): Linea {
+-  return { gastosCentimos: gastos, minutos, horasCentimos: costeDeMinutos(minutos, coste) };
++function linea(facturado: number, gastos: number, minutos: number, coste: number): Linea {
++  return { facturadoCentimos: facturado, gastosCentimos: gastos, minutos, horasCentimos: costeDeMinutos(minutos, coste) };
+ }
+ 
+ export function calcularMargen(e: {
+   facturas: FacturaMes[];
+   gastos: GastoMes[];
+   tramos: TramoMes[];
+   costeHoraCentimos: number;
+ }): Rentabilidad {
+   const coste = e.costeHoraCentimos;
+   const clientes = new Map<string, Acumulado>();
+@@ -142,23 +145,24 @@ export function calcularMargen(e: {
+     else estructuraMin += t.minutos;
+     if (t.proyectoId !== null) toma(proyectos, t.proyectoId, t.proyectoNombre).minutos += t.minutos;
+     else if (t.clienteId !== null) sinProyectoMin += t.minutos;
+   }
+ 
+   const ordenar = (m: Map<string, Acumulado>) =>
+     [...m.entries()].map(([id, a]) => fila(id, a, coste)).sort((x, y) => y.margenCentimos - x.margenCentimos);
+ 
+   const filasCliente = ordenar(clientes);
+   const filasProyecto = ordenar(proyectos);
+-  const lineaSinCliente = linea(sinClienteG, sinClienteMin, coste);
+-  const lineaSinProyecto = linea(sinProyectoG, sinProyectoMin, coste);
+-  const lineaEstructura = linea(estructuraG, estructuraMin, coste);
++  // Solo `sinProyecto` factura (ver `Linea`); las otras dos van a 0.
++  const lineaSinCliente = linea(0, sinClienteG, sinClienteMin, coste);
++  const lineaSinProyecto = linea(facturadoSinProyecto, sinProyectoG, sinProyectoMin, coste);
++  const lineaEstructura = linea(0, estructuraG, estructuraMin, coste);
+ 
+   // Ronda de arreglo 1: el total de horas se SUMA a partir de las filas ya
+   // redondeadas del eje de cliente (porCliente + sinCliente + estructura); no
+   // se redondea aparte sobre el total de minutos. Con coste no exacto y
+   // minutos que no son múltiplos de 60 los dos números difieren: con coste
+   // 3333 y dos clientes de 1 minuto cada uno, las filas dan 56 + 56 = 112
+   // pero redondear el total de minutos (2) da 111. La pantalla enseña las
+   // filas y el total juntos, y un total que no cuadra con lo que se ve
+   // encima parece un error de verdad aunque no lo sea.
+   //
+@@ -174,20 +178,19 @@ export function calcularMargen(e: {
+     filasCliente.reduce((t, f) => t + f.horasCentimos, 0) +
+     lineaSinCliente.horasCentimos +
+     lineaEstructura.horasCentimos;
+ 
+   return {
+     porCliente: filasCliente,
+     sinCliente: lineaSinCliente,
+     porProyecto: filasProyecto,
+     sinProyecto: lineaSinProyecto,
+     estructura: lineaEstructura,
+-    facturadoSinProyectoCentimos: facturadoSinProyecto,
+     total: {
+       facturadoCentimos: facturadoTotal,
+       gastosCentimos: gastosTotal,
+       minutos: minutosTotal,
+       horasCentimos: horasTotal,
+       margenCentimos: facturadoTotal - gastosTotal - horasTotal,
+     },
+   };
+ }
+diff --git a/apps/atlas/src/tests/db/facturas.test.ts b/apps/atlas/src/tests/db/facturas.test.ts
+index 74b6581..4712ac3 100644
+--- a/apps/atlas/src/tests/db/facturas.test.ts
++++ b/apps/atlas/src/tests/db/facturas.test.ts
+@@ -192,20 +192,33 @@ describe("listar facturas", () => {
+     await pg.query(
+       `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision,
+                              base, iva_cuota, total, estado)
+        VALUES ('externa','BIO',9,$1,'2026-08-04',100,0,100,'borrador')`,
+       [idCliente]
+     );
+     const fs = await listarFacturas(sbDuenyo, { clienteId: idCliente, sinCobrar: true });
+     expect(fs.map((f) => f.numero)).not.toContain(9);
+   });
+ 
++  // Ronda final: el rango de fechas lo pone la base, no un filtro en memoria
++  // sobre las últimas 200. Se eligen los bordes justos: `desde` cae sobre la
++  // del 4 de julio (inclusivo, debe salir) y `hasta` sobre las del 4 de
++  // agosto (exclusivo, no deben salir). La de junio queda fuera por abajo.
++  it("con desde/hasta, una factura fuera del rango no sale (hasta exclusivo)", async () => {
++    const fs = await listarFacturas(sbDuenyo, {
++      clienteId: idCliente,
++      desde: "2026-07-04",
++      hasta: "2026-08-04",
++    });
++    expect(fs.map((f) => f.numero)).toEqual([2]);
++  });
++
+   // No filtra la consulta: de eso se encarga RLS, y se comprueba en vez de
+   // suponerse.
+   it("un colaborador no ve ninguna factura", async () => {
+     expect(await listarFacturas(sbColaborador, {})).toEqual([]);
+   });
+ });
+ 
+ describe("obtener una factura", () => {
+   it("la trae con sus líneas", async () => {
+     const f = await obtenerFactura(sbDuenyo, idFactura);
+diff --git a/apps/atlas/src/tests/db/rentabilidad.test.ts b/apps/atlas/src/tests/db/rentabilidad.test.ts
+index 3ff5dfd..86888c0 100644
+--- a/apps/atlas/src/tests/db/rentabilidad.test.ts
++++ b/apps/atlas/src/tests/db/rentabilidad.test.ts
+@@ -168,20 +168,31 @@ describe("margenDe", () => {
+     expect(m.facturadoCentimos).toBe(29000);
+   });
+ 
+   it("un id que no aparece ese mes devuelve ceros, no un error", async () => {
+     const m = await margenDe(sbDuenyo, { clienteId: "00000000-0000-0000-0000-000000000000" }, MES);
+     expect(m).toMatchObject({ facturadoCentimos: 0, gastosCentimos: 0, minutos: 0, horasCentimos: 0, margenCentimos: 0 });
+   });
+ });
+ 
+ describe("cierres", () => {
++  // Ronda final: un `mes` que no sea AAAA-MM se rechaza antes de tocar la
++  // base, con un mensaje claro en vez de un error de Postgres o, en reabrir,
++  // un «no estaba cerrado» engañoso.
++  it("un mes que no es AAAA-MM se rechaza sin tocar la base", async () => {
++    const error = "El mes tiene que ser AAAA-MM.";
++    for (const malo of ["2090-13", "2090-3", "2090-03-01", "marzo", ""]) {
++      expect(await cerrarMes(sbDuenyo, malo, 3000, AHORA)).toEqual({ ok: false, error });
++      expect(await reabrirMes(sbDuenyo, malo)).toEqual({ ok: false, error });
++    }
++  });
++
+   it("no se cierra el mes en curso ni uno futuro", async () => {
+     const r = await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA);
+     expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });
+   });
+ 
+   it("el mes en curso se decide en Madrid, no en UTC", async () => {
+     // A las 00:30 Madrid del 1 de junio (AHORA_LIMITE), mayo ya ha terminado
+     // en Madrid aunque en UTC siga siendo 31 de mayo: mayo se puede cerrar, y
+     // junio (el mes en curso en Madrid) no.
+     try {
+diff --git a/apps/atlas/src/tests/esquema/economia-ajustes.test.ts b/apps/atlas/src/tests/esquema/economia-ajustes.test.ts
+index f5372ff..c456f67 100644
+--- a/apps/atlas/src/tests/esquema/economia-ajustes.test.ts
++++ b/apps/atlas/src/tests/esquema/economia-ajustes.test.ts
+@@ -48,24 +48,28 @@ afterAll(async () => {
+       } catch {
+         /* ya no está */
+       }
+     }
+   } finally {
+     await pg.end();
+   }
+ });
+ 
+ describe("ajustes_economia", () => {
+-  it("nace con una fila y coste cero", async () => {
++  // La fila la escriben otros tests (`rentabilidad.test.ts` fija el coste y
++  // lo restaura al terminar) y el propio propietario desde `/ajustes/economia`:
++  // su VALOR no es un invariante del esquema. Lo que sí lo es: que haya una
++  // sola fila y que el coste no sea negativo.
++  it("tiene una sola fila", async () => {
+     const { rows } = await pg.query(`SELECT id, coste_hora FROM ajustes_economia`);
+     expect(rows).toHaveLength(1);
+-    expect(Number(rows[0].coste_hora)).toBe(0);
++    expect(Number(rows[0].coste_hora)).toBeGreaterThanOrEqual(0);
+   });
+ 
+   it("no admite una segunda fila", async () => {
+     await expect(pg.query(`INSERT INTO ajustes_economia (id) VALUES (2)`)).rejects.toThrow(/ajustes_economia_id_check/);
+   });
+ 
+   it("un colaborador no la ve", async () => {
+     const { data } = await sbColab.from("ajustes_economia").select("coste_hora");
+     expect(data).toEqual([]);
+   });
+diff --git a/apps/atlas/src/tests/rentabilidad/margen.test.ts b/apps/atlas/src/tests/rentabilidad/margen.test.ts
+index 35de63a..9034c8e 100644
+--- a/apps/atlas/src/tests/rentabilidad/margen.test.ts
++++ b/apps/atlas/src/tests/rentabilidad/margen.test.ts
+@@ -40,55 +40,58 @@ describe("calcularMargen", () => {
+   const r = calcularMargen({ facturas: [fBio, fClub], gastos, tramos, costeHoraCentimos: COSTE });
+ 
+   it("por cliente: facturado − gastos con su cliente − horas con su cliente", () => {
+     const bio = r.porCliente.find((f) => f.id === "c-bio")!;
+     expect(bio).toEqual({ id: "c-bio", nombre: "Biodental", facturadoCentimos: 35000, gastosCentimos: 4830, minutos: 120, horasCentimos: 6000, margenCentimos: 24170 });
+     const club = r.porCliente.find((f) => f.id === "c-club")!;
+     expect(club.margenCentimos).toBe(10000 - 940);
+   });
+ 
+   it("lo que tiene proyecto pero no cliente va a «sin cliente», sin repartir", () => {
+-    expect(r.sinCliente).toEqual({ gastosCentimos: 2500, minutos: 60, horasCentimos: 3000 });
++    // `facturadoCentimos` es 0 por construcción: una factura siempre tiene cliente.
++    expect(r.sinCliente).toEqual({ facturadoCentimos: 0, gastosCentimos: 2500, minutos: 60, horasCentimos: 3000 });
+   });
+ 
+   it("por proyecto: el facturado sale de las líneas, y el Supabase de Kairos sí es directo aquí", () => {
+     const kairos = r.porProyecto.find((f) => f.id === "p-kairos")!;
+     expect(kairos).toEqual({ id: "p-kairos", nombre: "Kairos", facturadoCentimos: 6000, gastosCentimos: 2500, minutos: 60, horasCentimos: 3000, margenCentimos: 500 });
+     const sara = r.porProyecto.find((f) => f.id === "p-sara")!;
+     expect(sara.facturadoCentimos).toBe(29000);
+   });
+ 
+   it("lo que tiene cliente pero no proyecto va a «sin proyecto»", () => {
+     expect(r.sinProyecto.gastosCentimos).toBe(940);
+     // y la línea de factura sin proyecto es facturado sin proyecto
+     expect(r.porProyecto.find((f) => f.id === "sin-proyecto")).toBeUndefined();
+     expect(r.total.facturadoCentimos - r.porProyecto.reduce((t, f) => t + f.facturadoCentimos, 0)).toBe(10000);
+     // La línea de fClub, sin proyecto: su facturado no cae en ninguna fila de
+-    // `porProyecto`, pero tampoco desaparece — vive en su propio campo.
+-    expect(r.facturadoSinProyectoCentimos).toBe(10000);
++    // `porProyecto`, pero tampoco desaparece — es el facturado del mismo
++    // cajón «sin proyecto» que ya recoge sus gastos y minutos (ronda final:
++    // un cajón, una fila).
++    expect(r.sinProyecto.facturadoCentimos).toBe(10000);
+   });
+ 
+   it("la estructura es lo que no tiene ningún contador, una sola vez", () => {
+-    expect(r.estructura).toEqual({ gastosCentimos: 2000, minutos: 30, horasCentimos: 1500 });
++    expect(r.estructura).toEqual({ facturadoCentimos: 0, gastosCentimos: 2000, minutos: 30, horasCentimos: 1500 });
+   });
+ 
+   it("los dos ejes cuadran con el total del negocio", () => {
+     const total = r.total;
+     expect(total.facturadoCentimos).toBe(45000);
+     expect(total.gastosCentimos).toBe(4830 + 2500 + 940 + 2000);
+     expect(total.minutos).toBe(210);
+     expect(total.horasCentimos).toBe(10500);
+     expect(total.margenCentimos).toBe(45000 - 10270 - 10500);
+     const sumaClientes = r.porCliente.reduce((t, f) => t + f.margenCentimos, 0);
+     expect(sumaClientes - r.sinCliente.gastosCentimos - r.sinCliente.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
+     const sumaProyectos = r.porProyecto.reduce((t, f) => t + f.margenCentimos, 0);
+-    expect(sumaProyectos + r.facturadoSinProyectoCentimos - r.sinProyecto.gastosCentimos - r.sinProyecto.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
++    expect(sumaProyectos + r.sinProyecto.facturadoCentimos - r.sinProyecto.gastosCentimos - r.sinProyecto.horasCentimos - r.estructura.gastosCentimos - r.estructura.horasCentimos).toBe(total.margenCentimos);
+   });
+ 
+   it("ordena de más a menos margen", () => {
+     expect(r.porCliente.map((f) => f.id)).toEqual(["c-bio", "c-club"]);
+   });
+ 
+   it("con coste cero, las horas cuentan cero pero los minutos se ven", () => {
+     const sin = calcularMargen({ facturas: [fBio], gastos: [], tramos, costeHoraCentimos: 0 });
+     expect(sin.porCliente[0]?.horasCentimos).toBe(0);
+     expect(sin.porCliente[0]?.minutos).toBe(120);
+@@ -128,14 +131,14 @@ describe("calcularMargen", () => {
+ 
+     // Y no el redondeo directo del total de minutos (1222): las dos formas
+     // de cuadrar difieren aquí a propósito, para fijar cuál gana.
+     expect(costeDeMinutos(r2.total.minutos, COSTE_IMPAR)).toBe(1222);
+     expect(r2.total.horasCentimos).not.toBe(costeDeMinutos(r2.total.minutos, COSTE_IMPAR));
+ 
+     // Y el margen del total cuadra por los dos ejes, con este total de horas.
+     const sumaMargenClientes = r2.porCliente.reduce((t, f) => t + f.margenCentimos, 0);
+     expect(sumaMargenClientes - r2.sinCliente.gastosCentimos - r2.sinCliente.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
+     const sumaMargenProyectos = r2.porProyecto.reduce((t, f) => t + f.margenCentimos, 0);
+-    const facturadoSinProyecto2 = 0;
+-    expect(sumaMargenProyectos + facturadoSinProyecto2 - r2.sinProyecto.gastosCentimos - r2.sinProyecto.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
++    expect(r2.sinProyecto.facturadoCentimos).toBe(0);
++    expect(sumaMargenProyectos + r2.sinProyecto.facturadoCentimos - r2.sinProyecto.gastosCentimos - r2.sinProyecto.horasCentimos - r2.estructura.gastosCentimos - r2.estructura.horasCentimos).toBe(r2.total.margenCentimos);
+   });
+ });

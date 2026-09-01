@@ -1,0 +1,707 @@
+# Review package: b74867c..ae8bcbc
+
+## Commits
+ae8bcbc feat(kaizen): proveedor de tema y componentes base
+
+## Files changed
+ apps/kaizen/package-lock.json                      | 169 +++++++++++++++++++++
+ apps/kaizen/package.json                           |   2 +
+ apps/kaizen/src/design/componentes/anillo.tsx      |  45 ++++++
+ apps/kaizen/src/design/componentes/barra.tsx       |  32 ++++
+ apps/kaizen/src/design/componentes/boton.tsx       |  34 +++++
+ .../src/design/componentes/componentes.test.tsx    |  36 +++++
+ apps/kaizen/src/design/componentes/superficie.tsx  |  50 ++++++
+ apps/kaizen/src/design/componentes/texto.tsx       |  34 +++++
+ apps/kaizen/src/design/proveedor.tsx               |  14 ++
+ 9 files changed, 416 insertions(+)
+
+## Diff
+diff --git a/apps/kaizen/package-lock.json b/apps/kaizen/package-lock.json
+index 5e3077d..f6fae5d 100644
+--- a/apps/kaizen/package-lock.json
++++ b/apps/kaizen/package-lock.json
+@@ -9,30 +9,32 @@
+       "version": "1.0.0",
+       "dependencies": {
+         "@react-native-async-storage/async-storage": "2.2.0",
+         "@react-native-community/netinfo": "12.0.1",
+         "@tanstack/query-async-storage-persister": "^5.101.4",
+         "@tanstack/react-query": "^5.101.4",
+         "@tanstack/react-query-persist-client": "^5.101.4",
+         "expo": "~57.0.14",
+         "expo-apple-authentication": "^57.0.1",
+         "expo-auth-session": "^57.0.7",
++        "expo-blur": "~57.0.2",
+         "expo-constants": "~57.0.12",
+         "expo-crypto": "^57.0.1",
+         "expo-linking": "~57.0.6",
+         "expo-router": "~57.0.14",
+         "expo-status-bar": "~57.0.1",
+         "expo-web-browser": "^57.0.2",
+         "react": "19.2.3",
+         "react-native": "0.86.2",
+         "react-native-safe-area-context": "~5.7.0",
+         "react-native-screens": "~4.26.0",
++        "react-native-svg": "15.15.4",
+         "react-native-url-polyfill": "^4.0.0"
+       },
+       "devDependencies": {
+         "@react-native/jest-preset": "^0.86.2",
+         "@supabase/supabase-js": "^2.112.3",
+         "@testing-library/react-native": "^13.1.1",
+         "@types/jest": "^29.5.14",
+         "@types/pg": "^8.21.0",
+         "@types/react": "~19.2.2",
+         "babel-preset-expo": "^57.0.7",
+@@ -3769,20 +3771,26 @@
+     },
+     "node_modules/big-integer": {
+       "version": "1.6.52",
+       "resolved": "https://registry.npmjs.org/big-integer/-/big-integer-1.6.52.tgz",
+       "integrity": "sha512-QxD8cf2eVqJOOz63z6JIN9BzvVs/dlySa5HGSBH5xtR8dPteIRQnBxxKqkNTiT6jbDTF6jAfrd4oMcND9RGbQg==",
+       "license": "Unlicense",
+       "engines": {
+         "node": ">=0.6"
+       }
+     },
++    "node_modules/boolbase": {
++      "version": "1.0.0",
++      "resolved": "https://registry.npmjs.org/boolbase/-/boolbase-1.0.0.tgz",
++      "integrity": "sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==",
++      "license": "ISC"
++    },
+     "node_modules/bplist-creator": {
+       "version": "0.1.0",
+       "resolved": "https://registry.npmjs.org/bplist-creator/-/bplist-creator-0.1.0.tgz",
+       "integrity": "sha512-sXaHZicyEEmY86WyueLTQesbeoH/mquvarJaQNbjuOQO+7gbFcDEWqKmcWA4cOTLzFlfgvkiVxolk1k5bBIpmg==",
+       "license": "MIT",
+       "dependencies": {
+         "stream-buffers": "2.2.x"
+       }
+     },
+     "node_modules/bplist-parser": {
+@@ -4280,20 +4288,70 @@
+       "license": "MIT",
+       "dependencies": {
+         "path-key": "^3.1.0",
+         "shebang-command": "^2.0.0",
+         "which": "^2.0.1"
+       },
+       "engines": {
+         "node": ">= 8"
+       }
+     },
++    "node_modules/css-select": {
++      "version": "5.2.2",
++      "resolved": "https://registry.npmjs.org/css-select/-/css-select-5.2.2.tgz",
++      "integrity": "sha512-TizTzUddG/xYLA3NXodFM0fSbNizXjOKhqiQQwvhlspadZokn1KDy0NZFS0wuEubIYAV5/c1/lAr0TaaFXEXzw==",
++      "license": "BSD-2-Clause",
++      "dependencies": {
++        "boolbase": "^1.0.0",
++        "css-what": "^6.1.0",
++        "domhandler": "^5.0.2",
++        "domutils": "^3.0.1",
++        "nth-check": "^2.0.1"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/fb55"
++      }
++    },
++    "node_modules/css-tree": {
++      "version": "1.1.3",
++      "resolved": "https://registry.npmjs.org/css-tree/-/css-tree-1.1.3.tgz",
++      "integrity": "sha512-tRpdppF7TRazZrjJ6v3stzv93qxRcSsFmW6cX0Zm2NVKpxE1WV1HblnghVv9TreireHkqI/VDEsfolRF1p6y7Q==",
++      "license": "MIT",
++      "dependencies": {
++        "mdn-data": "2.0.14",
++        "source-map": "^0.6.1"
++      },
++      "engines": {
++        "node": ">=8.0.0"
++      }
++    },
++    "node_modules/css-tree/node_modules/source-map": {
++      "version": "0.6.1",
++      "resolved": "https://registry.npmjs.org/source-map/-/source-map-0.6.1.tgz",
++      "integrity": "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==",
++      "license": "BSD-3-Clause",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/css-what": {
++      "version": "6.2.2",
++      "resolved": "https://registry.npmjs.org/css-what/-/css-what-6.2.2.tgz",
++      "integrity": "sha512-u/O3vwbptzhMs3L1fQE82ZSLHQQfto5gyZzwteVIEyeaY5Fc7R4dapF/BvRoSYFeqfBk4m0V1Vafq5Pjv25wvA==",
++      "license": "BSD-2-Clause",
++      "engines": {
++        "node": ">= 6"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/fb55"
++      }
++    },
+     "node_modules/css.escape": {
+       "version": "1.5.1",
+       "resolved": "https://registry.npmjs.org/css.escape/-/css.escape-1.5.1.tgz",
+       "integrity": "sha512-YUifsXXuknHlUsmlgyY0PKzgPOr7/FjCePfHNt0jxm83wHZi44VDMQ7/fGNkjY3/jV1MC+1CmZbaHzugyeRtpg==",
+       "license": "MIT"
+     },
+     "node_modules/cssom": {
+       "version": "0.5.0",
+       "resolved": "https://registry.npmjs.org/cssom/-/cssom-0.5.0.tgz",
+       "integrity": "sha512-iKuQcq+NdHqlAcwUY0o/HL69XQrUaQdMjmStJ8JFmUaiiQErlhrmuigkg/CU4E2J0IyUKUrMAgl36TvN67MqTw==",
+@@ -4483,34 +4541,101 @@
+       "engines": {
+         "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+     "node_modules/dnssd-advertise": {
+       "version": "1.1.6",
+       "resolved": "https://registry.npmjs.org/dnssd-advertise/-/dnssd-advertise-1.1.6.tgz",
+       "integrity": "sha512-Ndrrf6BMPalkQPd/zubL+4YghH2J9NspapQ09uDXwYbvOPkP0oaqf5CkcwJ0b50kS2O3ul6yVu+jz+RY62Cejg==",
+       "license": "MIT"
+     },
++    "node_modules/dom-serializer": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/dom-serializer/-/dom-serializer-2.0.0.tgz",
++      "integrity": "sha512-wIkAryiqt/nV5EQKqQpo3SToSOV9J0DnbJqwK7Wv/Trc92zIAYZ4FlMu+JPFW1DfGFt81ZTCGgDEabffXeLyJg==",
++      "license": "MIT",
++      "dependencies": {
++        "domelementtype": "^2.3.0",
++        "domhandler": "^5.0.2",
++        "entities": "^4.2.0"
++      },
++      "funding": {
++        "url": "https://github.com/cheeriojs/dom-serializer?sponsor=1"
++      }
++    },
++    "node_modules/dom-serializer/node_modules/entities": {
++      "version": "4.5.0",
++      "resolved": "https://registry.npmjs.org/entities/-/entities-4.5.0.tgz",
++      "integrity": "sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw==",
++      "license": "BSD-2-Clause",
++      "engines": {
++        "node": ">=0.12"
++      },
++      "funding": {
++        "url": "https://github.com/fb55/entities?sponsor=1"
++      }
++    },
++    "node_modules/domelementtype": {
++      "version": "2.3.0",
++      "resolved": "https://registry.npmjs.org/domelementtype/-/domelementtype-2.3.0.tgz",
++      "integrity": "sha512-OLETBj6w0OsagBwdXnPdN0cnMfF9opN69co+7ZrbfPGrdpPVNBUj02spi6B1N7wChLQiPn4CSH/zJvXw56gmHw==",
++      "funding": [
++        {
++          "type": "github",
++          "url": "https://github.com/sponsors/fb55"
++        }
++      ],
++      "license": "BSD-2-Clause"
++    },
+     "node_modules/domexception": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/domexception/-/domexception-4.0.0.tgz",
+       "integrity": "sha512-A2is4PLG+eeSfoTMA95/s4pvAoSo2mKtiM5jlHkAVewmiO8ISFTFKZjH7UAM1Atli/OT/7JHOrJRJiMKUZKYBw==",
+       "deprecated": "Use your platform's native DOMException instead",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "webidl-conversions": "^7.0.0"
+       },
+       "engines": {
+         "node": ">=12"
+       }
+     },
++    "node_modules/domhandler": {
++      "version": "5.0.3",
++      "resolved": "https://registry.npmjs.org/domhandler/-/domhandler-5.0.3.tgz",
++      "integrity": "sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==",
++      "license": "BSD-2-Clause",
++      "dependencies": {
++        "domelementtype": "^2.3.0"
++      },
++      "engines": {
++        "node": ">= 4"
++      },
++      "funding": {
++        "url": "https://github.com/fb55/domhandler?sponsor=1"
++      }
++    },
++    "node_modules/domutils": {
++      "version": "3.2.2",
++      "resolved": "https://registry.npmjs.org/domutils/-/domutils-3.2.2.tgz",
++      "integrity": "sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==",
++      "license": "BSD-2-Clause",
++      "dependencies": {
++        "dom-serializer": "^2.0.0",
++        "domelementtype": "^2.3.0",
++        "domhandler": "^5.0.3"
++      },
++      "funding": {
++        "url": "https://github.com/fb55/domutils?sponsor=1"
++      }
++    },
+     "node_modules/dunder-proto": {
+       "version": "1.0.1",
+       "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+       "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "call-bind-apply-helpers": "^1.0.1",
+         "es-errors": "^1.3.0",
+         "gopd": "^1.2.0"
+@@ -4927,20 +5052,31 @@
+         "expo-crypto": "~57.0.1",
+         "expo-linking": "~57.0.6",
+         "expo-web-browser": "~57.0.2",
+         "invariant": "^2.2.4"
+       },
+       "peerDependencies": {
+         "react": "*",
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-blur": {
++      "version": "57.0.2",
++      "resolved": "https://registry.npmjs.org/expo-blur/-/expo-blur-57.0.2.tgz",
++      "integrity": "sha512-Aoud8H8lmlNkbRufyvRLefmGFELdBf1n5Te/Xm+Zx8ORINH+aXL+gKb5mbftFSha860+I7pMArz77TBYz8HDVg==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*",
++        "react": "*",
++        "react-native": "*"
++      }
++    },
+     "node_modules/expo-constants": {
+       "version": "57.0.12",
+       "resolved": "https://registry.npmjs.org/expo-constants/-/expo-constants-57.0.12.tgz",
+       "integrity": "sha512-js9qxZw4G9ulSc72GGpYGwtmk/IzFcf6/tTcEG6wB8HTlkunMS4W86R+4e6oHIrIkHA7W6s/79Se+E+DC3RAqA==",
+       "license": "MIT",
+       "dependencies": {
+         "@expo/env": "~2.4.2"
+       },
+       "peerDependencies": {
+         "expo": "*",
+@@ -7953,20 +8089,26 @@
+     "node_modules/math-intrinsics": {
+       "version": "1.1.0",
+       "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+       "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
+       "dev": true,
+       "license": "MIT",
+       "engines": {
+         "node": ">= 0.4"
+       }
+     },
++    "node_modules/mdn-data": {
++      "version": "2.0.14",
++      "resolved": "https://registry.npmjs.org/mdn-data/-/mdn-data-2.0.14.tgz",
++      "integrity": "sha512-dn6wd0uw5GsdswPFfsgMp5NSB0/aDe6fK94YJV/AJDYXL6HVLWBsxeq7js7Ad+mU2K9LAlwpk6kN2D5mwCPVow==",
++      "license": "CC0-1.0"
++    },
+     "node_modules/memoize-one": {
+       "version": "5.2.1",
+       "resolved": "https://registry.npmjs.org/memoize-one/-/memoize-one-5.2.1.tgz",
+       "integrity": "sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q==",
+       "license": "MIT"
+     },
+     "node_modules/merge-options": {
+       "version": "3.0.4",
+       "resolved": "https://registry.npmjs.org/merge-options/-/merge-options-3.0.4.tgz",
+       "integrity": "sha512-2Sug1+knBjkaMsMgf1ctR1Ujx+Ayku4EdJN4Z+C2+JzoeF7A3OZ9KM2GY0CpQS51NR61LTurMJrRKPhSs3ZRTQ==",
+@@ -8457,20 +8599,32 @@
+       "integrity": "sha512-S48WzZW777zhNIrn7gxOlISNAqi9ZC/uQFnRdbeIHhZhCA6UqpkOT8T1G7BvfdgP4Er8gF4sUbaS0i7QvIfCWw==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "path-key": "^3.0.0"
+       },
+       "engines": {
+         "node": ">=8"
+       }
+     },
++    "node_modules/nth-check": {
++      "version": "2.1.1",
++      "resolved": "https://registry.npmjs.org/nth-check/-/nth-check-2.1.1.tgz",
++      "integrity": "sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w==",
++      "license": "BSD-2-Clause",
++      "dependencies": {
++        "boolbase": "^1.0.0"
++      },
++      "funding": {
++        "url": "https://github.com/fb55/nth-check?sponsor=1"
++      }
++    },
+     "node_modules/nullthrows": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/nullthrows/-/nullthrows-1.1.1.tgz",
+       "integrity": "sha512-2vPPEi+Z7WqML2jZYddDIfy5Dqb0r2fze2zTxNNknZaFpVHU3mFB3R+DWeJWGVx0ecvttSGlJTI+WG+8Z4cDWw==",
+       "license": "MIT"
+     },
+     "node_modules/nwsapi": {
+       "version": "2.2.24",
+       "resolved": "https://registry.npmjs.org/nwsapi/-/nwsapi-2.2.24.tgz",
+       "integrity": "sha512-7YRhZ3jS45LwmSCT4b2sVFHt/WuovaktDU07QrtOBY2PXskss5a9jfmR9jptyumwXST+rFjrmppMY1KT/yn35A==",
+@@ -9350,20 +9504,35 @@
+       "license": "MIT",
+       "dependencies": {
+         "react-freeze": "^1.0.0",
+         "warn-once": "^0.1.0"
+       },
+       "peerDependencies": {
+         "react": "*",
+         "react-native": "*"
+       }
+     },
++    "node_modules/react-native-svg": {
++      "version": "15.15.4",
++      "resolved": "https://registry.npmjs.org/react-native-svg/-/react-native-svg-15.15.4.tgz",
++      "integrity": "sha512-boT/vIRgj6zZKBpfTPJJiYWMbZE9duBMOwPK6kCSTgxsS947IFMOq9OgIFkpWZTB7t229H24pDRkh3W9ZK/J1A==",
++      "license": "MIT",
++      "dependencies": {
++        "css-select": "^5.1.0",
++        "css-tree": "^1.1.3",
++        "warn-once": "0.1.1"
++      },
++      "peerDependencies": {
++        "react": "*",
++        "react-native": "*"
++      }
++    },
+     "node_modules/react-native-url-polyfill": {
+       "version": "4.0.0",
+       "resolved": "https://registry.npmjs.org/react-native-url-polyfill/-/react-native-url-polyfill-4.0.0.tgz",
+       "integrity": "sha512-eqYM3wBAA0eL1sPYbBAoNfbES3+NkgcxUdelQ7QzmoVtqKB5qGG0U13MPTRUroAWK+y2EoJFS3MZUK0fwTf0pA==",
+       "license": "MIT",
+       "peerDependencies": {
+         "react-native": "*"
+       }
+     },
+     "node_modules/react-native/node_modules/commander": {
+diff --git a/apps/kaizen/package.json b/apps/kaizen/package.json
+index b9b7f8d..e2beed8 100644
+--- a/apps/kaizen/package.json
++++ b/apps/kaizen/package.json
+@@ -4,30 +4,32 @@
+   "main": "expo-router/entry",
+   "dependencies": {
+     "@react-native-async-storage/async-storage": "2.2.0",
+     "@react-native-community/netinfo": "12.0.1",
+     "@tanstack/query-async-storage-persister": "^5.101.4",
+     "@tanstack/react-query": "^5.101.4",
+     "@tanstack/react-query-persist-client": "^5.101.4",
+     "expo": "~57.0.14",
+     "expo-apple-authentication": "^57.0.1",
+     "expo-auth-session": "^57.0.7",
++    "expo-blur": "~57.0.2",
+     "expo-constants": "~57.0.12",
+     "expo-crypto": "^57.0.1",
+     "expo-linking": "~57.0.6",
+     "expo-router": "~57.0.14",
+     "expo-status-bar": "~57.0.1",
+     "expo-web-browser": "^57.0.2",
+     "react": "19.2.3",
+     "react-native": "0.86.2",
+     "react-native-safe-area-context": "~5.7.0",
+     "react-native-screens": "~4.26.0",
++    "react-native-svg": "15.15.4",
+     "react-native-url-polyfill": "^4.0.0"
+   },
+   "devDependencies": {
+     "@react-native/jest-preset": "^0.86.2",
+     "@supabase/supabase-js": "^2.112.3",
+     "@testing-library/react-native": "^13.1.1",
+     "@types/jest": "^29.5.14",
+     "@types/pg": "^8.21.0",
+     "@types/react": "~19.2.2",
+     "babel-preset-expo": "^57.0.7",
+diff --git a/apps/kaizen/src/design/componentes/anillo.tsx b/apps/kaizen/src/design/componentes/anillo.tsx
+new file mode 100644
+index 0000000..893ffec
+--- /dev/null
++++ b/apps/kaizen/src/design/componentes/anillo.tsx
+@@ -0,0 +1,45 @@
++import Svg, { Circle, Line } from 'react-native-svg'
++import { View } from 'react-native'
++import type { ReactNode } from 'react'
++import { useTema } from '../proveedor'
++
++export function Anillo({ progreso, tamano = 168, grosor = 12, children }: {
++  progreso: number
++  tamano?: number
++  grosor?: number
++  children?: ReactNode
++}) {
++  const t = useTema()
++  const recortado = Math.min(1, Math.max(0, progreso))
++  const centro = tamano / 2
++  const radio = centro - grosor / 2 - 6
++  const vuelta = 2 * Math.PI * radio
++
++  return (
++    <View style={{ width: tamano, height: tamano }}>
++      <Svg width={tamano} height={tamano}>
++        <Circle cx={centro} cy={centro} r={radio} fill="none"
++                stroke={t.color.pista} strokeWidth={grosor} />
++        <Circle cx={centro} cy={centro} r={radio} fill="none"
++                stroke={t.color.acento} strokeWidth={grosor} strokeLinecap="round"
++                strokeDasharray={`${vuelta * recortado} ${vuelta}`}
++                transform={`rotate(-90 ${centro} ${centro})`} />
++        {t.recetas.anillo === 'medidor' &&
++          [0, 0.25, 0.5, 0.75].map((fraccion) => {
++            const angulo = (fraccion * 2 - 0.5) * Math.PI
++            return (
++              <Line key={fraccion}
++                    x1={centro + Math.cos(angulo) * (radio + grosor / 2 + 1)}
++                    y1={centro + Math.sin(angulo) * (radio + grosor / 2 + 1)}
++                    x2={centro + Math.cos(angulo) * (radio + grosor / 2 + 5)}
++                    y2={centro + Math.sin(angulo) * (radio + grosor / 2 + 5)}
++                    stroke={t.color.textoTenue} strokeWidth={2} />
++            )
++          })}
++      </Svg>
++      <View style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center' }}>
++        {children}
++      </View>
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/design/componentes/barra.tsx b/apps/kaizen/src/design/componentes/barra.tsx
+new file mode 100644
+index 0000000..f1ace47
+--- /dev/null
++++ b/apps/kaizen/src/design/componentes/barra.tsx
+@@ -0,0 +1,32 @@
++import { View } from 'react-native'
++import { useTema } from '../proveedor'
++
++export function Barra({ progreso, color, alto = 7 }:
++  { progreso: number; color: string; alto?: number }) {
++  const t = useTema()
++  const recortado = Math.min(1, Math.max(0, progreso))
++
++  if (t.recetas.barra === 'segmentada') {
++    const total = 10
++    const llenos = Math.round(recortado * total)
++    return (
++      <View style={{ flexDirection: 'row', gap: 3 }}>
++        <View testID="barra-relleno" style={{ width: `${recortado * 100}%`, flexDirection: 'row', gap: 3 }}>
++          {Array.from({ length: total }, (_, i) => (
++            <View key={i} style={{
++              flex: 1, height: alto, borderRadius: 2,
++              backgroundColor: i < llenos ? color : t.color.pista,
++            }} />
++          ))}
++        </View>
++      </View>
++    )
++  }
++
++  return (
++    <View style={{ height: alto, borderRadius: alto, backgroundColor: t.color.pista, overflow: 'hidden' }}>
++      <View testID="barra-relleno"
++            style={{ width: `${recortado * 100}%`, height: '100%', borderRadius: alto, backgroundColor: color }} />
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/design/componentes/boton.tsx b/apps/kaizen/src/design/componentes/boton.tsx
+new file mode 100644
+index 0000000..90731c7
+--- /dev/null
++++ b/apps/kaizen/src/design/componentes/boton.tsx
+@@ -0,0 +1,34 @@
++import { Pressable } from 'react-native'
++import { useTema } from '../proveedor'
++import { Superficie } from './superficie'
++import { Texto } from './texto'
++
++/**
++ * El fondo sale de `superficie.botonPrimario`/`botonSecundario`, no de un
++ * color: así un tema puede darle arte ilustrado al botón sin que esta
++ * pantalla ni ninguna otra tengan que enterarse.
++ */
++export function Boton({ titulo, alPulsar, tono = 'primario' }:
++  { titulo: string; alPulsar: () => void; tono?: 'primario' | 'secundario' }) {
++  const t = useTema()
++  const primario = tono === 'primario'
++  const fondo = primario ? t.superficie.botonPrimario : t.superficie.botonSecundario
++
++  return (
++    <Pressable onPress={alPulsar} accessibilityRole="button">
++      <Superficie
++        fondo={fondo}
++        radio={t.radio.boton}
++        style={{
++          paddingVertical: t.espaciado[1],
++          paddingHorizontal: t.espaciado[2],
++          alignItems: 'center',
++        }}
++      >
++        <Texto style={{ color: primario ? t.color.sobreAcento : t.color.texto, fontWeight: '700' }}>
++          {titulo}
++        </Texto>
++      </Superficie>
++    </Pressable>
++  )
++}
+diff --git a/apps/kaizen/src/design/componentes/componentes.test.tsx b/apps/kaizen/src/design/componentes/componentes.test.tsx
+new file mode 100644
+index 0000000..4be3953
+--- /dev/null
++++ b/apps/kaizen/src/design/componentes/componentes.test.tsx
+@@ -0,0 +1,36 @@
++import { render, screen, fireEvent } from '@testing-library/react-native'
++import { ProveedorTema } from '../proveedor'
++import { Texto } from './texto'
++import { Boton } from './boton'
++import { Barra } from './barra'
++
++function envolver(nodo: React.ReactNode) {
++  return render(<ProveedorTema nombre="defecto">{nodo}</ProveedorTema>)
++}
++
++it('el texto toma el color del tema', () => {
++  envolver(<Texto>Hola</Texto>)
++  expect(screen.getByText('Hola')).toHaveStyle({ color: '#F4F5F2' })
++})
++
++it('la etiqueta usa el color tenue y va en mayúsculas', () => {
++  envolver(<Texto variante="etiqueta">Agua</Texto>)
++  expect(screen.getByText('AGUA')).toHaveStyle({ color: '#98A09A' })
++})
++
++it('el botón dispara su acción', () => {
++  const alPulsar = jest.fn()
++  envolver(<Boton titulo="Registrar" alPulsar={alPulsar} />)
++  fireEvent.press(screen.getByText('Registrar'))
++  expect(alPulsar).toHaveBeenCalledTimes(1)
++})
++
++it('la barra recorta el progreso al 100 por ciento', () => {
++  envolver(<Barra progreso={1.8} color="#4ECB9C" />)
++  expect(screen.getByTestId('barra-relleno')).toHaveStyle({ width: '100%' })
++})
++
++it('la barra no acepta progresos negativos', () => {
++  envolver(<Barra progreso={-0.5} color="#4ECB9C" />)
++  expect(screen.getByTestId('barra-relleno')).toHaveStyle({ width: '0%' })
++})
+diff --git a/apps/kaizen/src/design/componentes/superficie.tsx b/apps/kaizen/src/design/componentes/superficie.tsx
+new file mode 100644
+index 0000000..ac9d6a9
+--- /dev/null
++++ b/apps/kaizen/src/design/componentes/superficie.tsx
+@@ -0,0 +1,50 @@
++import { View, ImageBackground, type ViewStyle } from 'react-native'
++import { BlurView } from 'expo-blur'
++import type { ReactNode } from 'react'
++import type { Fondo } from '../tema'
++import { useTema } from '../proveedor'
++
++export function Superficie({ fondo, radio, style, children }: {
++  fondo: Fondo
++  radio: number
++  style?: ViewStyle
++  children?: ReactNode
++}) {
++  const t = useTema()
++  const base: ViewStyle = {
++    borderRadius: radio,
++    borderWidth: 1,
++    borderColor: t.color.borde,
++    overflow: 'hidden',
++    ...style,
++  }
++
++  if (fondo.tipo === 'color') {
++    return <View style={[base, { backgroundColor: fondo.valor }]}>{children}</View>
++  }
++
++  if (fondo.tipo === 'recurso') {
++    const r = fondo.recuadro
++    return (
++      <ImageBackground
++        source={fondo.fuente}
++        capInsets={r ? { top: r.arriba, left: r.izquierda, bottom: r.abajo, right: r.derecha } : undefined}
++        resizeMode="stretch"
++        style={base}
++        imageStyle={{ borderRadius: radio }}
++      >
++        {children}
++      </ImageBackground>
++    )
++  }
++
++  return (
++    <BlurView
++      intensity={t.superficie.desenfoque}
++      tint={t.esquema === 'oscuro' ? 'dark' : 'light'}
++      style={base}
++    >
++      <View style={{ backgroundColor: fondo.desde, flex: 1 }}>{children}</View>
++    </BlurView>
++  )
++}
+diff --git a/apps/kaizen/src/design/componentes/texto.tsx b/apps/kaizen/src/design/componentes/texto.tsx
+new file mode 100644
+index 0000000..237ba23
+--- /dev/null
++++ b/apps/kaizen/src/design/componentes/texto.tsx
+@@ -0,0 +1,34 @@
++import { Text, type TextProps } from 'react-native'
++import { useTema } from '../proveedor'
++
++type Variante = 'heroe' | 'titulo' | 'cuerpo' | 'etiqueta' | 'tenue'
++
++const TAMANOS: Record<Variante, number> = {
++  heroe: 50, titulo: 19, cuerpo: 15, etiqueta: 10, tenue: 12,
++}
++
++export function Texto({ variante = 'cuerpo', style, children, ...resto }:
++  TextProps & { variante?: Variante }) {
++  const t = useTema()
++  const esEtiqueta = variante === 'etiqueta'
++  const esTitular = variante === 'heroe' || variante === 'titulo'
++  const contenido = esEtiqueta && t.tipografia.mayusculasEtiquetas && typeof children === 'string'
++    ? children.toUpperCase()
++    : children
++
++  return (
++    <Text
++      {...resto}
++      style={[{
++        color: esEtiqueta || variante === 'tenue' ? t.color.textoTenue : t.color.texto,
++        fontSize: TAMANOS[variante],
++        lineHeight: TAMANOS[variante] * 1.35 * t.tipografia.ajusteLinea,
++        fontWeight: esTitular ? t.tipografia.pesoTitular : t.tipografia.pesoCuerpo,
++        fontFamily: (esTitular ? t.tipografia.familiaTitular : t.tipografia.familiaCuerpo) ?? undefined,
++        letterSpacing: esEtiqueta ? 1.3 : 0,
++      }, style]}
++    >
++      {contenido}
++    </Text>
++  )
++}
+diff --git a/apps/kaizen/src/design/proveedor.tsx b/apps/kaizen/src/design/proveedor.tsx
+new file mode 100644
+index 0000000..17f0af9
+--- /dev/null
++++ b/apps/kaizen/src/design/proveedor.tsx
+@@ -0,0 +1,14 @@
++import { createContext, useContext, type ReactNode } from 'react'
++import type { Tema } from './tema'
++import { TEMAS } from './temas/indice'
++
++const Contexto = createContext<Tema>(TEMAS.defecto!)
++
++export function ProveedorTema({ nombre, children }: { nombre: string; children: ReactNode }) {
++  const tema = TEMAS[nombre] ?? TEMAS.defecto!
++  return <Contexto.Provider value={tema}>{children}</Contexto.Provider>
++}
++
++export function useTema(): Tema {
++  return useContext(Contexto)
++}

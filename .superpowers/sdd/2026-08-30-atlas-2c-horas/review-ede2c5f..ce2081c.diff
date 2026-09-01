@@ -1,0 +1,442 @@
+# Review package: ede2c5f..ce2081c
+
+## Commits
+ce2081c feat(atlas): fichar, parar, anadir un tramo y leer las horas
+
+## Files changed
+ apps/atlas/src/lib/db/fichajes.ts        | 172 +++++++++++++++++++++
+ apps/atlas/src/tests/db/fichajes.test.ts | 247 +++++++++++++++++++++++++++++++
+ 2 files changed, 419 insertions(+)
+
+## Diff
+diff --git a/apps/atlas/src/lib/db/fichajes.ts b/apps/atlas/src/lib/db/fichajes.ts
+new file mode 100644
+index 0000000..2ed803d
+--- /dev/null
++++ b/apps/atlas/src/lib/db/fichajes.ts
+@@ -0,0 +1,172 @@
++// src/lib/db/fichajes.ts
++//
++// Fichar, parar, añadir un tramo olvidado y leer las horas. Recibe `sb` para
++// poder probarse contra la base; los envoltorios "use server" están en
++// `acciones-fichajes.ts`.
++//
++// NO filtra por rol. Un colaborador ve y escribe solo sus filas porque RLS lo
++// decide; el propietario ve las de todos por lo mismo. Los `.eq("usuario_id")`
++// de abajo son defensa en profundidad, no la barrera.
++//
++import type { Sb } from "./clientes";
++import type { Ok } from "./proyectos";
++import type { Tramo } from "@/lib/horas/tramos";
++import { TOPE_HORAS } from "@/lib/horas/abiertos";
++
++export type EntradaFichaje = {
++  proyectoId: string | null;
++  clienteId: string | null;
++  nota: string | null;
++};
++
++export type EntradaTramo = EntradaFichaje & {
++  /** ISO con zona. */
++  inicio: string;
++  fin: string;
++};
++
++const CAMPOS =
++  "id, usuario_id, proyecto_id, cliente_id, inicio, fin, origen, nota, " +
++  // Uniones EXTERNAS a propósito: un colaborador sin permiso sobre el
++  // proyecto no ve su fila en `proyectos`, y con `!inner` su propio fichaje
++  // desaparecería del listado. Aparece con el nombre a null, que es la verdad.
++  "perfiles(nombre), proyectos(nombre), clientes(nombre)";
++
++// PostgREST entrega la relación a veces como objeto y a veces como array.
++function uno<T>(u: T | T[] | null): T | null {
++  return Array.isArray(u) ? (u[0] ?? null) : u;
++}
++
++type Fila = {
++  id: string;
++  usuario_id: string;
++  proyecto_id: string | null;
++  cliente_id: string | null;
++  inicio: string;
++  fin: string | null;
++  origen: string;
++  nota: string | null;
++  perfiles: { nombre: string | null } | { nombre: string | null }[] | null;
++  proyectos: { nombre: string } | { nombre: string }[] | null;
++  clientes: { nombre: string } | { nombre: string }[] | null;
++};
++
++function aTramo(f: Fila): Tramo {
++  return {
++    id: f.id,
++    usuarioId: f.usuario_id,
++    usuarioNombre: uno(f.perfiles)?.nombre ?? null,
++    proyectoId: f.proyecto_id,
++    proyectoNombre: uno(f.proyectos)?.nombre ?? null,
++    clienteId: f.cliente_id,
++    clienteNombre: uno(f.clientes)?.nombre ?? null,
++    inicio: f.inicio,
++    fin: f.fin,
++    origen: f.origen as Tramo["origen"],
++    nota: f.nota,
++  };
++}
++
++/** Puro: se valida aquí y no en el formulario, porque una acción de servidor es un endpoint público. */
++export function validarTramo(e: EntradaTramo, ahoraMs: number): Ok {
++  const ini = Date.parse(e.inicio);
++  const fin = Date.parse(e.fin);
++  if (Number.isNaN(ini) || Number.isNaN(fin)) {
++    return { ok: false, error: "El inicio o el fin no son una fecha." };
++  }
++  if (fin <= ini) return { ok: false, error: "El fin tiene que ser posterior al inicio." };
++  if (fin > ahoraMs) return { ok: false, error: "El fin no puede estar en el futuro." };
++  if (fin - ini > TOPE_HORAS * 3_600_000) {
++    return {
++      ok: false,
++      error: `Un tramo no puede pasar de ${TOPE_HORAS} horas. Si fue más largo, pártelo en dos.`,
++    };
++  }
++  return { ok: true };
++}
++
++async function quienSoy(sb: Sb): Promise<string | null> {
++  const {
++    data: { user },
++  } = await sb.auth.getUser();
++  return user?.id ?? null;
++}
++
++export async function fichajeEnCurso(sb: Sb): Promise<Tramo | null> {
++  const yo = await quienSoy(sb);
++  if (!yo) return null;
++  const { data, error } = await sb
++    .from("fichajes")
++    .select(CAMPOS)
++    .eq("usuario_id", yo)
++    .is("fin", null)
++    .maybeSingle();
++  if (error) throw error;
++  return data ? aTramo(data as unknown as Fila) : null;
++}
++
++export async function empezar(sb: Sb, e: EntradaFichaje): Promise<Ok> {
++  const yo = await quienSoy(sb);
++  if (!yo) return { ok: false, error: "No hay sesión." };
++  const { error } = await sb.from("fichajes").insert({
++    usuario_id: yo,
++    proyecto_id: e.proyectoId,
++    cliente_id: e.clienteId,
++    nota: e.nota,
++    inicio: new Date().toISOString(),
++  });
++  if (!error) return { ok: true };
++  // El índice único parcial es la garantía; aquí solo se traduce su error a
++  // algo que una persona entienda.
++  if (error.code === "23505") {
++    return { ok: false, error: "Ya tienes un fichaje en curso. Páralo antes de empezar otro." };
++  }
++  return { ok: false, error: error.message };
++}
++
++export async function parar(sb: Sb): Promise<Ok> {
++  const yo = await quienSoy(sb);
++  if (!yo) return { ok: false, error: "No hay sesión." };
++  const { data, error } = await sb
++    .from("fichajes")
++    .update({ fin: new Date().toISOString() })
++    .eq("usuario_id", yo)
++    .is("fin", null)
++    .select("id");
++  if (error) return { ok: false, error: error.message };
++  // Cero filas no es un error de Postgres, pero sí es mentir si se devuelve ok.
++  if (!data || data.length === 0) return { ok: false, error: "No hay ningún fichaje en curso." };
++  return { ok: true };
++}
++
++export async function anadirTramo(sb: Sb, e: EntradaTramo, ahoraMs: number): Promise<Ok> {
++  const valido = validarTramo(e, ahoraMs);
++  if (!valido.ok) return valido;
++  const yo = await quienSoy(sb);
++  if (!yo) return { ok: false, error: "No hay sesión." };
++  const { error } = await sb.from("fichajes").insert({
++    usuario_id: yo,
++    proyecto_id: e.proyectoId,
++    cliente_id: e.clienteId,
++    nota: e.nota,
++    inicio: e.inicio,
++    fin: e.fin,
++    origen: "anadido",
++  });
++  return error ? { ok: false, error: error.message } : { ok: true };
++}
++
++/** Los tramos cuyo inicio cae en el rango. Quién los ve lo decide RLS. */
++export async function listarTramos(
++  sb: Sb,
++  rango: { desde: string; hasta: string }
++): Promise<Tramo[]> {
++  const { data, error } = await sb
++    .from("fichajes")
++    .select(CAMPOS)
++    .gte("inicio", rango.desde)
++    .lt("inicio", rango.hasta)
++    .order("inicio", { ascending: false });
++  if (error) throw error;
++  return (data ?? []).map((f) => aTramo(f as unknown as Fila));
++}
+diff --git a/apps/atlas/src/tests/db/fichajes.test.ts b/apps/atlas/src/tests/db/fichajes.test.ts
+new file mode 100644
+index 0000000..39990ce
+--- /dev/null
++++ b/apps/atlas/src/tests/db/fichajes.test.ts
+@@ -0,0 +1,247 @@
++// src/tests/db/fichajes.test.ts
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import {
++  validarTramo,
++  fichajeEnCurso,
++  empezar,
++  parar,
++  anadirTramo,
++  listarTramos,
++} from "@/lib/db/fichajes";
++import type { Database } from "@/types/supabase";
++
++const URL_API = "http://127.0.0.1:54321";
++const ANON =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++
++const CORREO_DUENYO = "duenyo-fichajes-db@atlas.test";
++const CORREO_COLAB = "colab-fichajes-db@atlas.test";
++const SLUG_PROYECTO = "fichajes-prueba";
++const SLUG_CLIENTE = "fichajes-prueba";
++
++const AHORA = Date.parse("2026-08-31T20:00:00Z");
++const RANGO = { desde: "2026-08-01T00:00:00Z", hasta: "2026-09-01T00:00:00Z" };
++
++let pg: Client;
++let admin: ReturnType<typeof createClient<Database>>;
++let sbDuenyo: ReturnType<typeof createClient<Database>>;
++let sbColab: ReturnType<typeof createClient<Database>>;
++let idDuenyo = "";
++let idColab = "";
++let idProyecto = "";
++let idCliente = "";
++
++async function altaUsuario(correo: string, propietario: boolean, clave: string) {
++  const creado = await admin.auth.admin.createUser({
++    email: correo,
++    password: "contrasena-de-prueba",
++    email_confirm: true,
++  });
++  if (creado.error) throw creado.error;
++  await pg.query(`INSERT INTO perfiles (id, nombre, es_propietario) VALUES ($1,$2,$3)`, [
++    creado.data.user.id,
++    propietario ? "Dueño" : "Colab",
++    propietario,
++  ]);
++  const sb = createClient<Database>(URL_API, ANON, {
++    auth: { persistSession: false, autoRefreshToken: false, storageKey: clave },
++  });
++  const { error } = await sb.auth.signInWithPassword({
++    email: correo,
++    password: "contrasena-de-prueba",
++  });
++  if (error) throw error;
++  return { sb, id: creado.data.user.id };
++}
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
++
++  // Limpieza defensiva, también ANTES de crear: un fichero que solo limpia al
++  // final queda inservible para siempre si una corrida se corta a medias.
++  const { data: listado } = await admin.auth.admin.listUsers();
++  for (const u of listado?.users ?? []) {
++    if (u.email === CORREO_DUENYO || u.email === CORREO_COLAB) {
++      await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [u.id]);
++      await admin.auth.admin.deleteUser(u.id);
++    }
++  }
++  await pg.query(`DELETE FROM proyectos WHERE slug = $1`, [SLUG_PROYECTO]);
++  await pg.query(`DELETE FROM clientes WHERE slug = $1`, [SLUG_CLIENTE]);
++
++  const d = await altaUsuario(CORREO_DUENYO, true, "fd-d");
++  const c = await altaUsuario(CORREO_COLAB, false, "fd-c");
++  sbDuenyo = d.sb;
++  idDuenyo = d.id;
++  sbColab = c.sb;
++  idColab = c.id;
++
++  // El check de `proyectos.tipo` es un conjunto cerrado; 'web-app' es el valor
++  // válido más parecido a "web" (ver 20260815100000_nucleo.sql).
++  const p = await pg.query(
++    `INSERT INTO proyectos (nombre, slug, tipo, estado) VALUES ('Fichajes prueba', $1, 'web-app', 'produccion') RETURNING id`,
++    [SLUG_PROYECTO]
++  );
++  idProyecto = p.rows[0].id;
++  const cl = await pg.query(
++    `INSERT INTO clientes (nombre, slug) VALUES ('Cliente fichajes', $1) RETURNING id`,
++    [SLUG_CLIENTE]
++  );
++  idCliente = cl.rows[0].id;
++});
++
++beforeEach(async () => {
++  for (const id of [idDuenyo, idColab]) {
++    if (id !== "") await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [id]);
++  }
++});
++
++afterAll(async () => {
++  try {
++    for (const id of [idDuenyo, idColab]) {
++      if (id === "") continue;
++      try {
++        await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [id]);
++      } catch {
++        /* ya no está */
++      }
++      try {
++        await admin.auth.admin.deleteUser(id);
++      } catch {
++        /* ya no está */
++      }
++    }
++    if (idProyecto !== "") {
++      try {
++        await pg.query(`DELETE FROM proyectos WHERE id = $1`, [idProyecto]);
++      } catch {
++        /* ya no está */
++      }
++    }
++    if (idCliente !== "") {
++      try {
++        await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
++      } catch {
++        /* ya no está */
++      }
++    }
++  } finally {
++    await pg.end();
++  }
++});
++
++describe("validarTramo", () => {
++  const base = { proyectoId: null, clienteId: null, nota: null };
++  it("acepta un tramo cerrado en el pasado", () => {
++    expect(
++      validarTramo({ ...base, inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T10:00:00Z" }, AHORA)
++    ).toEqual({ ok: true });
++  });
++  it("rechaza fin antes o igual que inicio", () => {
++    const r = validarTramo({ ...base, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T10:00:00Z" }, AHORA);
++    expect(r.ok).toBe(false);
++  });
++  it("rechaza un fin en el futuro: no se recuerda lo que aún no ha pasado", () => {
++    const r = validarTramo({ ...base, inicio: "2026-08-31T19:00:00Z", fin: "2026-08-31T21:00:00Z" }, AHORA);
++    expect(r).toEqual({ ok: false, error: "El fin no puede estar en el futuro." });
++  });
++  it("rechaza más del tope: un tramo de 20 horas no es un tramo, es un olvido", () => {
++    const r = validarTramo({ ...base, inicio: "2026-08-30T00:00:00Z", fin: "2026-08-30T20:00:00Z" }, AHORA);
++    expect(r.ok).toBe(false);
++    expect((r as { error: string }).error).toMatch(/16 horas/);
++  });
++  it("rechaza fechas que no lo son", () => {
++    expect(validarTramo({ ...base, inicio: "ayer", fin: "hoy" }, AHORA).ok).toBe(false);
++  });
++});
++
++describe("fichar", () => {
++  it("empezar deja uno en curso, con su proyecto y su cliente", async () => {
++    const r = await empezar(sbDuenyo, { proyectoId: idProyecto, clienteId: idCliente, nota: null });
++    expect(r).toEqual({ ok: true });
++    const en = await fichajeEnCurso(sbDuenyo);
++    expect(en?.fin).toBeNull();
++    expect(en?.proyectoNombre).toBe("Fichajes prueba");
++    expect(en?.clienteNombre).toBe("Cliente fichajes");
++    expect(en?.origen).toBe("atlas");
++  });
++
++  it("empezar dos veces falla con un mensaje que se entiende", async () => {
++    await empezar(sbDuenyo, { proyectoId: null, clienteId: null, nota: null });
++    const r = await empezar(sbDuenyo, { proyectoId: null, clienteId: null, nota: null });
++    expect(r).toEqual({ ok: false, error: "Ya tienes un fichaje en curso. Páralo antes de empezar otro." });
++  });
++
++  it("parar cierra el que estaba en curso", async () => {
++    await empezar(sbDuenyo, { proyectoId: null, clienteId: null, nota: null });
++    const r = await parar(sbDuenyo);
++    expect(r).toEqual({ ok: true });
++    expect(await fichajeEnCurso(sbDuenyo)).toBeNull();
++  });
++
++  it("parar sin nada en curso lo dice, no finge", async () => {
++    const r = await parar(sbDuenyo);
++    expect(r).toEqual({ ok: false, error: "No hay ningún fichaje en curso." });
++  });
++
++  it("un tramo añadido queda marcado como añadido", async () => {
++    const r = await anadirTramo(
++      sbDuenyo,
++      { proyectoId: null, clienteId: idCliente, nota: "llamada", inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T09:00:00Z" },
++      AHORA
++    );
++    expect(r).toEqual({ ok: true });
++    const [t] = await listarTramos(sbDuenyo, RANGO);
++    expect(t.origen).toBe("anadido");
++    expect(t.nota).toBe("llamada");
++  });
++
++  it("un tramo inválido no llega a la base", async () => {
++    const r = await anadirTramo(
++      sbDuenyo,
++      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T09:00:00Z" },
++      AHORA
++    );
++    expect(r.ok).toBe(false);
++    expect(await listarTramos(sbDuenyo, RANGO)).toEqual([]);
++  });
++});
++
++describe("quién ve qué (RLS, con usuarios reales)", () => {
++  it("el colaborador ficha lo suyo y solo ve lo suyo; el propietario ve a los dos", async () => {
++    await anadirTramo(
++      sbColab,
++      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T09:00:00Z" },
++      AHORA
++    );
++    await anadirTramo(
++      sbDuenyo,
++      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T11:00:00Z" },
++      AHORA
++    );
++    const mios = new Set([idDuenyo, idColab]);
++    const veColab = (await listarTramos(sbColab, RANGO)).filter((t) => mios.has(t.usuarioId));
++    expect(veColab.map((t) => t.usuarioId)).toEqual([idColab]);
++    const veDuenyo = (await listarTramos(sbDuenyo, RANGO)).filter((t) => mios.has(t.usuarioId));
++    expect(veDuenyo).toHaveLength(2);
++    // El nombre viaja con el tramo: el propietario sabe de quién es cada hora.
++    expect(veDuenyo.map((t) => t.usuarioNombre).sort()).toEqual(["Colab", "Dueño"]);
++  });
++
++  it("un proyecto que el colaborador no puede ver no le esconde su propio fichaje", async () => {
++    // Sin `permisos` sobre el proyecto, RLS le oculta la fila de `proyectos`.
++    // La unión tiene que ser externa: el tramo aparece, con el nombre a null.
++    await empezar(sbColab, { proyectoId: idProyecto, clienteId: null, nota: null });
++    const en = await fichajeEnCurso(sbColab);
++    expect(en).not.toBeNull();
++    expect(en?.proyectoId).toBe(idProyecto);
++    expect(en?.proyectoNombre).toBeNull();
++  });
++});

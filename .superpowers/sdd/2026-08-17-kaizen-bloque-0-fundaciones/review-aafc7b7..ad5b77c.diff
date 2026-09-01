@@ -1,0 +1,106 @@
+# Review package: aafc7b7..ad5b77c
+
+## Commits
+ad5b77c feat(kaizen): calculo del dia local con corte configurable
+5f04fed chore: no versionar los exports de workflows de n8n
+
+## Files changed
+ .gitignore                          | 13 +++++++++++++
+ apps/kaizen/src/dominio/dia.test.ts | 32 ++++++++++++++++++++++++++++++++
+ apps/kaizen/src/dominio/dia.ts      | 21 +++++++++++++++++++++
+ 3 files changed, 66 insertions(+)
+
+## Diff
+diff --git a/.gitignore b/.gitignore
+index 4e1f262..d7eb9f1 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -3,10 +3,23 @@ dist/
+ .next/
+ .env
+ .env.local
+ .env.development
+ *.log
+ *.tsbuildinfo
+ .env 
+ 
+ # Maquetas del companion visual de brainstorming
+ .superpowers/
++
++# Exports y copias de seguridad de workflows de n8n.
++#
++# Llevan DENTRO las claves de los nodos en claro —la de recepción de Kairos, por
++# ejemplo, que da acceso a nombres de pacientes y a sus tratamientos—. Un
++# `git add -A` los metería en el historial, y de ahí ya no salen: borrarlos del
++# fichero no los borra de git.
++#
++# Si hace falta versionar un workflow, primero se sustituye la clave por una
++# referencia a variable de entorno.
++*-backup-*.json
++**/n8n/**/backup*.json
++**/n8n/*-export.json
+diff --git a/apps/kaizen/src/dominio/dia.test.ts b/apps/kaizen/src/dominio/dia.test.ts
+new file mode 100644
+index 0000000..857a140
+--- /dev/null
++++ b/apps/kaizen/src/dominio/dia.test.ts
+@@ -0,0 +1,32 @@
++import { fechaLocal } from './dia'
++
++describe('fechaLocal', () => {
++  it('una comida de mediodía cuenta en su propio día', () => {
++    const instante = new Date('2026-08-17T12:00:00Z')
++    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-08-17')
++  })
++
++  it('una cena a la 01:30 cuenta como el día anterior con corte a las 4', () => {
++    // 01:30 del 18 en Madrid = 23:30 UTC del 17
++    const instante = new Date('2026-08-17T23:30:00Z')
++    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-08-17')
++  })
++
++  it('a las 04:30 ya cuenta como el día nuevo con corte a las 4', () => {
++    // 04:30 del 18 en Madrid = 02:30 UTC del 18
++    const instante = new Date('2026-08-18T02:30:00Z')
++    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-08-18')
++  })
++
++  it('con corte a 0 la medianoche parte el día', () => {
++    const instante = new Date('2026-08-17T23:30:00Z') // 01:30 del 18 en Madrid
++    expect(fechaLocal(instante, 'Europe/Madrid', 0)).toBe('2026-08-18')
++  })
++
++  it('el mismo instante da días distintos en zonas distintas', () => {
++    const instante = new Date('2026-08-17T23:00:00Z')
++    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-08-17')
++    expect(fechaLocal(instante, 'America/Mexico_City', 4)).toBe('2026-08-17')
++    expect(fechaLocal(instante, 'Pacific/Auckland', 4)).toBe('2026-08-18')
++  })
++})
+diff --git a/apps/kaizen/src/dominio/dia.ts b/apps/kaizen/src/dominio/dia.ts
+new file mode 100644
+index 0000000..573a92d
+--- /dev/null
++++ b/apps/kaizen/src/dominio/dia.ts
+@@ -0,0 +1,21 @@
++/**
++ * Devuelve el día (YYYY-MM-DD) al que cuenta un instante, según la zona
++ * horaria del usuario y su corte de día.
++ *
++ * Con corte a las 4, todo lo registrado entre las 00:00 y las 03:59 cuenta
++ * como el día anterior.
++ */
++export function fechaLocal(
++  instante: Date,
++  zonaHoraria: string,
++  corteHora: number,
++): string {
++  const desplazado = new Date(instante.getTime() - corteHora * 3_600_000)
++  const formateador = new Intl.DateTimeFormat('en-CA', {
++    timeZone: zonaHoraria,
++    year: 'numeric',
++    month: '2-digit',
++    day: '2-digit',
++  })
++  return formateador.format(desplazado)
++}

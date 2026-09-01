@@ -1,0 +1,254 @@
+# Review package: a93de63..0d7cd00
+
+## Commits
+0d7cd00 feat(atlas): el tipo de aviso de cobro y su disparo diario
+
+## Files changed
+ apps/atlas/src/tests/esquema/aviso-cobro.test.ts   | 100 +++++++++++++++++++++
+ apps/atlas/src/types/supabase.ts                   |   4 +
+ .../migrations/20260829170000_aviso_cobro.sql      |  62 +++++++++++++
+ 3 files changed, 166 insertions(+)
+
+## Diff
+diff --git a/apps/atlas/src/tests/esquema/aviso-cobro.test.ts b/apps/atlas/src/tests/esquema/aviso-cobro.test.ts
+new file mode 100644
+index 0000000..b684f46
+--- /dev/null
++++ b/apps/atlas/src/tests/esquema/aviso-cobro.test.ts
+@@ -0,0 +1,100 @@
++// src/tests/esquema/aviso-cobro.test.ts
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { Client } from "pg";
++
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++let pg: Client;
++
++// Correo fijo y reconocible: si una corrida anterior murió antes de llegar a
++// su afterAll, este beforeAll la limpia por su cuenta en vez de acumular
++// perfiles huérfanos en cada ejecución de la suite.
++const CORREO_PRUEBA = "aviso-cobro@atlas.test";
++let idUsuario = "";
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++
++  // Limpia antes de crear, no solo al final: no se puede suponer que la base
++  // está vacía.
++  await pg.query(`DELETE FROM auth.users WHERE email = $1`, [CORREO_PRUEBA]);
++
++  // `notificaciones.usuario_id` tiene clave foránea a `perfiles`. El brief
++  // original probaba el check de `tipo` insertando con un usuario_id a
++  // ceros: Postgres rechaza esa fila por la foránea ANTES de llegar a
++  // comprobar el check, así que el test pasaría por el motivo equivocado y
++  // dejaría de proteger nada el día que alguien borrase el check. Por eso
++  // aquí se crea un perfil de verdad (con su usuario en auth.users, que es
++  // lo que perfiles.id referencia) y el test de abajo inserta con ESE id.
++  const { rows } = await pg.query(
++    `INSERT INTO auth.users (id, instance_id, aud, role, email)
++     VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000000',
++             'authenticated', 'authenticated', $1)
++     RETURNING id`,
++    [CORREO_PRUEBA]
++  );
++  idUsuario = rows[0].id as string;
++  await pg.query(`INSERT INTO perfiles (id) VALUES ($1)`, [idUsuario]);
++});
++
++afterAll(async () => {
++  try {
++    // Por si el test del check dejó la fila insertada (no debería: la
++    // inserción falla y no llega a persistir nada, pero se borra igual por
++    // si acaso cambia el orden de los tests).
++    await pg.query(`DELETE FROM notificaciones WHERE usuario_id = $1`, [idUsuario]);
++    // Borrar auth.users se lleva el perfil por delante (on delete cascade),
++    // así que no hace falta un DELETE FROM perfiles aparte.
++    await pg.query(`DELETE FROM auth.users WHERE id = $1`, [idUsuario]);
++  } finally {
++    // Cerrar la conexión pase lo que pase: un fallo en la limpieza no debe
++    // dejar el cliente de pg colgado y bloqueando el resto de la suite.
++    await pg.end();
++  }
++});
++
++describe("el aviso de cobro", () => {
++  it("las notificaciones nacen de tipo incidencia", async () => {
++    const { rows } = await pg.query(
++      `SELECT column_default FROM information_schema.columns
++       WHERE table_name = 'notificaciones' AND column_name = 'tipo'`
++    );
++    expect(rows[0].column_default).toContain("incidencia");
++  });
++
++  it("solo admite los dos tipos previstos", async () => {
++    await expect(
++      pg.query(
++        `INSERT INTO notificaciones (usuario_id, canal, ok, tipo)
++         VALUES ($1, 'push', true, 'chuches')`,
++        [idUsuario]
++      )
++      // Anclado al nombre exacto del check («notificaciones_tipo_check», el
++      // que genera Postgres por convención <tabla>_<columna>_check) y no a la
++      // palabra suelta «tipo»: un regex tan amplio como /tipo/ también
++      // casaría con el error de foránea del brief original (que menciona la
++      // columna "usuario_id" y su tipo de dato), así que el test seguiría en
++      // verde aunque el check dejase de existir. Anclarlo al nombre del check
++      // es lo único que hace que este test falle si alguien lo borra.
++    ).rejects.toThrow(/violates check constraint "notificaciones_tipo_check"/);
++  });
++
++  it("la tarea diaria está dada de alta a las 9:07", async () => {
++    const { rows } = await pg.query(
++      `SELECT schedule FROM cron.job WHERE jobname = 'atlas-cobro'`
++    );
++    expect(rows[0].schedule).toBe("7 9 * * *");
++  });
++
++  // Un `security definer` sin revoke queda expuesta en /rest/v1/rpc y se salta
++  // RLS. Se comprueba ejecutando con el rol, no leyendo el catálogo: lo que
++  // importa es qué pasa cuando alguien llama.
++  it("un rol autenticado no puede dispararla", async () => {
++    await pg.query("begin");
++    await pg.query("set local role authenticated");
++    await expect(pg.query("select atlas_disparar_cobro()")).rejects.toThrow(
++      /permission denied|permiso denegado/i
++    );
++    await pg.query("rollback");
++  });
++});
+diff --git a/apps/atlas/src/types/supabase.ts b/apps/atlas/src/types/supabase.ts
+index 8f8c267..5991f01 100644
+--- a/apps/atlas/src/types/supabase.ts
++++ b/apps/atlas/src/types/supabase.ts
+@@ -860,38 +860,41 @@ export type Database = {
+         ]
+       }
+       notificaciones: {
+         Row: {
+           canal: string
+           enviada_en: string
+           error: string | null
+           id: number
+           incidencia_id: string | null
+           ok: boolean
++          tipo: string
+           usuario_id: string
+         }
+         Insert: {
+           canal: string
+           enviada_en?: string
+           error?: string | null
+           id?: number
+           incidencia_id?: string | null
+           ok: boolean
++          tipo?: string
+           usuario_id: string
+         }
+         Update: {
+           canal?: string
+           enviada_en?: string
+           error?: string | null
+           id?: number
+           incidencia_id?: string | null
+           ok?: boolean
++          tipo?: string
+           usuario_id?: string
+         }
+         Relationships: [
+           {
+             foreignKeyName: "notificaciones_incidencia_id_fkey"
+             columns: ["incidencia_id"]
+             isOneToOne: false
+             referencedRelation: "incidencias"
+             referencedColumns: ["id"]
+           },
+@@ -1286,20 +1289,21 @@ export type Database = {
+             isOneToOne: false
+             referencedRelation: "proyectos"
+             referencedColumns: ["id"]
+           },
+         ]
+       }
+     }
+     Functions: {
+       atlas_consolidar_retencion: { Args: never; Returns: undefined }
+       atlas_disparar_avisos: { Args: never; Returns: undefined }
++      atlas_disparar_cobro: { Args: never; Returns: undefined }
+       atlas_disparar_descubridor: { Args: never; Returns: undefined }
+       atlas_disparar_vigia: { Args: never; Returns: undefined }
+       atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
+       atlas_es_propietario: { Args: never; Returns: boolean }
+       atlas_materializar_periodos: { Args: { mes: string }; Returns: number }
+       atlas_materializar_recurrentes: { Args: { mes: string }; Returns: number }
+       atlas_podar_descubrimientos: { Args: never; Returns: undefined }
+       atlas_ve_cliente: { Args: { c: string }; Returns: boolean }
+       atlas_ve_proyecto: { Args: { p: string }; Returns: boolean }
+     }
+diff --git a/apps/atlas/supabase/migrations/20260829170000_aviso_cobro.sql b/apps/atlas/supabase/migrations/20260829170000_aviso_cobro.sql
+new file mode 100644
+index 0000000..db3d4dc
+--- /dev/null
++++ b/apps/atlas/supabase/migrations/20260829170000_aviso_cobro.sql
+@@ -0,0 +1,62 @@
++-- apps/atlas/supabase/migrations/20260829170000_aviso_cobro.sql
++--
++-- El aviso diario de cobro.
++--
++-- `notificaciones` nació atada a `incidencias`, con su `incidencia_id`. Un
++-- aviso de cobro no tiene incidencia, así que ese campo va nulo — pero
++-- entonces el historial no sabría de qué era cada fila. Por eso una columna
++-- `tipo`.
++alter table notificaciones
++  add column tipo text not null default 'incidencia'
++    check (tipo in ('incidencia','cobro'));
++
++-- Las que ya existen son todas de incidencia, que es lo que dice el `default`.
++-- Se deja el default puesto para que el código del bloque 1 no tenga que
++-- cambiar: sigue insertando sin nombrar la columna y sigue siendo correcto.
++
++-- El candado del día: sirve a la consulta «¿ya avisé hoy de cobro?», que es lo
++-- único que impide mandar el mismo resumen dos veces si el cron se dispara dos
++-- veces.
++create index notificaciones_cobro_del_dia
++  on notificaciones(usuario_id, enviada_en desc) where tipo = 'cobro';
++
++-- ---------- el disparo ----------
++--
++-- Reutiliza la MISMA Edge Function que los avisos de incidencia, `avisar`, con
++-- un cuerpo distinto. Escribir una función nueva habría obligado a copiar
++-- `push.ts` y `correo.ts`, y dos copias del envío divergen siempre.
++create or replace function atlas_disparar_cobro() returns void
++language plpgsql security definer set search_path = public as $$
++declare
++  url   text := current_setting('app.atlas_funciones_url', true);
++  clave text := current_setting('app.atlas_service_key', true);
++begin
++  -- Sin configurar, avisa y se calla, igual que el resto de disparadores: un
++  -- error diario en el registro de cron acabaría tapando un problema de
++  -- verdad.
++  if url is null or clave is null then
++    raise warning 'atlas: faltan app.atlas_funciones_url o app.atlas_service_key; no se dispara el cobro';
++    return;
++  end if;
++
++  perform net.http_post(
++    url     := url || '/avisar',
++    headers := jsonb_build_object(
++                 'Content-Type',  'application/json',
++                 'Authorization', 'Bearer ' || clave),
++    body    := '{"cobro": true}'::jsonb,
++    timeout_milliseconds := 30000
++  );
++end $$;
++
++-- Cualquier `security definer` sin revoke queda expuesta en /rest/v1/rpc a
++-- cualquier autenticado, y al ejecutarse como su dueño se salta RLS.
++revoke all on function atlas_disparar_cobro() from public;
++revoke all on function atlas_disparar_cobro() from anon;
++revoke all on function atlas_disparar_cobro() from authenticated;
++
++-- A las 9:07 de la mañana. Ni de madrugada, porque un aviso que se lee doce
++-- horas después es un aviso perdido; ni en punto, porque los minutos redondos
++-- concentran carga de tareas programadas.
++select cron.schedule('atlas-cobro', '7 9 * * *',
++                     $$select atlas_disparar_cobro()$$);

@@ -1,0 +1,1155 @@
+# Review package: b3c12e9..4f47163
+
+## Commits
+4f47163 feat(kaizen): esquema, RLS y test de aislamiento entre usuarios
+
+## Files changed
+ apps/kaizen/.env.test.example                      |   3 +
+ apps/kaizen/.gitignore                             |   1 +
+ apps/kaizen/jest.integracion.config.js             |  27 ++
+ apps/kaizen/package-lock.json                      | 245 ++++++++----
+ apps/kaizen/package.json                           |   9 +-
+ .../kaizen/pruebas/aislamiento.integracion.test.ts |  53 +++
+ apps/kaizen/supabase/.gitignore                    |   8 +
+ apps/kaizen/supabase/config.toml                   | 414 +++++++++++++++++++++
+ apps/kaizen/supabase/migrations/0001_esquema.sql   | 116 ++++++
+ apps/kaizen/supabase/migrations/0002_rls.sql       |  48 +++
+ 10 files changed, 856 insertions(+), 68 deletions(-)
+
+## Diff
+diff --git a/apps/kaizen/.env.test.example b/apps/kaizen/.env.test.example
+new file mode 100644
+index 0000000..592f409
+--- /dev/null
++++ b/apps/kaizen/.env.test.example
+@@ -0,0 +1,3 @@
++SUPABASE_URL=
++SUPABASE_ANON_KEY=
++SUPABASE_SERVICE_ROLE_KEY=
+diff --git a/apps/kaizen/.gitignore b/apps/kaizen/.gitignore
+index d914c32..174eafb 100644
+--- a/apps/kaizen/.gitignore
++++ b/apps/kaizen/.gitignore
+@@ -25,17 +25,18 @@ expo-env.d.ts
+ npm-debug.*
+ yarn-debug.*
+ yarn-error.*
+ 
+ # macOS
+ .DS_Store
+ *.pem
+ 
+ # local env files
+ .env*.local
++.env.test
+ 
+ # typescript
+ *.tsbuildinfo
+ 
+ # generated native folders
+ /ios
+ /android
+diff --git a/apps/kaizen/jest.integracion.config.js b/apps/kaizen/jest.integracion.config.js
+new file mode 100644
+index 0000000..7c7cbb6
+--- /dev/null
++++ b/apps/kaizen/jest.integracion.config.js
+@@ -0,0 +1,27 @@
++const fs = require('fs')
++const path = require('path')
++
++// Carga las variables de apps/kaizen/.env.test en process.env antes de que
++// Jest arranque, sin depender de `dotenv`. Si el fichero no existe (p. ej.
++// no se ha corrido `supabase start` todavía), no falla aquí: los tests que
++// necesiten las variables fallarán con un mensaje claro al leerlas.
++const rutaEnvTest = path.join(__dirname, '.env.test')
++
++if (fs.existsSync(rutaEnvTest)) {
++  const contenido = fs.readFileSync(rutaEnvTest, 'utf-8')
++  for (const linea of contenido.split('\n')) {
++    const limpia = linea.trim()
++    if (limpia === '' || limpia.startsWith('#')) continue
++    const indice = limpia.indexOf('=')
++    if (indice === -1) continue
++    const clave = limpia.slice(0, indice).trim()
++    const valor = limpia.slice(indice + 1).trim()
++    if (clave) process.env[clave] = valor
++  }
++}
++
++module.exports = {
++  testEnvironment: 'node',
++  testMatch: ['**/*.integracion.test.ts'],
++  transform: { '^.+\\.ts$': ['babel-jest', { presets: ['babel-preset-expo'] }] },
++}
+diff --git a/apps/kaizen/package-lock.json b/apps/kaizen/package-lock.json
+index 7fbd8a9..03d6061 100644
+--- a/apps/kaizen/package-lock.json
++++ b/apps/kaizen/package-lock.json
+@@ -13,23 +13,25 @@
+         "expo-linking": "~57.0.6",
+         "expo-router": "~57.0.14",
+         "expo-status-bar": "~57.0.1",
+         "react": "19.2.3",
+         "react-native": "0.86.2",
+         "react-native-safe-area-context": "~5.7.0",
+         "react-native-screens": "~4.26.0"
+       },
+       "devDependencies": {
+         "@react-native/jest-preset": "^0.86.2",
++        "@supabase/supabase-js": "^2.112.3",
+         "@testing-library/react-native": "^14.0.1",
+         "@types/jest": "^29.5.14",
+         "@types/react": "~19.2.2",
++        "babel-preset-expo": "^57.0.7",
+         "jest": "^29.7.0",
+         "jest-expo": "^57.0.4",
+         "typescript": "~6.0.3"
+       }
+     },
+     "node_modules/@adobe/css-tools": {
+       "version": "4.5.0",
+       "resolved": "https://registry.npmjs.org/@adobe/css-tools/-/css-tools-4.5.0.tgz",
+       "integrity": "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==",
+       "license": "MIT"
+@@ -2785,20 +2787,119 @@
+     "node_modules/@sinonjs/fake-timers": {
+       "version": "10.3.0",
+       "resolved": "https://registry.npmjs.org/@sinonjs/fake-timers/-/fake-timers-10.3.0.tgz",
+       "integrity": "sha512-V4BG07kuYSUkTCSBHG8G8TNhM+F19jXFWnQtzj+we8DrkpSBCee9Z3Ms8yiGer/dlmhe35/Xdgyo3/0rQKg7YA==",
+       "dev": true,
+       "license": "BSD-3-Clause",
+       "dependencies": {
+         "@sinonjs/commons": "^3.0.0"
+       }
+     },
++    "node_modules/@supabase/auth-js": {
++      "version": "2.112.3",
++      "resolved": "https://registry.npmjs.org/@supabase/auth-js/-/auth-js-2.112.3.tgz",
++      "integrity": "sha512-NA0rsgAlWZPvbhw8aUdmgfpHVgUAcd8zK5ov43l++o1bLIPXZhRiAlRobhwF5AatQuovpqxsMH50F4oyyV4XZw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "tslib": "2.8.1"
++      },
++      "engines": {
++        "node": ">=22.0.0"
++      }
++    },
++    "node_modules/@supabase/functions-js": {
++      "version": "2.112.3",
++      "resolved": "https://registry.npmjs.org/@supabase/functions-js/-/functions-js-2.112.3.tgz",
++      "integrity": "sha512-gfv481mTOVWtZIJgXupxZpni2V2UWPf6jeF/jOK7HdMHdH+mt6sU0sHHwf0POsPip8ltlulu9OUHgwVzl5ddRw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "tslib": "2.8.1"
++      },
++      "engines": {
++        "node": ">=22.0.0"
++      }
++    },
++    "node_modules/@supabase/phoenix": {
++      "version": "0.4.5",
++      "resolved": "https://registry.npmjs.org/@supabase/phoenix/-/phoenix-0.4.5.tgz",
++      "integrity": "sha512-aAn9H9ovVyeApKy11OWOrrOGq8DV68yWeH4ud2lN9fzn4aO8Zb5GLL9m1pUg9nLqIcT+ZDfAcsZe0E/nqdv2lw==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/@supabase/postgrest-js": {
++      "version": "2.112.3",
++      "resolved": "https://registry.npmjs.org/@supabase/postgrest-js/-/postgrest-js-2.112.3.tgz",
++      "integrity": "sha512-+Mf6uCpzr00bqxwX8hTK2X2L9eAL/1vuOjdEjx6upz9ulb0RmQT16XeU/JkMUlVHw/B46ZnPa2busY4Kd9YCzw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "tslib": "2.8.1"
++      },
++      "engines": {
++        "node": ">=22.0.0"
++      }
++    },
++    "node_modules/@supabase/realtime-js": {
++      "version": "2.112.3",
++      "resolved": "https://registry.npmjs.org/@supabase/realtime-js/-/realtime-js-2.112.3.tgz",
++      "integrity": "sha512-E6wljXWs7DUOloyIB69i3YFInWE6IyCvgTAbQ0KYxOHv26FdA1KzEXTuzxrYEdf70t406Z9BRwUlGyclGF2FXA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@supabase/phoenix": "0.4.5",
++        "tslib": "2.8.1"
++      },
++      "engines": {
++        "node": ">=22.0.0"
++      }
++    },
++    "node_modules/@supabase/storage-js": {
++      "version": "2.112.3",
++      "resolved": "https://registry.npmjs.org/@supabase/storage-js/-/storage-js-2.112.3.tgz",
++      "integrity": "sha512-oSK61tzlUvg+BWPqpKQCu9qqonsO26btaoAR9D6Gest2aj7xUqToj9rKyaoYOJczkhg9BjqA1REbYy9tPI4bDA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "iceberg-js": "^0.8.1",
++        "tslib": "2.8.1"
++      },
++      "engines": {
++        "node": ">=22.0.0"
++      }
++    },
++    "node_modules/@supabase/supabase-js": {
++      "version": "2.112.3",
++      "resolved": "https://registry.npmjs.org/@supabase/supabase-js/-/supabase-js-2.112.3.tgz",
++      "integrity": "sha512-Jv1bxVQmEJNkjvPEhFaKjPzsh+Ozyew6lWGD+SoYcsclDEP1z7yEvKvfUQfzy0DkxRIQnZNxmmWtAzw5XLTQoA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@supabase/auth-js": "2.112.3",
++        "@supabase/functions-js": "2.112.3",
++        "@supabase/postgrest-js": "2.112.3",
++        "@supabase/realtime-js": "2.112.3",
++        "@supabase/storage-js": "2.112.3"
++      },
++      "engines": {
++        "node": ">=22.0.0"
++      },
++      "peerDependencies": {
++        "@opentelemetry/api": ">=1.0.0"
++      },
++      "peerDependenciesMeta": {
++        "@opentelemetry/api": {
++          "optional": true
++        }
++      }
++    },
+     "node_modules/@testing-library/jest-dom": {
+       "version": "6.9.1",
+       "resolved": "https://registry.npmjs.org/@testing-library/jest-dom/-/jest-dom-6.9.1.tgz",
+       "integrity": "sha512-zIcONa+hVtVSSep9UT3jZ5rizo2BsxgyDYU7WFD5eICBE7no3881HGeb/QkGfsJs6JTkY1aQhT7rIPC7e+0nnA==",
+       "license": "MIT",
+       "dependencies": {
+         "@adobe/css-tools": "^4.4.0",
+         "aria-query": "^5.0.0",
+         "css.escape": "^1.5.1",
+         "dom-accessibility-api": "^0.6.3",
+@@ -3486,20 +3587,87 @@
+         "@babel/plugin-syntax-object-rest-spread": "^7.8.3",
+         "@babel/plugin-syntax-optional-catch-binding": "^7.8.3",
+         "@babel/plugin-syntax-optional-chaining": "^7.8.3",
+         "@babel/plugin-syntax-private-property-in-object": "^7.14.5",
+         "@babel/plugin-syntax-top-level-await": "^7.14.5"
+       },
+       "peerDependencies": {
+         "@babel/core": "^7.0.0 || ^8.0.0-0"
+       }
+     },
++    "node_modules/babel-preset-expo": {
++      "version": "57.0.7",
++      "resolved": "https://registry.npmjs.org/babel-preset-expo/-/babel-preset-expo-57.0.7.tgz",
++      "integrity": "sha512-/1RLnZTJVoTNo6nCdSv27BSA2LBzM/qEkNLznwWvztg64DhsAz7ByZIiAqdbau9FK3YqF+IV5a2ZsPXFclwq4A==",
++      "license": "MIT",
++      "dependencies": {
++        "@babel/generator": "^7.20.5",
++        "@babel/helper-module-imports": "^7.25.9",
++        "@babel/plugin-proposal-decorators": "^7.12.9",
++        "@babel/plugin-proposal-export-default-from": "^7.24.7",
++        "@babel/plugin-syntax-dynamic-import": "^7.8.3",
++        "@babel/plugin-syntax-export-default-from": "^7.24.7",
++        "@babel/plugin-syntax-nullish-coalescing-operator": "^7.8.3",
++        "@babel/plugin-syntax-optional-chaining": "^7.8.3",
++        "@babel/plugin-transform-async-generator-functions": "^7.25.4",
++        "@babel/plugin-transform-async-to-generator": "^7.24.7",
++        "@babel/plugin-transform-block-scoping": "^7.25.0",
++        "@babel/plugin-transform-class-properties": "^7.25.4",
++        "@babel/plugin-transform-class-static-block": "^7.27.1",
++        "@babel/plugin-transform-classes": "^7.25.4",
++        "@babel/plugin-transform-destructuring": "^7.24.8",
++        "@babel/plugin-transform-export-namespace-from": "^7.25.9",
++        "@babel/plugin-transform-flow-strip-types": "^7.25.2",
++        "@babel/plugin-transform-for-of": "^7.24.7",
++        "@babel/plugin-transform-logical-assignment-operators": "^7.24.7",
++        "@babel/plugin-transform-modules-commonjs": "^7.24.8",
++        "@babel/plugin-transform-named-capturing-groups-regex": "^7.24.7",
++        "@babel/plugin-transform-nullish-coalescing-operator": "^7.24.7",
++        "@babel/plugin-transform-object-rest-spread": "^7.24.7",
++        "@babel/plugin-transform-optional-catch-binding": "^7.24.7",
++        "@babel/plugin-transform-optional-chaining": "^7.24.8",
++        "@babel/plugin-transform-parameters": "^7.24.7",
++        "@babel/plugin-transform-private-methods": "^7.24.7",
++        "@babel/plugin-transform-private-property-in-object": "^7.24.7",
++        "@babel/plugin-transform-react-display-name": "^7.24.7",
++        "@babel/plugin-transform-react-jsx": "^7.28.6",
++        "@babel/plugin-transform-react-jsx-development": "^7.27.1",
++        "@babel/plugin-transform-react-pure-annotations": "^7.27.1",
++        "@babel/plugin-transform-runtime": "^7.24.7",
++        "@babel/plugin-transform-typescript": "^7.25.2",
++        "@babel/plugin-transform-unicode-regex": "^7.24.7",
++        "@babel/preset-typescript": "^7.23.0",
++        "@react-native/babel-plugin-codegen": "0.86.2",
++        "babel-plugin-react-compiler": "^1.0.0",
++        "babel-plugin-react-native-web": "~0.21.0",
++        "babel-plugin-syntax-hermes-parser": "^0.36.0",
++        "babel-plugin-transform-flow-enums": "^0.0.2",
++        "debug": "^4.3.4"
++      },
++      "peerDependencies": {
++        "@babel/runtime": "^7.20.0",
++        "expo": "*",
++        "expo-widgets": "^57.0.10",
++        "react-refresh": ">=0.14.0 <1.0.0"
++      },
++      "peerDependenciesMeta": {
++        "@babel/runtime": {
++          "optional": true
++        },
++        "expo": {
++          "optional": true
++        },
++        "expo-widgets": {
++          "optional": true
++        }
++      }
++    },
+     "node_modules/babel-preset-jest": {
+       "version": "29.6.3",
+       "resolved": "https://registry.npmjs.org/babel-preset-jest/-/babel-preset-jest-29.6.3.tgz",
+       "integrity": "sha512-0B3bhxR6snWXJZtR/RliHTDPRgn1sNHOR0yVtq/IiQFyuOVjFS+wuio/R4gSNkyYmKmJB4wGZv2NZanmKmTnNA==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "babel-plugin-jest-hoist": "^29.6.3",
+         "babel-preset-current-node-syntax": "^1.0.0"
+       },
+@@ -5180,87 +5348,20 @@
+       "integrity": "sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==",
+       "license": "MIT",
+       "dependencies": {
+         "mime-types": "~2.1.34",
+         "negotiator": "0.6.3"
+       },
+       "engines": {
+         "node": ">= 0.6"
+       }
+     },
+-    "node_modules/expo/node_modules/babel-preset-expo": {
+-      "version": "57.0.7",
+-      "resolved": "https://registry.npmjs.org/babel-preset-expo/-/babel-preset-expo-57.0.7.tgz",
+-      "integrity": "sha512-/1RLnZTJVoTNo6nCdSv27BSA2LBzM/qEkNLznwWvztg64DhsAz7ByZIiAqdbau9FK3YqF+IV5a2ZsPXFclwq4A==",
+-      "license": "MIT",
+-      "dependencies": {
+-        "@babel/generator": "^7.20.5",
+-        "@babel/helper-module-imports": "^7.25.9",
+-        "@babel/plugin-proposal-decorators": "^7.12.9",
+-        "@babel/plugin-proposal-export-default-from": "^7.24.7",
+-        "@babel/plugin-syntax-dynamic-import": "^7.8.3",
+-        "@babel/plugin-syntax-export-default-from": "^7.24.7",
+-        "@babel/plugin-syntax-nullish-coalescing-operator": "^7.8.3",
+-        "@babel/plugin-syntax-optional-chaining": "^7.8.3",
+-        "@babel/plugin-transform-async-generator-functions": "^7.25.4",
+-        "@babel/plugin-transform-async-to-generator": "^7.24.7",
+-        "@babel/plugin-transform-block-scoping": "^7.25.0",
+-        "@babel/plugin-transform-class-properties": "^7.25.4",
+-        "@babel/plugin-transform-class-static-block": "^7.27.1",
+-        "@babel/plugin-transform-classes": "^7.25.4",
+-        "@babel/plugin-transform-destructuring": "^7.24.8",
+-        "@babel/plugin-transform-export-namespace-from": "^7.25.9",
+-        "@babel/plugin-transform-flow-strip-types": "^7.25.2",
+-        "@babel/plugin-transform-for-of": "^7.24.7",
+-        "@babel/plugin-transform-logical-assignment-operators": "^7.24.7",
+-        "@babel/plugin-transform-modules-commonjs": "^7.24.8",
+-        "@babel/plugin-transform-named-capturing-groups-regex": "^7.24.7",
+-        "@babel/plugin-transform-nullish-coalescing-operator": "^7.24.7",
+-        "@babel/plugin-transform-object-rest-spread": "^7.24.7",
+-        "@babel/plugin-transform-optional-catch-binding": "^7.24.7",
+-        "@babel/plugin-transform-optional-chaining": "^7.24.8",
+-        "@babel/plugin-transform-parameters": "^7.24.7",
+-        "@babel/plugin-transform-private-methods": "^7.24.7",
+-        "@babel/plugin-transform-private-property-in-object": "^7.24.7",
+-        "@babel/plugin-transform-react-display-name": "^7.24.7",
+-        "@babel/plugin-transform-react-jsx": "^7.28.6",
+-        "@babel/plugin-transform-react-jsx-development": "^7.27.1",
+-        "@babel/plugin-transform-react-pure-annotations": "^7.27.1",
+-        "@babel/plugin-transform-runtime": "^7.24.7",
+-        "@babel/plugin-transform-typescript": "^7.25.2",
+-        "@babel/plugin-transform-unicode-regex": "^7.24.7",
+-        "@babel/preset-typescript": "^7.23.0",
+-        "@react-native/babel-plugin-codegen": "0.86.2",
+-        "babel-plugin-react-compiler": "^1.0.0",
+-        "babel-plugin-react-native-web": "~0.21.0",
+-        "babel-plugin-syntax-hermes-parser": "^0.36.0",
+-        "babel-plugin-transform-flow-enums": "^0.0.2",
+-        "debug": "^4.3.4"
+-      },
+-      "peerDependencies": {
+-        "@babel/runtime": "^7.20.0",
+-        "expo": "*",
+-        "expo-widgets": "^57.0.10",
+-        "react-refresh": ">=0.14.0 <1.0.0"
+-      },
+-      "peerDependenciesMeta": {
+-        "@babel/runtime": {
+-          "optional": true
+-        },
+-        "expo": {
+-          "optional": true
+-        },
+-        "expo-widgets": {
+-          "optional": true
+-        }
+-      }
+-    },
+     "node_modules/expo/node_modules/ci-info": {
+       "version": "3.9.0",
+       "resolved": "https://registry.npmjs.org/ci-info/-/ci-info-3.9.0.tgz",
+       "integrity": "sha512-NIxF55hv4nSqQswkAeiOi1r83xy8JldOFDTWiug55KBu9Jnblncd2U6ViHmYgHf01TPZS77NJBhBMKdWj9HQMQ==",
+       "funding": [
+         {
+           "type": "github",
+           "url": "https://github.com/sponsors/sibiraj-s"
+         }
+       ],
+@@ -5904,20 +6005,30 @@
+     "node_modules/human-signals": {
+       "version": "2.1.0",
+       "resolved": "https://registry.npmjs.org/human-signals/-/human-signals-2.1.0.tgz",
+       "integrity": "sha512-B4FFZ6q/T2jhhksgkbEW3HBvWIfDW85snkQgawt07S7J5QXTk6BkNV+0yAeZrM5QpMAdYlocGoljn0sJ/WQkFw==",
+       "dev": true,
+       "license": "Apache-2.0",
+       "engines": {
+         "node": ">=10.17.0"
+       }
+     },
++    "node_modules/iceberg-js": {
++      "version": "0.8.1",
++      "resolved": "https://registry.npmjs.org/iceberg-js/-/iceberg-js-0.8.1.tgz",
++      "integrity": "sha512-1dhVQZXhcHje7798IVM+xoo/1ZdVfzOMIc8/rgVSijRK38EDqOJoGula9N/8ZI5RD8QTxNQtK/Gozpr+qUqRRA==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=20.0.0"
++      }
++    },
+     "node_modules/iconv-lite": {
+       "version": "0.6.3",
+       "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.6.3.tgz",
+       "integrity": "sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "safer-buffer": ">= 2.1.2 < 3.0.0"
+       },
+       "engines": {
+diff --git a/apps/kaizen/package.json b/apps/kaizen/package.json
+index bf2dc5f..4ca69a5 100644
+--- a/apps/kaizen/package.json
++++ b/apps/kaizen/package.json
+@@ -8,32 +8,39 @@
+     "expo-linking": "~57.0.6",
+     "expo-router": "~57.0.14",
+     "expo-status-bar": "~57.0.1",
+     "react": "19.2.3",
+     "react-native": "0.86.2",
+     "react-native-safe-area-context": "~5.7.0",
+     "react-native-screens": "~4.26.0"
+   },
+   "devDependencies": {
+     "@react-native/jest-preset": "^0.86.2",
++    "@supabase/supabase-js": "^2.112.3",
+     "@testing-library/react-native": "^14.0.1",
+     "@types/jest": "^29.5.14",
+     "@types/react": "~19.2.2",
++    "babel-preset-expo": "^57.0.7",
+     "jest": "^29.7.0",
+     "jest-expo": "^57.0.4",
+     "typescript": "~6.0.3"
+   },
+   "scripts": {
+     "start": "expo start",
+     "android": "expo start --android",
+     "ios": "expo start --ios",
+     "web": "expo start --web",
+     "dev": "expo start",
+     "test": "jest",
+     "test:watch": "jest --watch",
++    "test:integracion": "jest --config jest.integracion.config.js",
+     "typecheck": "tsc --noEmit"
+   },
+   "jest": {
+-    "preset": "jest-expo"
++    "preset": "jest-expo",
++    "testPathIgnorePatterns": [
++      "/node_modules/",
++      "\\.integracion\\.test\\.ts$"
++    ]
+   },
+   "private": true
+ }
+diff --git a/apps/kaizen/pruebas/aislamiento.integracion.test.ts b/apps/kaizen/pruebas/aislamiento.integracion.test.ts
+new file mode 100644
+index 0000000..513228c
+--- /dev/null
++++ b/apps/kaizen/pruebas/aislamiento.integracion.test.ts
+@@ -0,0 +1,53 @@
++import { createClient, SupabaseClient } from '@supabase/supabase-js'
++
++const URL = process.env.SUPABASE_URL!
++const ANON = process.env.SUPABASE_ANON_KEY!
++const SERVICIO = process.env.SUPABASE_SERVICE_ROLE_KEY!
++
++async function crearUsuario(correo: string): Promise<{ cliente: SupabaseClient; id: string }> {
++  const admin = createClient(URL, SERVICIO)
++  const { data, error } = await admin.auth.admin.createUser({
++    email: correo, password: 'contrasena-de-prueba', email_confirm: true,
++  })
++  if (error) throw error
++  const cliente = createClient(URL, ANON)
++  await cliente.auth.signInWithPassword({ email: correo, password: 'contrasena-de-prueba' })
++  return { cliente, id: data.user!.id }
++}
++
++describe('aislamiento entre usuarios', () => {
++  let a: Awaited<ReturnType<typeof crearUsuario>>
++  let b: Awaited<ReturnType<typeof crearUsuario>>
++
++  beforeAll(async () => {
++    a = await crearUsuario(`a-${Date.now()}@prueba.local`)
++    b = await crearUsuario(`b-${Date.now()}@prueba.local`)
++    const { error } = await a.cliente.from('pesos').insert({
++      id: crypto.randomUUID(), user_id: a.id, fecha_local: '2026-08-17', kg: 80,
++    })
++    expect(error).toBeNull()
++  })
++
++  it('B no puede leer los pesos de A', async () => {
++    const { data } = await b.cliente.from('pesos').select('*')
++    expect(data).toEqual([])
++  })
++
++  it('B no puede modificar los pesos de A', async () => {
++    const { data } = await b.cliente.from('pesos').update({ kg: 99 }).eq('user_id', a.id).select()
++    expect(data).toEqual([])
++  })
++
++  it('B no puede borrar los pesos de A', async () => {
++    await b.cliente.from('pesos').delete().eq('user_id', a.id)
++    const { data } = await a.cliente.from('pesos').select('*')
++    expect(data).toHaveLength(1)
++  })
++
++  it('B no puede insertar un registro a nombre de A', async () => {
++    const { error } = await b.cliente.from('pesos').insert({
++      id: crypto.randomUUID(), user_id: a.id, fecha_local: '2026-08-18', kg: 70,
++    })
++    expect(error).not.toBeNull()
++  })
++})
+diff --git a/apps/kaizen/supabase/.gitignore b/apps/kaizen/supabase/.gitignore
+new file mode 100644
+index 0000000..ad9264f
+--- /dev/null
++++ b/apps/kaizen/supabase/.gitignore
+@@ -0,0 +1,8 @@
++# Supabase
++.branches
++.temp
++
++# dotenvx
++.env.keys
++.env.local
++.env.*.local
+diff --git a/apps/kaizen/supabase/config.toml b/apps/kaizen/supabase/config.toml
+new file mode 100644
+index 0000000..9762057
+--- /dev/null
++++ b/apps/kaizen/supabase/config.toml
+@@ -0,0 +1,414 @@
++# For detailed configuration reference documentation, visit:
++# https://supabase.com/docs/guides/local-development/cli/config
++# A string used to distinguish different Supabase projects on the same host. Defaults to the
++# working directory name when running `supabase init`.
++project_id = "kaizen"
++
++[api]
++enabled = true
++# Port to use for the API URL.
++port = 54331
++# Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
++# endpoints. `public` and `graphql_public` schemas are included by default.
++schemas = ["public", "graphql_public"]
++# Extra schemas to add to the search_path of every request.
++extra_search_path = ["public", "extensions"]
++# The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
++# for accidental or malicious requests.
++max_rows = 1000
++# Controls whether new tables, views, sequences and functions created in the `public` schema by
++# `postgres` are reachable through the Data API roles (`anon`, `authenticated`, `service_role`)
++# without explicit GRANTs. When unset, new entities are NOT auto-exposed, matching the new cloud
++# default. Set to `true` to keep the legacy behaviour of auto-exposing new entities; this is
++# deprecated and the field is removed on 2026-10-30 once the always-revoked behaviour is permanent.
++# auto_expose_new_tables = true
++
++[api.tls]
++# Enable HTTPS endpoints locally using a self-signed certificate.
++enabled = false
++# Paths to self-signed certificate pair.
++# cert_path = "../certs/my-cert.pem"
++# key_path = "../certs/my-key.pem"
++
++[db]
++# Port to use for the local database URL.
++port = 54332
++# Port used by db diff command to initialize the shadow database.
++shadow_port = 54330
++# Maximum amount of time to wait for health check when starting the local database.
++health_timeout = "2m"
++# The database major version to use. This has to be the same as your remote database's. Run `SHOW
++# server_version;` on the remote database to check.
++major_version = 17
++
++[db.pooler]
++enabled = false
++# Port to use for the local connection pooler.
++port = 54339
++# Specifies when a server connection can be reused by other clients.
++# Configure one of the supported pooler modes: `transaction`, `session`.
++pool_mode = "transaction"
++# How many server connections to allow per user/database pair.
++default_pool_size = 20
++# Maximum number of client connections allowed.
++max_client_conn = 100
++
++# [db.vault]
++# secret_key = "env(SECRET_VALUE)"
++
++[db.migrations]
++# If disabled, migrations will be skipped during a db push or reset.
++enabled = true
++# Specifies an ordered list of schema files, directories, or glob patterns that describe your database.
++# Supports paths relative to supabase directory: "./schemas/*.sql", "./database".
++schema_paths = []
++
++[db.seed]
++# If enabled, seeds the database after migrations during a db reset.
++enabled = true
++# Specifies an ordered list of seed files to load during db reset.
++# Supports glob patterns relative to supabase directory: "./seeds/*.sql"
++sql_paths = ["./seed.sql"]
++
++[db.network_restrictions]
++# Enable management of network restrictions.
++enabled = false
++# List of IPv4 CIDR blocks allowed to connect to the database.
++# Defaults to allow all IPv4 connections. Set empty array to block all IPs.
++allowed_cidrs = ["0.0.0.0/0"]
++# List of IPv6 CIDR blocks allowed to connect to the database.
++# Defaults to allow all IPv6 connections. Set empty array to block all IPs.
++allowed_cidrs_v6 = ["::/0"]
++
++# Uncomment to reject non-secure connections to the database.
++# [db.ssl_enforcement]
++# enabled = true
++
++[realtime]
++enabled = true
++# Bind realtime via either IPv4 or IPv6. (default: IPv4)
++# ip_version = "IPv6"
++# The maximum length in bytes of HTTP request headers. (default: 4096)
++# max_header_length = 4096
++
++[studio]
++enabled = true
++# Port to use for Supabase Studio.
++port = 54333
++# External URL of the API server that frontend connects to.
++api_url = "http://127.0.0.1"
++# OpenAI API Key to use for Supabase AI in the Supabase Studio.
++openai_api_key = "env(OPENAI_API_KEY)"
++
++# Email testing server. Emails sent with the local dev setup are not actually sent - rather, they
++# are monitored, and you can view the emails that would have been sent from the web interface.
++[local_smtp]
++enabled = true
++# Port to use for the email testing server web interface.
++port = 54334
++# Uncomment to expose additional ports for testing user applications that send emails.
++# smtp_port = 54325
++# pop3_port = 54326
++# admin_email = "admin@email.com"
++# sender_name = "Admin"
++
++[storage]
++enabled = true
++# The maximum file size allowed (e.g. "5MB", "500KB").
++file_size_limit = "50MiB"
++
++# Uncomment to configure local storage buckets
++# [storage.buckets.images]
++# public = false
++# file_size_limit = "50MiB"
++# allowed_mime_types = ["image/png", "image/jpeg"]
++# objects_path = "./images"
++
++# Allow connections via S3 compatible clients
++[storage.s3_protocol]
++enabled = true
++
++# Image transformation API is available to Supabase Pro plan.
++# [storage.image_transformation]
++# enabled = true
++
++# Store analytical data in S3 for running ETL jobs over Iceberg Catalog
++# This feature is only available on the hosted platform.
++[storage.analytics]
++enabled = false
++max_namespaces = 5
++max_tables = 10
++max_catalogs = 2
++
++# Analytics Buckets is available to Supabase Pro plan.
++# [storage.analytics.buckets.my-warehouse]
++
++# Store vector embeddings in S3 for large and durable datasets
++[storage.vector]
++enabled = true
++max_buckets = 10
++max_indexes = 5
++
++# Vector Buckets is available to Supabase Pro plan.
++# [storage.vector.buckets.documents-openai]
++
++[auth]
++enabled = true
++# The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
++# in emails.
++site_url = "http://127.0.0.1:3000"
++# The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
++# external_url = ""
++# A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
++additional_redirect_urls = ["https://127.0.0.1:3000"]
++# How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
++jwt_expiry = 3600
++# JWT issuer URL. If not set, defaults to auth.external_url.
++# jwt_issuer = ""
++# Path to JWT signing key. DO NOT commit your signing keys file to git.
++# signing_keys_path = "./signing_keys.json"
++# If disabled, the refresh token will never expire.
++enable_refresh_token_rotation = true
++# Allows refresh tokens to be reused after expiry, up to the specified interval in seconds.
++# Requires enable_refresh_token_rotation = true.
++refresh_token_reuse_interval = 10
++# Allow/disallow new user signups to your project.
++enable_signup = true
++# Allow/disallow anonymous sign-ins to your project.
++enable_anonymous_sign_ins = false
++# Allow/disallow testing manual linking of accounts
++enable_manual_linking = false
++# Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
++minimum_password_length = 6
++# Passwords that do not meet the following requirements will be rejected as weak. Supported values
++# are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
++password_requirements = ""
++
++# Configure passkey sign-ins.
++# [auth.passkey]
++# enabled = false
++
++# Configure WebAuthn relying party settings (required when passkey is enabled).
++# [auth.webauthn]
++# rp_display_name = "Supabase"
++# rp_id = "localhost"
++# rp_origins = ["http://127.0.0.1:3000"]
++
++[auth.rate_limit]
++# Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
++email_sent = 2
++# Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
++sms_sent = 30
++# Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
++anonymous_users = 30
++# Number of sessions that can be refreshed in a 5 minute interval per IP address.
++token_refresh = 150
++# Number of sign up and sign-in requests that can be made in a 5 minute interval per IP address (excludes anonymous users).
++sign_in_sign_ups = 30
++# Number of OTP / Magic link verifications that can be made in a 5 minute interval per IP address.
++token_verifications = 30
++# Number of Web3 logins that can be made in a 5 minute interval per IP address.
++web3 = 30
++
++# Configure one of the supported captcha providers: `hcaptcha`, `turnstile`.
++# [auth.captcha]
++# enabled = true
++# provider = "hcaptcha"
++# secret = ""
++
++[auth.email]
++# Allow/disallow new user signups via email to your project.
++enable_signup = true
++# If enabled, a user will be required to confirm any email change on both the old, and new email
++# addresses. If disabled, only the new email is required to confirm.
++double_confirm_changes = true
++# If enabled, users need to confirm their email address before signing in.
++enable_confirmations = false
++# If enabled, users will need to reauthenticate or have logged in recently to change their password.
++secure_password_change = false
++# Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
++max_frequency = "1s"
++# Number of characters used in the email OTP.
++otp_length = 6
++# Number of seconds before the email OTP expires (defaults to 1 hour).
++otp_expiry = 3600
++
++# Use a production-ready SMTP server
++# [auth.email.smtp]
++# enabled = true
++# host = "smtp.sendgrid.net"
++# port = 587
++# user = "apikey"
++# pass = "env(SENDGRID_API_KEY)"
++# admin_email = "admin@email.com"
++# sender_name = "Admin"
++
++# Uncomment to customize email template
++# [auth.email.template.invite]
++# subject = "You have been invited"
++# content_path = "./supabase/templates/invite.html"
++
++# Uncomment to customize notification email template
++# [auth.email.notification.password_changed]
++# enabled = true
++# subject = "Your password has been changed"
++# content_path = "./templates/password_changed_notification.html"
++
++[auth.sms]
++# Allow/disallow new user signups via SMS to your project.
++enable_signup = false
++# If enabled, users need to confirm their phone number before signing in.
++enable_confirmations = false
++# Template for sending OTP to users
++template = "Your code is {{ .Code }}"
++# Controls the minimum amount of time that must pass before sending another sms otp.
++max_frequency = "5s"
++
++# Use pre-defined map of phone number to OTP for testing.
++# [auth.sms.test_otp]
++# 4152127777 = "123456"
++
++# Configure logged in session timeouts.
++# [auth.sessions]
++# Force log out after the specified duration.
++# timebox = "24h"
++# Force log out if the user has been inactive longer than the specified duration.
++# inactivity_timeout = "8h"
++
++# This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
++# [auth.hook.before_user_created]
++# enabled = true
++# uri = "pg-functions://postgres/auth/before-user-created-hook"
++
++# This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
++# [auth.hook.custom_access_token]
++# enabled = true
++# uri = "pg-functions://<database>/<schema>/<hook_name>"
++
++# Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
++[auth.sms.twilio]
++enabled = false
++account_sid = ""
++message_service_sid = ""
++# DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
++auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
++
++# Multi-factor-authentication is available to Supabase Pro plan.
++[auth.mfa]
++# Control how many MFA factors can be enrolled at once per user.
++max_enrolled_factors = 10
++
++# Control MFA via App Authenticator (TOTP)
++[auth.mfa.totp]
++enroll_enabled = false
++verify_enabled = false
++
++# Configure MFA via Phone Messaging
++[auth.mfa.phone]
++enroll_enabled = false
++verify_enabled = false
++otp_length = 6
++template = "Your code is {{ .Code }}"
++max_frequency = "5s"
++
++# Configure MFA via WebAuthn
++# [auth.mfa.web_authn]
++# enroll_enabled = true
++# verify_enabled = true
++
++# Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
++# `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
++# `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
++[auth.external.apple]
++enabled = false
++client_id = ""
++# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
++secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
++# Overrides the default auth callback URL derived from auth.external_url.
++redirect_uri = ""
++# Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,
++# or any other third-party OIDC providers.
++url = ""
++# If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
++skip_nonce_check = false
++# If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
++email_optional = false
++
++# Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
++# You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
++[auth.web3.solana]
++enabled = false
++
++# Use Firebase Auth as a third-party provider alongside Supabase Auth.
++[auth.third_party.firebase]
++enabled = false
++# project_id = "my-firebase-project"
++
++# Use Auth0 as a third-party provider alongside Supabase Auth.
++[auth.third_party.auth0]
++enabled = false
++# tenant = "my-auth0-tenant"
++# tenant_region = "us"
++
++# Use AWS Cognito (Amplify) as a third-party provider alongside Supabase Auth.
++[auth.third_party.aws_cognito]
++enabled = false
++# user_pool_id = "my-user-pool-id"
++# user_pool_region = "us-east-1"
++
++# Use Clerk as a third-party provider alongside Supabase Auth.
++[auth.third_party.clerk]
++enabled = false
++# Obtain from https://clerk.com/setup/supabase
++# domain = "example.clerk.accounts.dev"
++
++# OAuth server configuration
++[auth.oauth_server]
++# Enable OAuth server functionality
++enabled = false
++# Path for OAuth consent flow UI
++authorization_url_path = "/oauth/consent"
++# Allow dynamic client registration
++allow_dynamic_registration = false
++
++[edge_runtime]
++enabled = true
++# Supported request policies: `oneshot`, `per_worker`.
++# `per_worker` (default) — enables hot reload during local development.
++# `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
++policy = "per_worker"
++# Port to attach the Chrome inspector for debugging edge functions.
++inspector_port = 8083
++# The Deno major version to use.
++deno_version = 2
++
++# [edge_runtime.secrets]
++# secret_key = "env(SECRET_VALUE)"
++
++[analytics]
++enabled = true
++port = 54337
++# Configure one of the supported backends: `postgres`, `bigquery`.
++backend = "postgres"
++
++# Experimental features may be deprecated any time
++[experimental]
++# Configures Postgres storage engine to use OrioleDB (S3)
++orioledb_version = ""
++# Configures S3 bucket URL, eg. <bucket_name>.s3-<region>.amazonaws.com
++s3_host = "env(S3_HOST)"
++# Configures S3 bucket region, eg. us-east-1
++s3_region = "env(S3_REGION)"
++# Configures AWS_ACCESS_KEY_ID for S3 bucket
++s3_access_key = "env(S3_ACCESS_KEY)"
++# Configures AWS_SECRET_ACCESS_KEY for S3 bucket
++s3_secret_key = "env(S3_SECRET_KEY)"
++
++# pg-delta is the schema diff engine for db diff / db pull / db remote commit.
++# Set enabled = false to fall back to the legacy migra engine.
++[experimental.pgdelta]
++enabled = true
++# Directory under `supabase/` where declarative files are written.
++# declarative_schema_path = "./database"
++# JSON string passed through to pg-delta SQL formatting.
++# format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+diff --git a/apps/kaizen/supabase/migrations/0001_esquema.sql b/apps/kaizen/supabase/migrations/0001_esquema.sql
+new file mode 100644
+index 0000000..adb2dc2
+--- /dev/null
++++ b/apps/kaizen/supabase/migrations/0001_esquema.sql
+@@ -0,0 +1,116 @@
++create table perfiles (
++  id uuid primary key references auth.users on delete cascade,
++  nombre text not null default '',
++  fecha_nacimiento date,
++  sexo text check (sexo in ('hombre','mujer','no_indica')),
++  altura_cm integer,
++  unidades text not null default 'metrico',
++  zona_horaria text not null default 'Europe/Madrid',
++  corte_dia smallint not null default 4 check (corte_dia between 0 and 12),
++  hora_silencio smallint not null default 22 check (hora_silencio between 0 and 23),
++  creado_en timestamptz not null default now()
++);
++
++create table objetivos (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  vigente_desde date not null,
++  kcal integer not null,
++  proteina_g integer not null,
++  carbos_g integer not null,
++  grasas_g integer not null,
++  agua_ml integer not null,
++  objetivo text not null,
++  origen text not null check (origen in ('auto','manual')),
++  creado_en timestamptz not null default now(),
++  unique (user_id, vigente_desde)
++);
++
++create table alimentos (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  nombre text not null,
++  kcal_100 numeric not null,
++  proteina_100 numeric not null default 0,
++  carbos_100 numeric not null default 0,
++  grasas_100 numeric not null default 0,
++  codigo_barras text,
++  origen text not null check (origen in ('off','propio')),
++  ultima_cantidad_g numeric,
++  creado_en timestamptz not null default now()
++);
++create index on alimentos (user_id, codigo_barras);
++
++create table comidas (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  fecha_local date not null,
++  momento text not null,
++  registrado_en timestamptz not null default now()
++);
++create index on comidas (user_id, fecha_local);
++
++create table comida_items (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  comida_id uuid not null references comidas on delete cascade,
++  alimento_id uuid references alimentos on delete set null,
++  nombre text not null,
++  cantidad_g numeric not null,
++  kcal numeric not null,
++  proteina_g numeric not null,
++  carbos_g numeric not null,
++  grasas_g numeric not null,
++  fuente text not null
++);
++
++create table registros_agua (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  fecha_local date not null,
++  ml integer not null,
++  registrado_en timestamptz not null default now()
++);
++create index on registros_agua (user_id, fecha_local);
++
++create table entrenamientos (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  fecha_local date not null,
++  tipo text not null,
++  duracion_min integer,
++  intensidad smallint,
++  notas text,
++  registrado_en timestamptz not null default now()
++);
++create index on entrenamientos (user_id, fecha_local);
++
++create table habitos (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  nombre text not null,
++  icono text,
++  activo boolean not null default true,
++  orden smallint not null default 0,
++  hora_aviso smallint,
++  hora_cierre smallint,
++  avisos_activos boolean not null default false
++);
++
++create table habitos_registro (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  habito_id uuid not null references habitos on delete cascade,
++  fecha_local date not null,
++  hecho boolean not null default true,
++  registrado_en timestamptz not null default now(),
++  unique (habito_id, fecha_local)
++);
++
++create table pesos (
++  id uuid primary key,
++  user_id uuid not null references auth.users on delete cascade,
++  fecha_local date not null,
++  kg numeric not null,
++  unique (user_id, fecha_local)
++);
+diff --git a/apps/kaizen/supabase/migrations/0002_rls.sql b/apps/kaizen/supabase/migrations/0002_rls.sql
+new file mode 100644
+index 0000000..cf450d4
+--- /dev/null
++++ b/apps/kaizen/supabase/migrations/0002_rls.sql
+@@ -0,0 +1,48 @@
++-- Conceder acceso de tabla al rol `authenticated` antes de activar RLS.
++--
++-- Esta instancia de Supabase (CLI reciente) NO expone automáticamente las
++-- tablas nuevas del esquema `public` a los roles de la API (comportamiento
++-- por defecto en la nube, ver `auto_expose_new_tables` en config.toml): sin
++-- estos GRANT, `authenticated` no tiene ningún privilegio sobre las tablas y
++-- toda consulta falla con "permission denied" pase lo que pase con RLS.
++-- RLS y GRANT son capas independientes: el GRANT decide si el rol puede
++-- tocar la tabla; la política RLS decide qué filas ve una vez que puede.
++-- No se concede nada a `anon`: esta app exige sesión, y los datos son
++-- categoría especial de RGPD (peso, medidas, alimentación).
++grant usage on schema public to authenticated;
++grant select, insert, update, delete on all tables in schema public to authenticated;
++
++alter table perfiles           enable row level security;
++alter table objetivos          enable row level security;
++alter table alimentos          enable row level security;
++alter table comidas            enable row level security;
++alter table comida_items       enable row level security;
++alter table registros_agua     enable row level security;
++alter table entrenamientos     enable row level security;
++alter table habitos            enable row level security;
++alter table habitos_registro   enable row level security;
++alter table pesos              enable row level security;
++
++create policy "propio" on perfiles         for all using (id = auth.uid())      with check (id = auth.uid());
++create policy "propio" on objetivos        for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++create policy "propio" on alimentos        for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++create policy "propio" on comidas          for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++create policy "propio" on comida_items     for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++create policy "propio" on registros_agua   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++create policy "propio" on entrenamientos   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++create policy "propio" on habitos          for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++create policy "propio" on habitos_registro for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++create policy "propio" on pesos            for all using (user_id = auth.uid()) with check (user_id = auth.uid());
++
++-- Crear el perfil automáticamente al registrarse
++create function public.crear_perfil()
++returns trigger language plpgsql security definer set search_path = '' as $$
++begin
++  insert into public.perfiles (id) values (new.id);
++  return new;
++end;
++$$;
++
++create trigger al_crear_usuario
++  after insert on auth.users
++  for each row execute function public.crear_perfil();

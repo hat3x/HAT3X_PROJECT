@@ -1,0 +1,378 @@
+# Review package: d1554b1..43c2e26
+
+## Commits
+43c2e26 feat(atlas): el fichaje en el marco, a un clic desde cualquier pantalla
+
+## Files changed
+ apps/atlas/src/app/layout.tsx                     |  35 +++++-
+ apps/atlas/src/components/marco/BarraLateral.tsx  |   2 +-
+ apps/atlas/src/components/marco/Fichaje.tsx       | 134 ++++++++++++++++++++++
+ apps/atlas/src/lib/db/acciones-fichajes.ts        |  40 +++++++
+ apps/atlas/src/tests/componentes/fichaje.test.tsx |  60 ++++++++++
+ 5 files changed, 266 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/src/app/layout.tsx b/apps/atlas/src/app/layout.tsx
+index ed94109..66caf56 100644
+--- a/apps/atlas/src/app/layout.tsx
++++ b/apps/atlas/src/app/layout.tsx
+@@ -1,18 +1,22 @@
+ import type { Metadata, Viewport } from "next";
+ import { headers } from "next/headers";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { atributosTema } from "@/lib/tema/tokens";
+ import { BarraLateral } from "@/components/marco/BarraLateral";
++import { Fichaje, type EnCurso } from "@/components/marco/Fichaje";
+ import { Auroras } from "@/components/marco/Auroras";
+ import { RegistrarSW } from "@/components/marco/RegistrarSW";
++import { fichajeEnCurso } from "@/lib/db/fichajes";
++import { listarProyectos } from "@/lib/db/proyectos";
++import { listarClientes } from "@/lib/db/clientes";
+ import "./globals.css";
+ 
+ export const metadata: Metadata = {
+   title: "Atlas — HAT3X",
+   description: "Todo lo que HAT3X tiene en producción, en un solo sitio.",
+   manifest: "/manifest.webmanifest",
+   // En iOS esto es lo que hace que «Añadir a inicio» abra Atlas a pantalla
+   // completa — y ahí no es un lujo: sin instalar, iOS no da push.
+   appleWebApp: { capable: true, title: "Atlas", statusBarStyle: "black-translucent" },
+   icons: { icon: "/iconos/atlas-192.png", apple: "/iconos/atlas-192.png" },
+@@ -31,30 +35,53 @@ export default async function RootLayout({
+   const sb = await clienteServidor();
+   const perfil = await obtenerPerfil(sb);
+   // Un componente de servidor no tiene acceso a la URL: la inyecta el
+   // middleware como cabecera para que la barra lateral marque la entrada activa.
+   const rutaActual = headers().get("x-pathname") ?? "/";
+ 
+   // Sin perfil (pantallas de entrada): tema por defecto y sin barra lateral.
+   const tema = perfil?.tema ?? "oscuro";
+   const paleta = perfil?.paleta ?? "zafiro";
+ 
++  let enCurso: EnCurso | null = null;
++  let proyectos: { id: string; nombre: string }[] = [];
++  let clientes: { id: string; nombre: string }[] = [];
++  if (perfil) {
++    const [f, ps, cs] = await Promise.all([
++      fichajeEnCurso(sb),
++      listarProyectos(sb),
++      listarClientes(sb),
++    ]);
++    // La etiqueta se compone aquí, una vez, y viaja como texto: el componente
++    // cliente no tiene por qué saber de proyectos ni de clientes.
++    enCurso = f
++      ? {
++          id: f.id,
++          inicio: f.inicio,
++          etiqueta:
++            [f.proyectoNombre, f.clienteNombre].filter(Boolean).join(" · ") || "Sin asignar",
++        }
++      : null;
++    proyectos = ps.map((p) => ({ id: p.id, nombre: p.nombre }));
++    clientes = cs.map((c) => ({ id: c.id, nombre: c.nombre }));
++  }
++
+   return (
+     <html lang="es" {...atributosTema(tema, paleta)}>
+       <body className="min-h-dvh">
+         <Auroras />
+         <RegistrarSW />
+         {perfil ? (
+           <div className="flex min-h-dvh">
+-            <BarraLateral
+-              esPropietario={perfil.esPropietario}
+-              rutaActual={rutaActual}
+-            />
++            <div className="m-3 flex w-56 shrink-0 flex-col gap-3">
++              <BarraLateral esPropietario={perfil.esPropietario} rutaActual={rutaActual} />
++              <Fichaje enCurso={enCurso} proyectos={proyectos} clientes={clientes} />
++            </div>
+             <main className="min-w-0 flex-1 p-3 pl-0">{children}</main>
+           </div>
+         ) : (
+           children
+         )}
+       </body>
+     </html>
+   );
+ }
+diff --git a/apps/atlas/src/components/marco/BarraLateral.tsx b/apps/atlas/src/components/marco/BarraLateral.tsx
+index 25710a8..1cce3ae 100644
+--- a/apps/atlas/src/components/marco/BarraLateral.tsx
++++ b/apps/atlas/src/components/marco/BarraLateral.tsx
+@@ -20,21 +20,21 @@ const ENTRADAS = [
+ export function BarraLateral({
+   esPropietario,
+   rutaActual,
+ }: {
+   esPropietario: boolean;
+   rutaActual: string;
+ }) {
+   return (
+     <nav
+       aria-label="Navegación principal"
+-      className="cristal m-3 flex w-56 shrink-0 flex-col gap-1 p-3"
++      className="cristal flex flex-col gap-1 p-3"
+     >
+       <div className="px-2 pb-3 text-sm font-bold tracking-widest">ATLAS</div>
+       {ENTRADAS.map(({ href, etiqueta, Icono }) => {
+         const activa =
+           href === "/" ? rutaActual === "/" : rutaActual.startsWith(href);
+         return (
+           <Link
+             key={href}
+             href={href}
+             aria-current={activa ? "page" : undefined}
+diff --git a/apps/atlas/src/components/marco/Fichaje.tsx b/apps/atlas/src/components/marco/Fichaje.tsx
+new file mode 100644
+index 0000000..1fda731
+--- /dev/null
++++ b/apps/atlas/src/components/marco/Fichaje.tsx
+@@ -0,0 +1,134 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Play, Square } from "lucide-react";
++import { empezarFichaje, pararFichaje } from "@/lib/db/acciones-fichajes";
++import { formatearMinutos } from "@/lib/horas/tramos";
++
++export type EnCurso = { id: string; etiqueta: string; inicio: string };
++
++/**
++ * El fichaje, siempre a la vista. Va en el marco y no en una pantalla porque
++ * la regla —«ficha antes de empezar»— solo se cumple si cumplirla cuesta menos
++ * que olvidarla: un botón a un clic desde cualquier sitio, también en el móvil.
++ *
++ * Recibe el estado ya resuelto en servidor. Este componente no consulta la
++ * base: un componente cliente no puede decidir quién eres.
++ */
++export function Fichaje({
++  enCurso,
++  proyectos,
++  clientes,
++}: {
++  enCurso: EnCurso | null;
++  proyectos: { id: string; nombre: string }[];
++  clientes: { id: string; nombre: string }[];
++}) {
++  const [error, setError] = useState<string | null>(null);
++  const [enviando, setEnviando] = useState(false);
++  const [ahora, setAhora] = useState(() => Date.now());
++
++  // El cronómetro se refresca cada medio minuto: basta para leerlo y no
++  // vuelve a pintar el marco entero cada segundo.
++  useEffect(() => {
++    if (!enCurso) return;
++    const t = setInterval(() => setAhora(Date.now()), 30_000);
++    return () => clearInterval(t);
++  }, [enCurso]);
++
++  async function ejecutar(accion: () => Promise<{ ok: true } | { ok: false; error: string }>) {
++    setError(null);
++    setEnviando(true);
++    try {
++      const r = await accion();
++      if (!r.ok) setError(r.error);
++    } catch {
++      setError("No se pudo guardar. Comprueba la conexión.");
++    } finally {
++      // En el finally: si la promesa se rechaza, el botón no puede quedar muerto.
++      setEnviando(false);
++    }
++  }
++
++  if (enCurso) {
++    const minutos = Math.round((ahora - Date.parse(enCurso.inicio)) / 60_000);
++    return (
++      <div className="cristal space-y-2 p-3" aria-live="polite">
++        <div className="text-[11px] uppercase tracking-wider opacity-60">Fichado en</div>
++        <div className="truncate text-sm font-medium">{enCurso.etiqueta}</div>
++        <div className="text-sm tabular-nums opacity-80">{formatearMinutos(Math.max(0, minutos))}</div>
++        {error && (
++          <p role="alert" className="text-xs" style={{ color: "var(--estado-caido)" }}>
++            {error}
++          </p>
++        )}
++        <button
++          type="button"
++          disabled={enviando}
++          onClick={() => ejecutar(pararFichaje)}
++          className="flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium disabled:opacity-50"
++          style={{ background: "var(--cristal-fondo-denso)" }}
++        >
++          <Square size={14} aria-hidden="true" />
++          Parar
++        </button>
++      </div>
++    );
++  }
++
++  return (
++    <form
++      className="cristal space-y-2 p-3"
++      onSubmit={(e) => {
++        e.preventDefault();
++        const datos = new FormData(e.currentTarget);
++        const proyectoId = String(datos.get("proyectoId") ?? "");
++        const clienteId = String(datos.get("clienteId") ?? "");
++        void ejecutar(() =>
++          empezarFichaje({
++            proyectoId: proyectoId === "" ? null : proyectoId,
++            clienteId: clienteId === "" ? null : clienteId,
++            nota: null,
++          })
++        );
++      }}
++    >
++      <div className="text-[11px] uppercase tracking-wider opacity-60">Fichar</div>
++      {/*
++        Solo `aria-label`, sin `<label>` envolvente ni `sr-only` dentro: con
++        las dos cosas el mismo `<select>` tendría dos nombres accesibles y
++        `getByLabelText(/proyecto/i)` podría fallar por duplicado.
++      */}
++      <select name="proyectoId" aria-label="Proyecto" className="w-full rounded-lg px-2 py-1 text-xs">
++        <option value="">— proyecto —</option>
++        {proyectos.map((p) => (
++          <option key={p.id} value={p.id}>
++            {p.nombre}
++          </option>
++        ))}
++      </select>
++      <select name="clienteId" aria-label="Cliente" className="w-full rounded-lg px-2 py-1 text-xs">
++        <option value="">— cliente —</option>
++        {clientes.map((c) => (
++          <option key={c.id} value={c.id}>
++            {c.nombre}
++          </option>
++        ))}
++      </select>
++      {error && (
++        <p role="alert" className="text-xs" style={{ color: "var(--estado-caido)" }}>
++          {error}
++        </p>
++      )}
++      <button
++        type="submit"
++        disabled={enviando}
++        className="flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium disabled:opacity-50"
++        style={{ background: "var(--cristal-fondo-denso)" }}
++      >
++        <Play size={14} aria-hidden="true" />
++        Empezar
++      </button>
++    </form>
++  );
++}
+diff --git a/apps/atlas/src/lib/db/acciones-fichajes.ts b/apps/atlas/src/lib/db/acciones-fichajes.ts
+new file mode 100644
+index 0000000..dfd88d9
+--- /dev/null
++++ b/apps/atlas/src/lib/db/acciones-fichajes.ts
+@@ -0,0 +1,40 @@
++// src/lib/db/acciones-fichajes.ts
++"use server";
++
++import { revalidatePath } from "next/cache";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { empezar, parar, anadirTramo, type EntradaFichaje, type EntradaTramo } from "./fichajes";
++import type { Ok } from "./proyectos";
++
++//
++// Envoltorios del límite HTTP. Validar, comprobar la sesión y escribir es cosa
++// de `fichajes.ts`, que sí se puede probar contra la base porque recibe `sb`.
++//
++// El fichaje vive en el LAYOUT, así que la revalidación es del layout entero:
++// `revalidatePath("/", "layout")`. Revalidar solo una ruta dejaría el botón
++// del marco enseñando el estado anterior en todas las demás.
++//
++
++export async function empezarFichaje(entrada: EntradaFichaje): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await empezar(sb, entrada);
++  if (!r.ok) return r;
++  revalidatePath("/", "layout");
++  return { ok: true };
++}
++
++export async function pararFichaje(): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await parar(sb);
++  if (!r.ok) return r;
++  revalidatePath("/", "layout");
++  return { ok: true };
++}
++
++export async function anadirFichaje(entrada: EntradaTramo): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await anadirTramo(sb, entrada, Date.now());
++  if (!r.ok) return r;
++  revalidatePath("/dinero/horas");
++  return { ok: true };
++}
+diff --git a/apps/atlas/src/tests/componentes/fichaje.test.tsx b/apps/atlas/src/tests/componentes/fichaje.test.tsx
+new file mode 100644
+index 0000000..caa198a
+--- /dev/null
++++ b/apps/atlas/src/tests/componentes/fichaje.test.tsx
+@@ -0,0 +1,60 @@
++import { describe, it, expect, vi, beforeEach } from "vitest";
++import { render, screen, fireEvent, waitFor } from "@testing-library/react";
++import { Fichaje } from "@/components/marco/Fichaje";
++
++const acciones = vi.hoisted(() => ({
++  empezarFichaje: vi.fn(),
++  pararFichaje: vi.fn(),
++}));
++vi.mock("@/lib/db/acciones-fichajes", () => acciones);
++
++const PROYECTOS = [{ id: "p1", nombre: "Kairos" }];
++const CLIENTES = [{ id: "c1", nombre: "Biodental" }];
++
++beforeEach(() => {
++  acciones.empezarFichaje.mockReset().mockResolvedValue({ ok: true });
++  acciones.pararFichaje.mockReset().mockResolvedValue({ ok: true });
++});
++
++describe("Fichaje", () => {
++  it("sin nada en curso, ofrece empezar", () => {
++    render(<Fichaje enCurso={null} proyectos={PROYECTOS} clientes={CLIENTES} />);
++    expect(screen.getByRole("button", { name: /empezar/i })).toBeInTheDocument();
++  });
++
++  it("empezar manda lo elegido; vacío es null, no cadena vacía", async () => {
++    render(<Fichaje enCurso={null} proyectos={PROYECTOS} clientes={CLIENTES} />);
++    fireEvent.change(screen.getByLabelText(/proyecto/i), { target: { value: "p1" } });
++    fireEvent.click(screen.getByRole("button", { name: /empezar/i }));
++    await waitFor(() =>
++      expect(acciones.empezarFichaje).toHaveBeenCalledWith({ proyectoId: "p1", clienteId: null, nota: null })
++    );
++  });
++
++  it("con uno en curso, dice qué y desde cuándo, y ofrece parar", () => {
++    render(
++      <Fichaje
++        enCurso={{ id: "f1", etiqueta: "Kairos · Biodental", inicio: new Date(Date.now() - 125 * 60_000).toISOString() }}
++        proyectos={PROYECTOS}
++        clientes={CLIENTES}
++      />
++    );
++    expect(screen.getByText("Kairos · Biodental")).toBeInTheDocument();
++    expect(screen.getByText(/2 h 5 min/)).toBeInTheDocument();
++    expect(screen.getByRole("button", { name: /parar/i })).toBeInTheDocument();
++  });
++
++  it("si la acción falla, enseña el error y el botón vuelve a estar vivo", async () => {
++    acciones.pararFichaje.mockResolvedValue({ ok: false, error: "No hay ningún fichaje en curso." });
++    render(
++      <Fichaje
++        enCurso={{ id: "f1", etiqueta: "Sin asignar", inicio: new Date().toISOString() }}
++        proyectos={PROYECTOS}
++        clientes={CLIENTES}
++      />
++    );
++    fireEvent.click(screen.getByRole("button", { name: /parar/i }));
++    expect(await screen.findByRole("alert")).toHaveTextContent("No hay ningún fichaje en curso.");
++    expect(screen.getByRole("button", { name: /parar/i })).not.toBeDisabled();
++  });
++});

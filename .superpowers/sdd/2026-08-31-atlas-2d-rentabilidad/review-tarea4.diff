@@ -1,0 +1,245 @@
+diff --git a/apps/atlas/src/app/ajustes/economia/page.tsx b/apps/atlas/src/app/ajustes/economia/page.tsx
+new file mode 100644
+index 0000000..890b221
+--- /dev/null
++++ b/apps/atlas/src/app/ajustes/economia/page.tsx
+@@ -0,0 +1,32 @@
++import { notFound } from "next/navigation";
++import Link from "next/link";
++import { ChevronLeft } from "lucide-react";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { obtenerPerfil } from "@/lib/db/perfil";
++import { leerAjustes } from "@/lib/db/ajustes-economia";
++import { FormEconomia } from "@/components/ajustes/FormEconomia";
++
++export default async function PaginaEconomia() {
++  const sb = await clienteServidor();
++  const perfil = await obtenerPerfil(sb);
++  // Doble puerta: RLS ya negaría la fila, pero un 404 es más honesto que un error.
++  if (!perfil?.esPropietario) notFound();
++  const actual = await leerAjustes(sb);
++
++  return (
++    <section className="max-w-3xl space-y-4">
++      <header>
++        <Link href="/ajustes" className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100">
++          <ChevronLeft size={15} aria-hidden="true" />
++          Ajustes
++        </Link>
++        <h1 className="text-2xl font-semibold tracking-tight">Economía</h1>
++        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
++          Lo que cuesta una hora de trabajo, y quién emite las facturas. Viven aquí y no en el
++          entorno porque son datos del negocio, y se cambian desde aquí.
++        </p>
++      </header>
++      <FormEconomia actual={actual} />
++    </section>
++  );
++}
+diff --git a/apps/atlas/src/app/ajustes/page.tsx b/apps/atlas/src/app/ajustes/page.tsx
+index e2fb9e4..fc65388 100644
+--- a/apps/atlas/src/app/ajustes/page.tsx
++++ b/apps/atlas/src/app/ajustes/page.tsx
+@@ -1,5 +1,5 @@
+ import Link from "next/link";
+-import { Palette, KeyRound, Users, BellRing, Radar } from "lucide-react";
++import { Palette, KeyRound, Users, BellRing, Radar, Coins } from "lucide-react";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ 
+@@ -27,6 +27,13 @@ const SECCIONES = [
+     Icono: KeyRound,
+     soloPropietario: true,
+   },
++  {
++    href: "/ajustes/economia",
++    titulo: "Economía",
++    descripcion: "Coste de la hora y datos del emisor.",
++    Icono: Coins,
++    soloPropietario: true,
++  },
+   {
+     href: "/ajustes/usuarios",
+     titulo: "Usuarios y permisos",
+diff --git a/apps/atlas/src/components/ajustes/FormEconomia.tsx b/apps/atlas/src/components/ajustes/FormEconomia.tsx
+new file mode 100644
+index 0000000..f8a19aa
+--- /dev/null
++++ b/apps/atlas/src/components/ajustes/FormEconomia.tsx
+@@ -0,0 +1,92 @@
++"use client";
++
++import { useState } from "react";
++import { guardarAjustesEconomia } from "@/lib/db/acciones-economia";
++import { aCentimos } from "@/lib/dinero";
++import type { AjustesEconomia } from "@/lib/db/ajustes-economia";
++
++/**
++ * El coste de la hora y los datos fiscales del emisor. El coste es un número
++ * que fija el propietario (decisión 8), no un derivado: por eso es un campo y
++ * no un cálculo. Los datos fiscales pueden quedar vacíos hasta que 2E los exija.
++ */
++export function FormEconomia({ actual }: { actual: AjustesEconomia }) {
++  const [error, setError] = useState<string | null>(null);
++  const [enviando, setEnviando] = useState(false);
++  const [guardado, setGuardado] = useState(false);
++
++  async function alEnviar(e: React.FormEvent<HTMLFormElement>) {
++    e.preventDefault();
++    const datos = new FormData(e.currentTarget);
++    setError(null);
++    setGuardado(false);
++    const coste = aCentimos(String(datos.get("costeHora") ?? ""));
++    if (coste === null) return setError("El coste de la hora no es un importe.");
++    const texto = (n: string) => {
++      const t = String(datos.get(n) ?? "").trim();
++      return t === "" ? null : t;
++    };
++    setEnviando(true);
++    try {
++      const r = await guardarAjustesEconomia({
++        razonSocial: texto("razonSocial"),
++        cif: texto("cif"),
++        direccion: texto("direccion"),
++        costeHoraCentimos: coste,
++      });
++      if (r.ok) setGuardado(true);
++      else setError(r.error);
++    } catch {
++      // Igual que en FormGasto: un fallo de red en el `await` de arriba no
++      // debe dejar el botón deshabilitado para siempre ni al usuario sin
++      // explicación de por qué nada se guardó.
++      setError("No se pudo guardar. Comprueba la conexión e inténtalo otra vez.");
++    } finally {
++      // En un `finally` y no al final del `try`: así corre también cuando la
++      // acción de servidor rechaza en vez de devolver `{ ok: false }`.
++      setEnviando(false);
++    }
++  }
++
++  const euros = (actual.costeHoraCentimos / 100).toFixed(2).replace(".", ",");
++
++  return (
++    <form onSubmit={alEnviar} className="cristal space-y-3 p-4">
++      <label className="block text-sm">
++        <span className="mb-1 block">Coste de la hora (€)</span>
++        {/* Solo `aria-label`: el `<span>` de arriba y este atributo nombran el
++            mismo campo con textos distintos, y `getByLabelText` encontraría
++            dos coincidencias. El texto visible ya está en el `<span>`. */}
++        <input
++          name="costeHora"
++          inputMode="decimal"
++          defaultValue={euros}
++          aria-label="Coste de la hora"
++          className="w-full rounded-lg px-2 py-1.5 sm:w-48"
++        />
++      </label>
++      <p className="text-xs" style={{ color: "var(--texto-tenue)" }}>
++        Se aplica a los meses abiertos. Un mes cerrado conserva el coste con el que se cerró.
++      </p>
++      <div className="grid gap-3 sm:grid-cols-3">
++        <label className="block text-sm">
++          <span className="mb-1 block">Razón social</span>
++          <input name="razonSocial" defaultValue={actual.razonSocial ?? ""} className="w-full rounded-lg px-2 py-1.5" />
++        </label>
++        <label className="block text-sm">
++          <span className="mb-1 block">CIF</span>
++          <input name="cif" defaultValue={actual.cif ?? ""} className="w-full rounded-lg px-2 py-1.5" />
++        </label>
++        <label className="block text-sm">
++          <span className="mb-1 block">Dirección</span>
++          <input name="direccion" defaultValue={actual.direccion ?? ""} className="w-full rounded-lg px-2 py-1.5" />
++        </label>
++      </div>
++      {error && <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>{error}</p>}
++      {guardado && <p role="status" className="text-sm">Guardado.</p>}
++      <button type="submit" disabled={enviando} className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
++        Guardar
++      </button>
++    </form>
++  );
++}
+diff --git a/apps/atlas/src/lib/db/acciones-economia.ts b/apps/atlas/src/lib/db/acciones-economia.ts
+new file mode 100644
+index 0000000..fd27a0b
+--- /dev/null
++++ b/apps/atlas/src/lib/db/acciones-economia.ts
+@@ -0,0 +1,38 @@
++// src/lib/db/acciones-economia.ts
++"use server";
++
++import { revalidatePath } from "next/cache";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { escribirAjustes, type EntradaAjustes } from "./ajustes-economia";
++import { cerrarMes, reabrirMes } from "./cierres";
++import type { Ok } from "./proyectos";
++
++// Envoltorios del límite HTTP; validar y escribir es de los módulos que
++// reciben `sb`. Un módulo "use server" expone TODO lo exportado, así que
++// aquí no hay nada más que estas tres funciones: ninguna lógica que no deba
++// ser un endpoint público.
++
++export async function guardarAjustesEconomia(entrada: EntradaAjustes): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await escribirAjustes(sb, entrada);
++  if (!r.ok) return r;
++  revalidatePath("/ajustes/economia");
++  revalidatePath("/dinero/rentabilidad");
++  return { ok: true };
++}
++
++export async function cerrarMesAccion(mes: string, costeHoraCentimos: number): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await cerrarMes(sb, mes, costeHoraCentimos, Date.now());
++  if (!r.ok) return r;
++  revalidatePath("/dinero/rentabilidad");
++  return { ok: true };
++}
++
++export async function reabrirMesAccion(mes: string): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await reabrirMes(sb, mes);
++  if (!r.ok) return r;
++  revalidatePath("/dinero/rentabilidad");
++  return { ok: true };
++}
+diff --git a/apps/atlas/src/tests/componentes/form-economia.test.tsx b/apps/atlas/src/tests/componentes/form-economia.test.tsx
+new file mode 100644
+index 0000000..a21d687
+--- /dev/null
++++ b/apps/atlas/src/tests/componentes/form-economia.test.tsx
+@@ -0,0 +1,34 @@
++import { describe, it, expect, vi, beforeEach } from "vitest";
++import { render, screen, fireEvent, waitFor } from "@testing-library/react";
++import { FormEconomia } from "@/components/ajustes/FormEconomia";
++
++const acciones = vi.hoisted(() => ({ guardarAjustesEconomia: vi.fn() }));
++vi.mock("@/lib/db/acciones-economia", () => acciones);
++
++const ACTUAL = { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3000 };
++
++beforeEach(() => acciones.guardarAjustesEconomia.mockReset().mockResolvedValue({ ok: true }));
++
++describe("FormEconomia", () => {
++  it("enseña el coste actual en euros", () => {
++    render(<FormEconomia actual={ACTUAL} />);
++    expect(screen.getByLabelText(/coste de la hora/i)).toHaveValue("30,00");
++  });
++
++  it("manda céntimos, no euros, y los textos vacíos como null", async () => {
++    render(<FormEconomia actual={ACTUAL} />);
++    fireEvent.change(screen.getByLabelText(/coste de la hora/i), { target: { value: "32,5" } });
++    fireEvent.click(screen.getByRole("button", { name: /guardar/i }));
++    await waitFor(() =>
++      expect(acciones.guardarAjustesEconomia).toHaveBeenCalledWith({ razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3250 })
++    );
++  });
++
++  it("un coste que no es un importe no llega a la acción", async () => {
++    render(<FormEconomia actual={ACTUAL} />);
++    fireEvent.change(screen.getByLabelText(/coste de la hora/i), { target: { value: "treinta" } });
++    fireEvent.click(screen.getByRole("button", { name: /guardar/i }));
++    expect(await screen.findByRole("alert")).toHaveTextContent(/importe/i);
++    expect(acciones.guardarAjustesEconomia).not.toHaveBeenCalled();
++  });
++});

@@ -1,0 +1,909 @@
+# Review package: 0433a54..df25ca5
+
+## Commits
+df25ca5 feat(kaizen): cliente Supabase y contexto de sesion
+
+## Files changed
+ apps/kaizen/.env.example              |   2 +
+ apps/kaizen/jest.config.js            |  10 +
+ apps/kaizen/package-lock.json         | 380 +++++++---------------------------
+ apps/kaizen/package.json              |  14 +-
+ apps/kaizen/src/datos/sesion.test.tsx |  24 +++
+ apps/kaizen/src/datos/sesion.tsx      |  27 +++
+ apps/kaizen/src/datos/supabase.ts     |  19 ++
+ 7 files changed, 160 insertions(+), 316 deletions(-)
+
+## Diff
+diff --git a/apps/kaizen/.env.example b/apps/kaizen/.env.example
+new file mode 100644
+index 0000000..f22d777
+--- /dev/null
++++ b/apps/kaizen/.env.example
+@@ -0,0 +1,2 @@
++EXPO_PUBLIC_SUPABASE_URL=
++EXPO_PUBLIC_SUPABASE_ANON_KEY=
+diff --git a/apps/kaizen/jest.config.js b/apps/kaizen/jest.config.js
+new file mode 100644
+index 0000000..9a090f2
+--- /dev/null
++++ b/apps/kaizen/jest.config.js
+@@ -0,0 +1,10 @@
++module.exports = {
++  preset: 'jest-expo',
++  testPathIgnorePatterns: [
++    '/node_modules/',
++    '\\.integracion\\.test\\.ts$',
++  ],
++  moduleNameMapper: {
++    '^test-renderer$': 'react-test-renderer',
++  },
++}
+diff --git a/apps/kaizen/package-lock.json b/apps/kaizen/package-lock.json
+index f821771..5d8f5df 100644
+--- a/apps/kaizen/package-lock.json
++++ b/apps/kaizen/package-lock.json
+@@ -1,41 +1,44 @@
+ {
+   "name": "kaizen",
+   "version": "1.0.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "kaizen",
+       "version": "1.0.0",
+       "dependencies": {
++        "@react-native-async-storage/async-storage": "2.2.0",
+         "expo": "~57.0.14",
+         "expo-constants": "~57.0.12",
+         "expo-linking": "~57.0.6",
+         "expo-router": "~57.0.14",
+         "expo-status-bar": "~57.0.1",
+         "react": "19.2.3",
+         "react-native": "0.86.2",
+         "react-native-safe-area-context": "~5.7.0",
+-        "react-native-screens": "~4.26.0"
++        "react-native-screens": "~4.26.0",
++        "react-native-url-polyfill": "^4.0.0"
+       },
+       "devDependencies": {
+         "@react-native/jest-preset": "^0.86.2",
+         "@supabase/supabase-js": "^2.112.3",
+-        "@testing-library/react-native": "^14.0.1",
++        "@testing-library/react-native": "^13.1.1",
+         "@types/jest": "^29.5.14",
+         "@types/pg": "^8.21.0",
+         "@types/react": "~19.2.2",
+         "babel-preset-expo": "^57.0.7",
+         "jest": "^29.7.0",
+         "jest-expo": "^57.0.4",
+         "pg": "^8.23.0",
++        "react-test-renderer": "^19.2.3",
+         "typescript": "~6.0.3"
+       }
+     },
+     "node_modules/@adobe/css-tools": {
+       "version": "4.5.0",
+       "resolved": "https://registry.npmjs.org/@adobe/css-tools/-/css-tools-4.5.0.tgz",
+       "integrity": "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==",
+       "license": "MIT"
+     },
+     "node_modules/@babel/code-frame": {
+@@ -1797,30 +1800,20 @@
+       "integrity": "sha512-4QqS3LY5PBmTRHj9sAg1HLoPzqAI0uOX6wI/TRqHIcOxlFidy6YEmCQJk6FSZjNLGCeubDMfmkWL+qaLKhSGQA==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "@jest/types": "^29.6.3"
+       },
+       "engines": {
+         "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+-    "node_modules/@jest/diff-sequences": {
+-      "version": "30.4.0",
+-      "resolved": "https://registry.npmjs.org/@jest/diff-sequences/-/diff-sequences-30.4.0.tgz",
+-      "integrity": "sha512-zOpzlfUs45l6u7jm39qr87JCHUDsaeCtvL+kQe/Vn9jSnRB4/5IPXISm0h9I1vZW/o00Kn4UTJ2MOlhnUGwv3g==",
+-      "dev": true,
+-      "license": "MIT",
+-      "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+-      }
+-    },
+     "node_modules/@jest/environment": {
+       "version": "29.7.0",
+       "resolved": "https://registry.npmjs.org/@jest/environment/-/environment-29.7.0.tgz",
+       "integrity": "sha512-aQIfHDq33ExsN4jP1NWGXhxgQ/wixs60gDiKO+XVMd8Mn0NWPWgc34ZQDTb2jKaUWQ7MuwoitXAsN2XVXNMpAw==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "@jest/fake-timers": "^29.7.0",
+         "@jest/types": "^29.6.3",
+         "@types/node": "*",
+@@ -1868,30 +1861,20 @@
+         "@sinonjs/fake-timers": "^10.0.2",
+         "@types/node": "*",
+         "jest-message-util": "^29.7.0",
+         "jest-mock": "^29.7.0",
+         "jest-util": "^29.7.0"
+       },
+       "engines": {
+         "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+-    "node_modules/@jest/get-type": {
+-      "version": "30.1.0",
+-      "resolved": "https://registry.npmjs.org/@jest/get-type/-/get-type-30.1.0.tgz",
+-      "integrity": "sha512-eMbZE2hUnx1WV0pmURZY9XoXPkUYjpc55mb0CrhtdWLtzMQPFvu/rZkTLZFTsdaVQa+Tr4eWAteqcUzoawq/uA==",
+-      "dev": true,
+-      "license": "MIT",
+-      "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+-      }
+-    },
+     "node_modules/@jest/globals": {
+       "version": "29.7.0",
+       "resolved": "https://registry.npmjs.org/@jest/globals/-/globals-29.7.0.tgz",
+       "integrity": "sha512-mpiz3dutLbkW2MNFubUGUEVLkTGiqW6yLVTA+JbP6fI6J5iL9Y0Nlg8k95pcF8ctKwCS7WVxteBs29hhfAotzQ==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "@jest/environment": "^29.7.0",
+         "@jest/expect": "^29.7.0",
+         "@jest/types": "^29.6.3",
+@@ -2552,20 +2535,32 @@
+       "peerDependencies": {
+         "@types/react": "*",
+         "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+       },
+       "peerDependenciesMeta": {
+         "@types/react": {
+           "optional": true
+         }
+       }
+     },
++    "node_modules/@react-native-async-storage/async-storage": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/@react-native-async-storage/async-storage/-/async-storage-2.2.0.tgz",
++      "integrity": "sha512-gvRvjR5JAaUZF8tv2Kcq/Gbt3JHwbKFYfmb445rhOj6NUMx3qPLixmDx5pZAyb9at1bYvJ4/eTUipU5aki45xw==",
++      "license": "MIT",
++      "dependencies": {
++        "merge-options": "^3.0.4"
++      },
++      "peerDependencies": {
++        "react-native": "^0.0.0-0 || >=0.65 <1.0"
++      }
++    },
+     "node_modules/@react-native-masked-view/masked-view": {
+       "version": "0.3.2",
+       "resolved": "https://registry.npmjs.org/@react-native-masked-view/masked-view/-/masked-view-0.3.2.tgz",
+       "integrity": "sha512-XwuQoW7/GEgWRMovOQtX3A4PrXhyaZm0lVUiY8qJDvdngjLms9Cpdck6SmGAUNqQwcj2EadHC1HwL0bEyoa/SQ==",
+       "license": "MIT",
+       "peerDependencies": {
+         "react": ">=16",
+         "react-native": ">=0.57"
+       }
+     },
+@@ -2914,95 +2909,46 @@
+         "yarn": ">=1"
+       }
+     },
+     "node_modules/@testing-library/jest-dom/node_modules/dom-accessibility-api": {
+       "version": "0.6.3",
+       "resolved": "https://registry.npmjs.org/dom-accessibility-api/-/dom-accessibility-api-0.6.3.tgz",
+       "integrity": "sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==",
+       "license": "MIT"
+     },
+     "node_modules/@testing-library/react-native": {
+-      "version": "14.0.1",
+-      "resolved": "https://registry.npmjs.org/@testing-library/react-native/-/react-native-14.0.1.tgz",
+-      "integrity": "sha512-2r2e2y8SkUNRWKRXlUGqDYunB+AkbdXUPn49Bs5rpv9oxRb0K3USBVugbPbAKJjfj4w5Ba91NJ8LcQCZyopUZA==",
++      "version": "13.1.1",
++      "resolved": "https://registry.npmjs.org/@testing-library/react-native/-/react-native-13.1.1.tgz",
++      "integrity": "sha512-zRC5Z6XvvlkqXO5dfwcNNVD0w3aZj4W7hCBhNAvUVpN/J+CSIAAM98YFSqUBI2nH4JIilYjKQx+7UluohLF5ow==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+-        "jest-matcher-utils": "^30.4.1",
+-        "picocolors": "^1.1.1",
+-        "pretty-format": "^30.4.1",
++        "chalk": "^4.1.2",
++        "jest-matcher-utils": "^29.7.0",
++        "pretty-format": "^29.7.0",
+         "redent": "^3.0.0"
+       },
+       "engines": {
+-        "node": "^22.13.0 || >=24"
++        "node": ">=18"
+       },
+       "peerDependencies": {
+         "jest": ">=29.0.0",
+-        "react": ">=19.0.0",
+-        "react-native": ">=0.78",
+-        "test-renderer": "^1.0.0"
++        "react": ">=18.2.0",
++        "react-native": ">=0.71",
++        "react-test-renderer": ">=18.2.0"
+       },
+       "peerDependenciesMeta": {
+         "jest": {
+           "optional": true
+         }
+       }
+     },
+-    "node_modules/@testing-library/react-native/node_modules/@jest/schemas": {
+-      "version": "30.4.1",
+-      "resolved": "https://registry.npmjs.org/@jest/schemas/-/schemas-30.4.1.tgz",
+-      "integrity": "sha512-i6b4qw5qnP8c5FEeBJg/uZQ4ddrkN6Ca8qISJh0pr7a5hfn3h3v5x60BEbOC7OYAGZNMs1LfFLwnW2CuK8F57Q==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "@sinclair/typebox": "^0.34.0"
+-      },
+-      "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+-      }
+-    },
+-    "node_modules/@testing-library/react-native/node_modules/@sinclair/typebox": {
+-      "version": "0.34.52",
+-      "resolved": "https://registry.npmjs.org/@sinclair/typebox/-/typebox-0.34.52.tgz",
+-      "integrity": "sha512-XiMQh7qqVlxZzcVD+kkGMNGMzcTrDMLWI7S4x7z1MkCkbDPrekpZXEUK0eZqZFMuHQg2a2DZOcDIh9o5v3Gonw==",
+-      "dev": true,
+-      "license": "MIT"
+-    },
+-    "node_modules/@testing-library/react-native/node_modules/ansi-styles": {
+-      "version": "5.2.0",
+-      "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-5.2.0.tgz",
+-      "integrity": "sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA==",
+-      "dev": true,
+-      "license": "MIT",
+-      "engines": {
+-        "node": ">=10"
+-      },
+-      "funding": {
+-        "url": "https://github.com/chalk/ansi-styles?sponsor=1"
+-      }
+-    },
+-    "node_modules/@testing-library/react-native/node_modules/pretty-format": {
+-      "version": "30.4.1",
+-      "resolved": "https://registry.npmjs.org/pretty-format/-/pretty-format-30.4.1.tgz",
+-      "integrity": "sha512-K6KiKMHTL4jjX4u3Kir2EW07nRfcqVTXIImx50wbjHQTcZPgg+gjVeNTIT3l3L1Rd4UefxfogquC9J37SoFyyw==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "@jest/schemas": "30.4.1",
+-        "ansi-styles": "^5.2.0",
+-        "react-is-18": "npm:react-is@^18.3.1",
+-        "react-is-19": "npm:react-is@^19.2.5"
+-      },
+-      "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+-      }
+-    },
+     "node_modules/@testing-library/user-event": {
+       "version": "14.6.4",
+       "resolved": "https://registry.npmjs.org/@testing-library/user-event/-/user-event-14.6.4.tgz",
+       "integrity": "sha512-QCGwP6QrjypBLwyj5cuyfVamkaIEy/XGY+1VDehbtbQqOggYmTFpFOdWR5mPz14vX8vXLMVjDHlRNBcClyO9ew==",
+       "license": "MIT",
+       "engines": {
+         "node": ">=12",
+         "npm": ">=6"
+       },
+       "peerDependencies": {
+@@ -4793,52 +4739,20 @@
+         "@jest/expect-utils": "^29.7.0",
+         "jest-get-type": "^29.6.3",
+         "jest-matcher-utils": "^29.7.0",
+         "jest-message-util": "^29.7.0",
+         "jest-util": "^29.7.0"
+       },
+       "engines": {
+         "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+-    "node_modules/expect/node_modules/jest-diff": {
+-      "version": "29.7.0",
+-      "resolved": "https://registry.npmjs.org/jest-diff/-/jest-diff-29.7.0.tgz",
+-      "integrity": "sha512-LMIgiIrhigmPrs03JHpxUh2yISK3vLFPkAodPeo0+BuF7wA2FoQbkEg1u8gBYBThncu7e1oEDUfIXVuTqLRUjw==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "chalk": "^4.0.0",
+-        "diff-sequences": "^29.6.3",
+-        "jest-get-type": "^29.6.3",
+-        "pretty-format": "^29.7.0"
+-      },
+-      "engines": {
+-        "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+-      }
+-    },
+-    "node_modules/expect/node_modules/jest-matcher-utils": {
+-      "version": "29.7.0",
+-      "resolved": "https://registry.npmjs.org/jest-matcher-utils/-/jest-matcher-utils-29.7.0.tgz",
+-      "integrity": "sha512-sBkD+Xi9DtcChsI3L3u0+N0opgPYnCRPtGcQYrgXmR+hmt/fYfWAL0xRXYU8eWOdfuLgBe0YCW3AFtnRLagq/g==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "chalk": "^4.0.0",
+-        "jest-diff": "^29.7.0",
+-        "jest-get-type": "^29.6.3",
+-        "pretty-format": "^29.7.0"
+-      },
+-      "engines": {
+-        "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+-      }
+-    },
+     "node_modules/expo": {
+       "version": "57.0.14",
+       "resolved": "https://registry.npmjs.org/expo/-/expo-57.0.14.tgz",
+       "integrity": "sha512-vJ7V/VNr2IGxhhBdRs1qDExPbEe+DvfqVGp3818gyfr4k0l7mdBb1QuDFH0VCX6wT9/18EYxW7SQca4tXkzDYw==",
+       "license": "MIT",
+       "dependencies": {
+         "@babel/runtime": "^7.20.0",
+         "@expo/cli": "^57.0.16",
+         "@expo/config": "~57.0.8",
+         "@expo/config-plugins": "~57.0.8",
+@@ -6196,20 +6110,29 @@
+     },
+     "node_modules/is-number": {
+       "version": "7.0.0",
+       "resolved": "https://registry.npmjs.org/is-number/-/is-number-7.0.0.tgz",
+       "integrity": "sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==",
+       "license": "MIT",
+       "engines": {
+         "node": ">=0.12.0"
+       }
+     },
++    "node_modules/is-plain-obj": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/is-plain-obj/-/is-plain-obj-2.1.0.tgz",
++      "integrity": "sha512-YWnfyRwxL/+SsrWYfOpUtz5b3YD+nyfkHvjbcanzk8zgyO4ASD67uVMRt8k5bM4lLMDnXfriRhOpemw+NfT1eA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/is-potential-custom-element-name": {
+       "version": "1.0.1",
+       "resolved": "https://registry.npmjs.org/is-potential-custom-element-name/-/is-potential-custom-element-name-1.0.1.tgz",
+       "integrity": "sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ==",
+       "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/is-stream": {
+       "version": "2.0.1",
+       "resolved": "https://registry.npmjs.org/is-stream/-/is-stream-2.0.1.tgz",
+@@ -6389,52 +6312,20 @@
+         "p-limit": "^3.1.0",
+         "pretty-format": "^29.7.0",
+         "pure-rand": "^6.0.0",
+         "slash": "^3.0.0",
+         "stack-utils": "^2.0.3"
+       },
+       "engines": {
+         "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+-    "node_modules/jest-circus/node_modules/jest-diff": {
+-      "version": "29.7.0",
+-      "resolved": "https://registry.npmjs.org/jest-diff/-/jest-diff-29.7.0.tgz",
+-      "integrity": "sha512-LMIgiIrhigmPrs03JHpxUh2yISK3vLFPkAodPeo0+BuF7wA2FoQbkEg1u8gBYBThncu7e1oEDUfIXVuTqLRUjw==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "chalk": "^4.0.0",
+-        "diff-sequences": "^29.6.3",
+-        "jest-get-type": "^29.6.3",
+-        "pretty-format": "^29.7.0"
+-      },
+-      "engines": {
+-        "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+-      }
+-    },
+-    "node_modules/jest-circus/node_modules/jest-matcher-utils": {
+-      "version": "29.7.0",
+-      "resolved": "https://registry.npmjs.org/jest-matcher-utils/-/jest-matcher-utils-29.7.0.tgz",
+-      "integrity": "sha512-sBkD+Xi9DtcChsI3L3u0+N0opgPYnCRPtGcQYrgXmR+hmt/fYfWAL0xRXYU8eWOdfuLgBe0YCW3AFtnRLagq/g==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "chalk": "^4.0.0",
+-        "jest-diff": "^29.7.0",
+-        "jest-get-type": "^29.6.3",
+-        "pretty-format": "^29.7.0"
+-      },
+-      "engines": {
+-        "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+-      }
+-    },
+     "node_modules/jest-cli": {
+       "version": "29.7.0",
+       "resolved": "https://registry.npmjs.org/jest-cli/-/jest-cli-29.7.0.tgz",
+       "integrity": "sha512-OVVobw2IubN/GSYsxETi+gOe7Ka59EFMR/twOU3Jb2GnKKeMGJB5SGUUrEz3SFVmJASUdZUzy83sLNNQ2gZslg==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "@jest/core": "^29.7.0",
+         "@jest/test-result": "^29.7.0",
+         "@jest/types": "^29.6.3",
+@@ -6571,82 +6462,33 @@
+       "dev": true,
+       "license": "ISC",
+       "dependencies": {
+         "brace-expansion": "^1.1.7"
+       },
+       "engines": {
+         "node": "*"
+       }
+     },
+     "node_modules/jest-diff": {
+-      "version": "30.4.1",
+-      "resolved": "https://registry.npmjs.org/jest-diff/-/jest-diff-30.4.1.tgz",
+-      "integrity": "sha512-CRpFK0RtLriVDGcPPAnR6HMVI8bSR2jnUIgralhauzYQZIb4RH9AtEInTuQr65LmmGggGcRT6HIASxwqsVsmlA==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "@jest/diff-sequences": "30.4.0",
+-        "@jest/get-type": "30.1.0",
+-        "chalk": "^4.1.2",
+-        "pretty-format": "30.4.1"
+-      },
+-      "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+-      }
+-    },
+-    "node_modules/jest-diff/node_modules/@jest/schemas": {
+-      "version": "30.4.1",
+-      "resolved": "https://registry.npmjs.org/@jest/schemas/-/schemas-30.4.1.tgz",
+-      "integrity": "sha512-i6b4qw5qnP8c5FEeBJg/uZQ4ddrkN6Ca8qISJh0pr7a5hfn3h3v5x60BEbOC7OYAGZNMs1LfFLwnW2CuK8F57Q==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "@sinclair/typebox": "^0.34.0"
+-      },
+-      "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+-      }
+-    },
+-    "node_modules/jest-diff/node_modules/@sinclair/typebox": {
+-      "version": "0.34.52",
+-      "resolved": "https://registry.npmjs.org/@sinclair/typebox/-/typebox-0.34.52.tgz",
+-      "integrity": "sha512-XiMQh7qqVlxZzcVD+kkGMNGMzcTrDMLWI7S4x7z1MkCkbDPrekpZXEUK0eZqZFMuHQg2a2DZOcDIh9o5v3Gonw==",
+-      "dev": true,
+-      "license": "MIT"
+-    },
+-    "node_modules/jest-diff/node_modules/ansi-styles": {
+-      "version": "5.2.0",
+-      "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-5.2.0.tgz",
+-      "integrity": "sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA==",
+-      "dev": true,
+-      "license": "MIT",
+-      "engines": {
+-        "node": ">=10"
+-      },
+-      "funding": {
+-        "url": "https://github.com/chalk/ansi-styles?sponsor=1"
+-      }
+-    },
+-    "node_modules/jest-diff/node_modules/pretty-format": {
+-      "version": "30.4.1",
+-      "resolved": "https://registry.npmjs.org/pretty-format/-/pretty-format-30.4.1.tgz",
+-      "integrity": "sha512-K6KiKMHTL4jjX4u3Kir2EW07nRfcqVTXIImx50wbjHQTcZPgg+gjVeNTIT3l3L1Rd4UefxfogquC9J37SoFyyw==",
++      "version": "29.7.0",
++      "resolved": "https://registry.npmjs.org/jest-diff/-/jest-diff-29.7.0.tgz",
++      "integrity": "sha512-LMIgiIrhigmPrs03JHpxUh2yISK3vLFPkAodPeo0+BuF7wA2FoQbkEg1u8gBYBThncu7e1oEDUfIXVuTqLRUjw==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+-        "@jest/schemas": "30.4.1",
+-        "ansi-styles": "^5.2.0",
+-        "react-is-18": "npm:react-is@^18.3.1",
+-        "react-is-19": "npm:react-is@^19.2.5"
++        "chalk": "^4.0.0",
++        "diff-sequences": "^29.6.3",
++        "jest-get-type": "^29.6.3",
++        "pretty-format": "^29.7.0"
+       },
+       "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
++        "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+     "node_modules/jest-docblock": {
+       "version": "29.7.0",
+       "resolved": "https://registry.npmjs.org/jest-docblock/-/jest-docblock-29.7.0.tgz",
+       "integrity": "sha512-q617Auw3A612guyaFgsbFeYpNP5t2aoUNLwBUbc/0kD1R4t9ixDbyFTHd1nok4epoVFpr7PmeWHrhvuV3XaJ4g==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "detect-newline": "^3.0.0"
+@@ -6799,82 +6641,33 @@
+       "license": "MIT",
+       "dependencies": {
+         "jest-get-type": "^29.6.3",
+         "pretty-format": "^29.7.0"
+       },
+       "engines": {
+         "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+     "node_modules/jest-matcher-utils": {
+-      "version": "30.4.1",
+-      "resolved": "https://registry.npmjs.org/jest-matcher-utils/-/jest-matcher-utils-30.4.1.tgz",
+-      "integrity": "sha512-zvYfX5CaeEkFrrLS9suWe9rvJrm9J1Iv3ua8kIBv9GEPzcnsfBf0bob37la7s67fs0nlBC3EuvkOLnXQKxtx4A==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "@jest/get-type": "30.1.0",
+-        "chalk": "^4.1.2",
+-        "jest-diff": "30.4.1",
+-        "pretty-format": "30.4.1"
+-      },
+-      "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+-      }
+-    },
+-    "node_modules/jest-matcher-utils/node_modules/@jest/schemas": {
+-      "version": "30.4.1",
+-      "resolved": "https://registry.npmjs.org/@jest/schemas/-/schemas-30.4.1.tgz",
+-      "integrity": "sha512-i6b4qw5qnP8c5FEeBJg/uZQ4ddrkN6Ca8qISJh0pr7a5hfn3h3v5x60BEbOC7OYAGZNMs1LfFLwnW2CuK8F57Q==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "@sinclair/typebox": "^0.34.0"
+-      },
+-      "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
+-      }
+-    },
+-    "node_modules/jest-matcher-utils/node_modules/@sinclair/typebox": {
+-      "version": "0.34.52",
+-      "resolved": "https://registry.npmjs.org/@sinclair/typebox/-/typebox-0.34.52.tgz",
+-      "integrity": "sha512-XiMQh7qqVlxZzcVD+kkGMNGMzcTrDMLWI7S4x7z1MkCkbDPrekpZXEUK0eZqZFMuHQg2a2DZOcDIh9o5v3Gonw==",
+-      "dev": true,
+-      "license": "MIT"
+-    },
+-    "node_modules/jest-matcher-utils/node_modules/ansi-styles": {
+-      "version": "5.2.0",
+-      "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-5.2.0.tgz",
+-      "integrity": "sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA==",
+-      "dev": true,
+-      "license": "MIT",
+-      "engines": {
+-        "node": ">=10"
+-      },
+-      "funding": {
+-        "url": "https://github.com/chalk/ansi-styles?sponsor=1"
+-      }
+-    },
+-    "node_modules/jest-matcher-utils/node_modules/pretty-format": {
+-      "version": "30.4.1",
+-      "resolved": "https://registry.npmjs.org/pretty-format/-/pretty-format-30.4.1.tgz",
+-      "integrity": "sha512-K6KiKMHTL4jjX4u3Kir2EW07nRfcqVTXIImx50wbjHQTcZPgg+gjVeNTIT3l3L1Rd4UefxfogquC9J37SoFyyw==",
++      "version": "29.7.0",
++      "resolved": "https://registry.npmjs.org/jest-matcher-utils/-/jest-matcher-utils-29.7.0.tgz",
++      "integrity": "sha512-sBkD+Xi9DtcChsI3L3u0+N0opgPYnCRPtGcQYrgXmR+hmt/fYfWAL0xRXYU8eWOdfuLgBe0YCW3AFtnRLagq/g==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+-        "@jest/schemas": "30.4.1",
+-        "ansi-styles": "^5.2.0",
+-        "react-is-18": "npm:react-is@^18.3.1",
+-        "react-is-19": "npm:react-is@^19.2.5"
++        "chalk": "^4.0.0",
++        "jest-diff": "^29.7.0",
++        "jest-get-type": "^29.6.3",
++        "pretty-format": "^29.7.0"
+       },
+       "engines": {
+-        "node": "^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0"
++        "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+     "node_modules/jest-message-util": {
+       "version": "29.7.0",
+       "resolved": "https://registry.npmjs.org/jest-message-util/-/jest-message-util-29.7.0.tgz",
+       "integrity": "sha512-GBEV4GRADeP+qtB2+6u61stea8mGcOT4mCtrYISZwfu9/ISHFJ/5zOMXYbpBE9RsS5+Gb63DW4FgmnKJ79Kf6w==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "@babel/code-frame": "^7.12.13",
+@@ -7135,52 +6928,20 @@
+         "jest-message-util": "^29.7.0",
+         "jest-util": "^29.7.0",
+         "natural-compare": "^1.4.0",
+         "pretty-format": "^29.7.0",
+         "semver": "^7.5.3"
+       },
+       "engines": {
+         "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+       }
+     },
+-    "node_modules/jest-snapshot/node_modules/jest-diff": {
+-      "version": "29.7.0",
+-      "resolved": "https://registry.npmjs.org/jest-diff/-/jest-diff-29.7.0.tgz",
+-      "integrity": "sha512-LMIgiIrhigmPrs03JHpxUh2yISK3vLFPkAodPeo0+BuF7wA2FoQbkEg1u8gBYBThncu7e1oEDUfIXVuTqLRUjw==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "chalk": "^4.0.0",
+-        "diff-sequences": "^29.6.3",
+-        "jest-get-type": "^29.6.3",
+-        "pretty-format": "^29.7.0"
+-      },
+-      "engines": {
+-        "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+-      }
+-    },
+-    "node_modules/jest-snapshot/node_modules/jest-matcher-utils": {
+-      "version": "29.7.0",
+-      "resolved": "https://registry.npmjs.org/jest-matcher-utils/-/jest-matcher-utils-29.7.0.tgz",
+-      "integrity": "sha512-sBkD+Xi9DtcChsI3L3u0+N0opgPYnCRPtGcQYrgXmR+hmt/fYfWAL0xRXYU8eWOdfuLgBe0YCW3AFtnRLagq/g==",
+-      "dev": true,
+-      "license": "MIT",
+-      "dependencies": {
+-        "chalk": "^4.0.0",
+-        "jest-diff": "^29.7.0",
+-        "jest-get-type": "^29.6.3",
+-        "pretty-format": "^29.7.0"
+-      },
+-      "engines": {
+-        "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+-      }
+-    },
+     "node_modules/jest-util": {
+       "version": "29.7.0",
+       "resolved": "https://registry.npmjs.org/jest-util/-/jest-util-29.7.0.tgz",
+       "integrity": "sha512-z6EbKajIpqGKU56y5KBUgy1dt1ihhQJgWzUlZHArA/+X2ad7Cb5iF+AK1EWVL/Bo7Rz9uurpqw6SiBCefUbCGA==",
+       "license": "MIT",
+       "dependencies": {
+         "@jest/types": "^29.6.3",
+         "@types/node": "*",
+         "chalk": "^4.0.0",
+         "ci-info": "^3.2.0",
+@@ -8053,20 +7814,32 @@
+       "engines": {
+         "node": ">= 0.4"
+       }
+     },
+     "node_modules/memoize-one": {
+       "version": "5.2.1",
+       "resolved": "https://registry.npmjs.org/memoize-one/-/memoize-one-5.2.1.tgz",
+       "integrity": "sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q==",
+       "license": "MIT"
+     },
++    "node_modules/merge-options": {
++      "version": "3.0.4",
++      "resolved": "https://registry.npmjs.org/merge-options/-/merge-options-3.0.4.tgz",
++      "integrity": "sha512-2Sug1+knBjkaMsMgf1ctR1Ujx+Ayku4EdJN4Z+C2+JzoeF7A3OZ9KM2GY0CpQS51NR61LTurMJrRKPhSs3ZRTQ==",
++      "license": "MIT",
++      "dependencies": {
++        "is-plain-obj": "^2.1.0"
++      },
++      "engines": {
++        "node": ">=10"
++      }
++    },
+     "node_modules/merge-stream": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/merge-stream/-/merge-stream-2.0.0.tgz",
+       "integrity": "sha512-abv/qOcuPfk3URPfDzmZU1LKmuw8kT+0nIHvKrKgFrwifol/doWcdA4ZqsWQ8ENrFKkd67Mfpo/LovbIUsbt3w==",
+       "license": "MIT"
+     },
+     "node_modules/metro": {
+       "version": "0.84.4",
+       "resolved": "https://registry.npmjs.org/metro/-/metro-0.84.4.tgz",
+       "integrity": "sha512-8ETTubqfD6ornDy2zYDvRcKnVDOXdFJsjetYDBsY4oAsb6NJkiwFR+FaMESyGppFmQUyBQA4H4sFGxzcQSGtFA==",
+@@ -9333,36 +9106,20 @@
+       "peerDependencies": {
+         "react": ">=17.0.0"
+       }
+     },
+     "node_modules/react-is": {
+       "version": "18.3.1",
+       "resolved": "https://registry.npmjs.org/react-is/-/react-is-18.3.1.tgz",
+       "integrity": "sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==",
+       "license": "MIT"
+     },
+-    "node_modules/react-is-18": {
+-      "name": "react-is",
+-      "version": "18.3.1",
+-      "resolved": "https://registry.npmjs.org/react-is/-/react-is-18.3.1.tgz",
+-      "integrity": "sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==",
+-      "dev": true,
+-      "license": "MIT"
+-    },
+-    "node_modules/react-is-19": {
+-      "name": "react-is",
+-      "version": "19.2.8",
+-      "resolved": "https://registry.npmjs.org/react-is/-/react-is-19.2.8.tgz",
+-      "integrity": "sha512-s5un28nYxKJw5gvUHyW5PCC28CvBqLu9r3cWgzHT4Vo/5fqqkFcdRYsGcKf50WMPpjjFZS5d76fn3YCo2njKwQ==",
+-      "dev": true,
+-      "license": "MIT"
+-    },
+     "node_modules/react-native": {
+       "version": "0.86.2",
+       "resolved": "https://registry.npmjs.org/react-native/-/react-native-0.86.2.tgz",
+       "integrity": "sha512-zbJXGZpwfZGA79Z9ob6Atvfx4nAQL8yJBa35s58E4Oo+khPykfQP2sTeumkKbjwajFYfVayg8pj7Il9nIfTk7A==",
+       "license": "MIT",
+       "dependencies": {
+         "@react-native/assets-registry": "0.86.2",
+         "@react-native/codegen": "0.86.2",
+         "@react-native/community-cli-plugin": "0.86.2",
+         "@react-native/gradle-plugin": "0.86.2",
+@@ -9448,20 +9205,29 @@
+       "license": "MIT",
+       "dependencies": {
+         "react-freeze": "^1.0.0",
+         "warn-once": "^0.1.0"
+       },
+       "peerDependencies": {
+         "react": "*",
+         "react-native": "*"
+       }
+     },
++    "node_modules/react-native-url-polyfill": {
++      "version": "4.0.0",
++      "resolved": "https://registry.npmjs.org/react-native-url-polyfill/-/react-native-url-polyfill-4.0.0.tgz",
++      "integrity": "sha512-eqYM3wBAA0eL1sPYbBAoNfbES3+NkgcxUdelQ7QzmoVtqKB5qGG0U13MPTRUroAWK+y2EoJFS3MZUK0fwTf0pA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "react-native": "*"
++      }
++    },
+     "node_modules/react-native/node_modules/commander": {
+       "version": "12.1.0",
+       "resolved": "https://registry.npmjs.org/commander/-/commander-12.1.0.tgz",
+       "integrity": "sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==",
+       "license": "MIT",
+       "engines": {
+         "node": ">=18"
+       }
+     },
+     "node_modules/react-refresh": {
+diff --git a/apps/kaizen/package.json b/apps/kaizen/package.json
+index 5c816a5..93de487 100644
+--- a/apps/kaizen/package.json
++++ b/apps/kaizen/package.json
+@@ -1,48 +1,44 @@
+ {
+   "name": "kaizen",
+   "version": "1.0.0",
+   "main": "expo-router/entry",
+   "dependencies": {
++    "@react-native-async-storage/async-storage": "2.2.0",
+     "expo": "~57.0.14",
+     "expo-constants": "~57.0.12",
+     "expo-linking": "~57.0.6",
+     "expo-router": "~57.0.14",
+     "expo-status-bar": "~57.0.1",
+     "react": "19.2.3",
+     "react-native": "0.86.2",
+     "react-native-safe-area-context": "~5.7.0",
+-    "react-native-screens": "~4.26.0"
++    "react-native-screens": "~4.26.0",
++    "react-native-url-polyfill": "^4.0.0"
+   },
+   "devDependencies": {
+     "@react-native/jest-preset": "^0.86.2",
+     "@supabase/supabase-js": "^2.112.3",
+-    "@testing-library/react-native": "^14.0.1",
++    "@testing-library/react-native": "^13.1.1",
+     "@types/jest": "^29.5.14",
+     "@types/pg": "^8.21.0",
+     "@types/react": "~19.2.2",
+     "babel-preset-expo": "^57.0.7",
+     "jest": "^29.7.0",
+     "jest-expo": "^57.0.4",
+     "pg": "^8.23.0",
++    "react-test-renderer": "^19.2.3",
+     "typescript": "~6.0.3"
+   },
+   "scripts": {
+     "start": "expo start",
+     "android": "expo start --android",
+     "ios": "expo start --ios",
+     "web": "expo start --web",
+     "dev": "expo start",
+     "test": "jest",
+     "test:watch": "jest --watch",
+     "test:integracion": "jest --config jest.integracion.config.js",
+     "typecheck": "tsc --noEmit"
+   },
+-  "jest": {
+-    "preset": "jest-expo",
+-    "testPathIgnorePatterns": [
+-      "/node_modules/",
+-      "\\.integracion\\.test\\.ts$"
+-    ]
+-  },
+   "private": true
+ }
+diff --git a/apps/kaizen/src/datos/sesion.test.tsx b/apps/kaizen/src/datos/sesion.test.tsx
+new file mode 100644
+index 0000000..3491333
+--- /dev/null
++++ b/apps/kaizen/src/datos/sesion.test.tsx
+@@ -0,0 +1,24 @@
++import { render, screen, waitFor } from '@testing-library/react-native'
++import { Text } from 'react-native'
++import { ProveedorSesion, useSesion } from './sesion'
++
++jest.mock('./supabase', () => ({
++  supabase: {
++    auth: {
++      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
++      onAuthStateChange: jest.fn().mockReturnValue({
++        data: { subscription: { unsubscribe: jest.fn() } },
++      }),
++    },
++  },
++}))
++
++function Sonda() {
++  const { sesion, cargando } = useSesion()
++  return <Text>{cargando ? 'cargando' : sesion ? 'dentro' : 'fuera'}</Text>
++}
++
++it('empieza cargando y acaba sin sesión', async () => {
++  render(<ProveedorSesion><Sonda /></ProveedorSesion>)
++  await waitFor(() => expect(screen.getByText('fuera')).toBeTruthy())
++})
+diff --git a/apps/kaizen/src/datos/sesion.tsx b/apps/kaizen/src/datos/sesion.tsx
+new file mode 100644
+index 0000000..c282a82
+--- /dev/null
++++ b/apps/kaizen/src/datos/sesion.tsx
+@@ -0,0 +1,27 @@
++import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
++import type { Session } from '@supabase/supabase-js'
++import { supabase } from './supabase'
++
++type Estado = { sesion: Session | null; cargando: boolean }
++
++const Contexto = createContext<Estado>({ sesion: null, cargando: true })
++
++export function ProveedorSesion({ children }: { children: ReactNode }) {
++  const [estado, setEstado] = useState<Estado>({ sesion: null, cargando: true })
++
++  useEffect(() => {
++    supabase.auth.getSession().then(({ data }) => {
++      setEstado({ sesion: data.session, cargando: false })
++    })
++    const { data } = supabase.auth.onAuthStateChange((_evento, sesion) => {
++      setEstado({ sesion, cargando: false })
++    })
++    return () => data.subscription.unsubscribe()
++  }, [])
++
++  return <Contexto.Provider value={estado}>{children}</Contexto.Provider>
++}
++
++export function useSesion(): Estado {
++  return useContext(Contexto)
++}
+diff --git a/apps/kaizen/src/datos/supabase.ts b/apps/kaizen/src/datos/supabase.ts
+new file mode 100644
+index 0000000..a3a137e
+--- /dev/null
++++ b/apps/kaizen/src/datos/supabase.ts
+@@ -0,0 +1,19 @@
++import 'react-native-url-polyfill/auto'
++import AsyncStorage from '@react-native-async-storage/async-storage'
++import { createClient } from '@supabase/supabase-js'
++
++const url = process.env.EXPO_PUBLIC_SUPABASE_URL
++const clave = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
++
++if (!url || !clave) {
++  throw new Error('Faltan EXPO_PUBLIC_SUPABASE_URL o EXPO_PUBLIC_SUPABASE_ANON_KEY')
++}
++
++export const supabase = createClient(url, clave, {
++  auth: {
++    storage: AsyncStorage,
++    autoRefreshToken: true,
++    persistSession: true,
++    detectSessionInUrl: false,
++  },
++})

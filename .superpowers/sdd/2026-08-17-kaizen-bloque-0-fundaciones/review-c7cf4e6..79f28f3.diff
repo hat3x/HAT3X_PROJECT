@@ -1,0 +1,271 @@
+# Review package: c7cf4e6..79f28f3
+
+## Commits
+79f28f3 feat(kaizen): autenticacion con correo y Apple
+
+## Files changed
+ apps/kaizen/package-lock.json               | 61 +++++++++++++++++++++++++++++
+ apps/kaizen/package.json                    |  4 ++
+ apps/kaizen/src/datos/autenticacion.test.ts | 28 +++++++++++++
+ apps/kaizen/src/datos/autenticacion.ts      | 43 ++++++++++++++++++++
+ 4 files changed, 136 insertions(+)
+
+## Diff
+diff --git a/apps/kaizen/package-lock.json b/apps/kaizen/package-lock.json
+index 5d8f5df..d51bb51 100644
+--- a/apps/kaizen/package-lock.json
++++ b/apps/kaizen/package-lock.json
+@@ -3,24 +3,28 @@
+   "version": "1.0.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "kaizen",
+       "version": "1.0.0",
+       "dependencies": {
+         "@react-native-async-storage/async-storage": "2.2.0",
+         "expo": "~57.0.14",
++        "expo-apple-authentication": "^57.0.1",
++        "expo-auth-session": "^57.0.7",
+         "expo-constants": "~57.0.12",
++        "expo-crypto": "^57.0.1",
+         "expo-linking": "~57.0.6",
+         "expo-router": "~57.0.14",
+         "expo-status-bar": "~57.0.1",
++        "expo-web-browser": "^57.0.2",
+         "react": "19.2.3",
+         "react-native": "0.86.2",
+         "react-native-safe-area-context": "~5.7.0",
+         "react-native-screens": "~4.26.0",
+         "react-native-url-polyfill": "^4.0.0"
+       },
+       "devDependencies": {
+         "@react-native/jest-preset": "^0.86.2",
+         "@supabase/supabase-js": "^2.112.3",
+         "@testing-library/react-native": "^13.1.1",
+@@ -4801,33 +4805,80 @@
+           "optional": true
+         },
+         "react-native-web": {
+           "optional": true
+         },
+         "react-native-webview": {
+           "optional": true
+         }
+       }
+     },
++    "node_modules/expo-apple-authentication": {
++      "version": "57.0.1",
++      "resolved": "https://registry.npmjs.org/expo-apple-authentication/-/expo-apple-authentication-57.0.1.tgz",
++      "integrity": "sha512-pqAIaiTa/ycNl+XqNg5UMVT5TBgl6q6djTtoIcUmDItjVBA1IDHsQEs+leo+8+fG5hhuempZLSqBVVn+RJKKWA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*",
++        "react": "*",
++        "react-native": "*"
++      }
++    },
++    "node_modules/expo-application": {
++      "version": "57.0.2",
++      "resolved": "https://registry.npmjs.org/expo-application/-/expo-application-57.0.2.tgz",
++      "integrity": "sha512-q31YwcXyymviAmdrtDfAg3Dld4VMxLCNAfgMHip7vZpPX4lzF/AfwsywqBJUAjQnJknzaNAkzqvMVjO5XmKYDA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
++    "node_modules/expo-auth-session": {
++      "version": "57.0.7",
++      "resolved": "https://registry.npmjs.org/expo-auth-session/-/expo-auth-session-57.0.7.tgz",
++      "integrity": "sha512-Rha7PX+Xp7CVoQJmNGTeQSlweaUL/fwBMtEvPyhZECe0cdp9Pc/MR/7Dn4d8IboXax2kKMCPKSkr/Rm+mpVxQA==",
++      "license": "MIT",
++      "dependencies": {
++        "expo-application": "~57.0.2",
++        "expo-constants": "~57.0.11",
++        "expo-crypto": "~57.0.1",
++        "expo-linking": "~57.0.6",
++        "expo-web-browser": "~57.0.2",
++        "invariant": "^2.2.4"
++      },
++      "peerDependencies": {
++        "react": "*",
++        "react-native": "*"
++      }
++    },
+     "node_modules/expo-constants": {
+       "version": "57.0.12",
+       "resolved": "https://registry.npmjs.org/expo-constants/-/expo-constants-57.0.12.tgz",
+       "integrity": "sha512-js9qxZw4G9ulSc72GGpYGwtmk/IzFcf6/tTcEG6wB8HTlkunMS4W86R+4e6oHIrIkHA7W6s/79Se+E+DC3RAqA==",
+       "license": "MIT",
+       "dependencies": {
+         "@expo/env": "~2.4.2"
+       },
+       "peerDependencies": {
+         "expo": "*",
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-crypto": {
++      "version": "57.0.1",
++      "resolved": "https://registry.npmjs.org/expo-crypto/-/expo-crypto-57.0.1.tgz",
++      "integrity": "sha512-xwegXQw3ATgeL1ZuqbSNrGzOeG+zNeh6Z6DSJk825Qpa3TEQQ1kG3ioE1p3g/SNF373BAVz2iBKUTSytlIbBRA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
+     "node_modules/expo-font": {
+       "version": "57.0.1",
+       "resolved": "https://registry.npmjs.org/expo-font/-/expo-font-57.0.1.tgz",
+       "integrity": "sha512-QyS9L1Kh9sKJg4gfU6rdbpxpmH+DyzBX8z6jVvXMUDoqLr1GqmkO/Wu379KCXjL///kWbhpNlbi7AgBuj4VdIQ==",
+       "license": "MIT",
+       "dependencies": {
+         "fontfaceobserver": "^2.1.0"
+       },
+       "peerDependencies": {
+         "expo": "*",
+@@ -5098,20 +5149,30 @@
+         "@expo-google-fonts/material-symbols": "^0.4.1",
+         "sf-symbols-typescript": "^2.0.0"
+       },
+       "peerDependencies": {
+         "expo": "*",
+         "expo-font": "*",
+         "react": "*",
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-web-browser": {
++      "version": "57.0.2",
++      "resolved": "https://registry.npmjs.org/expo-web-browser/-/expo-web-browser-57.0.2.tgz",
++      "integrity": "sha512-3vl5kvd7PB48ub6PpNIJUuPxO8xVa6D8RnIgNba6SXRwqFprOfeEZgwTgtm41kz0AAtvMOztUVNEUkwrHKjqMQ==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*",
++        "react-native": "*"
++      }
++    },
+     "node_modules/expo/node_modules/@expo/cli": {
+       "version": "57.0.16",
+       "resolved": "https://registry.npmjs.org/@expo/cli/-/cli-57.0.16.tgz",
+       "integrity": "sha512-+HyMY2nAS6QBJb0nSeMz92p11bZ1AtWSRnhWnklznN07IRoQirisnKq2vr18Ayjb/fnb5F/um+n6FRhF0fZm1Q==",
+       "license": "MIT",
+       "dependencies": {
+         "@expo/code-signing-certificates": "^0.0.6",
+         "@expo/config": "~57.0.8",
+         "@expo/config-plugins": "~57.0.8",
+         "@expo/devcert": "^1.2.1",
+diff --git a/apps/kaizen/package.json b/apps/kaizen/package.json
+index 93de487..a84dfb0 100644
+--- a/apps/kaizen/package.json
++++ b/apps/kaizen/package.json
+@@ -1,21 +1,25 @@
+ {
+   "name": "kaizen",
+   "version": "1.0.0",
+   "main": "expo-router/entry",
+   "dependencies": {
+     "@react-native-async-storage/async-storage": "2.2.0",
+     "expo": "~57.0.14",
++    "expo-apple-authentication": "^57.0.1",
++    "expo-auth-session": "^57.0.7",
+     "expo-constants": "~57.0.12",
++    "expo-crypto": "^57.0.1",
+     "expo-linking": "~57.0.6",
+     "expo-router": "~57.0.14",
+     "expo-status-bar": "~57.0.1",
++    "expo-web-browser": "^57.0.2",
+     "react": "19.2.3",
+     "react-native": "0.86.2",
+     "react-native-safe-area-context": "~5.7.0",
+     "react-native-screens": "~4.26.0",
+     "react-native-url-polyfill": "^4.0.0"
+   },
+   "devDependencies": {
+     "@react-native/jest-preset": "^0.86.2",
+     "@supabase/supabase-js": "^2.112.3",
+     "@testing-library/react-native": "^13.1.1",
+diff --git a/apps/kaizen/src/datos/autenticacion.test.ts b/apps/kaizen/src/datos/autenticacion.test.ts
+new file mode 100644
+index 0000000..8d67032
+--- /dev/null
++++ b/apps/kaizen/src/datos/autenticacion.test.ts
+@@ -0,0 +1,28 @@
++import { entrarConCorreo, salir } from './autenticacion'
++
++const mockSignInWithPassword = jest.fn()
++const mockSignOut = jest.fn()
++
++jest.mock('./supabase', () => ({
++  supabase: { auth: { signInWithPassword: (...a: unknown[]) => mockSignInWithPassword(...a),
++                      signOut: () => mockSignOut() } },
++}))
++
++beforeEach(() => jest.clearAllMocks())
++
++it('devuelve error nulo cuando el acceso funciona', async () => {
++  mockSignInWithPassword.mockResolvedValue({ error: null })
++  await expect(entrarConCorreo('a@b.c', 'clave')).resolves.toEqual({ error: null })
++})
++
++it('traduce el error de credenciales a un mensaje en español', async () => {
++  mockSignInWithPassword.mockResolvedValue({ error: { message: 'Invalid login credentials' } })
++  const { error } = await entrarConCorreo('a@b.c', 'mal')
++  expect(error).toBe('Correo o contraseña incorrectos.')
++})
++
++it('salir llama a signOut', async () => {
++  mockSignOut.mockResolvedValue({ error: null })
++  await salir()
++  expect(mockSignOut).toHaveBeenCalled()
++})
+diff --git a/apps/kaizen/src/datos/autenticacion.ts b/apps/kaizen/src/datos/autenticacion.ts
+new file mode 100644
+index 0000000..1eaedfb
+--- /dev/null
++++ b/apps/kaizen/src/datos/autenticacion.ts
+@@ -0,0 +1,43 @@
++import * as AppleAuthentication from 'expo-apple-authentication'
++import { supabase } from './supabase'
++
++export type Resultado = { error: string | null }
++
++const MENSAJES: Record<string, string> = {
++  'Invalid login credentials': 'Correo o contraseña incorrectos.',
++  'User already registered': 'Ya existe una cuenta con ese correo.',
++}
++
++function traducir(mensaje: string): string {
++  return MENSAJES[mensaje] ?? 'No hemos podido completar la operación. Inténtalo de nuevo.'
++}
++
++export async function entrarConCorreo(correo: string, contrasena: string): Promise<Resultado> {
++  const { error } = await supabase.auth.signInWithPassword({ email: correo, password: contrasena })
++  return { error: error ? traducir(error.message) : null }
++}
++
++export async function registrarConCorreo(correo: string, contrasena: string): Promise<Resultado> {
++  const { error } = await supabase.auth.signUp({ email: correo, password: contrasena })
++  return { error: error ? traducir(error.message) : null }
++}
++
++export async function entrarConApple(): Promise<Resultado> {
++  try {
++    const credencial = await AppleAuthentication.signInAsync({
++      requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME],
++    })
++    if (!credencial.identityToken) return { error: 'Apple no ha devuelto un token válido.' }
++    const { error } = await supabase.auth.signInWithIdToken({
++      provider: 'apple', token: credencial.identityToken,
++    })
++    return { error: error ? traducir(error.message) : null }
++  } catch {
++    return { error: null } // el usuario canceló
++  }
++}
++
++export async function salir(): Promise<Resultado> {
++  const { error } = await supabase.auth.signOut()
++  return { error: error ? traducir(error.message) : null }
++}

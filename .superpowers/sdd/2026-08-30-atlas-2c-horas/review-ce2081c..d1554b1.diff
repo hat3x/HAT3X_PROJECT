@@ -1,0 +1,206 @@
+# Review package: ce2081c..d1554b1
+
+## Commits
+d1554b1 fix(atlas): aislar listarTramos por usuarios propios del test y documentar el corte por inicio
+7b18217 fix(atlas): tsc limpio en tests de horas y fichajes con encadenamiento opcional
+
+## Files changed
+ apps/atlas/src/lib/db/fichajes.ts           |  9 ++++++++-
+ apps/atlas/src/tests/db/fichajes.test.ts    | 22 +++++++++++++++-------
+ apps/atlas/src/tests/horas/abiertos.test.ts | 10 +++++-----
+ 3 files changed, 28 insertions(+), 13 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/src/lib/db/fichajes.ts b/apps/atlas/src/lib/db/fichajes.ts
+index 2ed803d..75fc841 100644
+--- a/apps/atlas/src/lib/db/fichajes.ts
++++ b/apps/atlas/src/lib/db/fichajes.ts
+@@ -149,21 +149,28 @@ export async function anadirTramo(sb: Sb, e: EntradaTramo, ahoraMs: number): Pro
+     proyecto_id: e.proyectoId,
+     cliente_id: e.clienteId,
+     nota: e.nota,
+     inicio: e.inicio,
+     fin: e.fin,
+     origen: "anadido",
+   });
+   return error ? { ok: false, error: error.message } : { ok: true };
+ }
+ 
+-/** Los tramos cuyo inicio cae en el rango. Quién los ve lo decide RLS. */
++/**
++ * Los tramos cuyo inicio cae en el rango. Quién los ve lo decide RLS.
++ *
++ * El corte es por `inicio`, no por `fin`: un tramo que empieza el 31 a las
++ * 23:00 y termina el 1 a las 02:00 cuenta entero en el mes en que empezó.
++ * Es a propósito — así un mismo tramo nunca se cuenta dos veces, ni se
++ * parte entre dos listados.
++ */
+ export async function listarTramos(
+   sb: Sb,
+   rango: { desde: string; hasta: string }
+ ): Promise<Tramo[]> {
+   const { data, error } = await sb
+     .from("fichajes")
+     .select(CAMPOS)
+     .gte("inicio", rango.desde)
+     .lt("inicio", rango.hasta)
+     .order("inicio", { ascending: false });
+diff --git a/apps/atlas/src/tests/db/fichajes.test.ts b/apps/atlas/src/tests/db/fichajes.test.ts
+index 39990ce..72df8d2 100644
+--- a/apps/atlas/src/tests/db/fichajes.test.ts
++++ b/apps/atlas/src/tests/db/fichajes.test.ts
+@@ -4,20 +4,21 @@ import { createClient } from "@supabase/supabase-js";
+ import { Client } from "pg";
+ import {
+   validarTramo,
+   fichajeEnCurso,
+   empezar,
+   parar,
+   anadirTramo,
+   listarTramos,
+ } from "@/lib/db/fichajes";
+ import type { Database } from "@/types/supabase";
++import type { Tramo } from "@/lib/horas/tramos";
+ 
+ const URL_API = "http://127.0.0.1:54321";
+ const ANON =
+   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+ const SERVICE =
+   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+ const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+ 
+ const CORREO_DUENYO = "duenyo-fichajes-db@atlas.test";
+ const CORREO_COLAB = "colab-fichajes-db@atlas.test";
+@@ -29,20 +30,28 @@ const RANGO = { desde: "2026-08-01T00:00:00Z", hasta: "2026-09-01T00:00:00Z" };
+ 
+ let pg: Client;
+ let admin: ReturnType<typeof createClient<Database>>;
+ let sbDuenyo: ReturnType<typeof createClient<Database>>;
+ let sbColab: ReturnType<typeof createClient<Database>>;
+ let idDuenyo = "";
+ let idColab = "";
+ let idProyecto = "";
+ let idCliente = "";
+ 
++// El propietario ve TODAS las filas de `fichajes`, no solo las de este fichero;
++// sin este filtro, otro test que inserte en el mismo rango de fechas (p.ej.
++// `esquema/fichajes.test.ts`) podría colarse en el aserto.
++function soloMios(tramos: Tramo[]): Tramo[] {
++  const mios = new Set([idDuenyo, idColab]);
++  return tramos.filter((t) => mios.has(t.usuarioId));
++}
++
+ async function altaUsuario(correo: string, propietario: boolean, clave: string) {
+   const creado = await admin.auth.admin.createUser({
+     email: correo,
+     password: "contrasena-de-prueba",
+     email_confirm: true,
+   });
+   if (creado.error) throw creado.error;
+   await pg.query(`INSERT INTO perfiles (id, nombre, es_propietario) VALUES ($1,$2,$3)`, [
+     creado.data.user.id,
+     propietario ? "Dueño" : "Colab",
+@@ -191,52 +200,51 @@ describe("fichar", () => {
+     expect(r).toEqual({ ok: false, error: "No hay ningún fichaje en curso." });
+   });
+ 
+   it("un tramo añadido queda marcado como añadido", async () => {
+     const r = await anadirTramo(
+       sbDuenyo,
+       { proyectoId: null, clienteId: idCliente, nota: "llamada", inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T09:00:00Z" },
+       AHORA
+     );
+     expect(r).toEqual({ ok: true });
+-    const [t] = await listarTramos(sbDuenyo, RANGO);
+-    expect(t.origen).toBe("anadido");
+-    expect(t.nota).toBe("llamada");
++    const [t] = soloMios(await listarTramos(sbDuenyo, RANGO));
++    expect(t?.origen).toBe("anadido");
++    expect(t?.nota).toBe("llamada");
+   });
+ 
+   it("un tramo inválido no llega a la base", async () => {
+     const r = await anadirTramo(
+       sbDuenyo,
+       { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T09:00:00Z" },
+       AHORA
+     );
+     expect(r.ok).toBe(false);
+-    expect(await listarTramos(sbDuenyo, RANGO)).toEqual([]);
++    expect(soloMios(await listarTramos(sbDuenyo, RANGO))).toEqual([]);
+   });
+ });
+ 
+ describe("quién ve qué (RLS, con usuarios reales)", () => {
+   it("el colaborador ficha lo suyo y solo ve lo suyo; el propietario ve a los dos", async () => {
+     await anadirTramo(
+       sbColab,
+       { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T09:00:00Z" },
+       AHORA
+     );
+     await anadirTramo(
+       sbDuenyo,
+       { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T11:00:00Z" },
+       AHORA
+     );
+-    const mios = new Set([idDuenyo, idColab]);
+-    const veColab = (await listarTramos(sbColab, RANGO)).filter((t) => mios.has(t.usuarioId));
++    const veColab = soloMios(await listarTramos(sbColab, RANGO));
+     expect(veColab.map((t) => t.usuarioId)).toEqual([idColab]);
+-    const veDuenyo = (await listarTramos(sbDuenyo, RANGO)).filter((t) => mios.has(t.usuarioId));
++    const veDuenyo = soloMios(await listarTramos(sbDuenyo, RANGO));
+     expect(veDuenyo).toHaveLength(2);
+     // El nombre viaja con el tramo: el propietario sabe de quién es cada hora.
+     expect(veDuenyo.map((t) => t.usuarioNombre).sort()).toEqual(["Colab", "Dueño"]);
+   });
+ 
+   it("un proyecto que el colaborador no puede ver no le esconde su propio fichaje", async () => {
+     // Sin `permisos` sobre el proyecto, RLS le oculta la fila de `proyectos`.
+     // La unión tiene que ser externa: el tramo aparece, con el nombre a null.
+     await empezar(sbColab, { proyectoId: idProyecto, clienteId: null, nota: null });
+     const en = await fichajeEnCurso(sbColab);
+diff --git a/apps/atlas/src/tests/horas/abiertos.test.ts b/apps/atlas/src/tests/horas/abiertos.test.ts
+index ac1ec70..7c6daef 100644
+--- a/apps/atlas/src/tests/horas/abiertos.test.ts
++++ b/apps/atlas/src/tests/horas/abiertos.test.ts
+@@ -19,35 +19,35 @@ describe("abiertosDemasiado", () => {
+   it("con nada abierto no avisa", () => {
+     expect(abiertosDemasiado([], AHORA)).toEqual([]);
+   });
+ 
+   it("uno de once horas avisa; uno de nueve no", () => {
+     const r = abiertosDemasiado(
+       [abierto(), abierto({ id: "f2", usuarioId: "u2", inicio: new Date(AHORA - h(9)).toISOString() })],
+       AHORA
+     );
+     expect(r.map((a) => a.fichajeId)).toEqual(["f1"]);
+-    expect(r[0].horas).toBe(11);
++    expect(r[0]?.horas).toBe(11);
+   });
+ 
+   it("el umbral es inclusivo: justo a las diez horas avisa", () => {
+     const r = abiertosDemasiado([abierto({ inicio: new Date(AHORA - h(AVISO_HORAS)).toISOString() })], AHORA);
+     expect(r).toHaveLength(1);
+   });
+ 
+   it("el título dice cuánto y de qué; sin proyecto ni cliente, dice «sin asignar»", () => {
+     const [con] = abiertosDemasiado([abierto()], AHORA);
+-    expect(con.titulo).toBe("Llevas 11 horas fichado en Kairos · Biodental");
++    expect(con?.titulo).toBe("Llevas 11 horas fichado en Kairos · Biodental");
+     const [sin] = abiertosDemasiado([abierto({ proyectoNombre: null, clienteNombre: null })], AHORA);
+-    expect(sin.titulo).toBe("Llevas 11 horas fichado sin asignar");
+-    expect(sin.cuerpo).toMatch(/ciérralo/i);
++    expect(sin?.titulo).toBe("Llevas 11 horas fichado sin asignar");
++    expect(sin?.cuerpo).toMatch(/ciérralo/i);
+   });
+ 
+   it("las horas se redondean hacia abajo", () => {
+     const [a] = abiertosDemasiado([abierto({ inicio: new Date(AHORA - h(10.9)).toISOString() })], AHORA);
+-    expect(a.horas).toBe(10);
++    expect(a?.horas).toBe(10);
+   });
+ 
+   it("admite otro límite", () => {
+     expect(abiertosDemasiado([abierto()], AHORA, 12)).toEqual([]);
+   });
+ });

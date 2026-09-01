@@ -1,0 +1,373 @@
+## Tarea 2: Cuánto se ha trabajado, y qué lleva abierto demasiado
+
+**Dos ficheros puros.** `abiertos.ts` es el que se copiará a Deno en la tarea 6: sin imports, sin `Intl`. `tramos.ts` es solo de la aplicación y puede importar del primero.
+
+**Ficheros:**
+- Crear: `apps/atlas/src/lib/horas/abiertos.ts`
+- Crear: `apps/atlas/src/lib/horas/tramos.ts`
+- Test: `apps/atlas/src/tests/horas/abiertos.test.ts`
+- Test: `apps/atlas/src/tests/horas/tramos.test.ts`
+
+**Interfaces:**
+- Consume: nada.
+- Produce:
+  - `abiertos.ts`: `AVISO_HORAS = 10`, `TOPE_HORAS = 16`, `type Abierto = { id; usuarioId; inicio; proyectoNombre: string | null; clienteNombre: string | null }`, `type AvisoAbierto = { fichajeId; usuarioId; horas: number; titulo; cuerpo }`, `function abiertosDemasiado(abiertos: Abierto[], ahoraMs: number, limiteHoras?: number): AvisoAbierto[]`
+  - `tramos.ts`: `type Tramo`, `type FilaHoras = { id: string | null; nombre: string; minutos: number }`, `type ResumenHoras`, `function minutosDe(t: Tramo, ahoraMs): number`, `function resumir(tramos: Tramo[], ahoraMs): ResumenHoras`, `function formatearMinutos(min): string`
+
+- [ ] **Paso 1: los tests que fallan**
+
+```ts
+// src/tests/horas/abiertos.test.ts
+import { describe, it, expect } from "vitest";
+import { abiertosDemasiado, AVISO_HORAS, type Abierto } from "@/lib/horas/abiertos";
+
+const AHORA = Date.parse("2026-08-31T20:00:00Z");
+const h = (n: number) => n * 3_600_000;
+
+function abierto(p: Partial<Abierto> = {}): Abierto {
+  return {
+    id: "f1",
+    usuarioId: "u1",
+    inicio: new Date(AHORA - h(11)).toISOString(),
+    proyectoNombre: "Kairos",
+    clienteNombre: "Biodental",
+    ...p,
+  };
+}
+
+describe("abiertosDemasiado", () => {
+  it("con nada abierto no avisa", () => {
+    expect(abiertosDemasiado([], AHORA)).toEqual([]);
+  });
+
+  it("uno de once horas avisa; uno de nueve no", () => {
+    const r = abiertosDemasiado(
+      [abierto(), abierto({ id: "f2", usuarioId: "u2", inicio: new Date(AHORA - h(9)).toISOString() })],
+      AHORA
+    );
+    expect(r.map((a) => a.fichajeId)).toEqual(["f1"]);
+    expect(r[0].horas).toBe(11);
+  });
+
+  it("el umbral es inclusivo: justo a las diez horas avisa", () => {
+    const r = abiertosDemasiado([abierto({ inicio: new Date(AHORA - h(AVISO_HORAS)).toISOString() })], AHORA);
+    expect(r).toHaveLength(1);
+  });
+
+  it("el título dice cuánto y de qué; sin proyecto ni cliente, dice «sin asignar»", () => {
+    const [con] = abiertosDemasiado([abierto()], AHORA);
+    expect(con.titulo).toBe("Llevas 11 horas fichado en Kairos · Biodental");
+    const [sin] = abiertosDemasiado([abierto({ proyectoNombre: null, clienteNombre: null })], AHORA);
+    expect(sin.titulo).toBe("Llevas 11 horas fichado sin asignar");
+    expect(sin.cuerpo).toMatch(/ciérralo/i);
+  });
+
+  it("las horas se redondean hacia abajo", () => {
+    const [a] = abiertosDemasiado([abierto({ inicio: new Date(AHORA - h(10.9)).toISOString() })], AHORA);
+    expect(a.horas).toBe(10);
+  });
+
+  it("admite otro límite", () => {
+    expect(abiertosDemasiado([abierto()], AHORA, 12)).toEqual([]);
+  });
+});
+```
+
+```ts
+// src/tests/horas/tramos.test.ts
+import { describe, it, expect } from "vitest";
+import { minutosDe, resumir, formatearMinutos, type Tramo } from "@/lib/horas/tramos";
+import { TOPE_HORAS } from "@/lib/horas/abiertos";
+
+const AHORA = Date.parse("2026-08-31T20:00:00Z");
+const min = (n: number) => n * 60_000;
+
+function tramo(p: Partial<Tramo> = {}): Tramo {
+  return {
+    id: "t1",
+    usuarioId: "u1",
+    usuarioNombre: "Jose",
+    proyectoId: "p1",
+    proyectoNombre: "Kairos",
+    clienteId: "c1",
+    clienteNombre: "Biodental",
+    inicio: new Date(AHORA - min(90)).toISOString(),
+    fin: new Date(AHORA - min(30)).toISOString(),
+    origen: "atlas",
+    nota: null,
+    ...p,
+  };
+}
+
+describe("minutosDe", () => {
+  it("un tramo cerrado dura lo que dura", () => {
+    expect(minutosDe(tramo(), AHORA)).toBe(60);
+  });
+
+  it("uno en curso dura hasta ahora", () => {
+    expect(minutosDe(tramo({ fin: null }), AHORA)).toBe(90);
+  });
+
+  it("nunca cuenta más del tope, aunque siga abierto", () => {
+    const viejo = tramo({ fin: null, inicio: new Date(AHORA - min(60 * 30)).toISOString() });
+    expect(minutosDe(viejo, AHORA)).toBe(TOPE_HORAS * 60);
+  });
+
+  it("los segundos sueltos se redondean al minuto más cercano", () => {
+    const t = tramo({ inicio: new Date(AHORA - 90_500).toISOString(), fin: new Date(AHORA).toISOString() });
+    expect(minutosDe(t, AHORA)).toBe(2);
+  });
+});
+
+describe("resumir", () => {
+  it("con nada, todo a cero y sin sospechosos", () => {
+    const r = resumir([], AHORA);
+    expect(r.totalMin).toBe(0);
+    expect(r.porCliente).toEqual([]);
+    expect(r.sospechosos).toEqual([]);
+    expect(r.ultimoInicio).toBeNull();
+  });
+
+  it("los tres desgloses suman lo mismo que el total, aunque haya tramos sin asignar", () => {
+    const r = resumir(
+      [
+        tramo(),
+        tramo({ id: "t2", clienteId: null, clienteNombre: null }),
+        tramo({ id: "t3", proyectoId: null, proyectoNombre: null, usuarioId: "u2", usuarioNombre: "Ana" }),
+      ],
+      AHORA
+    );
+    const suma = (f: { minutos: number }[]) => f.reduce((t, x) => t + x.minutos, 0);
+    expect(r.totalMin).toBe(180);
+    expect(suma(r.porCliente)).toBe(180);
+    expect(suma(r.porProyecto)).toBe(180);
+    expect(suma(r.porPersona)).toBe(180);
+    expect(r.porCliente.find((f) => f.id === null)?.nombre).toBe("Sin asignar");
+  });
+
+  it("separa lo medido de lo añadido", () => {
+    const r = resumir([tramo(), tramo({ id: "t2", origen: "anadido" })], AHORA);
+    expect(r.medidosMin).toBe(60);
+    expect(r.anadidosMin).toBe(60);
+  });
+
+  it("ordena cada desglose de más a menos minutos", () => {
+    const r = resumir(
+      [tramo(), tramo({ id: "t2", clienteId: "c2", clienteNombre: "Club", inicio: new Date(AHORA - min(300)).toISOString(), fin: new Date(AHORA).toISOString() })],
+      AHORA
+    );
+    expect(r.porCliente.map((f) => f.nombre)).toEqual(["Club", "Biodental"]);
+  });
+
+  it("un abierto de más de AVISO_HORAS es sospechoso; uno reciente no", () => {
+    const r = resumir(
+      [tramo({ fin: null, inicio: new Date(AHORA - min(60 * 11)).toISOString() }), tramo({ id: "t2", fin: null })],
+      AHORA
+    );
+    expect(r.sospechosos.map((t) => t.id)).toEqual(["t1"]);
+  });
+
+  it("el último inicio es el más reciente, cerrado o no", () => {
+    const r = resumir([tramo(), tramo({ id: "t2", inicio: new Date(AHORA - min(10)).toISOString(), fin: null })], AHORA);
+    expect(r.ultimoInicio).toBe(new Date(AHORA - min(10)).toISOString());
+  });
+});
+
+describe("formatearMinutos", () => {
+  it("horas y minutos, sin ceros de relleno", () => {
+    expect(formatearMinutos(0)).toBe("0 min");
+    expect(formatearMinutos(45)).toBe("45 min");
+    expect(formatearMinutos(60)).toBe("1 h");
+    expect(formatearMinutos(150)).toBe("2 h 30 min");
+  });
+});
+```
+
+- [ ] **Paso 2: comprobar que fallan**
+
+Ejecutar: `npx vitest run src/tests/horas/`
+Esperado: FALLA, no encuentra los módulos.
+
+- [ ] **Paso 3: implementar**
+
+```ts
+// src/lib/horas/abiertos.ts
+//
+// Qué fichaje lleva abierto demasiado tiempo. Sin base, sin red, sin reloj:
+// el instante entra por parámetro.
+//
+// ESTE FICHERO SE COPIA BYTE A BYTE a `supabase/functions/avisar/fichajes.ts`.
+// Por eso no importa nada ni usa `Intl`: Deno no resuelve el alias `@/` y la
+// copia la vigila `src/tests/vigia/copias.test.ts`.
+//
+
+/** A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido. */
+export const AVISO_HORAS = 10;
+
+/**
+ * A partir de aquí ya no se cuenta. Un fichaje abierto desde el lunes no son
+ * 26 horas de trabajo: son un olvido, y contarlas inflaría el coste del
+ * cliente. El tramo sigue abierto —hay que cerrarlo y corregir el fin— pero
+ * los minutos que se suman se paran aquí.
+ */
+export const TOPE_HORAS = 16;
+
+export type Abierto = {
+  id: string;
+  usuarioId: string;
+  /** ISO con zona. */
+  inicio: string;
+  proyectoNombre: string | null;
+  clienteNombre: string | null;
+};
+
+export type AvisoAbierto = {
+  fichajeId: string;
+  usuarioId: string;
+  /** Horas enteras, hacia abajo. */
+  horas: number;
+  titulo: string;
+  cuerpo: string;
+};
+
+export function abiertosDemasiado(
+  abiertos: Abierto[],
+  ahoraMs: number,
+  limiteHoras: number = AVISO_HORAS
+): AvisoAbierto[] {
+  const avisos: AvisoAbierto[] = [];
+  for (const a of abiertos) {
+    const horas = Math.floor((ahoraMs - Date.parse(a.inicio)) / 3_600_000);
+    if (horas < limiteHoras) continue;
+    const donde =
+      a.proyectoNombre || a.clienteNombre
+        ? [a.proyectoNombre, a.clienteNombre].filter(Boolean).join(" · ")
+        : "sin asignar";
+    avisos.push({
+      fichajeId: a.id,
+      usuarioId: a.usuarioId,
+      horas,
+      titulo: `Llevas ${horas} horas fichado en ${donde}`,
+      // Se dice qué hacer, no solo qué pasa: el aviso sirve para corregir.
+      cuerpo: "Si ya no estás trabajando, ciérralo y corrige la hora de fin desde Horas.",
+    });
+  }
+  return avisos;
+}
+```
+
+```ts
+// src/lib/horas/tramos.ts
+//
+// Cuánto se ha trabajado, por quién y para quién. Pura: el instante entra
+// por parámetro y no hay base ni red.
+//
+import { AVISO_HORAS, TOPE_HORAS } from "./abiertos";
+
+export type Tramo = {
+  id: string;
+  usuarioId: string;
+  usuarioNombre: string | null;
+  proyectoId: string | null;
+  proyectoNombre: string | null;
+  clienteId: string | null;
+  clienteNombre: string | null;
+  /** ISO con zona. */
+  inicio: string;
+  /** ISO con zona, o null si sigue en curso. */
+  fin: string | null;
+  origen: "atlas" | "anadido";
+  nota: string | null;
+};
+
+export type FilaHoras = { id: string | null; nombre: string; minutos: number };
+
+export type ResumenHoras = {
+  totalMin: number;
+  medidosMin: number;
+  anadidosMin: number;
+  porCliente: FilaHoras[];
+  porProyecto: FilaHoras[];
+  porPersona: FilaHoras[];
+  /** El inicio más reciente de cualquier tramo, o null si no hay ninguno. */
+  ultimoInicio: string | null;
+  /** Abiertos desde hace más de AVISO_HORAS: casi seguro olvidos. */
+  sospechosos: Tramo[];
+};
+
+const SIN_ASIGNAR = "Sin asignar";
+
+/** Minutos de un tramo, con el tope aplicado. Un abierto cuenta hasta `ahora`. */
+export function minutosDe(t: Tramo, ahoraMs: number): number {
+  const finMs = t.fin === null ? ahoraMs : Date.parse(t.fin);
+  const ms = Math.max(0, finMs - Date.parse(t.inicio));
+  return Math.min(Math.round(ms / 60_000), TOPE_HORAS * 60);
+}
+
+function agrupar(
+  tramos: Tramo[],
+  ahoraMs: number,
+  clave: (t: Tramo) => string | null,
+  nombre: (t: Tramo) => string | null
+): FilaHoras[] {
+  const filas = new Map<string | null, FilaHoras>();
+  for (const t of tramos) {
+    const id = clave(t);
+    const fila = filas.get(id) ?? { id, nombre: nombre(t) ?? SIN_ASIGNAR, minutos: 0 };
+    fila.minutos += minutosDe(t, ahoraMs);
+    filas.set(id, fila);
+  }
+  // De más a menos: lo que más pesa, arriba. Los desgloses se leen de arriba abajo.
+  return [...filas.values()].sort((a, b) => b.minutos - a.minutos);
+}
+
+export function resumir(tramos: Tramo[], ahoraMs: number): ResumenHoras {
+  let medidos = 0;
+  let anadidos = 0;
+  let ultimo: string | null = null;
+  const sospechosos: Tramo[] = [];
+  for (const t of tramos) {
+    const m = minutosDe(t, ahoraMs);
+    if (t.origen === "atlas") medidos += m;
+    else anadidos += m;
+    if (ultimo === null || Date.parse(t.inicio) > Date.parse(ultimo)) ultimo = t.inicio;
+    if (t.fin === null && ahoraMs - Date.parse(t.inicio) >= AVISO_HORAS * 3_600_000) {
+      sospechosos.push(t);
+    }
+  }
+  return {
+    totalMin: medidos + anadidos,
+    medidosMin: medidos,
+    anadidosMin: anadidos,
+    // Los tres agrupan los MISMOS tramos: si no suman igual, hay uno perdido.
+    porCliente: agrupar(tramos, ahoraMs, (t) => t.clienteId, (t) => t.clienteNombre),
+    porProyecto: agrupar(tramos, ahoraMs, (t) => t.proyectoId, (t) => t.proyectoNombre),
+    porPersona: agrupar(tramos, ahoraMs, (t) => t.usuarioId, (t) => t.usuarioNombre),
+    ultimoInicio: ultimo,
+    sospechosos,
+  };
+}
+
+export function formatearMinutos(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+}
+```
+
+- [ ] **Paso 4: comprobar que pasan**
+
+Ejecutar: `npx vitest run src/tests/horas/`
+Esperado: PASA, 17 tests.
+
+- [ ] **Paso 5: comprometer**
+
+```bash
+git add apps/atlas/src/lib/horas/ apps/atlas/src/tests/horas/
+git commit -m "feat(atlas): cuanto se ha trabajado y que fichaje lleva abierto demasiado"
+```
+
+---
+

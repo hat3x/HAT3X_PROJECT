@@ -1,0 +1,224 @@
+# Review package: 0ed354a..69d417b
+
+## Commits
+69d417b feat(kaizen): contrato de temas tipado con tema oscuro y claro
+
+## Files changed
+ apps/kaizen/src/design/tema.ts                | 53 +++++++++++++++++++++++++++
+ apps/kaizen/src/design/temas/claro.ts         | 38 +++++++++++++++++++
+ apps/kaizen/src/design/temas/contrato.test.ts | 37 +++++++++++++++++++
+ apps/kaizen/src/design/temas/defecto.ts       | 38 +++++++++++++++++++
+ apps/kaizen/src/design/temas/indice.ts        | 14 +++++++
+ 5 files changed, 180 insertions(+)
+
+## Diff
+diff --git a/apps/kaizen/src/design/tema.ts b/apps/kaizen/src/design/tema.ts
+new file mode 100644
+index 0000000..e1d0706
+--- /dev/null
++++ b/apps/kaizen/src/design/tema.ts
+@@ -0,0 +1,53 @@
++import type { ImageSourcePropType } from 'react-native'
++
++export type Recuadro = { arriba: number; izquierda: number; abajo: number; derecha: number }
++
++export type Fondo =
++  | { tipo: 'color'; valor: string }
++  | { tipo: 'degradado'; desde: string; hasta: string }
++  | { tipo: 'recurso'; fuente: ImageSourcePropType; recuadro: Recuadro | null }
++
++export type RecetaBarra = 'continua' | 'segmentada'
++export type RecetaAnillo = 'liso' | 'medidor'
++
++export interface Tema {
++  nombre: string
++  esquema: 'claro' | 'oscuro'
++
++  color: {
++    acento: string
++    sobreAcento: string
++    texto: string
++    textoTenue: string
++    borde: string
++    pista: string
++    proteina: string
++    carbos: string
++    grasas: string
++  }
++
++  radio: { tarjeta: number; boton: number; pastilla: number }
++
++  espaciado: readonly [number, number, number, number, number, number, number, number, number]
++
++  tipografia: {
++    familiaTitular: string | null
++    familiaCuerpo: string | null
++    pesoTitular: '600' | '700' | '800'
++    pesoCuerpo: '400' | '500' | '600'
++    ajusteLinea: number
++    mayusculasEtiquetas: boolean
++  }
++
++  fondo: { pantalla: Fondo; velo: string }
++
++  superficie: { tarjeta: Fondo; barraInferior: Fondo; desenfoque: number }
++
++  recetas: { barra: RecetaBarra; anillo: RecetaAnillo }
++
++  decoracion: {
++    cabecera: ImageSourcePropType | null
++    tarjetaEntrenamiento: ImageSourcePropType | null
++    tarjetaMision: ImageSourcePropType | null
++  }
++}
+diff --git a/apps/kaizen/src/design/temas/claro.ts b/apps/kaizen/src/design/temas/claro.ts
+new file mode 100644
+index 0000000..eb2eed1
+--- /dev/null
++++ b/apps/kaizen/src/design/temas/claro.ts
+@@ -0,0 +1,38 @@
++import type { Tema } from '../tema'
++
++export const temaClaro: Tema = {
++  nombre: 'claro',
++  esquema: 'claro',
++  color: {
++    acento: '#1E9E73',
++    sobreAcento: '#FFFFFF',
++    texto: '#141715',
++    textoTenue: '#6B726C',
++    borde: 'rgba(0,0,0,0.10)',
++    pista: 'rgba(0,0,0,0.08)',
++    proteina: '#C97A45',
++    carbos: '#4A7FBF',
++    grasas: '#B08A3C',
++  },
++  radio: { tarjeta: 22, boton: 13, pastilla: 20 },
++  espaciado: [4, 8, 12, 16, 20, 24, 32, 40, 48],
++  tipografia: {
++    familiaTitular: null,
++    familiaCuerpo: null,
++    pesoTitular: '600',
++    pesoCuerpo: '500',
++    ajusteLinea: 1,
++    mayusculasEtiquetas: true,
++  },
++  fondo: {
++    pantalla: { tipo: 'color', valor: '#FAF9F7' },
++    velo: 'rgba(255,255,255,0)',
++  },
++  superficie: {
++    tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },
++    barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },
++    desenfoque: 22,
++  },
++  recetas: { barra: 'continua', anillo: 'liso' },
++  decoracion: { cabecera: null, tarjetaEntrenamiento: null, tarjetaMision: null },
++}
+diff --git a/apps/kaizen/src/design/temas/contrato.test.ts b/apps/kaizen/src/design/temas/contrato.test.ts
+new file mode 100644
+index 0000000..06ace80
+--- /dev/null
++++ b/apps/kaizen/src/design/temas/contrato.test.ts
+@@ -0,0 +1,37 @@
++import { TEMAS } from './indice'
++
++function rutas(objeto: unknown, prefijo = ''): string[] {
++  if (objeto === null || typeof objeto !== 'object' || Array.isArray(objeto)) return [prefijo]
++  return Object.entries(objeto).flatMap(([clave, valor]) =>
++    rutas(valor, prefijo ? `${prefijo}.${clave}` : clave),
++  )
++}
++
++function valorEn(objeto: unknown, ruta: string): unknown {
++  let actual: unknown = objeto
++  for (const parte of ruta.split('.')) {
++    actual = (actual as Record<string, unknown>)[parte]
++  }
++  return actual
++}
++
++const nombres = Object.keys(TEMAS)
++
++it('hay al menos un tema registrado', () => {
++  expect(nombres.length).toBeGreaterThan(0)
++})
++
++it('ningún tema deja valores sin definir', () => {
++  for (const nombre of nombres) {
++    const sinDefinir = rutas(TEMAS[nombre]).filter((r) => valorEn(TEMAS[nombre], r) === undefined)
++    expect({ tema: nombre, sinDefinir }).toEqual({ tema: nombre, sinDefinir: [] })
++  }
++})
++
++it('todos los temas declaran exactamente las mismas claves', () => {
++  const referencia = rutas(TEMAS[nombres[0]!]).sort()
++  for (const nombre of nombres.slice(1)) {
++    expect({ tema: nombre, claves: rutas(TEMAS[nombre]).sort() })
++      .toEqual({ tema: nombre, claves: referencia })
++  }
++})
+diff --git a/apps/kaizen/src/design/temas/defecto.ts b/apps/kaizen/src/design/temas/defecto.ts
+new file mode 100644
+index 0000000..76c834d
+--- /dev/null
++++ b/apps/kaizen/src/design/temas/defecto.ts
+@@ -0,0 +1,38 @@
++import type { Tema } from '../tema'
++
++export const temaDefecto: Tema = {
++  nombre: 'defecto',
++  esquema: 'oscuro',
++  color: {
++    acento: '#4ECB9C',
++    sobreAcento: '#04120C',
++    texto: '#F4F5F2',
++    textoTenue: '#98A09A',
++    borde: 'rgba(255,255,255,0.10)',
++    pista: 'rgba(255,255,255,0.10)',
++    proteina: '#E8A87C',
++    carbos: '#7EA8D9',
++    grasas: '#D9B26F',
++  },
++  radio: { tarjeta: 22, boton: 13, pastilla: 20 },
++  espaciado: [4, 8, 12, 16, 20, 24, 32, 40, 48],
++  tipografia: {
++    familiaTitular: null,
++    familiaCuerpo: null,
++    pesoTitular: '600',
++    pesoCuerpo: '500',
++    ajusteLinea: 1,
++    mayusculasEtiquetas: true,
++  },
++  fondo: {
++    pantalla: { tipo: 'color', valor: '#060807' },
++    velo: 'rgba(0,0,0,0)',
++  },
++  superficie: {
++    tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
++    barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
++    desenfoque: 22,
++  },
++  recetas: { barra: 'continua', anillo: 'liso' },
++  decoracion: { cabecera: null, tarjetaEntrenamiento: null, tarjetaMision: null },
++}
+diff --git a/apps/kaizen/src/design/temas/indice.ts b/apps/kaizen/src/design/temas/indice.ts
+new file mode 100644
+index 0000000..be23599
+--- /dev/null
++++ b/apps/kaizen/src/design/temas/indice.ts
+@@ -0,0 +1,14 @@
++import type { Tema } from '../tema'
++import { temaDefecto } from './defecto'
++import { temaClaro } from './claro'
++
++/**
++ * Temas disponibles en ESTA compilación.
++ *
++ * El perfil `personal` de EAS añade aquí su propio tema desde un directorio
++ * fuera del control de versiones. El perfil `tienda` nunca lo incluye.
++ */
++export const TEMAS: Record<string, Tema> = {
++  defecto: temaDefecto,
++  claro: temaClaro,
++}

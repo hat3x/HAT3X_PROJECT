@@ -1,0 +1,36 @@
+{
+  "fichajes": [
+    {
+      "entrada": "2026-08-06T03:29:41.873459+02:00",
+      "salida": "2026-08-06T03:29:44.207429+02:00",
+      "cliente_principal": "100-montaditos"
+    },
+    {
+      "entrada": "2026-08-06T03:30:49.856985+02:00",
+      "salida": "2026-08-06T04:57:11.908157+02:00",
+      "cliente_principal": "100-montaditos"
+    },
+    {
+      "entrada": "2026-08-06T05:23:06.276960+02:00",
+      "salida": "2026-08-06T05:28:33.818824+02:00",
+      "cliente_principal": "biodental"
+    },
+    {
+      "entrada": "2026-08-06T14:05:02.934198+02:00",
+      "salida": "2026-08-07T00:57:27.165033+02:00",
+      "cliente_principal": "100-montaditos"
+    },
+    {
+      "entrada": "2026-08-07T13:13:56.912015+02:00",
+      "salida": "2026-08-07T19:29:01.500450+02:00",
+      "cliente_principal": "100-montaditos"
+    },
+    {
+      "entrada": "2026-08-07T21:07:38.029940+02:00",
+      "salida": "2026-08-08T00:22:04.592691+02:00",
+      "cliente_principal": "mtdi"
+    }
+  ],
+  "abierto": null,
+  "manuales": []
+}

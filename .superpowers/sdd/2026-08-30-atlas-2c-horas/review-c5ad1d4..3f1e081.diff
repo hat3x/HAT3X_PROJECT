@@ -1,0 +1,85 @@
+# Review package: c5ad1d4..3f1e081
+
+## Commits
+3f1e081 fix(atlas): el resto de una particion de 16h respeta el minimo, y --limpiar solo retira lo anadido
+
+## Files changed
+ apps/atlas/scripts/migrar/fichajes.ts        | 14 ++++++++++++--
+ apps/atlas/src/tests/migrar/fichajes.test.ts | 10 ++++++++++
+ 2 files changed, 22 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/scripts/migrar/fichajes.ts b/apps/atlas/scripts/migrar/fichajes.ts
+index b492bb7..24b6f6c 100644
+--- a/apps/atlas/scripts/migrar/fichajes.ts
++++ b/apps/atlas/scripts/migrar/fichajes.ts
+@@ -44,31 +44,41 @@ export function convertir(
+     }
+     const slug = v.cliente_principal;
+     const clienteId = slug ? (clientes.get(slug) ?? null) : null;
+     if (slug && clienteId === null) sinCliente.add(slug);
+     // Un tramo de 20 horas no cabe en la regla del tope. Se parte, sin
+     // perder ni un minuto: la suma es la misma, el histórico no se inventa.
+     while (fin - ini > TOPE_MS) {
+       filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(ini + TOPE_MS).toISOString(), clienteId, clienteSlug: slug });
+       ini += TOPE_MS;
+     }
+-    filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(fin).toISOString(), clienteId, clienteSlug: slug });
++    // El resto de la partición pasa por la misma regla que un tramo entero:
++    // 16 h y 30 s deja un resto de 30 s, y eso no es trabajo, es ruido. Se
++    // descarta en vez de insertar una fila de menos de un minuto.
++    if (fin - ini < MINIMO_MS) {
++      descartados++;
++    } else {
++      filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(fin).toISOString(), clienteId, clienteSlug: slug });
++    }
+   }
+   return { filas, sinCliente: [...sinCliente], descartados };
+ }
+ 
+ async function main() {
+   const pg = new Client({ connectionString: URL_PG });
+   await pg.connect();
+   try {
+     if (process.argv.includes("--limpiar")) {
+-      const r = await pg.query(`DELETE FROM fichajes WHERE nota = $1`, [NOTA]);
++      // `nota` sola no basta de guarda: alguien podría escribir a mano esa
++      // misma frase en la nota de un fichaje real. `origen = 'anadido'` es la
++      // marca que solo este script pone, así que solo eso es lo que retira.
++      const r = await pg.query(`DELETE FROM fichajes WHERE nota = $1 AND origen = 'anadido'`, [NOTA]);
+       console.log(`Retirados ${r.rowCount} tramos importados.`);
+       return;
+     }
+ 
+     const i = process.argv.indexOf("--usuario");
+     let usuario = i >= 0 ? process.argv[i + 1] : null;
+     if (!usuario) {
+       const { rows } = await pg.query(`SELECT id FROM perfiles WHERE es_propietario`);
+       if (rows.length !== 1) {
+         throw new Error(`Hay ${rows.length} propietarios; di cuál con --usuario <uuid>.`);
+diff --git a/apps/atlas/src/tests/migrar/fichajes.test.ts b/apps/atlas/src/tests/migrar/fichajes.test.ts
+index bfa5384..11ed4bc 100644
+--- a/apps/atlas/src/tests/migrar/fichajes.test.ts
++++ b/apps/atlas/src/tests/migrar/fichajes.test.ts
+@@ -27,11 +27,21 @@ describe("convertir", () => {
+     expect(r.descartados).toBe(1);
+   });
+ 
+   it("un tramo de más de 16 horas se parte en tramos de 16 y el resto", () => {
+     const r = convertir([{ entrada: "2026-08-01T00:00:00Z", salida: "2026-08-01T20:00:00Z", cliente_principal: "biodental" }], CLIENTES);
+     expect(r.filas.map((f) => [f.inicio, f.fin])).toEqual([
+       ["2026-08-01T00:00:00.000Z", "2026-08-01T16:00:00.000Z"],
+       ["2026-08-01T16:00:00.000Z", "2026-08-01T20:00:00.000Z"],
+     ]);
+   });
++
++  it("un resto de partición por debajo del minuto se descarta, no se inserta", () => {
++    // 16 h y 30 s: el tramo de 16 h completo se guarda, el resto de 30 s no
++    // llega al mínimo y se cuenta como descartado, no como una fila más.
++    const r = convertir([{ entrada: "2026-08-01T00:00:00Z", salida: "2026-08-01T16:00:30Z", cliente_principal: "biodental" }], CLIENTES);
++    expect(r.filas.map((f) => [f.inicio, f.fin])).toEqual([
++      ["2026-08-01T00:00:00.000Z", "2026-08-01T16:00:00.000Z"],
++    ]);
++    expect(r.descartados).toBe(1);
++  });
+ });

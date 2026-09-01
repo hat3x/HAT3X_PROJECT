@@ -1,0 +1,691 @@
+diff --git a/apps/atlas/src/tests/esquema/economia.test.ts b/apps/atlas/src/tests/esquema/economia.test.ts
+index 85e21e0..e5b872c 100644
+--- a/apps/atlas/src/tests/esquema/economia.test.ts
++++ b/apps/atlas/src/tests/esquema/economia.test.ts
+@@ -18,6 +18,7 @@ beforeAll(async () => {
+ 
+ afterAll(async () => {
+   await pg.query(`DELETE FROM facturas WHERE cliente_id = $1`, [idCliente]);
++  await pg.query(`DELETE FROM series_facturas WHERE serie IN ('X','XA','DUP')`);
+   await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
+   await pg.end();
+ });
+@@ -48,7 +49,8 @@ describe("esquema de economía", () => {
+   });
+ 
+   it("una de Atlas sí puede", async () => {
+-    const { rows } = await factura({ origen: "atlas", huella: "abc" });
++    // En su propia serie: desde 2E una serie es de externas o de Atlas.
++    const { rows } = await factura({ origen: "atlas", serie: "XA", huella: "abc" });
+     expect(rows[0].id).toBeTruthy();
+   });
+ 
+diff --git a/apps/atlas/src/tests/esquema/emision-cierres.test.ts b/apps/atlas/src/tests/esquema/emision-cierres.test.ts
+new file mode 100644
+index 0000000..9bc5157
+--- /dev/null
++++ b/apps/atlas/src/tests/esquema/emision-cierres.test.ts
+@@ -0,0 +1,310 @@
++// src/tests/esquema/emision-cierres.test.ts
++//
++// Ronda de arreglo 1 sobre la emisión (20260901101000_emision_cierres.sql):
++// el borrador que no se emite fuera de la RPC, la serie con un solo origen,
++// la línea que no se muda, el cobro que no toca una anulada, la firma y el
++// instante obligatorios, los eventos que la aplicación puede apuntar, y el
++// colaborador que no se hace propietario. Serie propia `TE2` (Atlas) y `TE2X`
++// (externas); misma preparación que `emision.test.ts`, con sus helpers copiados.
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import type { Database } from "@/types/supabase";
++
++const URL_API = "http://127.0.0.1:54321";
++const ANON =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++const CORREO_DUENYO = "duenyo-emision-cierres@atlas.test";
++const CORREO_COLAB = "colab-emision-cierres@atlas.test";
++const SLUG_CLIENTE = "prueba-emision-cierres";
++const SERIE = "TE2";
++const SERIE_EXTERNA = "TE2X";
++const SERIES = [SERIE, SERIE_EXTERNA];
++
++type ArgsEmitir = Database["public"]["Functions"]["atlas_emitir_factura"]["Args"];
++
++let pg: Client;
++let admin: ReturnType<typeof createClient<Database>>;
++let sbDuenyo: ReturnType<typeof createClient<Database>>;
++let sbColab: ReturnType<typeof createClient<Database>>;
++let idDuenyo = "";
++let idColab = "";
++let idCliente = "";
++let idBorrador = "";
++let idLineaBorrador = "";
++let idEmitida = "";
++let idLineaEmitida = "";
++
++// Los tipos generados dicen `string` para los parámetros porque la base no
++// sabe declarar la nulabilidad; aquí se prueba justo lo que pasa con null.
++function argsEmitir(a: Omit<ArgsEmitir, "p_huella_anterior" | "p_firma" | "p_gen_en"> & {
++  p_huella_anterior: string | null;
++  p_firma: string | null;
++  p_gen_en: string | null;
++}): ArgsEmitir {
++  return a as ArgsEmitir;
++}
++
++// Limpieza con los disparadores apagados, SOLO aquí y en una transacción: si
++// algo falla, el ROLLBACK deshace también el `disable trigger`.
++async function limpiarSeries() {
++  await pg.query(`BEGIN`);
++  try {
++    await pg.query(`ALTER TABLE facturas DISABLE TRIGGER facturas_inmutables`);
++    await pg.query(`ALTER TABLE factura_lineas DISABLE TRIGGER factura_lineas_inmutables`);
++    await pg.query(`ALTER TABLE factura_eventos DISABLE TRIGGER factura_eventos_inmutables`);
++    await pg.query(
++      `DELETE FROM factura_eventos WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
++      [SERIES]
++    );
++    await pg.query(
++      `UPDATE cadena_facturas SET punta = NULL, factura_id = NULL, sellada_en = NULL
++        WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
++      [SERIES]
++    );
++    await pg.query(
++      `DELETE FROM factura_lineas WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
++      [SERIES]
++    );
++    await pg.query(`DELETE FROM facturas WHERE serie = ANY($1)`, [SERIES]);
++    await pg.query(`DELETE FROM series_facturas WHERE serie = ANY($1)`, [SERIES]);
++    await pg.query(`ALTER TABLE facturas ENABLE TRIGGER facturas_inmutables`);
++    await pg.query(`ALTER TABLE factura_lineas ENABLE TRIGGER factura_lineas_inmutables`);
++    await pg.query(`ALTER TABLE factura_eventos ENABLE TRIGGER factura_eventos_inmutables`);
++    await pg.query(`COMMIT`);
++  } catch (e) {
++    await pg.query(`ROLLBACK`);
++    throw e;
++  }
++}
++
++async function usuario(correo: string, propietario: boolean) {
++  const { data: listado } = await admin.auth.admin.listUsers();
++  for (const u of listado?.users ?? []) {
++    if (u.email === correo) await admin.auth.admin.deleteUser(u.id);
++  }
++  const creado = await admin.auth.admin.createUser({ email: correo, password: "contrasena-de-prueba", email_confirm: true });
++  if (creado.error) throw creado.error;
++  await pg.query(`INSERT INTO perfiles (id, es_propietario) VALUES ($1, $2)`, [creado.data.user.id, propietario]);
++  const sb = createClient<Database>(URL_API, ANON, {
++    auth: { persistSession: false, autoRefreshToken: false, storageKey: `ec-${propietario ? "d" : "c"}` },
++  });
++  const { error } = await sb.auth.signInWithPassword({ email: correo, password: "contrasena-de-prueba" });
++  if (error) throw error;
++  return { id: creado.data.user.id, sb };
++}
++
++async function borradorAtlas(): Promise<{ factura: string; linea: string }> {
++  const { rows } = await pg.query(
++    `INSERT INTO facturas (origen, serie, cliente_id, fecha_emision, fecha_vencimiento, base, iva_tipo, iva_cuota, total)
++     VALUES ('atlas', $1, $2, '2092-01-10', '2092-02-10', 100, 21, 21, 121) RETURNING id`,
++    [SERIE, idCliente]
++  );
++  const { rows: lineas } = await pg.query(
++    `INSERT INTO factura_lineas (factura_id, concepto, cantidad, precio_unitario, importe) VALUES ($1, 'Trabajo', 1, 100, 100) RETURNING id`,
++    [rows[0].id]
++  );
++  return { factura: rows[0].id, linea: lineas[0].id };
++}
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
++  await limpiarSeries();
++
++  await pg.query(`DELETE FROM clientes WHERE slug = $1`, [SLUG_CLIENTE]);
++  const { rows } = await pg.query(`INSERT INTO clientes (nombre, slug) VALUES ('Prueba Cierres', $1) RETURNING id`, [SLUG_CLIENTE]);
++  idCliente = rows[0].id;
++
++  const d = await usuario(CORREO_DUENYO, true);
++  idDuenyo = d.id;
++  sbDuenyo = d.sb;
++  const c = await usuario(CORREO_COLAB, false);
++  idColab = c.id;
++  sbColab = c.sb;
++
++  const b = await borradorAtlas();
++  idBorrador = b.factura;
++  idLineaBorrador = b.linea;
++
++  // Una emitida con línea, sellada como lo haría la RPC: con la marca de
++  // sesión dentro de su transacción. No toca la cadena.
++  const e = await borradorAtlas();
++  idEmitida = e.factura;
++  idLineaEmitida = e.linea;
++  await pg.query(`BEGIN`);
++  try {
++    await pg.query(`SELECT set_config('atlas.emitiendo', 'si', true)`);
++    await pg.query(`UPDATE facturas SET estado = 'emitida', numero = 1, huella = repeat('A', 64) WHERE id = $1`, [idEmitida]);
++    await pg.query(`COMMIT`);
++  } catch (err) {
++    await pg.query(`ROLLBACK`);
++    throw err;
++  }
++});
++
++afterAll(async () => {
++  try {
++    try {
++      await limpiarSeries();
++    } catch {
++      /* que no impida el resto de la limpieza */
++    }
++    if (idCliente !== "") {
++      try {
++        await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
++      } catch {
++        /* ya no está */
++      }
++    }
++    for (const id of [idDuenyo, idColab]) {
++      if (id === "") continue;
++      try {
++        await admin.auth.admin.deleteUser(id);
++      } catch {
++        /* ya no está */
++      }
++    }
++  } finally {
++    await pg.end();
++  }
++});
++
++describe("I1 · un borrador de Atlas solo se emite por la RPC", () => {
++  it("cambiar el estado a mano falla", async () => {
++    expect(idBorrador).not.toBe("");
++    await expect(pg.query(`UPDATE facturas SET estado = 'emitida' WHERE id = $1`, [idBorrador])).rejects.toThrow(/atlas_emitir_factura/);
++  });
++
++  it("poner huella, firma o instante a mano falla; el resto del borrador sigue editable", async () => {
++    await expect(pg.query(`UPDATE facturas SET huella = repeat('B', 64) WHERE id = $1`, [idBorrador])).rejects.toThrow(/atlas_emitir_factura/);
++    await expect(pg.query(`UPDATE facturas SET firma = 'x' WHERE id = $1`, [idBorrador])).rejects.toThrow(/atlas_emitir_factura/);
++    await expect(pg.query(`UPDATE facturas SET huella_gen_en = now() WHERE id = $1`, [idBorrador])).rejects.toThrow(/atlas_emitir_factura/);
++    await expect(pg.query(`UPDATE facturas SET base = 150, total = 181.5, iva_cuota = 31.5 WHERE id = $1`, [idBorrador])).resolves.toBeDefined();
++  });
++});
++
++describe("I2 · una serie tiene un solo origen", () => {
++  it("una externa no entra en una serie de Atlas", async () => {
++    await expect(
++      pg.query(
++        `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado)
++         VALUES ('externa', $1, 500, $2, '2092-01-10', 100, 21, 21, 121, 'emitida')`,
++        [SERIE, idCliente]
++      )
++    ).rejects.toThrow(/la serie TE2 es de facturas de Atlas; usa otra serie/);
++  });
++
++  it("una de Atlas no entra en una serie de externas", async () => {
++    await pg.query(
++      `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado)
++       VALUES ('externa', $1, 1, $2, '2092-01-10', 100, 21, 21, 121, 'emitida')`,
++      [SERIE_EXTERNA, idCliente]
++    );
++    await expect(
++      pg.query(`INSERT INTO facturas (origen, serie, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total) VALUES ('atlas', $1, $2, '2092-01-10', 1, 21, 0.21, 1.21)`, [
++        SERIE_EXTERNA,
++        idCliente,
++      ])
++    ).rejects.toThrow(/la serie TE2X es de facturas externas; usa otra serie/);
++    const { rows } = await pg.query(`SELECT serie, origen FROM series_facturas WHERE serie = ANY($1) ORDER BY serie`, [SERIES]);
++    expect(rows).toEqual([
++      { serie: SERIE, origen: "atlas" },
++      { serie: SERIE_EXTERNA, origen: "externa" },
++    ]);
++  });
++
++  it("ni cambiando la serie de un borrador", async () => {
++    await expect(pg.query(`UPDATE facturas SET serie = $2 WHERE id = $1`, [idBorrador, SERIE_EXTERNA])).rejects.toThrow(/usa otra serie/);
++  });
++
++  it("el colaborador ve las series pero no las crea", async () => {
++    const { data } = await sbColab.from("series_facturas").select("serie").eq("serie", SERIE);
++    expect(data).toEqual([{ serie: SERIE }]);
++    const { error } = await sbColab.from("series_facturas").insert({ serie: "TE2C", origen: "atlas" });
++    expect(error?.message).toMatch(/row-level security/);
++  });
++});
++
++describe("I3 · una línea no se muda", () => {
++  it("de una emitida a un borrador, falla", async () => {
++    expect(idLineaEmitida).not.toBe("");
++    await expect(pg.query(`UPDATE factura_lineas SET factura_id = $2 WHERE id = $1`, [idLineaEmitida, idBorrador])).rejects.toThrow(
++      /no cambia de factura|inmutables/
++    );
++  });
++
++  it("de un borrador a otro, tampoco: cambiar factura_id se prohíbe siempre", async () => {
++    const otro = await borradorAtlas();
++    await expect(pg.query(`UPDATE factura_lineas SET factura_id = $2 WHERE id = $1`, [idLineaBorrador, otro.factura])).rejects.toThrow(
++      /no cambia de factura/
++    );
++    await expect(pg.query(`UPDATE factura_lineas SET concepto = 'Otro' WHERE id = $1`, [idLineaBorrador])).resolves.toBeDefined();
++  });
++});
++
++describe("M1 · cobro y vencimiento", () => {
++  it("el vencimiento de una emitida es inmutable; las notas no", async () => {
++    await expect(pg.query(`UPDATE facturas SET fecha_vencimiento = '2092-03-01' WHERE id = $1`, [idEmitida])).rejects.toThrow(/inmutable/);
++    await expect(pg.query(`UPDATE facturas SET notas = 'apunte interno' WHERE id = $1`, [idEmitida])).resolves.toBeDefined();
++  });
++
++  it("una anulada no se cobra", async () => {
++    const { rows } = await pg.query(
++      `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado, huella)
++       VALUES ('atlas', $1, 2, $2, '2092-01-10', 100, 21, 21, 121, 'anulada', repeat('D', 64)) RETURNING id`,
++      [SERIE, idCliente]
++    );
++    await expect(pg.query(`UPDATE facturas SET cobrada_en = '2092-02-01' WHERE id = $1`, [rows[0].id])).rejects.toThrow(/inmutable/);
++  });
++});
++
++describe("M4 · sellar exige firma e instante", () => {
++  it("sin firma o sin instante, la RPC lo dice y no escribe", async () => {
++    const sinFirma = await sbDuenyo.rpc(
++      "atlas_emitir_factura",
++      argsEmitir({ p_factura: idBorrador, p_numero: 3, p_huella_anterior: null, p_huella: "C".repeat(64), p_firma: null, p_gen_en: new Date().toISOString() })
++    );
++    expect(sinFirma.data).toMatchObject({ ok: false, error: expect.stringMatching(/firma/) });
++    const sinInstante = await sbDuenyo.rpc(
++      "atlas_emitir_factura",
++      argsEmitir({ p_factura: idBorrador, p_numero: 3, p_huella_anterior: null, p_huella: "C".repeat(64), p_firma: "firma", p_gen_en: null })
++    );
++    expect(sinInstante.data).toMatchObject({ ok: false, error: expect.stringMatching(/instante/) });
++    const { rows } = await pg.query(`SELECT estado, numero FROM facturas WHERE id = $1`, [idBorrador]);
++    expect(rows[0]).toEqual({ estado: "borrador", numero: null });
++  });
++});
++
++describe("M5 · qué eventos apunta la aplicación", () => {
++  it("un emision por PostgREST lo rechaza RLS, aunque sea el propietario", async () => {
++    const { error } = await sbDuenyo.from("factura_eventos").insert({ factura_id: idEmitida, tipo: "emision" });
++    expect(error?.message).toMatch(/row-level security/);
++  });
++
++  it("una exportacion sí", async () => {
++    const { error } = await sbDuenyo.from("factura_eventos").insert({ factura_id: idEmitida, tipo: "exportacion" });
++    expect(error).toBeNull();
++  });
++});
++
++describe("M7 · nadie se hace propietario solo", () => {
++  it("el colaborador no puede ponerse es_propietario", async () => {
++    const { error } = await sbColab.from("perfiles").update({ es_propietario: true }).eq("id", idColab);
++    expect(error?.message).toMatch(/solo el propietario/);
++    const { rows } = await pg.query(`SELECT es_propietario FROM perfiles WHERE id = $1`, [idColab]);
++    expect(rows[0]).toEqual({ es_propietario: false });
++  });
++
++  it("el propietario sí puede cambiarlo en otro", async () => {
++    const { error } = await sbDuenyo.from("perfiles").update({ es_propietario: true }).eq("id", idColab);
++    expect(error).toBeNull();
++    const { rows } = await pg.query(`SELECT es_propietario FROM perfiles WHERE id = $1`, [idColab]);
++    expect(rows[0]).toEqual({ es_propietario: true });
++    await pg.query(`UPDATE perfiles SET es_propietario = false WHERE id = $1`, [idColab]);
++  });
++});
+diff --git a/apps/atlas/src/tests/esquema/emision.test.ts b/apps/atlas/src/tests/esquema/emision.test.ts
+index 8c30e41..cd8b8b2 100644
+--- a/apps/atlas/src/tests/esquema/emision.test.ts
++++ b/apps/atlas/src/tests/esquema/emision.test.ts
+@@ -19,6 +19,9 @@ const CORREO_DUENYO = "duenyo-emision-esquema@atlas.test";
+ const CORREO_COLAB = "colab-emision-esquema@atlas.test";
+ const SLUG_CLIENTE = "prueba-emision-esquema";
+ const SERIE = "TE1";
++// Una serie es de externas o de Atlas (ronda 1, I2): la externa de prueba va aparte.
++const SERIE_EXTERNA = "TE1X";
++const SERIES = [SERIE, SERIE_EXTERNA];
+ 
+ type ArgsEmitir = Database["public"]["Functions"]["atlas_emitir_factura"]["Args"];
+ 
+@@ -45,29 +48,38 @@ function argsEmitir(a: Omit<ArgsEmitir, "p_huella_anterior"> & { p_huella_anteri
+ // La serie de prueba se limpia con los disparadores de inmutabilidad apagados,
+ // SOLO aquí: el disparador no deja borrar una emitida ni tocar sus eventos, y
+ // un test que no puede limpiar deja la serie de prueba envenenada para siempre.
++// Todo en UNA transacción: si algo falla a medias, el ROLLBACK deshace también
++// el `disable trigger`, y la base no se queda con un disparador apagado.
+ async function limpiarSerie() {
+-  await pg.query(`ALTER TABLE facturas DISABLE TRIGGER facturas_inmutables`);
+-  await pg.query(`ALTER TABLE factura_lineas DISABLE TRIGGER factura_lineas_inmutables`);
+-  await pg.query(`ALTER TABLE factura_eventos DISABLE TRIGGER factura_eventos_inmutables`);
++  await pg.query(`BEGIN`);
+   try {
++    await pg.query(`ALTER TABLE facturas DISABLE TRIGGER facturas_inmutables`);
++    await pg.query(`ALTER TABLE factura_lineas DISABLE TRIGGER factura_lineas_inmutables`);
++    await pg.query(`ALTER TABLE factura_eventos DISABLE TRIGGER factura_eventos_inmutables`);
+     await pg.query(
+-      `DELETE FROM factura_eventos WHERE factura_id IN (SELECT id FROM facturas WHERE serie = $1)`,
+-      [SERIE]
++      `DELETE FROM factura_eventos WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
++      [SERIES]
+     );
+     await pg.query(
+       `UPDATE cadena_facturas SET punta = NULL, factura_id = NULL, sellada_en = NULL
+-        WHERE factura_id IN (SELECT id FROM facturas WHERE serie = $1)`,
+-      [SERIE]
++        WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
++      [SERIES]
+     );
+     await pg.query(
+-      `DELETE FROM factura_lineas WHERE factura_id IN (SELECT id FROM facturas WHERE serie = $1)`,
+-      [SERIE]
++      `DELETE FROM factura_lineas WHERE factura_id IN (SELECT id FROM facturas WHERE serie = ANY($1))`,
++      [SERIES]
+     );
+-    await pg.query(`DELETE FROM facturas WHERE serie = $1`, [SERIE]);
+-  } finally {
++    await pg.query(`DELETE FROM facturas WHERE serie = ANY($1)`, [SERIES]);
++    // La serie de prueba no deja huella en `series_facturas`: la siguiente
++    // corrida vuelve a decidir su origen con la primera factura.
++    await pg.query(`DELETE FROM series_facturas WHERE serie = ANY($1)`, [SERIES]);
+     await pg.query(`ALTER TABLE facturas ENABLE TRIGGER facturas_inmutables`);
+     await pg.query(`ALTER TABLE factura_lineas ENABLE TRIGGER factura_lineas_inmutables`);
+     await pg.query(`ALTER TABLE factura_eventos ENABLE TRIGGER factura_eventos_inmutables`);
++    await pg.query(`COMMIT`);
++  } catch (e) {
++    await pg.query(`ROLLBACK`);
++    throw e;
+   }
+ }
+ 
+@@ -184,11 +196,16 @@ describe("inmutabilidad", () => {
+     const { rows } = await pg.query(
+       `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado)
+        VALUES ('externa',$2,900,$1,'2091-01-10',100,21,21,121,'emitida') RETURNING id`,
+-      [idCliente, SERIE]
++      [idCliente, SERIE_EXTERNA]
+     );
+     await expect(pg.query(`UPDATE facturas SET base = 200 WHERE id = $1`, [rows[0].id])).resolves.toBeDefined();
+   });
+ 
++  it("una anulada no vuelve a emitida", async () => {
++    expect(idEmitida).not.toBe("");
++    await expect(pg.query(`UPDATE facturas SET estado = 'emitida' WHERE id = $1`, [idEmitida])).rejects.toThrow(/inmutable/);
++  });
++
+   it("los eventos no se editan ni se borran", async () => {
+     expect(idEmitida).not.toBe("");
+     const { rows } = await pg.query(`INSERT INTO factura_eventos (factura_id, tipo) VALUES ($1,'exportacion') RETURNING id`, [idEmitida]);
+@@ -216,11 +233,18 @@ describe("las RPC", () => {
+       "atlas_emitir_factura",
+       argsEmitir({ p_factura: idBorrador, p_numero: 99, p_huella_anterior: null, p_huella: "B".repeat(64), p_firma: "x", p_gen_en: new Date().toISOString() })
+     );
+-    expect(r.data).toMatchObject({ ok: false, reintentar: true });
++    // Ya hay una emitida (la 1, del bloque anterior): el número real es el 2.
++    expect(r.data).toMatchObject({ ok: false, reintentar: true, numero: 2 });
+     const { rows } = await pg.query(`SELECT estado, numero FROM facturas WHERE id = $1`, [idBorrador]);
+     expect(rows[0]).toEqual({ estado: "borrador", numero: null });
+   });
+ 
++  it("un colaborador no ve el siguiente número ni la punta", async () => {
++    const { data, error } = await sbColab.rpc("atlas_siguiente_emision", { p_serie: SERIE });
++    expect(error).toBeNull();
++    expect(data).toEqual([]);
++  });
++
+   it("el código no puede poner número a un borrador por su cuenta", async () => {
+     await expect(pg.query(`UPDATE facturas SET numero = 5 WHERE id = $1`, [idBorrador])).rejects.toThrow(/atlas_emitir_factura/);
+   });
+diff --git a/apps/atlas/src/types/supabase.ts b/apps/atlas/src/types/supabase.ts
+index 13fdc06..86f2bad 100644
+--- a/apps/atlas/src/types/supabase.ts
++++ b/apps/atlas/src/types/supabase.ts
+@@ -1300,6 +1300,24 @@ export type Database = {
+         }
+         Relationships: []
+       }
++      series_facturas: {
++        Row: {
++          creado_en: string
++          origen: string
++          serie: string
++        }
++        Insert: {
++          creado_en?: string
++          origen: string
++          serie: string
++        }
++        Update: {
++          creado_en?: string
++          origen?: string
++          serie?: string
++        }
++        Relationships: []
++      }
+       servicios: {
+         Row: {
+           activo: boolean
+diff --git a/apps/atlas/supabase/migrations/20260901101000_emision_cierres.sql b/apps/atlas/supabase/migrations/20260901101000_emision_cierres.sql
+new file mode 100644
+index 0000000..8b9106c
+--- /dev/null
++++ b/apps/atlas/supabase/migrations/20260901101000_emision_cierres.sql
+@@ -0,0 +1,216 @@
++-- apps/atlas/supabase/migrations/20260901101000_emision_cierres.sql
++--
++-- Ronda de arreglo 1 sobre la emisión (20260901100000_emision.sql). La revisión
++-- encontró agujeros que en una cadena fiscal no se pueden dejar: un borrador
++-- que se «emite» sin pasar por la RPC, una serie compartida entre externas y
++-- Atlas que rompe el correlativo, una línea que se muda de una emitida a un
++-- borrador, y un colaborador que se hace propietario. La migración anterior no
++-- se toca: aquí se reemplazan las funciones y se añade lo que falta.
++
++-- ---------- I1 + M1: el disparador de facturas, cerrado ----------
++-- En un borrador de Atlas, TODO lo que forma parte del sello (estado, número,
++-- huellas, firma, instante de generación) lo pone `atlas_emitir_factura` y
++-- nadie más: sin `atlas.emitiendo = 'si'` en la transacción, se rechaza.
++-- En una emitida o anulada, además de lo de antes, `fecha_vencimiento` es
++-- inmutable (viaja en el PDF), y `cobrada_en` solo se mueve en una emitida:
++-- una anulada no se cobra. `notas` sigue siendo editable en cualquier estado:
++-- es un apunte interno, no un dato fiscal, y no entra en la huella.
++create or replace function atlas_factura_inmutable() returns trigger
++language plpgsql as $$
++begin
++  if old.origen <> 'atlas' then
++    return case when tg_op = 'DELETE' then old else new end;
++  end if;
++  if tg_op = 'DELETE' then
++    if old.estado <> 'borrador' then
++      raise exception 'factura emitida: no se borra (serie %, numero %)', old.serie, old.numero;
++    end if;
++    return old;
++  end if;
++  if old.estado = 'borrador' then
++    if (new.numero is distinct from old.numero
++        or new.estado is distinct from old.estado
++        or new.huella is distinct from old.huella
++        or new.huella_anterior is distinct from old.huella_anterior
++        or new.firma is distinct from old.firma
++        or new.huella_gen_en is distinct from old.huella_gen_en)
++       and current_setting('atlas.emitiendo', true) is distinct from 'si' then
++      raise exception 'el numero, el estado y el sello los asigna atlas_emitir_factura';
++    end if;
++    return new;
++  end if;
++  -- Emitida o anulada: solo cobrada_en (y solo en emitida), notas, y emitida → anulada.
++  if new.serie <> old.serie or new.numero <> old.numero or new.cliente_id <> old.cliente_id
++     or new.fecha_emision <> old.fecha_emision
++     or new.fecha_vencimiento is distinct from old.fecha_vencimiento
++     or new.base <> old.base
++     or new.iva_tipo <> old.iva_tipo or new.iva_cuota <> old.iva_cuota
++     or new.total <> old.total or new.huella is distinct from old.huella
++     or new.huella_anterior is distinct from old.huella_anterior
++     or new.firma is distinct from old.firma or new.huella_gen_en is distinct from old.huella_gen_en
++     or new.tipo_factura <> old.tipo_factura or new.rectifica_a is distinct from old.rectifica_a
++     or new.origen <> old.origen
++     or (new.estado <> old.estado and not (old.estado = 'emitida' and new.estado = 'anulada'))
++     or (old.estado = 'anulada' and new.cobrada_en is distinct from old.cobrada_en) then
++    raise exception 'factura emitida: inmutable (serie %, numero %)', old.serie, old.numero;
++  end if;
++  return new;
++end $$;
++
++-- ---------- I3: las líneas no se mudan ----------
++-- Antes solo se miraba la factura de destino: una línea de una emitida podía
++-- pasar a un borrador con un `update … set factura_id`. Ahora se miran las dos
++-- puntas, y cambiar `factura_id` se prohíbe siempre: una línea nace y muere en
++-- su factura, sea del origen que sea.
++create or replace function atlas_lineas_inmutables() returns trigger
++language plpgsql as $$
++declare f record;
++begin
++  if tg_op = 'UPDATE' and new.factura_id is distinct from old.factura_id then
++    raise exception 'una linea no cambia de factura';
++  end if;
++  select origen, estado, serie, numero into f from facturas
++   where id = coalesce(new.factura_id, old.factura_id);
++  if f.origen = 'atlas' and f.estado <> 'borrador' then
++    raise exception 'lineas de factura emitida: inmutables (serie %, numero %)', f.serie, f.numero;
++  end if;
++  return case when tg_op = 'DELETE' then old else new end;
++end $$;
++
++-- ---------- I2: cada serie tiene un origen ----------
++-- `atlas_siguiente_emision` calcula el correlativo con las facturas de Atlas de
++-- la serie. Si en esa serie conviven externas con número puesto a mano, el
++-- correlativo choca con `unique (serie, numero)` y la emisión se bloquea. Así
++-- que una serie es de externas o de Atlas, y lo decide la primera factura.
++create table series_facturas (
++  serie      text primary key,
++  origen     text not null check (origen in ('externa','atlas')),
++  creado_en  timestamptz not null default now()
++);
++
++-- Siembra con lo que ya hay. Si una serie ya mezcla orígenes, mejor parar aquí
++-- con un mensaje claro que sembrar mal: eso lo arregla una persona, no un script.
++do $$
++declare mezcladas text;
++begin
++  select string_agg(serie, ', ' order by serie) into mezcladas
++    from (select serie from facturas group by serie having count(distinct origen) > 1) s;
++  if mezcladas is not null then
++    raise exception 'series con facturas externas y de Atlas a la vez: %. Separa las series antes de migrar.', mezcladas;
++  end if;
++end $$;
++insert into series_facturas (serie, origen)
++select serie, min(origen) from facturas group by serie;
++
++-- Corre con los permisos de quien inserta la factura (el propietario, por RLS
++-- de `facturas`): no hace falta definer. `on conflict do nothing` + lectura
++-- resuelve la carrera de dos primeras facturas a la vez con orígenes distintos:
++-- la segunda espera a la primera y lee lo que ganó.
++create or replace function atlas_serie_origen() returns trigger
++language plpgsql as $$
++declare o text;
++begin
++  insert into series_facturas (serie, origen) values (new.serie, new.origen)
++  on conflict (serie) do nothing;
++  select origen into o from series_facturas where serie = new.serie;
++  if o <> new.origen then
++    raise exception 'la serie % es de facturas %; usa otra serie', new.serie,
++      case o when 'externa' then 'externas' else 'de Atlas' end;
++  end if;
++  return new;
++end $$;
++-- También al cambiar serie u origen de un borrador: la regla es de la fila, no
++-- solo del alta.
++create trigger facturas_serie_origen
++  before insert or update of serie, origen on facturas
++  for each row execute function atlas_serie_origen();
++
++grant select, insert on series_facturas to authenticated;
++grant all privileges on series_facturas to service_role;
++alter table series_facturas enable row level security;
++create policy series_ver on series_facturas for select to authenticated using (true);
++create policy series_alta on series_facturas for insert to authenticated
++  with check (atlas_es_propietario());
++
++-- ---------- M4: sellar exige firma e instante ----------
++-- Mismos parámetros y mismo JSON que antes; solo se añade que `p_firma` y
++-- `p_gen_en` no pueden venir vacíos: un registro sin firma o sin instante no
++-- es un registro de alta.
++create or replace function atlas_emitir_factura(
++  p_factura uuid, p_numero int, p_huella_anterior text,
++  p_huella text, p_firma text, p_gen_en timestamptz
++) returns jsonb
++language plpgsql security definer set search_path = public as $$
++declare
++  f record; sig int; punta_actual text;
++begin
++  if not atlas_es_propietario() then
++    return jsonb_build_object('ok', false, 'error', 'Solo el propietario emite facturas.');
++  end if;
++  if p_firma is null or p_firma = '' or p_gen_en is null then
++    return jsonb_build_object('ok', false, 'error', 'La emision necesita firma e instante de generacion.');
++  end if;
++  perform pg_advisory_xact_lock(hashtext('atlas_emision'));
++
++  select * into f from facturas where id = p_factura for update;
++  if not found then return jsonb_build_object('ok', false, 'error', 'La factura no existe.'); end if;
++  if f.origen <> 'atlas' or f.estado <> 'borrador' then
++    return jsonb_build_object('ok', false, 'error', 'Solo se emite un borrador de Atlas.');
++  end if;
++  if not exists (select 1 from factura_lineas where factura_id = p_factura) then
++    return jsonb_build_object('ok', false, 'error', 'Una factura necesita al menos una linea.');
++  end if;
++  if p_huella !~ '^[0-9A-F]{64}$' then
++    return jsonb_build_object('ok', false, 'error', 'La huella no tiene la forma esperada.');
++  end if;
++
++  select numero, punta into sig, punta_actual from atlas_siguiente_emision(f.serie);
++  if sig is distinct from p_numero or punta_actual is distinct from p_huella_anterior then
++    return jsonb_build_object('ok', false, 'reintentar', true,
++                              'numero', sig, 'punta', punta_actual);
++  end if;
++
++  perform set_config('atlas.emitiendo', 'si', true);
++  update facturas
++     set numero = p_numero, huella_anterior = p_huella_anterior, huella = p_huella,
++         firma = p_firma, huella_gen_en = p_gen_en, estado = 'emitida'
++   where id = p_factura;
++  update cadena_facturas set punta = p_huella, factura_id = p_factura, sellada_en = p_gen_en where id = 1;
++  insert into factura_eventos (factura_id, tipo, detalle, usuario_id)
++  values (p_factura, 'emision',
++          jsonb_build_object('serie', f.serie, 'numero', p_numero, 'huella', p_huella),
++          auth.uid());
++  return jsonb_build_object('ok', true, 'numero', p_numero);
++end $$;
++revoke all on function atlas_emitir_factura(uuid,int,text,text,text,timestamptz) from public;
++revoke all on function atlas_emitir_factura(uuid,int,text,text,text,timestamptz) from anon;
++grant execute on function atlas_emitir_factura(uuid,int,text,text,text,timestamptz) to authenticated;
++
++-- ---------- M5: qué eventos escribe la aplicación ----------
++-- `emision`, `anulacion`, `rectificacion`, `anomalia` y `verificacion` los
++-- escriben las RPC (definer: no pasan por esta política). Desde PostgREST el
++-- propietario solo apunta exportaciones y cambios de configuración fiscal.
++drop policy factura_eventos_propietario on factura_eventos;
++create policy factura_eventos_ver on factura_eventos for select to authenticated
++  using (atlas_es_propietario());
++create policy factura_eventos_apuntar on factura_eventos for insert to authenticated
++  with check (atlas_es_propietario() and tipo in ('exportacion','config_fiscal'));
++
++-- ---------- M7: nadie se hace propietario solo ----------
++-- `perfiles_propio` deja a cada uno editar su fila (nombre, tema, paleta): con
++-- eso un colaborador podía ponerse `es_propietario = true` por PostgREST.
++-- Cambiar esa columna exige ser ya propietario. Sin sesión (psql, scripts con
++-- service_role) `auth.uid()` es null: ese es el camino de administración y se
++-- deja pasar, porque es el único por el que se da de alta al primer propietario.
++create or replace function atlas_propietario_protegido() returns trigger
++language plpgsql as $$
++begin
++  if new.es_propietario is distinct from old.es_propietario
++     and auth.uid() is not null and not atlas_es_propietario() then
++    raise exception 'solo el propietario cambia es_propietario';
++  end if;
++  return new;
++end $$;
++create trigger perfiles_propietario_protegido
++  before update on perfiles
++  for each row execute function atlas_propietario_protegido();

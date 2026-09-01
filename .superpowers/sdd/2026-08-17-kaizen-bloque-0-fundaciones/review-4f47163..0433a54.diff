@@ -1,0 +1,419 @@
+# Review package: 4f47163..0433a54
+
+## Commits
+0433a54 test(kaizen): cobertura estructural de RLS en las diez tablas
+
+## Files changed
+ apps/kaizen/.env.test.example                      |   1 +
+ apps/kaizen/package-lock.json                      | 174 +++++++++++++++++++++
+ apps/kaizen/package.json                           |   2 +
+ .../rls-todas-las-tablas.integracion.test.ts       |  52 ++++++
+ 4 files changed, 229 insertions(+)
+
+## Diff
+diff --git a/apps/kaizen/.env.test.example b/apps/kaizen/.env.test.example
+index 592f409..6b104e4 100644
+--- a/apps/kaizen/.env.test.example
++++ b/apps/kaizen/.env.test.example
+@@ -1,3 +1,4 @@
+ SUPABASE_URL=
+ SUPABASE_ANON_KEY=
+ SUPABASE_SERVICE_ROLE_KEY=
++DATABASE_URL=
+diff --git a/apps/kaizen/package-lock.json b/apps/kaizen/package-lock.json
+index 03d6061..f821771 100644
+--- a/apps/kaizen/package-lock.json
++++ b/apps/kaizen/package-lock.json
+@@ -16,24 +16,26 @@
+         "react": "19.2.3",
+         "react-native": "0.86.2",
+         "react-native-safe-area-context": "~5.7.0",
+         "react-native-screens": "~4.26.0"
+       },
+       "devDependencies": {
+         "@react-native/jest-preset": "^0.86.2",
+         "@supabase/supabase-js": "^2.112.3",
+         "@testing-library/react-native": "^14.0.1",
+         "@types/jest": "^29.5.14",
++        "@types/pg": "^8.21.0",
+         "@types/react": "~19.2.2",
+         "babel-preset-expo": "^57.0.7",
+         "jest": "^29.7.0",
+         "jest-expo": "^57.0.4",
++        "pg": "^8.23.0",
+         "typescript": "~6.0.3"
+       }
+     },
+     "node_modules/@adobe/css-tools": {
+       "version": "4.5.0",
+       "resolved": "https://registry.npmjs.org/@adobe/css-tools/-/css-tools-4.5.0.tgz",
+       "integrity": "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==",
+       "license": "MIT"
+     },
+     "node_modules/@babel/code-frame": {
+@@ -3121,20 +3123,32 @@
+     },
+     "node_modules/@types/node": {
+       "version": "26.2.0",
+       "resolved": "https://registry.npmjs.org/@types/node/-/node-26.2.0.tgz",
+       "integrity": "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg==",
+       "license": "MIT",
+       "dependencies": {
+         "undici-types": "~8.3.0"
+       }
+     },
++    "node_modules/@types/pg": {
++      "version": "8.21.0",
++      "resolved": "https://registry.npmjs.org/@types/pg/-/pg-8.21.0.tgz",
++      "integrity": "sha512-AYdtudzabjLZgVgRZmAnU8bAnVUXzuJX2IYHeSIiIHm68olD+LgQYCGWdtcNYnP0uq9c4S4NibVG3Ni7VbKW7Q==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*",
++        "pg-protocol": "*",
++        "pg-types": "^2.2.0"
++      }
++    },
+     "node_modules/@types/react": {
+       "version": "19.2.18",
+       "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.18.tgz",
+       "integrity": "sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "csstype": "^3.2.2"
+       }
+     },
+@@ -8886,20 +8900,117 @@
+     },
+     "node_modules/path-scurry/node_modules/lru-cache": {
+       "version": "11.5.2",
+       "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-11.5.2.tgz",
+       "integrity": "sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==",
+       "license": "BlueOak-1.0.0",
+       "engines": {
+         "node": "20 || >=22"
+       }
+     },
++    "node_modules/pg": {
++      "version": "8.23.0",
++      "resolved": "https://registry.npmjs.org/pg/-/pg-8.23.0.tgz",
++      "integrity": "sha512-Ip2EQCngowJLGOfCwkFhPXU7/ljlhn6Rxlmy4XYfL2Y+vyRM59+8uR2xqRWKdYmbXmxCFOAmKxBuSUCdF34qLg==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "pg-connection-string": "^2.14.0",
++        "pg-pool": "^3.14.0",
++        "pg-protocol": "^1.16.0",
++        "pg-types": "2.2.0",
++        "pgpass": "1.0.5"
++      },
++      "engines": {
++        "node": ">= 16.0.0"
++      },
++      "optionalDependencies": {
++        "pg-cloudflare": "^1.4.0"
++      },
++      "peerDependencies": {
++        "pg-native": ">=3.0.1"
++      },
++      "peerDependenciesMeta": {
++        "pg-native": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/pg-cloudflare": {
++      "version": "1.4.0",
++      "resolved": "https://registry.npmjs.org/pg-cloudflare/-/pg-cloudflare-1.4.0.tgz",
++      "integrity": "sha512-Vo7z/6rrQYxpNRylp4Tlob2elzbh+N/MOQbxFVWCxS7oEx6jF53GTJFxK2WWpKuBRkmiin4Mt+xofFDjx09R0A==",
++      "dev": true,
++      "license": "MIT",
++      "optional": true
++    },
++    "node_modules/pg-connection-string": {
++      "version": "2.14.0",
++      "resolved": "https://registry.npmjs.org/pg-connection-string/-/pg-connection-string-2.14.0.tgz",
++      "integrity": "sha512-XwWDGcLRGCXAR8F/AM5bG7Q+A3Wm2s6QeEjlOKZLlH3UYcguiqCWKyWXVag5TLTIjR7oOJUY8kcADaZgWPyLeg==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/pg-int8": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/pg-int8/-/pg-int8-1.0.1.tgz",
++      "integrity": "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==",
++      "dev": true,
++      "license": "ISC",
++      "engines": {
++        "node": ">=4.0.0"
++      }
++    },
++    "node_modules/pg-pool": {
++      "version": "3.14.0",
++      "resolved": "https://registry.npmjs.org/pg-pool/-/pg-pool-3.14.0.tgz",
++      "integrity": "sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==",
++      "dev": true,
++      "license": "MIT",
++      "peerDependencies": {
++        "pg": ">=8.0"
++      }
++    },
++    "node_modules/pg-protocol": {
++      "version": "1.16.0",
++      "resolved": "https://registry.npmjs.org/pg-protocol/-/pg-protocol-1.16.0.tgz",
++      "integrity": "sha512-sILXutLVjCLjcDuOmvhX5e2Z4cS5qG/6Bu3VkpFwdf/633ElGLpEh9bgmuI5I4sqKqkifQiGyiCcx1HdtrK7tg==",
++      "dev": true,
++      "license": "MIT"
++    },
++    "node_modules/pg-types": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/pg-types/-/pg-types-2.2.0.tgz",
++      "integrity": "sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "pg-int8": "1.0.1",
++        "postgres-array": "~2.0.0",
++        "postgres-bytea": "~1.0.0",
++        "postgres-date": "~1.0.4",
++        "postgres-interval": "^1.1.0"
++      },
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/pgpass": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/pgpass/-/pgpass-1.0.5.tgz",
++      "integrity": "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "split2": "^4.1.0"
++      }
++    },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+       "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+       "license": "ISC"
+     },
+     "node_modules/picomatch": {
+       "version": "2.3.2",
+       "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-2.3.2.tgz",
+       "integrity": "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==",
+@@ -8987,20 +9098,63 @@
+       "license": "MIT",
+       "dependencies": {
+         "nanoid": "^3.3.17",
+         "picocolors": "^1.1.1",
+         "source-map-js": "^1.2.1"
+       },
+       "engines": {
+         "node": "^10 || ^12 || >=14"
+       }
+     },
++    "node_modules/postgres-array": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/postgres-array/-/postgres-array-2.0.0.tgz",
++      "integrity": "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/postgres-bytea": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/postgres-bytea/-/postgres-bytea-1.0.1.tgz",
++      "integrity": "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-date": {
++      "version": "1.0.7",
++      "resolved": "https://registry.npmjs.org/postgres-date/-/postgres-date-1.0.7.tgz",
++      "integrity": "sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-interval": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/postgres-interval/-/postgres-interval-1.2.0.tgz",
++      "integrity": "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "xtend": "^4.0.0"
++      },
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/pretty-format": {
+       "version": "29.7.0",
+       "resolved": "https://registry.npmjs.org/pretty-format/-/pretty-format-29.7.0.tgz",
+       "integrity": "sha512-Pdlw/oPxN+aXdmM9R00JVC9WVFoCLTKJvDVLgmJ+qAffBMxsV85l/Lu7sNx4zSzPyoL2euImuEwHhOXdEgNFZQ==",
+       "license": "MIT",
+       "dependencies": {
+         "@jest/schemas": "^29.6.3",
+         "ansi-styles": "^5.0.0",
+         "react-is": "^18.0.0"
+       },
+@@ -9900,20 +10054,30 @@
+     },
+     "node_modules/split-on-first": {
+       "version": "1.1.0",
+       "resolved": "https://registry.npmjs.org/split-on-first/-/split-on-first-1.1.0.tgz",
+       "integrity": "sha512-43ZssAJaMusuKWL8sKUBQXHWOpq8d6CfN/u1p4gUzfJkM05C8rxTmYrkIPTXapZpORA6LkkzcUulJ8FqA7Uudw==",
+       "license": "MIT",
+       "engines": {
+         "node": ">=6"
+       }
+     },
++    "node_modules/split2": {
++      "version": "4.2.0",
++      "resolved": "https://registry.npmjs.org/split2/-/split2-4.2.0.tgz",
++      "integrity": "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==",
++      "dev": true,
++      "license": "ISC",
++      "engines": {
++        "node": ">= 10.x"
++      }
++    },
+     "node_modules/sprintf-js": {
+       "version": "1.0.3",
+       "resolved": "https://registry.npmjs.org/sprintf-js/-/sprintf-js-1.0.3.tgz",
+       "integrity": "sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g==",
+       "dev": true,
+       "license": "BSD-3-Clause"
+     },
+     "node_modules/stack-generator": {
+       "version": "2.0.10",
+       "resolved": "https://registry.npmjs.org/stack-generator/-/stack-generator-2.0.10.tgz",
+@@ -10870,20 +11034,30 @@
+         "node": ">=8.0"
+       }
+     },
+     "node_modules/xmlchars": {
+       "version": "2.2.0",
+       "resolved": "https://registry.npmjs.org/xmlchars/-/xmlchars-2.2.0.tgz",
+       "integrity": "sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==",
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/xtend": {
++      "version": "4.0.2",
++      "resolved": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
++      "integrity": "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.4"
++      }
++    },
+     "node_modules/y18n": {
+       "version": "5.0.8",
+       "resolved": "https://registry.npmjs.org/y18n/-/y18n-5.0.8.tgz",
+       "integrity": "sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==",
+       "license": "ISC",
+       "engines": {
+         "node": ">=10"
+       }
+     },
+     "node_modules/yallist": {
+diff --git a/apps/kaizen/package.json b/apps/kaizen/package.json
+index 4ca69a5..5c816a5 100644
+--- a/apps/kaizen/package.json
++++ b/apps/kaizen/package.json
+@@ -11,24 +11,26 @@
+     "react": "19.2.3",
+     "react-native": "0.86.2",
+     "react-native-safe-area-context": "~5.7.0",
+     "react-native-screens": "~4.26.0"
+   },
+   "devDependencies": {
+     "@react-native/jest-preset": "^0.86.2",
+     "@supabase/supabase-js": "^2.112.3",
+     "@testing-library/react-native": "^14.0.1",
+     "@types/jest": "^29.5.14",
++    "@types/pg": "^8.21.0",
+     "@types/react": "~19.2.2",
+     "babel-preset-expo": "^57.0.7",
+     "jest": "^29.7.0",
+     "jest-expo": "^57.0.4",
++    "pg": "^8.23.0",
+     "typescript": "~6.0.3"
+   },
+   "scripts": {
+     "start": "expo start",
+     "android": "expo start --android",
+     "ios": "expo start --ios",
+     "web": "expo start --web",
+     "dev": "expo start",
+     "test": "jest",
+     "test:watch": "jest --watch",
+diff --git a/apps/kaizen/pruebas/rls-todas-las-tablas.integracion.test.ts b/apps/kaizen/pruebas/rls-todas-las-tablas.integracion.test.ts
+new file mode 100644
+index 0000000..0691f38
+--- /dev/null
++++ b/apps/kaizen/pruebas/rls-todas-las-tablas.integracion.test.ts
+@@ -0,0 +1,52 @@
++import { Client } from 'pg'
++
++const TABLAS = [
++  'perfiles', 'objetivos', 'alimentos', 'comidas', 'comida_items',
++  'registros_agua', 'entrenamientos', 'habitos', 'habitos_registro', 'pesos',
++]
++
++let cliente: Client
++
++beforeAll(async () => {
++  cliente = new Client({ connectionString: process.env.DATABASE_URL })
++  await cliente.connect()
++})
++
++afterAll(async () => {
++  await cliente.end()
++})
++
++it('las diez tablas esperadas existen en public', async () => {
++  const { rows } = await cliente.query<{ tablename: string }>(
++    `select tablename from pg_tables where schemaname = 'public'`,
++  )
++  expect(rows.map((f) => f.tablename).sort()).toEqual([...TABLAS].sort())
++})
++
++it('ninguna tabla de public se queda sin RLS activado', async () => {
++  const { rows } = await cliente.query<{ tablename: string }>(
++    `select tablename from pg_tables
++      where schemaname = 'public' and rowsecurity = false`,
++  )
++  expect(rows.map((f) => f.tablename)).toEqual([])
++})
++
++it('ninguna tabla de public se queda sin política', async () => {
++  const { rows } = await cliente.query<{ tablename: string }>(
++    `select t.tablename from pg_tables t
++      where t.schemaname = 'public'
++        and not exists (
++          select 1 from pg_policies p
++           where p.schemaname = 'public' and p.tablename = t.tablename
++        )`,
++  )
++  expect(rows.map((f) => f.tablename)).toEqual([])
++})
++
++it('ninguna política concede acceso al rol anónimo', async () => {
++  const { rows } = await cliente.query<{ tablename: string; roles: string[] }>(
++    `select tablename, roles::text[] from pg_policies where schemaname = 'public'`,
++  )
++  const conAnon = rows.filter((f) => f.roles.includes('anon')).map((f) => f.tablename)
++  expect(conAnon).toEqual([])
++})

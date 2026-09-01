@@ -1,0 +1,166 @@
+diff --git a/apps/atlas/src/lib/facturas/huella.ts b/apps/atlas/src/lib/facturas/huella.ts
+new file mode 100644
+index 0000000..afeda8c
+--- /dev/null
++++ b/apps/atlas/src/lib/facturas/huella.ts
+@@ -0,0 +1,97 @@
++// La huella del registro de alta (Orden HAC/1177/2024; documento técnico de la
++// AEAT v0.1.2). Pura: sin base, sin reloj. Los dos vectores públicos del
++// documento están en el test y son la única verdad que esta función acepta.
++//
++export type RegistroAlta = {
++  nifEmisor: string;
++  numSerie: string;
++  /** ISO AAAA-MM-DD */
++  fechaExpedicion: string;
++  tipoFactura: "F1" | "R1";
++  cuotaTotalCentimos: number;
++  importeTotalCentimos: number;
++  huellaAnterior: string | null;
++  /** ISO con desfase explícito: 2024-01-01T19:20:30+01:00 */
++  genEn: string;
++};
++
++export type Eslabon = RegistroAlta & { huella: string };
++
++/** Céntimos → «123.45». Dos decimales y punto: es lo que el documento muestra. */
++export function importeAeat(centimos: number): string {
++  const signo = centimos < 0 ? "-" : "";
++  const abs = Math.abs(centimos);
++  return `${signo}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
++}
++
++/** AAAA-MM-DD → dd-mm-aaaa. */
++export function fechaAeat(iso: string): string {
++  return `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`;
++}
++
++/** Una sola regla para el identificador: la que va en la huella, el documento y el QR. */
++export function numSerie(serie: string, numero: number): string {
++  return `${serie}-${numero}`;
++}
++
++/**
++ * El instante de generación, en Madrid y con su desfase escrito. La orden pide
++ * fecha, hora y huso; escribir el desfase (+01:00/+02:00) lo hace verificable
++ * sin conocer la zona.
++ */
++export function instanteMadrid(ms: number): string {
++  const d = new Date(ms);
++  const partes = new Intl.DateTimeFormat("en-US", {
++    timeZone: "Europe/Madrid", hour12: false,
++    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
++  }).formatToParts(d);
++  const g = (t: string) => partes.find((p) => p.type === t)?.value ?? "00";
++  const hora = String(Number(g("hour")) % 24).padStart(2, "0");
++  const local = Date.UTC(Number(g("year")), Number(g("month")) - 1, Number(g("day")), Number(hora), Number(g("minute")), Number(g("second")));
++  const desfaseMin = Math.round((local - Math.floor(ms / 1000) * 1000) / 60_000);
++  const signo = desfaseMin >= 0 ? "+" : "-";
++  const abs = Math.abs(desfaseMin);
++  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
++  const mm = String(abs % 60).padStart(2, "0");
++  return `${g("year")}-${g("month")}-${g("day")}T${hora}:${g("minute")}:${g("second")}${signo}${hh}:${mm}`;
++}
++
++const v = (s: string | null) => (s ?? "").trim();
++
++/** Exactamente el orden y los nombres del documento; cambiarlos invalida la cadena. */
++export function cadenaCanonica(r: RegistroAlta): string {
++  return (
++    `IDEmisorFactura=${v(r.nifEmisor)}` +
++    `&NumSerieFactura=${v(r.numSerie)}` +
++    `&FechaExpedicionFactura=${fechaAeat(v(r.fechaExpedicion))}` +
++    `&TipoFactura=${r.tipoFactura}` +
++    `&CuotaTotal=${importeAeat(r.cuotaTotalCentimos)}` +
++    `&ImporteTotal=${importeAeat(r.importeTotalCentimos)}` +
++    `&Huella=${v(r.huellaAnterior)}` +
++    `&FechaHoraHusoGenRegistro=${v(r.genEn)}`
++  );
++}
++
++export async function huellaDe(r: RegistroAlta): Promise<string> {
++  const bytes = new TextEncoder().encode(cadenaCanonica(r));
++  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
++  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
++}
++
++/** Recorre la cadena y recalcula cada huella. Si algo no encaja, dice dónde. */
++export async function verificarCadena(
++  eslabones: Eslabon[]
++): Promise<{ ok: true } | { ok: false; rotaEn: number; esperada: string; encontrada: string }> {
++  let anterior: string | null = null;
++  for (let i = 0; i < eslabones.length; i++) {
++    const e = eslabones[i];
++    if (e === undefined) break;
++    if ((e.huellaAnterior ?? null) !== anterior) {
++      return { ok: false, rotaEn: i, esperada: anterior ?? "", encontrada: e.huellaAnterior ?? "" };
++    }
++    const esperada = await huellaDe(e);
++    if (esperada !== e.huella) return { ok: false, rotaEn: i, esperada, encontrada: e.huella };
++    anterior = e.huella;
++  }
++  return { ok: true };
++}
+diff --git a/apps/atlas/src/tests/facturas/huella.test.ts b/apps/atlas/src/tests/facturas/huella.test.ts
+new file mode 100644
+index 0000000..085455a
+--- /dev/null
++++ b/apps/atlas/src/tests/facturas/huella.test.ts
+@@ -0,0 +1,57 @@
++import { describe, it, expect } from "vitest";
++import { cadenaCanonica, huellaDe, importeAeat, fechaAeat, instanteMadrid, numSerie, verificarCadena, type RegistroAlta } from "@/lib/facturas/huella";
++
++// Los dos ejemplos del documento «especificaciones técnicas para la generación
++// de la huella» v0.1.2 de la AEAT. Si esto deja de pasar, la cadena entera
++// deja de valer: no se toca sin un documento nuevo delante.
++const V1: RegistroAlta = { nifEmisor: "89890001K", numSerie: "12345678/G33", fechaExpedicion: "2024-01-01", tipoFactura: "F1", cuotaTotalCentimos: 1235, importeTotalCentimos: 12345, huellaAnterior: null, genEn: "2024-01-01T19:20:30+01:00" };
++const H1 = "3C464DAF61ACB827C65FDA19F352A4E3BDC2C640E9E9FC4CC058073F38F12F60";
++const V2: RegistroAlta = { ...V1, numSerie: "12345679/G34", huellaAnterior: H1, genEn: "2024-01-01T19:20:35+01:00" };
++const H2 = "F7B94CFD8924EDFF273501B01EE5153E4CE8F259766F88CF6ACB8935802A2B97";
++
++describe("cadenaCanonica", () => {
++  it("es exactamente la cadena del documento de la AEAT", () => {
++    expect(cadenaCanonica(V1)).toBe("IDEmisorFactura=89890001K&NumSerieFactura=12345678/G33&FechaExpedicionFactura=01-01-2024&TipoFactura=F1&CuotaTotal=12.35&ImporteTotal=123.45&Huella=&FechaHoraHusoGenRegistro=2024-01-01T19:20:30+01:00");
++  });
++  it("recorta espacios de los valores", () => {
++    expect(cadenaCanonica({ ...V1, nifEmisor: " 89890001K " })).toBe(cadenaCanonica(V1));
++  });
++});
++
++describe("huellaDe — vectores de la AEAT", () => {
++  it("primer registro", async () => { expect(await huellaDe(V1)).toBe(H1); });
++  it("encadenado", async () => { expect(await huellaDe(V2)).toBe(H2); });
++  it("cambiar un céntimo cambia la huella", async () => {
++    expect(await huellaDe({ ...V1, importeTotalCentimos: 12346 })).not.toBe(H1);
++  });
++});
++
++describe("formatos", () => {
++  it("importes con punto y dos decimales, negativos con signo", () => {
++    expect(importeAeat(12345)).toBe("123.45");
++    expect(importeAeat(0)).toBe("0.00");
++    expect(importeAeat(-1230)).toBe("-12.30");
++    expect(importeAeat(5)).toBe("0.05");
++  });
++  it("fecha dd-mm-aaaa", () => { expect(fechaAeat("2024-01-01")).toBe("01-01-2024"); });
++  it("instante de Madrid con su desfase, verano e invierno", () => {
++    expect(instanteMadrid(Date.parse("2026-08-01T10:15:00Z"))).toBe("2026-08-01T12:15:00+02:00");
++    expect(instanteMadrid(Date.parse("2026-01-15T10:15:00Z"))).toBe("2026-01-15T11:15:00+01:00");
++  });
++  it("serie y número con guion", () => { expect(numSerie("A", 12)).toBe("A-12"); });
++});
++
++describe("verificarCadena", () => {
++  it("una cadena íntegra pasa; una huella tocada dice dónde", async () => {
++    const buena = [{ ...V1, huella: H1 }, { ...V2, huella: H2 }];
++    expect(await verificarCadena(buena)).toEqual({ ok: true });
++    const rota = [{ ...V1, huella: H1 }, { ...V2, huella: "0".repeat(64) }];
++    const r = await verificarCadena(rota);
++    expect(r).toMatchObject({ ok: false, rotaEn: 1, esperada: H2 });
++  });
++  it("un eslabón cuya huellaAnterior no es la huella del anterior también rompe", async () => {
++    const r = await verificarCadena([{ ...V1, huella: H1 }, { ...V2, huellaAnterior: "1".repeat(64), huella: H2 }]);
++    expect(r).toMatchObject({ ok: false, rotaEn: 1 });
++  });
++  it("vacía es íntegra", async () => { expect(await verificarCadena([])).toEqual({ ok: true }); });
++});

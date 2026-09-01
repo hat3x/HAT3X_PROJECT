@@ -1,0 +1,133 @@
+# Review package: 159fa80..7d448bc
+
+## Commits
+7d448bc fix(atlas): la duracion de cada tramo con el mismo tope que el total, y aviso de zona en el formulario
+
+## Files changed
+ apps/atlas/src/app/dinero/horas/page.tsx       | 23 +++++++++++++++++++----
+ apps/atlas/src/components/dinero/FormTramo.tsx |  4 +++-
+ 2 files changed, 22 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/src/app/dinero/horas/page.tsx b/apps/atlas/src/app/dinero/horas/page.tsx
+index e0c8350..fdbe0b4 100644
+--- a/apps/atlas/src/app/dinero/horas/page.tsx
++++ b/apps/atlas/src/app/dinero/horas/page.tsx
+@@ -1,19 +1,19 @@
+ // src/app/dinero/horas/page.tsx
+ import Link from "next/link";
+ import { ChevronLeft } from "lucide-react";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { listarTramos } from "@/lib/db/fichajes";
+ import { listarProyectos } from "@/lib/db/proyectos";
+ import { listarClientes } from "@/lib/db/clientes";
+-import { resumir, formatearMinutos, type FilaHoras } from "@/lib/horas/tramos";
++import { resumir, formatearMinutos, minutosDe, type FilaHoras } from "@/lib/horas/tramos";
+ import { hoyEnMadrid } from "@/lib/dinero";
+ import { FormTramo } from "@/components/dinero/FormTramo";
+ import { Distintivo } from "@/components/ui/Distintivo";
+ 
+ const FECHA_HORA = new Intl.DateTimeFormat("es-ES", {
+   day: "numeric",
+   month: "short",
+   hour: "2-digit",
+   minute: "2-digit",
+   timeZone: "Europe/Madrid",
+@@ -77,21 +77,26 @@ export default async function PaginaHoras() {
+   // Sin doble puerta: aquí entra cualquiera. Un colaborador ve sus horas y el
+   // propietario las de todos, y eso lo decide RLS al leer, no esta pantalla.
+   const esPropietario = perfil?.esPropietario ?? false;
+ 
+   const rango = mesEnCurso(hoyEnMadrid());
+   const [tramos, proyectos, clientes] = await Promise.all([
+     listarTramos(sb, rango),
+     listarProyectos(sb),
+     listarClientes(sb),
+   ]);
+-  const r = resumir(tramos, Date.now());
++  // Un único instante para toda la pantalla: `resumir` lo usa para el total y
++  // los desgloses, y la tabla de abajo lo reutiliza en `minutosDe` fila por
++  // fila. Si cada uno leyera su propio `Date.now()`, un tramo abierto podría
++  // sumar un minuto distinto en la fila que en el total.
++  const ahora = Date.now();
++  const r = resumir(tramos, ahora);
+   const pctAnadido = r.totalMin === 0 ? 0 : Math.round((r.anadidosMin / r.totalMin) * 100);
+ 
+   return (
+     <section className="max-w-5xl space-y-4">
+       <header>
+         <Link href="/dinero" className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100">
+           <ChevronLeft size={15} aria-hidden="true" />
+           Dinero
+         </Link>
+         <h1 className="text-2xl font-semibold tracking-tight">Horas</h1>
+@@ -160,27 +165,37 @@ export default async function PaginaHoras() {
+               <tr className="border-b text-left text-xs uppercase tracking-wider" style={{ borderColor: "var(--cristal-borde)", color: "var(--texto-tenue)" }}>
+                 {esPropietario && <th scope="col" className="px-4 py-2 font-medium">Quién</th>}
+                 <th scope="col" className="px-4 py-2 font-medium">Inicio</th>
+                 <th scope="col" className="px-4 py-2 font-medium">Duración</th>
+                 <th scope="col" className="px-4 py-2 font-medium">Para</th>
+                 <th scope="col" className="px-4 py-2 font-medium">Origen</th>
+               </tr>
+             </thead>
+             <tbody className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
+               {tramos.map((t) => {
+-                const minutos = t.fin === null ? null : Math.round((Date.parse(t.fin) - Date.parse(t.inicio)) / 60_000);
++                // La misma `minutosDe` que usa `resumir`: es lo que hace que
++                // la suma de esta columna cuadre con el total de arriba,
++                // tope de 16 h incluido tanto en cerrados como en abiertos.
++                const minutos = minutosDe(t, ahora);
+                 return (
+                   <tr key={t.id}>
+                     {esPropietario && <td className="px-4 py-2.5">{t.usuarioNombre ?? "—"}</td>}
+                     <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">{FECHA_HORA.format(new Date(t.inicio))}</td>
+                     <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
+-                      {minutos === null ? <Distintivo estado="ok" texto="En curso" /> : formatearMinutos(minutos)}
++                      {t.fin === null ? (
++                        <span className="inline-flex items-center gap-1.5">
++                          <Distintivo estado="ok" texto="En curso" />
++                          <span>{formatearMinutos(minutos)}</span>
++                        </span>
++                      ) : (
++                        formatearMinutos(minutos)
++                      )}
+                     </td>
+                     <td className="px-4 py-2.5">
+                       {[t.proyectoNombre, t.clienteNombre].filter(Boolean).join(" · ") || (
+                         <span style={{ color: "var(--texto-tenue)" }}>Sin asignar</span>
+                       )}
+                     </td>
+                     <td className="px-4 py-2.5">
+                       {t.origen === "anadido" ? <Distintivo estado="aviso" texto="Añadido" /> : <span style={{ color: "var(--texto-tenue)" }}>Medido</span>}
+                     </td>
+                   </tr>
+diff --git a/apps/atlas/src/components/dinero/FormTramo.tsx b/apps/atlas/src/components/dinero/FormTramo.tsx
+index cbe88db..ffba555 100644
+--- a/apps/atlas/src/components/dinero/FormTramo.tsx
++++ b/apps/atlas/src/components/dinero/FormTramo.tsx
+@@ -3,21 +3,23 @@
+ import { useState } from "react";
+ import { anadirFichaje } from "@/lib/db/acciones-fichajes";
+ 
+ /**
+  * Añadir un tramo que se olvidó fichar. Queda marcado como añadido, y la
+  * pantalla lo enseña: la regla es fichar antes, y esto es la excepción, no el
+  * camino.
+  *
+  * Las horas se teclean en la zona del dispositivo (`datetime-local` no lleva
+  * zona) y se mandan en ISO con zona: `new Date(valor)` las interpreta en la
+- * zona del navegador, que es la de quien las recuerda.
++ * zona del navegador, que es la de quien las recuerda. Si quien rellena el
++ * formulario está de viaje, la hora se interpreta en la zona del
++ * dispositivo, no en la de Madrid — es una limitación aceptada, no un bug.
+  */
+ export function FormTramo({
+   proyectos,
+   clientes,
+ }: {
+   proyectos: { id: string; nombre: string }[];
+   clientes: { id: string; nombre: string }[];
+ }) {
+   const [error, setError] = useState<string | null>(null);
+   const [enviando, setEnviando] = useState(false);

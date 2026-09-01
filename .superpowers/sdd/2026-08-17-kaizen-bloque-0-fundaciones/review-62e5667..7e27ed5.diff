@@ -1,0 +1,627 @@
+# Review package: 62e5667..7e27ed5
+
+## Commits
+7e27ed5 fix(kaizen): ronda 1 de arreglos sobre la Tarea 9 (fondo, color de peligro, doble pulsacion)
+
+## Files changed
+ apps/kaizen/src/app/(pestanas)/_layout.tsx         | 14 +++++++--
+ apps/kaizen/src/app/(pestanas)/coach.tsx           |  6 ++--
+ apps/kaizen/src/app/(pestanas)/entrenamiento.tsx   |  6 ++--
+ apps/kaizen/src/app/(pestanas)/evolucion.tsx       |  6 ++--
+ apps/kaizen/src/app/(pestanas)/index.tsx           |  6 ++--
+ apps/kaizen/src/app/(pestanas)/nutricion.tsx       |  6 ++--
+ apps/kaizen/src/app/_layout.tsx                    |  5 +++-
+ apps/kaizen/src/app/acceso.tsx                     | 19 ++++++++-----
+ apps/kaizen/src/app/anadir.tsx                     |  7 +++--
+ apps/kaizen/src/design/componentes/boton.tsx       | 33 +++++++++++++++-------
+ .../src/design/componentes/componentes.test.tsx    |  8 ++++++
+ apps/kaizen/src/design/componentes/pantalla.tsx    | 17 +++++++++++
+ apps/kaizen/src/design/tema.ts                     | 10 +++++++
+ apps/kaizen/src/design/temas/claro.ts              |  3 ++
+ apps/kaizen/src/design/temas/defecto.ts            |  3 ++
+ 15 files changed, 110 insertions(+), 39 deletions(-)
+
+## Diff
+diff --git a/apps/kaizen/src/app/(pestanas)/_layout.tsx b/apps/kaizen/src/app/(pestanas)/_layout.tsx
+index 3c71fcd..42bc531 100644
+--- a/apps/kaizen/src/app/(pestanas)/_layout.tsx
++++ b/apps/kaizen/src/app/(pestanas)/_layout.tsx
+@@ -1,27 +1,35 @@
+ import { Tabs, useRouter } from 'expo-router'
+-import { Pressable, View } from 'react-native'
++import { Pressable } from 'react-native'
+ import { Superficie } from '@/design/componentes/superficie'
+ import { Texto } from '@/design/componentes/texto'
+ import { useTema } from '@/design/proveedor'
+ 
++// Disposición, no tema: cuánto mide el botón central y cuánto sobresale de la
++// barra. No hay token para esto porque no es «look», es geometría de esta barra.
++const LADO_MAS = 52
++const SOBRESALIENTE_MAS = 18
++
+ function BotonAnadir() {
+   const t = useTema()
+   const router = useRouter()
+   return (
+     <Pressable
+       onPress={() => router.push('/anadir')}
+       accessibilityRole="button"
+       accessibilityLabel="Añadir registro"
+       style={{
+-        width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+-        backgroundColor: t.color.acento, marginTop: -18,
++        width: LADO_MAS, height: LADO_MAS,
++        borderRadius: LADO_MAS / 2, // círculo: derivado, no un radio inventado
++        alignItems: 'center', justifyContent: 'center',
++        backgroundColor: t.color.acento,
++        marginTop: -SOBRESALIENTE_MAS,
+       }}
+     >
+       <Texto variante="titulo" style={{ color: t.color.sobreAcento }}>+</Texto>
+     </Pressable>
+   )
+ }
+ 
+ export default function LayoutPestanas() {
+   const t = useTema()
+   return (
+diff --git a/apps/kaizen/src/app/(pestanas)/coach.tsx b/apps/kaizen/src/app/(pestanas)/coach.tsx
+index 44049d3..8d1ceb0 100644
+--- a/apps/kaizen/src/app/(pestanas)/coach.tsx
++++ b/apps/kaizen/src/app/(pestanas)/coach.tsx
+@@ -1,16 +1,16 @@
+-import { View } from 'react-native'
+ import { Texto } from '@/design/componentes/texto'
++import { Pantalla } from '@/design/componentes/pantalla'
+ import { useTema } from '@/design/proveedor'
+ 
+ export default function Coach() {
+   const t = useTema()
+   return (
+-    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++    <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5] }}>
+       <Texto variante="titulo">Coach</Texto>
+       <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
+         Todavía no tengo datos suficientes sobre ti. Registra unos días y aquí
+         empezaré a decirte cosas que valgan la pena.
+       </Texto>
+-    </View>
++    </Pantalla>
+   )
+ }
+diff --git a/apps/kaizen/src/app/(pestanas)/entrenamiento.tsx b/apps/kaizen/src/app/(pestanas)/entrenamiento.tsx
+index 193f58a..3240af3 100644
+--- a/apps/kaizen/src/app/(pestanas)/entrenamiento.tsx
++++ b/apps/kaizen/src/app/(pestanas)/entrenamiento.tsx
+@@ -1,15 +1,15 @@
+-import { View } from 'react-native'
+ import { Texto } from '@/design/componentes/texto'
++import { Pantalla } from '@/design/componentes/pantalla'
+ import { useTema } from '@/design/proveedor'
+ 
+ export default function Entrenamiento() {
+   const t = useTema()
+   return (
+-    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++    <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5] }}>
+       <Texto variante="titulo">Entreno</Texto>
+       <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
+         Tus entrenamientos aparecerán aquí en cuanto registres el primero.
+       </Texto>
+-    </View>
++    </Pantalla>
+   )
+ }
+diff --git a/apps/kaizen/src/app/(pestanas)/evolucion.tsx b/apps/kaizen/src/app/(pestanas)/evolucion.tsx
+index 81316c8..7f1e124 100644
+--- a/apps/kaizen/src/app/(pestanas)/evolucion.tsx
++++ b/apps/kaizen/src/app/(pestanas)/evolucion.tsx
+@@ -1,15 +1,15 @@
+-import { View } from 'react-native'
+ import { Texto } from '@/design/componentes/texto'
++import { Pantalla } from '@/design/componentes/pantalla'
+ import { useTema } from '@/design/proveedor'
+ 
+ export default function Evolucion() {
+   const t = useTema()
+   return (
+-    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++    <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5] }}>
+       <Texto variante="titulo">Evolución</Texto>
+       <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
+         Cuando lleves unas semanas registrando, aquí verás cómo has cambiado.
+       </Texto>
+-    </View>
++    </Pantalla>
+   )
+ }
+diff --git a/apps/kaizen/src/app/(pestanas)/index.tsx b/apps/kaizen/src/app/(pestanas)/index.tsx
+index 7d1c387..165e8ea 100644
+--- a/apps/kaizen/src/app/(pestanas)/index.tsx
++++ b/apps/kaizen/src/app/(pestanas)/index.tsx
+@@ -1,16 +1,16 @@
+-import { View } from 'react-native'
+ import { Texto } from '@/design/componentes/texto'
++import { Pantalla } from '@/design/componentes/pantalla'
+ import { useTema } from '@/design/proveedor'
+ 
+ export default function Hoy() {
+   const t = useTema()
+   return (
+-    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++    <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5] }}>
+       <Texto variante="titulo">Hola</Texto>
+       <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
+         Este es el resumen de tu día. Todavía no hay nada registrado: usa el
+         botón + para empezar.
+       </Texto>
+-    </View>
++    </Pantalla>
+   )
+ }
+diff --git a/apps/kaizen/src/app/(pestanas)/nutricion.tsx b/apps/kaizen/src/app/(pestanas)/nutricion.tsx
+index d687fea..1ccf9da 100644
+--- a/apps/kaizen/src/app/(pestanas)/nutricion.tsx
++++ b/apps/kaizen/src/app/(pestanas)/nutricion.tsx
+@@ -1,16 +1,16 @@
+-import { View } from 'react-native'
+ import { Texto } from '@/design/componentes/texto'
++import { Pantalla } from '@/design/componentes/pantalla'
+ import { useTema } from '@/design/proveedor'
+ 
+ export default function Nutricion() {
+   const t = useTema()
+   return (
+-    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++    <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5] }}>
+       <Texto variante="titulo">Nutrición</Texto>
+       <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
+         Aquí verás tu histórico de comidas. Empieza registrando algo desde el
+         botón +.
+       </Texto>
+-    </View>
++    </Pantalla>
+   )
+ }
+diff --git a/apps/kaizen/src/app/_layout.tsx b/apps/kaizen/src/app/_layout.tsx
+index 966090b..866a831 100644
+--- a/apps/kaizen/src/app/_layout.tsx
++++ b/apps/kaizen/src/app/_layout.tsx
+@@ -1,21 +1,24 @@
+ import { Stack, Redirect } from 'expo-router'
+ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+ import { ProveedorSesion, useSesion } from '@/datos/sesion'
+ import { crearClienteConsultas, persistidor } from '@/datos/cliente-consultas'
+ import { ProveedorTema } from '@/design/proveedor'
++import { Pantalla } from '@/design/componentes/pantalla'
+ 
+ const cliente = crearClienteConsultas()
+ 
+ function Puerta() {
+   const { sesion, cargando } = useSesion()
+-  if (cargando) return null
++  // Nunca `null`: sin nada montado se ve el fondo por defecto de React Native
++  // —blanco— y en una app oscura eso es un fogonazo en cada arranque lento.
++  if (cargando) return <Pantalla />
+   if (!sesion) return <Redirect href="/acceso" />
+   return (
+     <Stack screenOptions={{ headerShown: false }}>
+       <Stack.Screen name="(pestanas)" />
+       <Stack.Screen name="anadir" options={{ presentation: 'modal' }} />
+     </Stack>
+   )
+ }
+ 
+ export default function Raiz() {
+diff --git a/apps/kaizen/src/app/acceso.tsx b/apps/kaizen/src/app/acceso.tsx
+index c8b7580..72dd431 100644
+--- a/apps/kaizen/src/app/acceso.tsx
++++ b/apps/kaizen/src/app/acceso.tsx
+@@ -1,60 +1,65 @@
+ import { useState } from 'react'
+-import { View, TextInput, Platform } from 'react-native'
++import { TextInput, Platform } from 'react-native'
+ import { Texto } from '@/design/componentes/texto'
+ import { Boton } from '@/design/componentes/boton'
++import { Pantalla } from '@/design/componentes/pantalla'
+ import { useTema } from '@/design/proveedor'
+ import { entrarConCorreo, registrarConCorreo, entrarConApple } from '@/datos/autenticacion'
+ 
+ export default function Acceso() {
+   const t = useTema()
+   const [correo, setCorreo] = useState('')
+   const [contrasena, setContrasena] = useState('')
+   const [error, setError] = useState<string | null>(null)
+   const [ocupado, setOcupado] = useState(false)
+ 
+   async function ejecutar(accion: () => Promise<{ error: string | null }>) {
++    // Sin esta guarda, un segundo toque lanza otra petición: dos registros
++    // con el mismo correo devuelven «ya existe» justo después de haber
++    // funcionado, y el usuario ve un error tras algo que salió bien.
++    if (ocupado) return
+     setOcupado(true)
+     setError((await accion()).error)
+     setOcupado(false)
+   }
+ 
+   const campo = {
+     borderWidth: 1, borderColor: t.color.borde, borderRadius: t.radio.boton,
+     padding: t.espaciado[2], color: t.color.texto,
+   }
+ 
+   return (
+-    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5], gap: t.espaciado[2] }}>
++    <Pantalla style={{ justifyContent: 'center', padding: t.espaciado[5], gap: t.espaciado[2] }}>
+       <Texto variante="titulo">Entrar en KAIZEN</Texto>
+ 
+       <TextInput
+         style={campo}
+         value={correo}
+         onChangeText={setCorreo}
+         placeholder="Correo"
+         placeholderTextColor={t.color.textoTenue}
+         autoCapitalize="none"
+         keyboardType="email-address"
+       />
+       <TextInput
+         style={campo}
+         value={contrasena}
+         onChangeText={setContrasena}
+         placeholder="Contraseña"
+         placeholderTextColor={t.color.textoTenue}
+         secureTextEntry
+       />
+ 
+-      {error && <Texto variante="tenue" style={{ color: '#E2574C' }}>{error}</Texto>}
++      {error && <Texto variante="tenue" style={{ color: t.color.peligro }}>{error}</Texto>}
+ 
+-      <Boton titulo={ocupado ? 'Un momento…' : 'Entrar'}
++      <Boton titulo={ocupado ? 'Un momento…' : 'Entrar'} deshabilitado={ocupado}
+              alPulsar={() => ejecutar(() => entrarConCorreo(correo, contrasena))} />
+-      <Boton titulo="Crear cuenta" tono="secundario"
++      <Boton titulo="Crear cuenta" tono="secundario" deshabilitado={ocupado}
+              alPulsar={() => ejecutar(() => registrarConCorreo(correo, contrasena))} />
+       {Platform.OS === 'ios' && (
+-        <Boton titulo="Continuar con Apple" tono="secundario"
++        <Boton titulo="Continuar con Apple" tono="secundario" deshabilitado={ocupado}
+                alPulsar={() => ejecutar(entrarConApple)} />
+       )}
+-    </View>
++    </Pantalla>
+   )
+ }
+diff --git a/apps/kaizen/src/app/anadir.tsx b/apps/kaizen/src/app/anadir.tsx
+index 5be7bd4..c97480d 100644
+--- a/apps/kaizen/src/app/anadir.tsx
++++ b/apps/kaizen/src/app/anadir.tsx
+@@ -1,38 +1,39 @@
+-import { View, Pressable } from 'react-native'
++import { Pressable } from 'react-native'
+ import { useRouter } from 'expo-router'
+ import { Texto } from '@/design/componentes/texto'
++import { Pantalla } from '@/design/componentes/pantalla'
+ import { useTema } from '@/design/proveedor'
+ 
+ // Las seis rutas de destino (buscar alimento, escanear código, entrada
+ // rápida, agua, entrenamiento, peso) se crean en el bloque 1. Hasta entonces
+ // todas apuntan a "/" para no navegar a una pantalla que no existe: las
+ // entradas quedan visibles y funcionales, sin opciones deshabilitadas ni
+ // «próximamente».
+ const OPCIONES = [
+   { clave: 'buscar',   titulo: 'Buscar alimento', ruta: '/' },
+   { clave: 'escanear', titulo: 'Escanear código', ruta: '/' },
+   { clave: 'rapida',   titulo: 'Entrada rápida', ruta: '/' },
+   { clave: 'agua',     titulo: 'Agua', ruta: '/' },
+   { clave: 'entreno',  titulo: 'Entrenamiento', ruta: '/' },
+   { clave: 'peso',     titulo: 'Peso', ruta: '/' },
+ ] as const
+ 
+ export default function Anadir() {
+   const t = useTema()
+   const router = useRouter()
+   return (
+-    <View style={{ flex: 1, padding: t.espaciado[3], gap: t.espaciado[1] }}>
++    <Pantalla style={{ padding: t.espaciado[3], gap: t.espaciado[1] }}>
+       <Texto variante="etiqueta">Añadir</Texto>
+       {OPCIONES.map((o) => (
+         <Pressable
+           key={o.clave}
+           accessibilityRole="button"
+           onPress={() => router.replace(o.ruta)}
+           style={{ paddingVertical: t.espaciado[3] }}
+         >
+           <Texto>{o.titulo}</Texto>
+         </Pressable>
+       ))}
+-    </View>
++    </Pantalla>
+   )
+ }
+diff --git a/apps/kaizen/src/design/componentes/boton.tsx b/apps/kaizen/src/design/componentes/boton.tsx
+index b717478..b1e6071 100644
+--- a/apps/kaizen/src/design/componentes/boton.tsx
++++ b/apps/kaizen/src/design/componentes/boton.tsx
+@@ -1,37 +1,50 @@
+ import { Pressable } from 'react-native'
+ import { useTema } from '../proveedor'
+ import { Superficie } from './superficie'
+ import { Texto } from './texto'
+ 
+ /**
+  * El fondo sale de `superficie.botonPrimario`/`botonSecundario`, no de un
+  * color: así un tema puede darle arte ilustrado al botón sin que esta
+  * pantalla ni ninguna otra tengan que enterarse.
+  */
+-export function Boton({ titulo, alPulsar, tono = 'primario' }:
+-  { titulo: string; alPulsar: () => void; tono?: 'primario' | 'secundario' }) {
++type Tono = 'primario' | 'secundario' | 'peligro'
++
++export function Boton({ titulo, alPulsar, tono = 'primario', deshabilitado = false }:
++  { titulo: string; alPulsar: () => void; tono?: Tono; deshabilitado?: boolean }) {
+   const t = useTema()
+-  const primario = tono === 'primario'
+-  const fondo = primario ? t.superficie.botonPrimario : t.superficie.botonSecundario
++  const fondos: Record<Tono, typeof t.superficie.botonPrimario> = {
++    primario: t.superficie.botonPrimario,
++    secundario: t.superficie.botonSecundario,
++    peligro: t.superficie.botonPeligro,
++  }
++  const colores: Record<Tono, string> = {
++    primario: t.color.sobreAcento,
++    secundario: t.color.texto,
++    peligro: t.color.sobrePeligro,
++  }
+ 
+   return (
+-    <Pressable onPress={alPulsar} accessibilityRole="button">
++    <Pressable
++      onPress={alPulsar}
++      accessibilityRole="button"
++      disabled={deshabilitado}
++      accessibilityState={{ disabled: deshabilitado }}
++      style={{ opacity: deshabilitado ? 0.5 : 1 }}
++    >
+       <Superficie
+-        fondo={fondo}
++        fondo={fondos[tono]}
+         radio={t.radio.boton}
+         style={{
+           paddingVertical: t.espaciado[1],
+           paddingHorizontal: t.espaciado[2],
+           alignItems: 'center',
+         }}
+       >
+-        <Texto style={{
+-          color: primario ? t.color.sobreAcento : t.color.texto,
+-          fontWeight: t.tipografia.pesoTitular,
+-        }}>
++        <Texto style={{ color: colores[tono], fontWeight: t.tipografia.pesoTitular }}>
+           {titulo}
+         </Texto>
+       </Superficie>
+     </Pressable>
+   )
+ }
+diff --git a/apps/kaizen/src/design/componentes/componentes.test.tsx b/apps/kaizen/src/design/componentes/componentes.test.tsx
+index ae3dc45..c49999d 100644
+--- a/apps/kaizen/src/design/componentes/componentes.test.tsx
++++ b/apps/kaizen/src/design/componentes/componentes.test.tsx
+@@ -1,20 +1,21 @@
+ import { render, screen, fireEvent } from '@testing-library/react-native'
+ import { StyleSheet } from 'react-native'
+ import { Line } from 'react-native-svg'
+ import { ProveedorTema, ContextoTema } from '../proveedor'
+ import type { Tema } from '../tema'
+ import { temaDefecto } from '../temas/defecto'
+ import { Texto } from './texto'
+ import { Boton } from './boton'
+ import { Barra } from './barra'
+ import { Anillo } from './anillo'
++import { Pantalla } from './pantalla'
+ 
+ function envolver(nodo: React.ReactNode) {
+   return render(<ProveedorTema nombre="defecto">{nodo}</ProveedorTema>)
+ }
+ 
+ it('el texto toma el color del tema', () => {
+   envolver(<Texto>Hola</Texto>)
+   expect(screen.getByText('Hola')).toHaveStyle({ color: '#F4F5F2' })
+ })
+ 
+@@ -44,20 +45,27 @@ it('la barra refleja un progreso intermedio', () => {
+   envolver(<Barra progreso={0.5} color="#4ECB9C" />)
+   expect(screen.getByTestId('barra-relleno')).toHaveStyle({ width: '50%' })
+ })
+ 
+ it('el anillo se dibuja y anuncia su progreso', () => {
+   envolver(<Anillo progreso={0.82}><Texto>82</Texto></Anillo>)
+   expect(screen.getByText('82')).toBeTruthy()
+   expect(screen.getByRole('progressbar').props.accessibilityValue.now).toBe(82)
+ })
+ 
++it('la pantalla pinta el fondo del tema y no el del sistema', () => {
++  envolver(<Pantalla><Texto>Contenido</Texto></Pantalla>)
++  const fondo = temaDefecto.fondo.pantalla
++  const esperado = fondo.tipo === 'color' ? fondo.valor : ''
++  expect(JSON.stringify(screen.toJSON())).toContain(esperado)
++})
++
+ it('un tema desconocido cae al tema por defecto en vez de romper', () => {
+   render(<ProveedorTema nombre="no-existe"><Texto>Hola</Texto></ProveedorTema>)
+   expect(screen.getByText('Hola')).toHaveStyle({ color: '#F4F5F2' })
+ })
+ 
+ // Las recetas alternativas no las activa ningún tema registrado, así que se
+ // inyecta un tema a mano. Sin estos tests, la mitad del sistema de recetas
+ // —justo la mitad que usará la piel personal— viajaría sin probar.
+ describe('recetas que ningún tema registrado activa', () => {
+   function conReceta(recetas: Partial<Tema['recetas']>, nodo: React.ReactNode) {
+diff --git a/apps/kaizen/src/design/componentes/pantalla.tsx b/apps/kaizen/src/design/componentes/pantalla.tsx
+new file mode 100644
+index 0000000..468aa08
+--- /dev/null
++++ b/apps/kaizen/src/design/componentes/pantalla.tsx
+@@ -0,0 +1,17 @@
++import { View, type ViewStyle } from 'react-native'
++import type { ReactNode } from 'react'
++import { useTema } from '../proveedor'
++import { Superficie } from './superficie'
++
++/**
++ * Raíz de toda pantalla. Pinta el fondo del tema y su velo, para que ninguna
++ * pantalla tenga que saber de qué color es el suyo.
++ */
++export function Pantalla({ style, children }: { style?: ViewStyle; children?: ReactNode }) {
++  const t = useTema()
++  return (
++    <Superficie fondo={t.fondo.pantalla} radio={0} style={{ flex: 1 }}>
++      <View style={[{ flex: 1, backgroundColor: t.fondo.velo }, style]}>{children}</View>
++    </Superficie>
++  )
++}
+diff --git a/apps/kaizen/src/design/tema.ts b/apps/kaizen/src/design/tema.ts
+index a336ce5..f4b6f50 100644
+--- a/apps/kaizen/src/design/tema.ts
++++ b/apps/kaizen/src/design/tema.ts
+@@ -14,20 +14,24 @@ export interface Tema {
+   nombre: string
+   esquema: 'claro' | 'oscuro'
+ 
+   color: {
+     acento: string
+     sobreAcento: string
+     texto: string
+     textoTenue: string
+     borde: string
+     pista: string
++    // Sin esto, la primera pantalla que muestre un error escribe un rojo a
++    // mano y la regla del sistema de temas se rompe en su primer uso real.
++    peligro: string
++    sobrePeligro: string
+     proteina: string
+     carbos: string
+     grasas: string
+   }
+ 
+   radio: { tarjeta: number; boton: number; pastilla: number }
+ 
+   espaciado: readonly [number, number, number, number, number, number, number, number, number]
+ 
+   tipografia: {
+@@ -37,22 +41,28 @@ export interface Tema {
+     pesoCuerpo: '400' | '500' | '600'
+     ajusteLinea: number
+     mayusculasEtiquetas: boolean
+   }
+ 
+   fondo: { pantalla: Fondo; velo: string }
+ 
+   superficie: {
+     tarjeta: Fondo
+     barraInferior: Fondo
++    // El botón necesita `Fondo`, no solo un color: un skin con arte de botón
++    // ilustrado no cabe en `color.acento`, y sin esto la pantalla acabaría
++    // decidiendo a pelo entre imagen y color plano.
+     botonPrimario: Fondo
+     botonSecundario: Fondo
++    // La Tarea 10 construye el borrado de cuenta y necesita un botón
++    // destructivo; sin este campo lo escribiría a mano igual que el error.
++    botonPeligro: Fondo
+     desenfoque: number
+   }
+ 
+   recetas: { barra: RecetaBarra; anillo: RecetaAnillo }
+ 
+   decoracion: {
+     cabecera: ImageSourcePropType | null
+     tarjetaEntrenamiento: ImageSourcePropType | null
+     tarjetaMision: ImageSourcePropType | null
+   }
+diff --git a/apps/kaizen/src/design/temas/claro.ts b/apps/kaizen/src/design/temas/claro.ts
+index 117dfa7..4a687d5 100644
+--- a/apps/kaizen/src/design/temas/claro.ts
++++ b/apps/kaizen/src/design/temas/claro.ts
+@@ -3,20 +3,22 @@ import type { Tema } from '../tema'
+ export const temaClaro: Tema = {
+   nombre: 'claro',
+   esquema: 'claro',
+   color: {
+     acento: '#1E9E73',
+     sobreAcento: '#FFFFFF',
+     texto: '#141715',
+     textoTenue: '#6B726C',
+     borde: 'rgba(0,0,0,0.10)',
+     pista: 'rgba(0,0,0,0.08)',
++    peligro: '#C0392B',
++    sobrePeligro: '#FFFFFF',
+     proteina: '#C97A45',
+     carbos: '#4A7FBF',
+     grasas: '#B08A3C',
+   },
+   radio: { tarjeta: 22, boton: 13, pastilla: 20 },
+   espaciado: [4, 8, 12, 16, 20, 24, 32, 40, 48],
+   tipografia: {
+     familiaTitular: null,
+     familiaCuerpo: null,
+     pesoTitular: '600',
+@@ -26,15 +28,16 @@ export const temaClaro: Tema = {
+   },
+   fondo: {
+     pantalla: { tipo: 'color', valor: '#FAF9F7' },
+     velo: 'rgba(255,255,255,0)',
+   },
+   superficie: {
+     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },
+     barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },
+     botonPrimario: { tipo: 'color', valor: '#1E9E73' },
+     botonSecundario: { tipo: 'color', valor: 'rgba(0,0,0,0.06)' },
++    botonPeligro: { tipo: 'color', valor: '#C0392B' },
+     desenfoque: 22,
+   },
+   recetas: { barra: 'continua', anillo: 'liso' },
+   decoracion: { cabecera: null, tarjetaEntrenamiento: null, tarjetaMision: null },
+ }
+diff --git a/apps/kaizen/src/design/temas/defecto.ts b/apps/kaizen/src/design/temas/defecto.ts
+index 8de0315..753f605 100644
+--- a/apps/kaizen/src/design/temas/defecto.ts
++++ b/apps/kaizen/src/design/temas/defecto.ts
+@@ -3,20 +3,22 @@ import type { Tema } from '../tema'
+ export const temaDefecto: Tema = {
+   nombre: 'defecto',
+   esquema: 'oscuro',
+   color: {
+     acento: '#4ECB9C',
+     sobreAcento: '#04120C',
+     texto: '#F4F5F2',
+     textoTenue: '#98A09A',
+     borde: 'rgba(255,255,255,0.10)',
+     pista: 'rgba(255,255,255,0.10)',
++    peligro: '#E2574C',
++    sobrePeligro: '#2A0A07',
+     proteina: '#E8A87C',
+     carbos: '#7EA8D9',
+     grasas: '#D9B26F',
+   },
+   radio: { tarjeta: 22, boton: 13, pastilla: 20 },
+   espaciado: [4, 8, 12, 16, 20, 24, 32, 40, 48],
+   tipografia: {
+     familiaTitular: null,
+     familiaCuerpo: null,
+     pesoTitular: '600',
+@@ -26,15 +28,16 @@ export const temaDefecto: Tema = {
+   },
+   fondo: {
+     pantalla: { tipo: 'color', valor: '#060807' },
+     velo: 'rgba(0,0,0,0)',
+   },
+   superficie: {
+     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
+     barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
+     botonPrimario: { tipo: 'color', valor: '#4ECB9C' },
+     botonSecundario: { tipo: 'color', valor: 'rgba(255,255,255,0.10)' },
++    botonPeligro: { tipo: 'color', valor: '#E2574C' },
+     desenfoque: 22,
+   },
+   recetas: { barra: 'continua', anillo: 'liso' },
+   decoracion: { cabecera: null, tarjetaEntrenamiento: null, tarjetaMision: null },
+ }

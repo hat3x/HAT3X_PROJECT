@@ -1,0 +1,3165 @@
+# Review package: 2bd5123..3f1e081
+
+## Commits
+3f1e081 fix(atlas): el resto de una particion de 16h respeta el minimo, y --limpiar solo retira lo anadido
+c5ad1d4 fix(atlas): ronda de arreglo 1 del aviso de fichaje — proyectos, la nota de las 10h y el candado sin filtrar por ok
+0504fcb feat(atlas): el historico de apps/fichaje vuelca a fichajes como anadido, y la app queda jubilada
+8ed27e1 feat(atlas): el aviso del fichaje que se dejo abierto
+7d448bc fix(atlas): la duracion de cada tramo con el mismo tope que el total, y aviso de zona en el formulario
+159fa80 fix(atlas): flex-1 en el nav, consultas ligeras para el fichaje y sin desajuste de hidratacion
+1975441 feat(atlas): la pantalla de horas, con lo medido y lo anadido a la vista
+43c2e26 feat(atlas): el fichaje en el marco, a un clic desde cualquier pantalla
+d1554b1 fix(atlas): aislar listarTramos por usuarios propios del test y documentar el corte por inicio
+7b18217 fix(atlas): tsc limpio en tests de horas y fichajes con encadenamiento opcional
+ce2081c feat(atlas): fichar, parar, anadir un tramo y leer las horas
+ede2c5f refactor(atlas): separar rotulosPorDefecto en agrupar - porPersona usa Sin nombre
+db1fdbb feat(atlas): cuanto se ha trabajado y que fichaje lleva abierto demasiado
+0ff99d3 feat(atlas): la tabla de fichajes, con una sola en curso por persona
+
+## Files changed
+ apps/atlas/MANTENIMIENTO.md                        |  16 +-
+ apps/atlas/README.md                               |  18 +-
+ apps/atlas/scripts/humo.mjs                        |   1 +
+ apps/atlas/scripts/migrar/fichajes.ts              | 126 ++++++++++
+ apps/atlas/src/app/dinero/horas/page.tsx           | 210 +++++++++++++++++
+ apps/atlas/src/app/dinero/page.tsx                 |   6 +
+ apps/atlas/src/app/layout.tsx                      |  39 +++-
+ apps/atlas/src/components/dinero/FormTramo.tsx     | 113 +++++++++
+ apps/atlas/src/components/marco/BarraLateral.tsx   |   7 +-
+ apps/atlas/src/components/marco/Fichaje.tsx        | 149 ++++++++++++
+ apps/atlas/src/lib/db/acciones-fichajes.ts         |  40 ++++
+ apps/atlas/src/lib/db/clientes.ts                  |  18 ++
+ apps/atlas/src/lib/db/fichajes.ts                  | 179 +++++++++++++++
+ apps/atlas/src/lib/db/proyectos.ts                 |  18 ++
+ apps/atlas/src/lib/horas/abiertos.ts               |  70 ++++++
+ apps/atlas/src/lib/horas/tramos.ts                 | 100 ++++++++
+ apps/atlas/src/tests/componentes/fichaje.test.tsx  |  60 +++++
+ apps/atlas/src/tests/db/fichajes.test.ts           | 255 +++++++++++++++++++++
+ apps/atlas/src/tests/db/nombres.test.ts            |  92 ++++++++
+ apps/atlas/src/tests/esquema/aviso-fichaje.test.ts |  73 ++++++
+ apps/atlas/src/tests/esquema/fichajes.test.ts      | 164 +++++++++++++
+ .../src/tests/esquema/service-role-lee.test.ts     |   7 +-
+ apps/atlas/src/tests/horas/abiertos.test.ts        |  53 +++++
+ apps/atlas/src/tests/horas/tramos.test.ts          | 114 +++++++++
+ apps/atlas/src/tests/migrar/fichajes.test.ts       |  47 ++++
+ apps/atlas/src/tests/vigia/copias.test.ts          |   3 +
+ apps/atlas/src/types/supabase.ts                   |  59 +++++
+ apps/atlas/supabase/functions/avisar/fichajes.ts   |  73 ++++++
+ apps/atlas/supabase/functions/avisar/index.ts      | 210 +++++++++++++----
+ .../migrations/20260830100000_fichajes.sql         |  54 +++++
+ .../migrations/20260830110000_aviso_fichaje.sql    |  61 +++++
+ apps/fichaje/README.md                             |   2 +
+ 32 files changed, 2378 insertions(+), 59 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/MANTENIMIENTO.md b/apps/atlas/MANTENIMIENTO.md
+index 2e1406c..abfa383 100644
+--- a/apps/atlas/MANTENIMIENTO.md
++++ b/apps/atlas/MANTENIMIENTO.md
+@@ -16,21 +16,21 @@ curl -s localhost:3010/login -o /dev/null -w '%{http_code}\n'    # ¿está la ap
+ ```
+ 
+ ```sql
+ -- ¿está el planificador haciendo su trabajo?
+ select j.jobname, d.status, d.return_message, d.start_time
+   from cron.job_run_details d join cron.job j on j.jobid = d.jobid
+  where d.start_time > now() - interval '15 minutes'
+  order by d.start_time desc;
+ ```
+ 
+-Las cuatro tareas —`atlas-vigia`, `atlas-avisos`, `atlas-retencion` y `atlas-cobro`— deben aparecer con `succeeded`. Las dos primeras, cada minuto; `atlas-cobro`, una vez al día.
++Las cinco tareas —`atlas-vigia`, `atlas-avisos`, `atlas-retencion`, `atlas-cobro` y `atlas-fichajes`— deben aparecer con `succeeded`. Las dos primeras, cada minuto; `atlas-cobro`, una vez al día; `atlas-fichajes`, cada hora, al minuto 41.
+ 
+ **pg_cron corre en UTC.** `atlas-cobro` está dada de alta como `7 9 * * *`, que son las **11:07 de Madrid en verano y las 10:07 en invierno**. El comentario de la migración `20260829170000_aviso_cobro.sql` dice «9:07 de la mañana» y no se puede corregir porque ya está aplicada: la verdad vive aquí.
+ 
+ ---
+ 
+ ## «No me llega ningún aviso»
+ 
+ El síntoma más habitual y el que más sitios tiene donde romperse. Recórrelos en este orden, que es el del flujo.
+ 
+ ### 1. ¿Se está detectando la caída?
+@@ -111,20 +111,31 @@ En local la URL es la de dentro de Docker: `http://kong:8000/functions/v1`. Y la
+ 
+ Es un aviso diario y **no manda nada si no hay nada pendiente**, así que un día sin aviso puede ser un día sin deudas. Para distinguirlo:
+ 
+ 1. **Qué respondió la Edge Function.** La tarea `atlas-cobro` llama a `avisar` con `{"cobro": true}`; la respuesta queda en el registro de la función (`npx supabase functions logs avisar`, o el panel). Un 500 con `error` significa que una lectura falló y **no se envió nada a propósito**: la función falla cerrado, porque un permiso denegado disfrazado de «nada pendiente» es exactamente el fallo que no se nota. Un 200 con `noComprobados` no vacío es que el candado del día no se pudo consultar para esos propietarios y se les saltó.
+ 2. **`ultima_ok_en` en `suscripciones_push`.** Si el push salió, ese sello se mueve; si lleva días parado con avisos que sí deberían haber llegado, sospecha de las claves VAPID (punto 3 de arriba).
+ 3. **La Edge Function lee la tabla `contratos`, no la vista `contratos_visibles`.** La vista filtra por `auth.uid()` y solo está concedida a `authenticated`; la service_role no la puede leer. Si alguien «unifica» la consulta con la de la pantalla (`src/lib/db/cobro.ts`) embebiendo la vista, la función vuelve al 500. Lo vigila `src/tests/esquema/service-role-lee.test.ts`.
+ 4. **La hora.** `atlas-cobro` corre a las 9:07 UTC (ver arriba). Antes de esa hora no ha pasado nada todavía.
+ 
+ ---
+ 
++## «No llega el aviso de fichaje abierto»
++
++Es el aviso que caza el fichaje que se dejó abierto (una jornada real, o un olvido: diez horas sin cerrar). Corre cada hora, al minuto 41, y **no manda nada si no hay ningún fichaje abierto desde hace diez horas** — un día sin aviso puede ser un día sin olvidos.
++
++1. **Qué respondió la Edge Function.** La tarea `atlas-fichajes` llama a `avisar` con `{"fichajes": true}`; la respuesta queda en el registro de la función (`npx supabase functions logs avisar`). Un **500** con `error` es una lectura que falló: la función falla cerrado, igual que `avisarDeCobro`, y no envía nada a propósito. Un 200 con `noComprobados` no vacío es que el candado por fichaje (¿ya se avisó de ESTE?) no se pudo consultar para esas personas y se les saltó esa vuelta.
++2. **`ultima_ok_en` en `suscripciones_push`.** El mismo sello que usa el aviso de cobro: si el push sale, se mueve. Si no se mueve con avisos que sí deberían haber salido, sospecha de las claves VAPID.
++3. **El aviso va al dueño del fichaje, no al propietario.** A diferencia de `atlas-cobro` (que avisa a todos los propietarios), aquí el destinatario es quien dejó el fichaje abierto: es su olvido y solo él puede cerrarlo. Si un colaborador se queja de que «nadie me avisó», mira `notificaciones` filtrando por su `usuario_id`, no por el propietario.
++4. **La hora.** `atlas-fichajes` corre al minuto 41 de cada hora (UTC, pero da igual: se mide en horas transcurridas desde el `inicio` del fichaje, no en hora del día).
++
++---
++
+ ## «Kairos tiene un salón nuevo y Atlas no lo vigila»
+ 
+ O al revés: se dio de baja un cliente y Atlas sigue alertando de su 404. Lo resuelve el descubridor, que pasa **cada hora al minuto 23**. Si lleva más de eso sin moverse, mira lo que dejó escrito:
+ 
+ ```sql
+ select ejecutado_en, ok, altas, pausados, reactivados, error
+ from descubrimientos order by ejecutado_en desc limit 10;
+ ```
+ 
+ Esa tabla es el diagnóstico entero. Casos por orden de frecuencia:
+@@ -268,30 +279,31 @@ select atlas_consolidar_retencion();
+ ## Tareas periódicas
+ 
+ | Cada | Qué |
+ |---|---|
+ | Semana | Mirar `notificaciones` por `ok = false`: un canal roto no se nota hasta que hace falta |
+ | Mes | Confirmar que llega el latido a healthchecks.io, si está dado de alta |
+ | Mes | Revisar `credencial_usos`: quién ha descifrado qué |
+ | Mes | Mirar `descubrimientos` por `ok = false`: un descubridor roto no se nota hasta que un cliente nuevo lleva semanas sin vigilar |
+ | Mes | Comprobar que los recibos fijos se materializaron: `select count(*) from gastos where recurrente_id is not null and date_trunc('month', fecha) = date_trunc('month', current_date);` |
+ | Día (automático) | `atlas-cobro` avisa a los propietarios de los meses de contrato sin facturar y de las facturas vencidas, a las 9:07 UTC. Si no llega, ver «El aviso de cobro no llega» |
++| Hora (automático) | `atlas-fichajes` avisa a quien lleva un fichaje abierto más de diez horas, al minuto 41 (las diez horas están por duplicado, en el SQL y en `AVISO_HORAS`: si cambia una, cambia la otra). Si no llega, ver «No llega el aviso de fichaje abierto» |
+ | Trimestre | Comprobar el tamaño de la base |
+ 
+ **Un gasto recurrente puede estar apuntado en dos sitios a la vez.** `apps/jarvis/src/lib/company-brain.ts` todavía escribe en `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue` — su propia copia de `gastos_recurrentes`, `gastos` y `facturas` — porque jubilarlas es un plan aparte (bloque 2A solo jubiló `hat3x_transactions`, vía `finance.ts`). Si una suma no cuadra, antes de sospechar de Atlas mira si ese gasto se dio de alta también desde jarvis.
+ 
+ ---
+ 
+ ## Al tocar el código
+ 
+ - **`npm run build` antes de dar nada por terminado.** Los tests y `tsc` en verde no bastan: una función de servidor sin `async` en un módulo `"use server"` solo la caza el build. **Pero para el servidor de desarrollo antes** — comparten `.next` y el build se lo deja inservible.
+-- **Si tocas lógica compartida con las Edge Functions, vuelve a copiarla.** `copias.test.ts` falla si divergen aunque sea un byte. Las cinco copias son `maquina`, `evaluar`, `agrupar`, `firma` y `pendientes`.
++- **Si tocas lógica compartida con las Edge Functions, vuelve a copiarla.** `copias.test.ts` falla si divergen aunque sea un byte. La lista de copias vigentes vive en ese fichero, no aquí: repetirla a mano en dos sitios es exactamente lo que la dejó desactualizada la última vez.
+ - **Migraciones con `npx supabase migration up --local`.** **Nunca `db reset`** — no hay `seed.sql` y borra los datos dados de alta a mano.
+ - **Una migración aplicada no se edita.** Se corrige con otra encima.
+ 
+ ---
+ 
+ ## Cuando nada de esto lo explica
+ 
+ La prueba que encuentra lo que la batería no ve, entera en el punto 5 del [plan 1C](../../docs/superpowers/plans/2026-08-16-atlas-1c-alertas.md): tira un servicio a un puerto cerrado, deja pasar dos minutos sin tocar nada y mira si llega el aviso; luego levántalo y mira si llega la recuperación.
+ 
+ Cuatro fallos reales salieron así, con los 435 tests en verde.
+diff --git a/apps/atlas/README.md b/apps/atlas/README.md
+index 46224e4..8fff190 100644
+--- a/apps/atlas/README.md
++++ b/apps/atlas/README.md
+@@ -26,24 +26,29 @@ pg_cron (cada minuto)
+    ├── atlas_disparar_vigia()   ── pg_net ──▶  Edge Function «vigia»
+    │      ¿hay algún check que toque?              │
+    │                                    comprueba, escribe check_resultados,
+    │                                    abre o cierra incidencias
+    │
+    ├── atlas_disparar_avisos()  ── pg_net ──▶  Edge Function «avisar»
+    │      ¿hay incidencias sin sellar?             │
+    │                                      agrupa por proyecto, resuelve
+    │                                      destinatarios, envía push y correo
+    │
+-   └── atlas_disparar_cobro()   ── pg_net ──▶  Edge Function «avisar»  {"cobro": true}
+-   (una vez al día, 9:07 UTC)     ¿meses sin facturar o facturas vencidas?
+-                                          si hay algo, un resumen a los
+-                                          propietarios, push y correo
++   ├── atlas_disparar_cobro()   ── pg_net ──▶  Edge Function «avisar»  {"cobro": true}
++   │   (una vez al día, 9:07 UTC)     ¿meses sin facturar o facturas vencidas?
++   │                                          si hay algo, un resumen a los
++   │                                          propietarios, push y correo
++   │
++   └── atlas_disparar_fichajes() ── pg_net ─▶  Edge Function «avisar»  {"fichajes": true}
++       (cada hora, minuto 41)         ¿algún fichaje abierto hace más de 10 h?
++                                              si lo hay, avisa a quien lo
++                                              dejó abierto, push y correo
+ ```
+ 
+ Van separadas a propósito: comprobar servicios no debe quedarse esperando a un servidor de correo.
+ 
+ **La decisión es pura; el envío es lo único que toca el mundo.** `transicion()`, `agrupar()` y `clasificar()` no leen el reloj ni la red — el instante entra por parámetro. Es lo que permite probar la agrupación por ventana sin esperar dos minutos.
+ 
+ ### Una incidencia avisa dos veces
+ 
+ Al abrirse y al cerrarse, y cada suceso tiene su propio candado: `notificada_en` y `recuperacion_notificada_en`. Con un solo sello la recuperación no se enviaba nunca — la fila seguía marcada de la apertura. Si tocas `src/lib/alertas/pendientes.ts`, es esto lo que estás tocando.
+ 
+@@ -137,21 +142,22 @@ Están todas en [`.env.example`](./.env.example) con su explicación. Las tres q
+ | `npm run build` | Build de producción. **Correlo antes de dar nada por terminado**: hay errores que solo salen aquí |
+ | `npm run tipos` | Regenera `src/types/supabase.ts` desde la base local |
+ | `npm run iconos` | Regenera los iconos de la PWA |
+ | `npm run migrar` | Trae los datos de la Oficina Virtual (`--ensayo` para probar sin escribir) |
+ 
+ ## Estructura
+ 
+ ```
+ src/
+ ├── app/            Rutas. (auth) son las pantallas de entrada; api/silenciar responde sin sesión
+-├── components/     Interfaz. marco/ es la estructura común; ui/ las piezas sueltas
++│   └── dinero/horas    Fichar y ver las horas del mes; el fichaje en curso también vive en el marco
++├── components/     Interfaz. marco/ es la estructura común (con el fichaje siempre a la vista, Fichaje.tsx); ui/ las piezas sueltas
+ ├── lib/
+ │   ├── alertas/     Agrupar, firmar enlaces, destinatarios y pendientes — TODO puro
+ │   ├── auth/        El guardia: qué ruta corresponde a cada estado de sesión
+ │   ├── cripto/      AES-256-GCM sobre WebCrypto (no node:crypto — Deno tiene que poder usarlo)
+ │   ├── db/          Consultas y acciones de servidor, separadas a propósito (ver abajo)
+ │   ├── descubrir/   El censo de Kairos: leerlo, decidir qué mover y aplicarlo
+ │   ├── dinero.ts    Los importes, en céntimos enteros. Ningún float toca un euro
+ │   ├── incidencias/ La máquina de estados
+ │   └── tema/        Dos temas × cinco paletas, en tokens CSS
+ ├── middleware.ts   El guardia. Su `matcher` deja fuera el manifiesto y el service worker
+@@ -162,21 +168,21 @@ supabase/
+ ├── kairos/         SQL para OTRA base: la RPC del censo. No la aplica la CLI
+ └── migrations/     Se aplican en orden. Nunca se editan una vez aplicadas
+ ```
+ 
+ ### Tres reglas que no son evidentes
+ 
+ **1. Las consultas y las mutaciones van en módulos separados.** Un módulo `"use server"` expone *todas* sus funciones exportadas como endpoints invocables desde el navegador. Meter `usarCredencial()` —que descifra— en el mismo fichero que una consulta la convierte en un endpoint público. Por eso `db/proyectos.ts` (lee) y `db/acciones-proyecto.ts` (escribe) están separados.
+ 
+ **2. Ningún componente cliente importa de un módulo de consultas ni de `lib/cripto`.** Arrastra `next/headers` y rompe la compilación. El gating por rol se calcula en la página de servidor y baja como prop.
+ 
+-**3. La lógica que comparten la aplicación y las Edge Functions va copiada**, no importada: Deno no resuelve el alias `@/` y el despliegue solo sube `supabase/functions`. Las cinco copias las vigila `src/tests/vigia/copias.test.ts`, que falla si divergen aunque sea un byte. Si tocas el original, vuelve a copiarlo.
++**3. La lógica que comparten la aplicación y las Edge Functions va copiada**, no importada: Deno no resuelve el alias `@/` y el despliegue solo sube `supabase/functions`. Las copias las vigila `src/tests/vigia/copias.test.ts` —ahí está la lista completa, no aquí, para no tener dos sitios que desactualizar—, que falla si divergen aunque sea un byte. Si tocas el original, vuelve a copiarlo.
+ 
+ ## Seguridad
+ 
+ - **Segundo factor obligatorio.** Sin él no se pasa de `/alta-2fa`.
+ - **RLS en todas las tablas.** Las consultas no filtran por permiso: lo hace la base. Si una consulta filtrase por su cuenta, un fallo de RLS pasaría desapercibido.
+ - **El enlace de silenciar va firmado** con HMAC-SHA256 y caduca en 24 h. Se pulsa desde una notificación, sin sesión: sin firma, cualquiera que la adivinara podría callar tus alertas. Un token manipulado da 410, no 403 — no confirma si la incidencia existe.
+ - **Las credenciales se descifran solo en el servidor**, y cada uso queda registrado en `credencial_usos`.
+ 
+ ## Lo que falta
+ 
+diff --git a/apps/atlas/scripts/humo.mjs b/apps/atlas/scripts/humo.mjs
+index aadef3b..34ac282 100644
+--- a/apps/atlas/scripts/humo.mjs
++++ b/apps/atlas/scripts/humo.mjs
+@@ -165,20 +165,21 @@ try {
+     { ruta: "/alertas", exige: [] },
+     // `exige` con contenido y no vacío: la pantalla se pinta desde tablas que
+     // al principio estarán vacías, y un 200 con el cuerpo en blanco sería
+     // indistinguible de una que funciona.
+     { ruta: "/dinero", exige: ["Dinero", "Coste de estructura"] },
+     // Se exige el texto de los tres desgloses: la pantalla se pinta entera
+     // desde tablas que estaran vacias al principio, y un 200 con el cuerpo en
+     // blanco seria indistinguible de una que funciona.
+     { ruta: "/dinero/gastos", exige: ["Por plataforma", "Por cliente", "Por proyecto"] },
+     { ruta: "/dinero/cobro", exige: ["Cobro"] },
++    { ruta: "/dinero/horas", exige: ["Horas"] },
+     { ruta: "/ajustes", exige: [] },
+     { ruta: "/ajustes/apariencia", exige: [] },
+     { ruta: "/ajustes/notificaciones", exige: [] },
+     { ruta: "/ajustes/usuarios", exige: [] },
+     { ruta: "/ajustes/credenciales", exige: [] },
+     // `exige` con contenido y no vacío: esta pantalla se pinta entera desde una
+     // tabla que casi siempre estará vacía, y un 200 con el cuerpo en blanco
+     // sería indistinguible de una que funciona.
+     { ruta: "/ajustes/descubridor", exige: ["Descubridor"] },
+   ];
+diff --git a/apps/atlas/scripts/migrar/fichajes.ts b/apps/atlas/scripts/migrar/fichajes.ts
+new file mode 100644
+index 0000000..24b6f6c
+--- /dev/null
++++ b/apps/atlas/scripts/migrar/fichajes.ts
+@@ -0,0 +1,126 @@
++// apps/atlas/scripts/migrar/fichajes.ts
++//
++// Vuelca el histórico de `apps/fichaje/data/fichaje.json` a `fichajes`, como
++// lo que es: dato reconstruido, `origen='anadido'`, con nota de procedencia.
++//
++//   npx tsx scripts/migrar/fichajes.ts            # vuelca (idempotente)
++//   npx tsx scripts/migrar/fichajes.ts --limpiar  # retira lo importado
++//
++// El usuario es el propietario. Si hubiera más de uno (o ninguno), hay que
++// decir cuál con --usuario <uuid>: adivinar a quién atribuir horas es peor
++// que parar.
++//
++import { readFileSync } from "node:fs";
++import { resolve } from "node:path";
++import { Client } from "pg";
++
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++const NOTA = "[importado de apps/fichaje]";
++const RUTA = resolve(__dirname, "../../../fichaje/data/fichaje.json");
++const TOPE_MS = 16 * 3_600_000;
++const MINIMO_MS = 60_000;
++
++export type FichajeViejo = { entrada: string; salida: string | null; cliente_principal: string | null };
++
++export type FilaNueva = { inicio: string; fin: string; clienteId: string | null; clienteSlug: string | null };
++
++export function convertir(
++  viejos: FichajeViejo[],
++  clientes: Map<string, string>
++): { filas: FilaNueva[]; sinCliente: string[]; descartados: number } {
++  const filas: FilaNueva[] = [];
++  const sinCliente = new Set<string>();
++  let descartados = 0;
++  for (const v of viejos) {
++    if (!v.salida) {
++      descartados++; // un abierto de la app vieja no se puede reconstruir
++      continue;
++    }
++    let ini = Date.parse(v.entrada);
++    const fin = Date.parse(v.salida);
++    if (Number.isNaN(ini) || Number.isNaN(fin) || fin - ini < MINIMO_MS) {
++      descartados++;
++      continue;
++    }
++    const slug = v.cliente_principal;
++    const clienteId = slug ? (clientes.get(slug) ?? null) : null;
++    if (slug && clienteId === null) sinCliente.add(slug);
++    // Un tramo de 20 horas no cabe en la regla del tope. Se parte, sin
++    // perder ni un minuto: la suma es la misma, el histórico no se inventa.
++    while (fin - ini > TOPE_MS) {
++      filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(ini + TOPE_MS).toISOString(), clienteId, clienteSlug: slug });
++      ini += TOPE_MS;
++    }
++    // El resto de la partición pasa por la misma regla que un tramo entero:
++    // 16 h y 30 s deja un resto de 30 s, y eso no es trabajo, es ruido. Se
++    // descarta en vez de insertar una fila de menos de un minuto.
++    if (fin - ini < MINIMO_MS) {
++      descartados++;
++    } else {
++      filas.push({ inicio: new Date(ini).toISOString(), fin: new Date(fin).toISOString(), clienteId, clienteSlug: slug });
++    }
++  }
++  return { filas, sinCliente: [...sinCliente], descartados };
++}
++
++async function main() {
++  const pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++  try {
++    if (process.argv.includes("--limpiar")) {
++      // `nota` sola no basta de guarda: alguien podría escribir a mano esa
++      // misma frase en la nota de un fichaje real. `origen = 'anadido'` es la
++      // marca que solo este script pone, así que solo eso es lo que retira.
++      const r = await pg.query(`DELETE FROM fichajes WHERE nota = $1 AND origen = 'anadido'`, [NOTA]);
++      console.log(`Retirados ${r.rowCount} tramos importados.`);
++      return;
++    }
++
++    const i = process.argv.indexOf("--usuario");
++    let usuario = i >= 0 ? process.argv[i + 1] : null;
++    if (!usuario) {
++      const { rows } = await pg.query(`SELECT id FROM perfiles WHERE es_propietario`);
++      if (rows.length !== 1) {
++        throw new Error(`Hay ${rows.length} propietarios; di cuál con --usuario <uuid>.`);
++      }
++      usuario = rows[0].id;
++    }
++
++    const datos = JSON.parse(readFileSync(RUTA, "utf8")) as { fichajes: FichajeViejo[] };
++    const { rows: cl } = await pg.query(`SELECT id, slug FROM clientes`);
++    const clientes = new Map<string, string>(cl.map((c) => [c.slug, c.id]));
++    const { filas, sinCliente, descartados } = convertir(datos.fichajes, clientes);
++
++    // Idempotente por (usuario, inicio): volver a ejecutarlo no duplica.
++    let nuevos = 0;
++    for (const f of filas) {
++      const r = await pg.query(
++        `INSERT INTO fichajes (usuario_id, cliente_id, inicio, fin, origen, nota)
++         SELECT $1, $2, $3, $4, 'anadido', $5
++         WHERE NOT EXISTS (SELECT 1 FROM fichajes WHERE usuario_id = $1 AND inicio = $3)`,
++        [usuario, f.clienteId, f.inicio, f.fin, NOTA]
++      );
++      nuevos += r.rowCount ?? 0;
++    }
++    console.log(`Importados ${nuevos} tramos nuevos (${filas.length} en total, ${descartados} descartados).`);
++    if (sinCliente.length > 0) {
++      console.log(`Sin cliente en Atlas (quedan sin asignar): ${sinCliente.join(", ")}`);
++    }
++    console.log("Para retirarlo: npx tsx scripts/migrar/fichajes.ts --limpiar");
++  } finally {
++    await pg.end();
++  }
++}
++
++// Ejecuta solo cuando se invoca directamente (no al importarse desde un test).
++// El resto de `scripts/migrar/` no necesitaba esta guarda porque nada importa
++// sus funciones puras desde el propio script; aquí sí (el test importa
++// `convertir` de este mismo fichero), así que hace falta distinguir «módulo
++// cargado» de «script lanzado». `seed-demo-salon.ts`, con el mismo tsconfig
++// ESM y el mismo Vitest en este monorepo, usa esta misma guarda.
++if (require.main === module) {
++  main().catch((e) => {
++    console.error(e);
++    process.exit(1);
++  });
++}
+diff --git a/apps/atlas/src/app/dinero/horas/page.tsx b/apps/atlas/src/app/dinero/horas/page.tsx
+new file mode 100644
+index 0000000..fdbe0b4
+--- /dev/null
++++ b/apps/atlas/src/app/dinero/horas/page.tsx
+@@ -0,0 +1,210 @@
++// src/app/dinero/horas/page.tsx
++import Link from "next/link";
++import { ChevronLeft } from "lucide-react";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { obtenerPerfil } from "@/lib/db/perfil";
++import { listarTramos } from "@/lib/db/fichajes";
++import { listarProyectos } from "@/lib/db/proyectos";
++import { listarClientes } from "@/lib/db/clientes";
++import { resumir, formatearMinutos, minutosDe, type FilaHoras } from "@/lib/horas/tramos";
++import { hoyEnMadrid } from "@/lib/dinero";
++import { FormTramo } from "@/components/dinero/FormTramo";
++import { Distintivo } from "@/components/ui/Distintivo";
++
++const FECHA_HORA = new Intl.DateTimeFormat("es-ES", {
++  day: "numeric",
++  month: "short",
++  hour: "2-digit",
++  minute: "2-digit",
++  timeZone: "Europe/Madrid",
++});
++
++/**
++ * El mes en curso, en Madrid, como instantes ISO. Se resta el desfase de la
++ * zona para que «el día 1 a las 00:00» sea el de Madrid y no el de UTC: a
++ * medianoche del día 1 en Madrid aún es día 30 en UTC.
++ */
++function mesEnCurso(hoy: string): { desde: string; hasta: string } {
++  // `hoy` es siempre "AAAA-MM-DD" (lo garantiza `hoyEnMadrid`): se lee por
++  // `slice` y no por `split(...).map(Number)` con desestructuración porque
++  // con `noUncheckedIndexedAccess` esta última tipa cada hueco como
++  // `number | undefined`, y aquí no hay nada opcional que reflejar.
++  const a = Number(hoy.slice(0, 4));
++  const m = Number(hoy.slice(5, 7));
++  const desfase = (d: Date) => {
++    const madrid = new Intl.DateTimeFormat("en-US", {
++      timeZone: "Europe/Madrid",
++      hour12: false,
++      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
++    }).formatToParts(d);
++    const g = (t: string) => Number(madrid.find((p) => p.type === t)?.value);
++    const comoUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"));
++    return comoUtc - d.getTime();
++  };
++  const inicioUtc = new Date(Date.UTC(a, m - 1, 1));
++  const finUtc = new Date(Date.UTC(a, m, 1));
++  return {
++    desde: new Date(inicioUtc.getTime() - desfase(inicioUtc)).toISOString(),
++    hasta: new Date(finUtc.getTime() - desfase(finUtc)).toISOString(),
++  };
++}
++
++function Desglose({ titulo, filas }: { titulo: string; filas: FilaHoras[] }) {
++  return (
++    <div className="cristal cristal-denso p-4">
++      <h3 className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>
++        {titulo}
++      </h3>
++      {filas.length === 0 ? (
++        <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>Nada este mes.</p>
++      ) : (
++        <ul className="space-y-1 text-sm">
++          {filas.map((f) => (
++            <li key={f.id ?? "sin"} className="flex items-baseline justify-between gap-3">
++              <span className="truncate">{f.nombre}</span>
++              <span className="shrink-0 tabular-nums">{formatearMinutos(f.minutos)}</span>
++            </li>
++          ))}
++        </ul>
++      )}
++    </div>
++  );
++}
++
++export default async function PaginaHoras() {
++  const sb = await clienteServidor();
++  const perfil = await obtenerPerfil(sb);
++  // Sin doble puerta: aquí entra cualquiera. Un colaborador ve sus horas y el
++  // propietario las de todos, y eso lo decide RLS al leer, no esta pantalla.
++  const esPropietario = perfil?.esPropietario ?? false;
++
++  const rango = mesEnCurso(hoyEnMadrid());
++  const [tramos, proyectos, clientes] = await Promise.all([
++    listarTramos(sb, rango),
++    listarProyectos(sb),
++    listarClientes(sb),
++  ]);
++  // Un único instante para toda la pantalla: `resumir` lo usa para el total y
++  // los desgloses, y la tabla de abajo lo reutiliza en `minutosDe` fila por
++  // fila. Si cada uno leyera su propio `Date.now()`, un tramo abierto podría
++  // sumar un minuto distinto en la fila que en el total.
++  const ahora = Date.now();
++  const r = resumir(tramos, ahora);
++  const pctAnadido = r.totalMin === 0 ? 0 : Math.round((r.anadidosMin / r.totalMin) * 100);
++
++  return (
++    <section className="max-w-5xl space-y-4">
++      <header>
++        <Link href="/dinero" className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100">
++          <ChevronLeft size={15} aria-hidden="true" />
++          Dinero
++        </Link>
++        <h1 className="text-2xl font-semibold tracking-tight">Horas</h1>
++        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
++          Lo fichado este mes. La regla es fichar antes de empezar; lo que se añade después cuenta, pero se ve.
++        </p>
++      </header>
++
++      <div className="grid gap-3 sm:grid-cols-3">
++        <div className="cristal cristal-denso p-4">
++          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Total del mes</div>
++          <div className="mt-1 text-2xl font-semibold tabular-nums">{formatearMinutos(r.totalMin)}</div>
++        </div>
++        <div className="cristal cristal-denso p-4">
++          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Añadido a posteriori</div>
++          <div className="mt-1 text-2xl font-semibold tabular-nums">{pctAnadido} %</div>
++          {/* Más de un cuarto reconstruido: la regla no se está cumpliendo. */}
++          {pctAnadido > 25 && <Distintivo estado="aviso" texto="Se está fichando tarde" />}
++        </div>
++        <div className="cristal cristal-denso p-4">
++          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Último fichaje</div>
++          <div className="mt-1 text-lg font-semibold">
++            {r.ultimoInicio ? FECHA_HORA.format(new Date(r.ultimoInicio)) : <Distintivo estado="desconocido" texto="Nunca" />}
++          </div>
++        </div>
++      </div>
++
++      {r.sospechosos.length > 0 && (
++        <div className="cristal p-4" role="alert">
++          <p className="font-medium">
++            {r.sospechosos.length === 1 ? "Hay un fichaje abierto desde hace demasiado." : `Hay ${r.sospechosos.length} fichajes abiertos desde hace demasiado.`}
++          </p>
++          <ul className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
++            {r.sospechosos.map((t) => (
++              <li key={t.id}>
++                {t.usuarioNombre ?? "Alguien"} · desde {FECHA_HORA.format(new Date(t.inicio))}
++              </li>
++            ))}
++          </ul>
++        </div>
++      )}
++
++      <div className={esPropietario ? "grid gap-3 lg:grid-cols-3" : "grid gap-3 lg:grid-cols-2"}>
++        <Desglose titulo="Por cliente" filas={r.porCliente} />
++        <Desglose titulo="Por proyecto" filas={r.porProyecto} />
++        {esPropietario && <Desglose titulo="Por persona" filas={r.porPersona} />}
++      </div>
++
++      <h2 className="pt-2 text-lg font-semibold">Se me olvidó fichar</h2>
++      <FormTramo
++        proyectos={proyectos.map((p) => ({ id: p.id, nombre: p.nombre }))}
++        clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
++      />
++
++      <h2 className="pt-2 text-lg font-semibold">Los tramos del mes</h2>
++      {tramos.length === 0 ? (
++        <div className="cristal p-8 text-center">
++          <p className="font-medium">Ningún tramo este mes.</p>
++          <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>Ficha desde el marco, a la izquierda, antes de empezar.</p>
++        </div>
++      ) : (
++        <div className="cristal cristal-denso overflow-x-auto">
++          <table className="w-full text-sm">
++            <caption className="sr-only">Tramos fichados en el mes en curso</caption>
++            <thead>
++              <tr className="border-b text-left text-xs uppercase tracking-wider" style={{ borderColor: "var(--cristal-borde)", color: "var(--texto-tenue)" }}>
++                {esPropietario && <th scope="col" className="px-4 py-2 font-medium">Quién</th>}
++                <th scope="col" className="px-4 py-2 font-medium">Inicio</th>
++                <th scope="col" className="px-4 py-2 font-medium">Duración</th>
++                <th scope="col" className="px-4 py-2 font-medium">Para</th>
++                <th scope="col" className="px-4 py-2 font-medium">Origen</th>
++              </tr>
++            </thead>
++            <tbody className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
++              {tramos.map((t) => {
++                // La misma `minutosDe` que usa `resumir`: es lo que hace que
++                // la suma de esta columna cuadre con el total de arriba,
++                // tope de 16 h incluido tanto en cerrados como en abiertos.
++                const minutos = minutosDe(t, ahora);
++                return (
++                  <tr key={t.id}>
++                    {esPropietario && <td className="px-4 py-2.5">{t.usuarioNombre ?? "—"}</td>}
++                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">{FECHA_HORA.format(new Date(t.inicio))}</td>
++                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
++                      {t.fin === null ? (
++                        <span className="inline-flex items-center gap-1.5">
++                          <Distintivo estado="ok" texto="En curso" />
++                          <span>{formatearMinutos(minutos)}</span>
++                        </span>
++                      ) : (
++                        formatearMinutos(minutos)
++                      )}
++                    </td>
++                    <td className="px-4 py-2.5">
++                      {[t.proyectoNombre, t.clienteNombre].filter(Boolean).join(" · ") || (
++                        <span style={{ color: "var(--texto-tenue)" }}>Sin asignar</span>
++                      )}
++                    </td>
++                    <td className="px-4 py-2.5">
++                      {t.origen === "anadido" ? <Distintivo estado="aviso" texto="Añadido" /> : <span style={{ color: "var(--texto-tenue)" }}>Medido</span>}
++                    </td>
++                  </tr>
++                );
++              })}
++            </tbody>
++          </table>
++        </div>
++      )}
++    </section>
++  );
++}
+diff --git a/apps/atlas/src/app/dinero/page.tsx b/apps/atlas/src/app/dinero/page.tsx
+index 3e71c03..a755e9c 100644
+--- a/apps/atlas/src/app/dinero/page.tsx
++++ b/apps/atlas/src/app/dinero/page.tsx
+@@ -95,20 +95,26 @@ export default async function PaginaDinero() {
+           Ver los gastos del mes, con su desglose por plataforma, cliente y proyecto →
+         </Link>
+       </p>
+ 
+       <p className="text-sm">
+         <Link href="/dinero/cobro" className="underline opacity-80 hover:opacity-100">
+           Ver lo que falta por facturar y por cobrar →
+         </Link>
+       </p>
+ 
++      <p className="text-sm">
++        <Link href="/dinero/horas" className="underline opacity-80 hover:opacity-100">
++          Ver las horas del mes →
++        </Link>
++      </p>
++
+       <h2 className="pt-2 text-lg font-semibold">Facturas</h2>
+ 
+       {facturas.length === 0 ? (
+         <div className="cristal p-8 text-center">
+           <p className="font-medium">Todavía no hay ninguna factura.</p>
+           <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+             Aquí aparecerán las que registres, con lo que falta por cobrar.
+           </p>
+         </div>
+       ) : (
+diff --git a/apps/atlas/src/app/layout.tsx b/apps/atlas/src/app/layout.tsx
+index ed94109..56f5d9a 100644
+--- a/apps/atlas/src/app/layout.tsx
++++ b/apps/atlas/src/app/layout.tsx
+@@ -1,18 +1,22 @@
+ import type { Metadata, Viewport } from "next";
+ import { headers } from "next/headers";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { atributosTema } from "@/lib/tema/tokens";
+ import { BarraLateral } from "@/components/marco/BarraLateral";
++import { Fichaje, type EnCurso } from "@/components/marco/Fichaje";
+ import { Auroras } from "@/components/marco/Auroras";
+ import { RegistrarSW } from "@/components/marco/RegistrarSW";
++import { fichajeEnCurso } from "@/lib/db/fichajes";
++import { nombresDeProyectos } from "@/lib/db/proyectos";
++import { nombresDeClientes } from "@/lib/db/clientes";
+ import "./globals.css";
+ 
+ export const metadata: Metadata = {
+   title: "Atlas — HAT3X",
+   description: "Todo lo que HAT3X tiene en producción, en un solo sitio.",
+   manifest: "/manifest.webmanifest",
+   // En iOS esto es lo que hace que «Añadir a inicio» abra Atlas a pantalla
+   // completa — y ahí no es un lujo: sin instalar, iOS no da push.
+   appleWebApp: { capable: true, title: "Atlas", statusBarStyle: "black-translucent" },
+   icons: { icon: "/iconos/atlas-192.png", apple: "/iconos/atlas-192.png" },
+@@ -31,30 +35,57 @@ export default async function RootLayout({
+   const sb = await clienteServidor();
+   const perfil = await obtenerPerfil(sb);
+   // Un componente de servidor no tiene acceso a la URL: la inyecta el
+   // middleware como cabecera para que la barra lateral marque la entrada activa.
+   const rutaActual = headers().get("x-pathname") ?? "/";
+ 
+   // Sin perfil (pantallas de entrada): tema por defecto y sin barra lateral.
+   const tema = perfil?.tema ?? "oscuro";
+   const paleta = perfil?.paleta ?? "zafiro";
+ 
++  let enCurso: EnCurso | null = null;
++  let proyectos: { id: string; nombre: string }[] = [];
++  let clientes: { id: string; nombre: string }[] = [];
++  if (perfil) {
++    // `nombresDeProyectos`/`nombresDeClientes`, no `listarProyectos`/
++    // `listarClientes`: el marco se renderiza en TODAS las páginas, y estas
++    // últimas arrastran `contratos_visibles` entera y agregan cuotas — cuatro
++    // consultas de más solo para quedarse con `{id, nombre}`.
++    const [f, ps, cs] = await Promise.all([
++      fichajeEnCurso(sb),
++      nombresDeProyectos(sb),
++      nombresDeClientes(sb),
++    ]);
++    // La etiqueta se compone aquí, una vez, y viaja como texto: el componente
++    // cliente no tiene por qué saber de proyectos ni de clientes.
++    enCurso = f
++      ? {
++          id: f.id,
++          inicio: f.inicio,
++          etiqueta:
++            [f.proyectoNombre, f.clienteNombre].filter(Boolean).join(" · ") || "Sin asignar",
++        }
++      : null;
++    proyectos = ps;
++    clientes = cs;
++  }
++
+   return (
+     <html lang="es" {...atributosTema(tema, paleta)}>
+       <body className="min-h-dvh">
+         <Auroras />
+         <RegistrarSW />
+         {perfil ? (
+           <div className="flex min-h-dvh">
+-            <BarraLateral
+-              esPropietario={perfil.esPropietario}
+-              rutaActual={rutaActual}
+-            />
++            <div className="m-3 flex w-56 shrink-0 flex-col gap-3">
++              <BarraLateral esPropietario={perfil.esPropietario} rutaActual={rutaActual} />
++              <Fichaje enCurso={enCurso} proyectos={proyectos} clientes={clientes} />
++            </div>
+             <main className="min-w-0 flex-1 p-3 pl-0">{children}</main>
+           </div>
+         ) : (
+           children
+         )}
+       </body>
+     </html>
+   );
+ }
+diff --git a/apps/atlas/src/components/dinero/FormTramo.tsx b/apps/atlas/src/components/dinero/FormTramo.tsx
+new file mode 100644
+index 0000000..ffba555
+--- /dev/null
++++ b/apps/atlas/src/components/dinero/FormTramo.tsx
+@@ -0,0 +1,113 @@
++"use client";
++
++import { useState } from "react";
++import { anadirFichaje } from "@/lib/db/acciones-fichajes";
++
++/**
++ * Añadir un tramo que se olvidó fichar. Queda marcado como añadido, y la
++ * pantalla lo enseña: la regla es fichar antes, y esto es la excepción, no el
++ * camino.
++ *
++ * Las horas se teclean en la zona del dispositivo (`datetime-local` no lleva
++ * zona) y se mandan en ISO con zona: `new Date(valor)` las interpreta en la
++ * zona del navegador, que es la de quien las recuerda. Si quien rellena el
++ * formulario está de viaje, la hora se interpreta en la zona del
++ * dispositivo, no en la de Madrid — es una limitación aceptada, no un bug.
++ */
++export function FormTramo({
++  proyectos,
++  clientes,
++}: {
++  proyectos: { id: string; nombre: string }[];
++  clientes: { id: string; nombre: string }[];
++}) {
++  const [error, setError] = useState<string | null>(null);
++  const [enviando, setEnviando] = useState(false);
++
++  async function alEnviar(e: React.FormEvent<HTMLFormElement>) {
++    e.preventDefault();
++    const formulario = e.currentTarget;
++    const datos = new FormData(formulario);
++    setError(null);
++
++    const inicio = new Date(String(datos.get("inicio") ?? ""));
++    const fin = new Date(String(datos.get("fin") ?? ""));
++    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
++      return setError("Hace falta un inicio y un fin.");
++    }
++    const proyectoId = String(datos.get("proyectoId") ?? "");
++    const clienteId = String(datos.get("clienteId") ?? "");
++    const nota = String(datos.get("nota") ?? "").trim();
++
++    setEnviando(true);
++    try {
++      const r = await anadirFichaje({
++        proyectoId: proyectoId === "" ? null : proyectoId,
++        clienteId: clienteId === "" ? null : clienteId,
++        nota: nota === "" ? null : nota,
++        inicio: inicio.toISOString(),
++        fin: fin.toISOString(),
++      });
++      if (r.ok) formulario.reset();
++      else setError(r.error);
++    } catch {
++      setError("No se pudo guardar. Comprueba la conexión e inténtalo otra vez.");
++    } finally {
++      setEnviando(false);
++    }
++  }
++
++  return (
++    <form onSubmit={alEnviar} className="cristal space-y-3 p-4">
++      <div className="grid gap-3 sm:grid-cols-2">
++        <label className="block text-sm">
++          <span className="mb-1 block">Inicio</span>
++          <input name="inicio" type="datetime-local" className="w-full rounded-lg px-2 py-1.5" />
++        </label>
++        <label className="block text-sm">
++          <span className="mb-1 block">Fin</span>
++          <input name="fin" type="datetime-local" className="w-full rounded-lg px-2 py-1.5" />
++        </label>
++        <label className="block text-sm">
++          <span className="mb-1 block">Proyecto</span>
++          <select name="proyectoId" className="w-full rounded-lg px-2 py-1.5">
++            <option value="">— ninguno —</option>
++            {proyectos.map((p) => (
++              <option key={p.id} value={p.id}>
++                {p.nombre}
++              </option>
++            ))}
++          </select>
++        </label>
++        <label className="block text-sm">
++          <span className="mb-1 block">Cliente</span>
++          <select name="clienteId" className="w-full rounded-lg px-2 py-1.5">
++            <option value="">— ninguno —</option>
++            {clientes.map((c) => (
++              <option key={c.id} value={c.id}>
++                {c.nombre}
++              </option>
++            ))}
++          </select>
++        </label>
++        <label className="block text-sm sm:col-span-2">
++          <span className="mb-1 block">Nota</span>
++          <input name="nota" className="w-full rounded-lg px-2 py-1.5" placeholder="Qué fue: llamada, visita, lectura…" />
++        </label>
++      </div>
++      {error && (
++        <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>
++          {error}
++        </p>
++      )}
++      <button
++        type="submit"
++        disabled={enviando}
++        className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50"
++        style={{ background: "var(--cristal-fondo-denso)" }}
++      >
++        Añadir tramo olvidado
++      </button>
++    </form>
++  );
++}
+diff --git a/apps/atlas/src/components/marco/BarraLateral.tsx b/apps/atlas/src/components/marco/BarraLateral.tsx
+index 25710a8..55366bb 100644
+--- a/apps/atlas/src/components/marco/BarraLateral.tsx
++++ b/apps/atlas/src/components/marco/BarraLateral.tsx
+@@ -18,23 +18,28 @@ const ENTRADAS = [
+  * decidir quién eres.
+  */
+ export function BarraLateral({
+   esPropietario,
+   rutaActual,
+ }: {
+   esPropietario: boolean;
+   rutaActual: string;
+ }) {
+   return (
++    // `flex-1`: desde que el marco (tarea 4) puso este <nav> dentro de una
++    // columna flex-col junto al bloque de fichaje, el <nav> ya no se estira
++    // solo. Sin `flex-1` el rótulo «Propietario» de abajo (con `mt-auto`) no
++    // tiene espacio sobrante que ocupar y queda pegado a la última entrada,
++    // en vez de al fondo de la columna, encima del fichaje.
+     <nav
+       aria-label="Navegación principal"
+-      className="cristal m-3 flex w-56 shrink-0 flex-col gap-1 p-3"
++      className="cristal flex flex-1 flex-col gap-1 p-3"
+     >
+       <div className="px-2 pb-3 text-sm font-bold tracking-widest">ATLAS</div>
+       {ENTRADAS.map(({ href, etiqueta, Icono }) => {
+         const activa =
+           href === "/" ? rutaActual === "/" : rutaActual.startsWith(href);
+         return (
+           <Link
+             key={href}
+             href={href}
+             aria-current={activa ? "page" : undefined}
+diff --git a/apps/atlas/src/components/marco/Fichaje.tsx b/apps/atlas/src/components/marco/Fichaje.tsx
+new file mode 100644
+index 0000000..849b51b
+--- /dev/null
++++ b/apps/atlas/src/components/marco/Fichaje.tsx
+@@ -0,0 +1,149 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Play, Square } from "lucide-react";
++import { empezarFichaje, pararFichaje } from "@/lib/db/acciones-fichajes";
++import { formatearMinutos } from "@/lib/horas/tramos";
++
++export type EnCurso = { id: string; etiqueta: string; inicio: string };
++
++/**
++ * El fichaje, siempre a la vista. Va en el marco y no en una pantalla porque
++ * la regla —«ficha antes de empezar»— solo se cumple si cumplirla cuesta menos
++ * que olvidarla: un botón a un clic desde cualquier sitio, también en el móvil.
++ *
++ * Recibe el estado ya resuelto en servidor. Este componente no consulta la
++ * base: un componente cliente no puede decidir quién eres.
++ */
++export function Fichaje({
++  enCurso,
++  proyectos,
++  clientes,
++}: {
++  enCurso: EnCurso | null;
++  proyectos: { id: string; nombre: string }[];
++  clientes: { id: string; nombre: string }[];
++}) {
++  const [error, setError] = useState<string | null>(null);
++  const [enviando, setEnviando] = useState(false);
++  // Nace en `null` y no en `Date.now()`: el servidor renderiza en un
++  // instante y el cliente hidrata en otro, y si esos dos instantes caen a
++  // ambos lados de un cambio de minuto el texto del cronómetro no coincide
++  // — error de hidratación. Mientras es `null` no se pinta el cronómetro,
++  // solo la etiqueta; en el primer efecto tras montar se fija el valor real,
++  // ya solo en el cliente.
++  const [ahora, setAhora] = useState<number | null>(null);
++
++  // El cronómetro se refresca cada medio minuto: basta para leerlo y no
++  // vuelve a pintar el marco entero cada segundo. La dependencia es
++  // `enCurso?.inicio` (una cadena) y no `enCurso` (un objeto nuevo en cada
++  // render del layout): con el objeto, el efecto se reiniciaría de más.
++  useEffect(() => {
++    if (!enCurso) return;
++    setAhora(Date.now());
++    const t = setInterval(() => setAhora(Date.now()), 30_000);
++    return () => clearInterval(t);
++  }, [enCurso?.inicio]);
++
++  async function ejecutar(accion: () => Promise<{ ok: true } | { ok: false; error: string }>) {
++    setError(null);
++    setEnviando(true);
++    try {
++      const r = await accion();
++      if (!r.ok) setError(r.error);
++    } catch {
++      setError("No se pudo guardar. Comprueba la conexión.");
++    } finally {
++      // En el finally: si la promesa se rechaza, el botón no puede quedar muerto.
++      setEnviando(false);
++    }
++  }
++
++  if (enCurso) {
++    // `ahora` es `null` hasta que el efecto corre en el cliente (ver el
++    // comentario del `useState` de arriba): mientras tanto no hay minutos
++    // fiables que pintar, solo la etiqueta de qué está en curso.
++    const minutos =
++      ahora === null ? null : Math.round((ahora - Date.parse(enCurso.inicio)) / 60_000);
++    return (
++      <div className="cristal space-y-2 p-3" aria-live="polite">
++        <div className="text-[11px] uppercase tracking-wider opacity-60">Fichado en</div>
++        <div className="truncate text-sm font-medium">{enCurso.etiqueta}</div>
++        {minutos !== null && (
++          <div className="text-sm tabular-nums opacity-80">{formatearMinutos(Math.max(0, minutos))}</div>
++        )}
++        {error && (
++          <p role="alert" className="text-xs" style={{ color: "var(--estado-caido)" }}>
++            {error}
++          </p>
++        )}
++        <button
++          type="button"
++          disabled={enviando}
++          onClick={() => ejecutar(pararFichaje)}
++          className="flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium disabled:opacity-50"
++          style={{ background: "var(--cristal-fondo-denso)" }}
++        >
++          <Square size={14} aria-hidden="true" />
++          Parar
++        </button>
++      </div>
++    );
++  }
++
++  return (
++    <form
++      className="cristal space-y-2 p-3"
++      onSubmit={(e) => {
++        e.preventDefault();
++        const datos = new FormData(e.currentTarget);
++        const proyectoId = String(datos.get("proyectoId") ?? "");
++        const clienteId = String(datos.get("clienteId") ?? "");
++        void ejecutar(() =>
++          empezarFichaje({
++            proyectoId: proyectoId === "" ? null : proyectoId,
++            clienteId: clienteId === "" ? null : clienteId,
++            nota: null,
++          })
++        );
++      }}
++    >
++      <div className="text-[11px] uppercase tracking-wider opacity-60">Fichar</div>
++      {/*
++        Solo `aria-label`, sin `<label>` envolvente ni `sr-only` dentro: con
++        las dos cosas el mismo `<select>` tendría dos nombres accesibles y
++        `getByLabelText(/proyecto/i)` podría fallar por duplicado.
++      */}
++      <select name="proyectoId" aria-label="Proyecto" className="w-full rounded-lg px-2 py-1 text-xs">
++        <option value="">— proyecto —</option>
++        {proyectos.map((p) => (
++          <option key={p.id} value={p.id}>
++            {p.nombre}
++          </option>
++        ))}
++      </select>
++      <select name="clienteId" aria-label="Cliente" className="w-full rounded-lg px-2 py-1 text-xs">
++        <option value="">— cliente —</option>
++        {clientes.map((c) => (
++          <option key={c.id} value={c.id}>
++            {c.nombre}
++          </option>
++        ))}
++      </select>
++      {error && (
++        <p role="alert" className="text-xs" style={{ color: "var(--estado-caido)" }}>
++          {error}
++        </p>
++      )}
++      <button
++        type="submit"
++        disabled={enviando}
++        className="flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium disabled:opacity-50"
++        style={{ background: "var(--cristal-fondo-denso)" }}
++      >
++        <Play size={14} aria-hidden="true" />
++        Empezar
++      </button>
++    </form>
++  );
++}
+diff --git a/apps/atlas/src/lib/db/acciones-fichajes.ts b/apps/atlas/src/lib/db/acciones-fichajes.ts
+new file mode 100644
+index 0000000..dfd88d9
+--- /dev/null
++++ b/apps/atlas/src/lib/db/acciones-fichajes.ts
+@@ -0,0 +1,40 @@
++// src/lib/db/acciones-fichajes.ts
++"use server";
++
++import { revalidatePath } from "next/cache";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { empezar, parar, anadirTramo, type EntradaFichaje, type EntradaTramo } from "./fichajes";
++import type { Ok } from "./proyectos";
++
++//
++// Envoltorios del límite HTTP. Validar, comprobar la sesión y escribir es cosa
++// de `fichajes.ts`, que sí se puede probar contra la base porque recibe `sb`.
++//
++// El fichaje vive en el LAYOUT, así que la revalidación es del layout entero:
++// `revalidatePath("/", "layout")`. Revalidar solo una ruta dejaría el botón
++// del marco enseñando el estado anterior en todas las demás.
++//
++
++export async function empezarFichaje(entrada: EntradaFichaje): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await empezar(sb, entrada);
++  if (!r.ok) return r;
++  revalidatePath("/", "layout");
++  return { ok: true };
++}
++
++export async function pararFichaje(): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await parar(sb);
++  if (!r.ok) return r;
++  revalidatePath("/", "layout");
++  return { ok: true };
++}
++
++export async function anadirFichaje(entrada: EntradaTramo): Promise<Ok> {
++  const sb = await clienteServidor();
++  const r = await anadirTramo(sb, entrada, Date.now());
++  if (!r.ok) return r;
++  revalidatePath("/dinero/horas");
++  return { ok: true };
++}
+diff --git a/apps/atlas/src/lib/db/clientes.ts b/apps/atlas/src/lib/db/clientes.ts
+index 00724b0..cd8ece1 100644
+--- a/apps/atlas/src/lib/db/clientes.ts
++++ b/apps/atlas/src/lib/db/clientes.ts
+@@ -78,20 +78,38 @@ function aContrato(f: FilaContrato): ContratoVisible {
+  * contrato trae importe: eso significa que quien consulta no es propietario, y
+  * mostrar 0 € sería mentir.
+  */
+ function cuotaTotal(contratos: ContratoVisible[]): number | null {
+   const activos = contratos.filter((c) => c.estado === "activo");
+   const conImporte = activos.filter((c) => c.cuotaMensual !== null);
+   if (activos.length > 0 && conImporte.length === 0) return null;
+   return conImporte.reduce((suma, c) => suma + (c.cuotaMensual ?? 0), 0);
+ }
+ 
++/**
++ * Solo `id` y `nombre`, ordenados. Existe aparte de `listarClientes` porque
++ * quien la llama —el selector de fichar, en el marco— no necesita ni
++ * `contratos_visibles` ni las cuotas agregadas: pedirlas ahí sería arrastrar
++ * cuatro consultas de más en CADA página, porque el marco se renderiza en
++ * todas.
++ */
++export async function nombresDeClientes(
++  sb: Sb
++): Promise<{ id: string; nombre: string }[]> {
++  const { data, error } = await sb
++    .from("clientes")
++    .select("id, nombre")
++    .order("nombre");
++  if (error) throw error;
++  return data ?? [];
++}
++
+ export async function listarClientes(sb: Sb): Promise<ClienteResumen[]> {
+   const { data, error } = await sb
+     .from("clientes")
+     .select("id, nombre, slug, sector, estado")
+     .order("nombre");
+   if (error) throw error;
+ 
+   // Siempre de la vista, nunca de la tabla `contratos`. Ver README.md.
+   const { data: contratos, error: errC } = await sb
+     .from("contratos_visibles")
+diff --git a/apps/atlas/src/lib/db/fichajes.ts b/apps/atlas/src/lib/db/fichajes.ts
+new file mode 100644
+index 0000000..75fc841
+--- /dev/null
++++ b/apps/atlas/src/lib/db/fichajes.ts
+@@ -0,0 +1,179 @@
++// src/lib/db/fichajes.ts
++//
++// Fichar, parar, añadir un tramo olvidado y leer las horas. Recibe `sb` para
++// poder probarse contra la base; los envoltorios "use server" están en
++// `acciones-fichajes.ts`.
++//
++// NO filtra por rol. Un colaborador ve y escribe solo sus filas porque RLS lo
++// decide; el propietario ve las de todos por lo mismo. Los `.eq("usuario_id")`
++// de abajo son defensa en profundidad, no la barrera.
++//
++import type { Sb } from "./clientes";
++import type { Ok } from "./proyectos";
++import type { Tramo } from "@/lib/horas/tramos";
++import { TOPE_HORAS } from "@/lib/horas/abiertos";
++
++export type EntradaFichaje = {
++  proyectoId: string | null;
++  clienteId: string | null;
++  nota: string | null;
++};
++
++export type EntradaTramo = EntradaFichaje & {
++  /** ISO con zona. */
++  inicio: string;
++  fin: string;
++};
++
++const CAMPOS =
++  "id, usuario_id, proyecto_id, cliente_id, inicio, fin, origen, nota, " +
++  // Uniones EXTERNAS a propósito: un colaborador sin permiso sobre el
++  // proyecto no ve su fila en `proyectos`, y con `!inner` su propio fichaje
++  // desaparecería del listado. Aparece con el nombre a null, que es la verdad.
++  "perfiles(nombre), proyectos(nombre), clientes(nombre)";
++
++// PostgREST entrega la relación a veces como objeto y a veces como array.
++function uno<T>(u: T | T[] | null): T | null {
++  return Array.isArray(u) ? (u[0] ?? null) : u;
++}
++
++type Fila = {
++  id: string;
++  usuario_id: string;
++  proyecto_id: string | null;
++  cliente_id: string | null;
++  inicio: string;
++  fin: string | null;
++  origen: string;
++  nota: string | null;
++  perfiles: { nombre: string | null } | { nombre: string | null }[] | null;
++  proyectos: { nombre: string } | { nombre: string }[] | null;
++  clientes: { nombre: string } | { nombre: string }[] | null;
++};
++
++function aTramo(f: Fila): Tramo {
++  return {
++    id: f.id,
++    usuarioId: f.usuario_id,
++    usuarioNombre: uno(f.perfiles)?.nombre ?? null,
++    proyectoId: f.proyecto_id,
++    proyectoNombre: uno(f.proyectos)?.nombre ?? null,
++    clienteId: f.cliente_id,
++    clienteNombre: uno(f.clientes)?.nombre ?? null,
++    inicio: f.inicio,
++    fin: f.fin,
++    origen: f.origen as Tramo["origen"],
++    nota: f.nota,
++  };
++}
++
++/** Puro: se valida aquí y no en el formulario, porque una acción de servidor es un endpoint público. */
++export function validarTramo(e: EntradaTramo, ahoraMs: number): Ok {
++  const ini = Date.parse(e.inicio);
++  const fin = Date.parse(e.fin);
++  if (Number.isNaN(ini) || Number.isNaN(fin)) {
++    return { ok: false, error: "El inicio o el fin no son una fecha." };
++  }
++  if (fin <= ini) return { ok: false, error: "El fin tiene que ser posterior al inicio." };
++  if (fin > ahoraMs) return { ok: false, error: "El fin no puede estar en el futuro." };
++  if (fin - ini > TOPE_HORAS * 3_600_000) {
++    return {
++      ok: false,
++      error: `Un tramo no puede pasar de ${TOPE_HORAS} horas. Si fue más largo, pártelo en dos.`,
++    };
++  }
++  return { ok: true };
++}
++
++async function quienSoy(sb: Sb): Promise<string | null> {
++  const {
++    data: { user },
++  } = await sb.auth.getUser();
++  return user?.id ?? null;
++}
++
++export async function fichajeEnCurso(sb: Sb): Promise<Tramo | null> {
++  const yo = await quienSoy(sb);
++  if (!yo) return null;
++  const { data, error } = await sb
++    .from("fichajes")
++    .select(CAMPOS)
++    .eq("usuario_id", yo)
++    .is("fin", null)
++    .maybeSingle();
++  if (error) throw error;
++  return data ? aTramo(data as unknown as Fila) : null;
++}
++
++export async function empezar(sb: Sb, e: EntradaFichaje): Promise<Ok> {
++  const yo = await quienSoy(sb);
++  if (!yo) return { ok: false, error: "No hay sesión." };
++  const { error } = await sb.from("fichajes").insert({
++    usuario_id: yo,
++    proyecto_id: e.proyectoId,
++    cliente_id: e.clienteId,
++    nota: e.nota,
++    inicio: new Date().toISOString(),
++  });
++  if (!error) return { ok: true };
++  // El índice único parcial es la garantía; aquí solo se traduce su error a
++  // algo que una persona entienda.
++  if (error.code === "23505") {
++    return { ok: false, error: "Ya tienes un fichaje en curso. Páralo antes de empezar otro." };
++  }
++  return { ok: false, error: error.message };
++}
++
++export async function parar(sb: Sb): Promise<Ok> {
++  const yo = await quienSoy(sb);
++  if (!yo) return { ok: false, error: "No hay sesión." };
++  const { data, error } = await sb
++    .from("fichajes")
++    .update({ fin: new Date().toISOString() })
++    .eq("usuario_id", yo)
++    .is("fin", null)
++    .select("id");
++  if (error) return { ok: false, error: error.message };
++  // Cero filas no es un error de Postgres, pero sí es mentir si se devuelve ok.
++  if (!data || data.length === 0) return { ok: false, error: "No hay ningún fichaje en curso." };
++  return { ok: true };
++}
++
++export async function anadirTramo(sb: Sb, e: EntradaTramo, ahoraMs: number): Promise<Ok> {
++  const valido = validarTramo(e, ahoraMs);
++  if (!valido.ok) return valido;
++  const yo = await quienSoy(sb);
++  if (!yo) return { ok: false, error: "No hay sesión." };
++  const { error } = await sb.from("fichajes").insert({
++    usuario_id: yo,
++    proyecto_id: e.proyectoId,
++    cliente_id: e.clienteId,
++    nota: e.nota,
++    inicio: e.inicio,
++    fin: e.fin,
++    origen: "anadido",
++  });
++  return error ? { ok: false, error: error.message } : { ok: true };
++}
++
++/**
++ * Los tramos cuyo inicio cae en el rango. Quién los ve lo decide RLS.
++ *
++ * El corte es por `inicio`, no por `fin`: un tramo que empieza el 31 a las
++ * 23:00 y termina el 1 a las 02:00 cuenta entero en el mes en que empezó.
++ * Es a propósito — así un mismo tramo nunca se cuenta dos veces, ni se
++ * parte entre dos listados.
++ */
++export async function listarTramos(
++  sb: Sb,
++  rango: { desde: string; hasta: string }
++): Promise<Tramo[]> {
++  const { data, error } = await sb
++    .from("fichajes")
++    .select(CAMPOS)
++    .gte("inicio", rango.desde)
++    .lt("inicio", rango.hasta)
++    .order("inicio", { ascending: false });
++  if (error) throw error;
++  return (data ?? []).map((f) => aTramo(f as unknown as Fila));
++}
+diff --git a/apps/atlas/src/lib/db/proyectos.ts b/apps/atlas/src/lib/db/proyectos.ts
+index 6b30ab5..60bec14 100644
+--- a/apps/atlas/src/lib/db/proyectos.ts
++++ b/apps/atlas/src/lib/db/proyectos.ts
+@@ -7,20 +7,38 @@ export type ProyectoResumen = {
+   id: string;
+   nombre: string;
+   slug: string;
+   tipo: string;
+   estado: string;
+   portadaUrl: string | null;
+   gradiente: string | null;
+   numClientes: number;
+ };
+ 
++/**
++ * Solo `id` y `nombre`, ordenados. Existe aparte de `listarProyectos` porque
++ * quien la llama —el selector de fichar, en el marco— no necesita ni
++ * `contratos_visibles` ni las cuotas agregadas: pedirlas ahí sería arrastrar
++ * cuatro consultas de más en CADA página, porque el marco se renderiza en
++ * todas.
++ */
++export async function nombresDeProyectos(
++  sb: Sb
++): Promise<{ id: string; nombre: string }[]> {
++  const { data, error } = await sb
++    .from("proyectos")
++    .select("id, nombre")
++    .order("nombre");
++  if (error) throw error;
++  return data ?? [];
++}
++
+ export async function listarProyectos(sb: Sb): Promise<ProyectoResumen[]> {
+   const { data, error } = await sb
+     .from("proyectos")
+     .select("id, nombre, slug, tipo, estado, portada_url, gradiente")
+     .order("nombre");
+   if (error) throw error;
+ 
+   // Siempre de la vista, nunca de la tabla `contratos`. Ver README.md.
+   const { data: contratos, error: errC } = await sb
+     .from("contratos_visibles")
+diff --git a/apps/atlas/src/lib/horas/abiertos.ts b/apps/atlas/src/lib/horas/abiertos.ts
+new file mode 100644
+index 0000000..e4c8fad
+--- /dev/null
++++ b/apps/atlas/src/lib/horas/abiertos.ts
+@@ -0,0 +1,70 @@
++//
++// Qué fichaje lleva abierto demasiado tiempo. Sin base, sin red, sin reloj:
++// el instante entra por parámetro.
++//
++// ESTE FICHERO SE COPIA BYTE A BYTE a `supabase/functions/avisar/fichajes.ts`.
++// Por eso no importa nada ni usa `Intl`: Deno no resuelve el alias `@/` y la
++// copia la vigila `src/tests/vigia/copias.test.ts`.
++//
++
++/**
++ * A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido.
++ *
++ * La salida rápida de `atlas_disparar_fichajes()` usa el mismo número en SQL
++ * (`interval '10 hours'`, en la migración ya aplicada `20260830110000_aviso_fichaje.sql`);
++ * si cambia uno, cambia el otro: si el SQL corta más tarde que este número, se
++ * avisa más tarde de lo que promete la pantalla; si corta antes, la Edge
++ * Function recibe invocaciones vacías que no encuentran nada que avisar.
++ */
++export const AVISO_HORAS = 10;
++
++/**
++ * A partir de aquí ya no se cuenta. Un fichaje abierto desde el lunes no son
++ * 26 horas de trabajo: son un olvido, y contarlas inflaría el coste del
++ * cliente. El tramo sigue abierto —hay que cerrarlo y corregir el fin— pero
++ * los minutos que se suman se paran aquí.
++ */
++export const TOPE_HORAS = 16;
++
++export type Abierto = {
++  id: string;
++  usuarioId: string;
++  /** ISO con zona. */
++  inicio: string;
++  proyectoNombre: string | null;
++  clienteNombre: string | null;
++};
++
++export type AvisoAbierto = {
++  fichajeId: string;
++  usuarioId: string;
++  /** Horas enteras, hacia abajo. */
++  horas: number;
++  titulo: string;
++  cuerpo: string;
++};
++
++export function abiertosDemasiado(
++  abiertos: Abierto[],
++  ahoraMs: number,
++  limiteHoras: number = AVISO_HORAS
++): AvisoAbierto[] {
++  const avisos: AvisoAbierto[] = [];
++  for (const a of abiertos) {
++    const horas = Math.floor((ahoraMs - Date.parse(a.inicio)) / 3_600_000);
++    if (horas < limiteHoras) continue;
++    const donde =
++      a.proyectoNombre || a.clienteNombre
++        ? "en " + [a.proyectoNombre, a.clienteNombre].filter(Boolean).join(" · ")
++        : "sin asignar";
++    avisos.push({
++      fichajeId: a.id,
++      usuarioId: a.usuarioId,
++      horas,
++      titulo: `Llevas ${horas} horas fichado ${donde}`,
++      // Se dice qué hacer, no solo qué pasa: el aviso sirve para corregir.
++      cuerpo: "Si ya no estás trabajando, ciérralo y corrige la hora de fin desde Horas.",
++    });
++  }
++  return avisos;
++}
+diff --git a/apps/atlas/src/lib/horas/tramos.ts b/apps/atlas/src/lib/horas/tramos.ts
+new file mode 100644
+index 0000000..c75c2dd
+--- /dev/null
++++ b/apps/atlas/src/lib/horas/tramos.ts
+@@ -0,0 +1,100 @@
++//
++// Cuánto se ha trabajado, por quién y para quién. Pura: el instante entra
++// por parámetro y no hay base ni red.
++//
++import { AVISO_HORAS, TOPE_HORAS } from "./abiertos";
++
++export type Tramo = {
++  id: string;
++  usuarioId: string;
++  usuarioNombre: string | null;
++  proyectoId: string | null;
++  proyectoNombre: string | null;
++  clienteId: string | null;
++  clienteNombre: string | null;
++  /** ISO con zona. */
++  inicio: string;
++  /** ISO con zona, o null si sigue en curso. */
++  fin: string | null;
++  origen: "atlas" | "anadido";
++  nota: string | null;
++};
++
++export type FilaHoras = { id: string | null; nombre: string; minutos: number };
++
++export type ResumenHoras = {
++  totalMin: number;
++  medidosMin: number;
++  anadidosMin: number;
++  porCliente: FilaHoras[];
++  porProyecto: FilaHoras[];
++  porPersona: FilaHoras[];
++  /** El inicio más reciente de cualquier tramo, o null si no hay ninguno. */
++  ultimoInicio: string | null;
++  /** Abiertos desde hace más de AVISO_HORAS: casi seguro olvidos. */
++  sospechosos: Tramo[];
++};
++
++const SIN_ASIGNAR = "Sin asignar";
++
++/** Minutos de un tramo, con el tope aplicado. Un abierto cuenta hasta `ahora`. */
++export function minutosDe(t: Tramo, ahoraMs: number): number {
++  const finMs = t.fin === null ? ahoraMs : Date.parse(t.fin);
++  const ms = Math.max(0, finMs - Date.parse(t.inicio));
++  return Math.min(Math.round(ms / 60_000), TOPE_HORAS * 60);
++}
++
++function agrupar(
++  tramos: Tramo[],
++  ahoraMs: number,
++  clave: (t: Tramo) => string | null,
++  nombre: (t: Tramo) => string | null,
++  rotuloPorDefecto: string = SIN_ASIGNAR
++): FilaHoras[] {
++  const filas = new Map<string | null, FilaHoras>();
++  for (const t of tramos) {
++    const id = clave(t);
++    // Si no hay nombre pero sí hay ID, es "Sin nombre"; si ni ID ni nombre, es "Sin asignar".
++    const nombreUsado = nombre(t) ?? (id ? rotuloPorDefecto : SIN_ASIGNAR);
++    const fila = filas.get(id) ?? { id, nombre: nombreUsado, minutos: 0 };
++    fila.minutos += minutosDe(t, ahoraMs);
++    filas.set(id, fila);
++  }
++  // De más a menos: lo que más pesa, arriba. Los desgloses se leen de arriba abajo.
++  return [...filas.values()].sort((a, b) => b.minutos - a.minutos);
++}
++
++export function resumir(tramos: Tramo[], ahoraMs: number): ResumenHoras {
++  let medidos = 0;
++  let anadidos = 0;
++  let ultimo: string | null = null;
++  const sospechosos: Tramo[] = [];
++  for (const t of tramos) {
++    const m = minutosDe(t, ahoraMs);
++    if (t.origen === "atlas") medidos += m;
++    else anadidos += m;
++    if (ultimo === null || Date.parse(t.inicio) > Date.parse(ultimo)) ultimo = t.inicio;
++    if (t.fin === null && ahoraMs - Date.parse(t.inicio) >= AVISO_HORAS * 3_600_000) {
++      sospechosos.push(t);
++    }
++  }
++  return {
++    totalMin: medidos + anadidos,
++    medidosMin: medidos,
++    anadidosMin: anadidos,
++    // Los tres agrupan los MISMOS tramos: si no suman igual, hay uno perdido.
++    porCliente: agrupar(tramos, ahoraMs, (t) => t.clienteId, (t) => t.clienteNombre, SIN_ASIGNAR),
++    porProyecto: agrupar(tramos, ahoraMs, (t) => t.proyectoId, (t) => t.proyectoNombre, SIN_ASIGNAR),
++    porPersona: agrupar(tramos, ahoraMs, (t) => t.usuarioId, (t) => t.usuarioNombre, "Sin nombre"),
++    ultimoInicio: ultimo,
++    sospechosos,
++  };
++}
++
++export function formatearMinutos(min: number): string {
++  const h = Math.floor(min / 60);
++  const m = min % 60;
++  if (h === 0) return `${m} min`;
++  if (m === 0) return `${h} h`;
++  return `${h} h ${m} min`;
++}
+diff --git a/apps/atlas/src/tests/componentes/fichaje.test.tsx b/apps/atlas/src/tests/componentes/fichaje.test.tsx
+new file mode 100644
+index 0000000..caa198a
+--- /dev/null
++++ b/apps/atlas/src/tests/componentes/fichaje.test.tsx
+@@ -0,0 +1,60 @@
++import { describe, it, expect, vi, beforeEach } from "vitest";
++import { render, screen, fireEvent, waitFor } from "@testing-library/react";
++import { Fichaje } from "@/components/marco/Fichaje";
++
++const acciones = vi.hoisted(() => ({
++  empezarFichaje: vi.fn(),
++  pararFichaje: vi.fn(),
++}));
++vi.mock("@/lib/db/acciones-fichajes", () => acciones);
++
++const PROYECTOS = [{ id: "p1", nombre: "Kairos" }];
++const CLIENTES = [{ id: "c1", nombre: "Biodental" }];
++
++beforeEach(() => {
++  acciones.empezarFichaje.mockReset().mockResolvedValue({ ok: true });
++  acciones.pararFichaje.mockReset().mockResolvedValue({ ok: true });
++});
++
++describe("Fichaje", () => {
++  it("sin nada en curso, ofrece empezar", () => {
++    render(<Fichaje enCurso={null} proyectos={PROYECTOS} clientes={CLIENTES} />);
++    expect(screen.getByRole("button", { name: /empezar/i })).toBeInTheDocument();
++  });
++
++  it("empezar manda lo elegido; vacío es null, no cadena vacía", async () => {
++    render(<Fichaje enCurso={null} proyectos={PROYECTOS} clientes={CLIENTES} />);
++    fireEvent.change(screen.getByLabelText(/proyecto/i), { target: { value: "p1" } });
++    fireEvent.click(screen.getByRole("button", { name: /empezar/i }));
++    await waitFor(() =>
++      expect(acciones.empezarFichaje).toHaveBeenCalledWith({ proyectoId: "p1", clienteId: null, nota: null })
++    );
++  });
++
++  it("con uno en curso, dice qué y desde cuándo, y ofrece parar", () => {
++    render(
++      <Fichaje
++        enCurso={{ id: "f1", etiqueta: "Kairos · Biodental", inicio: new Date(Date.now() - 125 * 60_000).toISOString() }}
++        proyectos={PROYECTOS}
++        clientes={CLIENTES}
++      />
++    );
++    expect(screen.getByText("Kairos · Biodental")).toBeInTheDocument();
++    expect(screen.getByText(/2 h 5 min/)).toBeInTheDocument();
++    expect(screen.getByRole("button", { name: /parar/i })).toBeInTheDocument();
++  });
++
++  it("si la acción falla, enseña el error y el botón vuelve a estar vivo", async () => {
++    acciones.pararFichaje.mockResolvedValue({ ok: false, error: "No hay ningún fichaje en curso." });
++    render(
++      <Fichaje
++        enCurso={{ id: "f1", etiqueta: "Sin asignar", inicio: new Date().toISOString() }}
++        proyectos={PROYECTOS}
++        clientes={CLIENTES}
++      />
++    );
++    fireEvent.click(screen.getByRole("button", { name: /parar/i }));
++    expect(await screen.findByRole("alert")).toHaveTextContent("No hay ningún fichaje en curso.");
++    expect(screen.getByRole("button", { name: /parar/i })).not.toBeDisabled();
++  });
++});
+diff --git a/apps/atlas/src/tests/db/fichajes.test.ts b/apps/atlas/src/tests/db/fichajes.test.ts
+new file mode 100644
+index 0000000..72df8d2
+--- /dev/null
++++ b/apps/atlas/src/tests/db/fichajes.test.ts
+@@ -0,0 +1,255 @@
++// src/tests/db/fichajes.test.ts
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import {
++  validarTramo,
++  fichajeEnCurso,
++  empezar,
++  parar,
++  anadirTramo,
++  listarTramos,
++} from "@/lib/db/fichajes";
++import type { Database } from "@/types/supabase";
++import type { Tramo } from "@/lib/horas/tramos";
++
++const URL_API = "http://127.0.0.1:54321";
++const ANON =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++
++const CORREO_DUENYO = "duenyo-fichajes-db@atlas.test";
++const CORREO_COLAB = "colab-fichajes-db@atlas.test";
++const SLUG_PROYECTO = "fichajes-prueba";
++const SLUG_CLIENTE = "fichajes-prueba";
++
++const AHORA = Date.parse("2026-08-31T20:00:00Z");
++const RANGO = { desde: "2026-08-01T00:00:00Z", hasta: "2026-09-01T00:00:00Z" };
++
++let pg: Client;
++let admin: ReturnType<typeof createClient<Database>>;
++let sbDuenyo: ReturnType<typeof createClient<Database>>;
++let sbColab: ReturnType<typeof createClient<Database>>;
++let idDuenyo = "";
++let idColab = "";
++let idProyecto = "";
++let idCliente = "";
++
++// El propietario ve TODAS las filas de `fichajes`, no solo las de este fichero;
++// sin este filtro, otro test que inserte en el mismo rango de fechas (p.ej.
++// `esquema/fichajes.test.ts`) podría colarse en el aserto.
++function soloMios(tramos: Tramo[]): Tramo[] {
++  const mios = new Set([idDuenyo, idColab]);
++  return tramos.filter((t) => mios.has(t.usuarioId));
++}
++
++async function altaUsuario(correo: string, propietario: boolean, clave: string) {
++  const creado = await admin.auth.admin.createUser({
++    email: correo,
++    password: "contrasena-de-prueba",
++    email_confirm: true,
++  });
++  if (creado.error) throw creado.error;
++  await pg.query(`INSERT INTO perfiles (id, nombre, es_propietario) VALUES ($1,$2,$3)`, [
++    creado.data.user.id,
++    propietario ? "Dueño" : "Colab",
++    propietario,
++  ]);
++  const sb = createClient<Database>(URL_API, ANON, {
++    auth: { persistSession: false, autoRefreshToken: false, storageKey: clave },
++  });
++  const { error } = await sb.auth.signInWithPassword({
++    email: correo,
++    password: "contrasena-de-prueba",
++  });
++  if (error) throw error;
++  return { sb, id: creado.data.user.id };
++}
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
++
++  // Limpieza defensiva, también ANTES de crear: un fichero que solo limpia al
++  // final queda inservible para siempre si una corrida se corta a medias.
++  const { data: listado } = await admin.auth.admin.listUsers();
++  for (const u of listado?.users ?? []) {
++    if (u.email === CORREO_DUENYO || u.email === CORREO_COLAB) {
++      await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [u.id]);
++      await admin.auth.admin.deleteUser(u.id);
++    }
++  }
++  await pg.query(`DELETE FROM proyectos WHERE slug = $1`, [SLUG_PROYECTO]);
++  await pg.query(`DELETE FROM clientes WHERE slug = $1`, [SLUG_CLIENTE]);
++
++  const d = await altaUsuario(CORREO_DUENYO, true, "fd-d");
++  const c = await altaUsuario(CORREO_COLAB, false, "fd-c");
++  sbDuenyo = d.sb;
++  idDuenyo = d.id;
++  sbColab = c.sb;
++  idColab = c.id;
++
++  // El check de `proyectos.tipo` es un conjunto cerrado; 'web-app' es el valor
++  // válido más parecido a "web" (ver 20260815100000_nucleo.sql).
++  const p = await pg.query(
++    `INSERT INTO proyectos (nombre, slug, tipo, estado) VALUES ('Fichajes prueba', $1, 'web-app', 'produccion') RETURNING id`,
++    [SLUG_PROYECTO]
++  );
++  idProyecto = p.rows[0].id;
++  const cl = await pg.query(
++    `INSERT INTO clientes (nombre, slug) VALUES ('Cliente fichajes', $1) RETURNING id`,
++    [SLUG_CLIENTE]
++  );
++  idCliente = cl.rows[0].id;
++});
++
++beforeEach(async () => {
++  for (const id of [idDuenyo, idColab]) {
++    if (id !== "") await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [id]);
++  }
++});
++
++afterAll(async () => {
++  try {
++    for (const id of [idDuenyo, idColab]) {
++      if (id === "") continue;
++      try {
++        await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [id]);
++      } catch {
++        /* ya no está */
++      }
++      try {
++        await admin.auth.admin.deleteUser(id);
++      } catch {
++        /* ya no está */
++      }
++    }
++    if (idProyecto !== "") {
++      try {
++        await pg.query(`DELETE FROM proyectos WHERE id = $1`, [idProyecto]);
++      } catch {
++        /* ya no está */
++      }
++    }
++    if (idCliente !== "") {
++      try {
++        await pg.query(`DELETE FROM clientes WHERE id = $1`, [idCliente]);
++      } catch {
++        /* ya no está */
++      }
++    }
++  } finally {
++    await pg.end();
++  }
++});
++
++describe("validarTramo", () => {
++  const base = { proyectoId: null, clienteId: null, nota: null };
++  it("acepta un tramo cerrado en el pasado", () => {
++    expect(
++      validarTramo({ ...base, inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T10:00:00Z" }, AHORA)
++    ).toEqual({ ok: true });
++  });
++  it("rechaza fin antes o igual que inicio", () => {
++    const r = validarTramo({ ...base, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T10:00:00Z" }, AHORA);
++    expect(r.ok).toBe(false);
++  });
++  it("rechaza un fin en el futuro: no se recuerda lo que aún no ha pasado", () => {
++    const r = validarTramo({ ...base, inicio: "2026-08-31T19:00:00Z", fin: "2026-08-31T21:00:00Z" }, AHORA);
++    expect(r).toEqual({ ok: false, error: "El fin no puede estar en el futuro." });
++  });
++  it("rechaza más del tope: un tramo de 20 horas no es un tramo, es un olvido", () => {
++    const r = validarTramo({ ...base, inicio: "2026-08-30T00:00:00Z", fin: "2026-08-30T20:00:00Z" }, AHORA);
++    expect(r.ok).toBe(false);
++    expect((r as { error: string }).error).toMatch(/16 horas/);
++  });
++  it("rechaza fechas que no lo son", () => {
++    expect(validarTramo({ ...base, inicio: "ayer", fin: "hoy" }, AHORA).ok).toBe(false);
++  });
++});
++
++describe("fichar", () => {
++  it("empezar deja uno en curso, con su proyecto y su cliente", async () => {
++    const r = await empezar(sbDuenyo, { proyectoId: idProyecto, clienteId: idCliente, nota: null });
++    expect(r).toEqual({ ok: true });
++    const en = await fichajeEnCurso(sbDuenyo);
++    expect(en?.fin).toBeNull();
++    expect(en?.proyectoNombre).toBe("Fichajes prueba");
++    expect(en?.clienteNombre).toBe("Cliente fichajes");
++    expect(en?.origen).toBe("atlas");
++  });
++
++  it("empezar dos veces falla con un mensaje que se entiende", async () => {
++    await empezar(sbDuenyo, { proyectoId: null, clienteId: null, nota: null });
++    const r = await empezar(sbDuenyo, { proyectoId: null, clienteId: null, nota: null });
++    expect(r).toEqual({ ok: false, error: "Ya tienes un fichaje en curso. Páralo antes de empezar otro." });
++  });
++
++  it("parar cierra el que estaba en curso", async () => {
++    await empezar(sbDuenyo, { proyectoId: null, clienteId: null, nota: null });
++    const r = await parar(sbDuenyo);
++    expect(r).toEqual({ ok: true });
++    expect(await fichajeEnCurso(sbDuenyo)).toBeNull();
++  });
++
++  it("parar sin nada en curso lo dice, no finge", async () => {
++    const r = await parar(sbDuenyo);
++    expect(r).toEqual({ ok: false, error: "No hay ningún fichaje en curso." });
++  });
++
++  it("un tramo añadido queda marcado como añadido", async () => {
++    const r = await anadirTramo(
++      sbDuenyo,
++      { proyectoId: null, clienteId: idCliente, nota: "llamada", inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T09:00:00Z" },
++      AHORA
++    );
++    expect(r).toEqual({ ok: true });
++    const [t] = soloMios(await listarTramos(sbDuenyo, RANGO));
++    expect(t?.origen).toBe("anadido");
++    expect(t?.nota).toBe("llamada");
++  });
++
++  it("un tramo inválido no llega a la base", async () => {
++    const r = await anadirTramo(
++      sbDuenyo,
++      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T09:00:00Z" },
++      AHORA
++    );
++    expect(r.ok).toBe(false);
++    expect(soloMios(await listarTramos(sbDuenyo, RANGO))).toEqual([]);
++  });
++});
++
++describe("quién ve qué (RLS, con usuarios reales)", () => {
++  it("el colaborador ficha lo suyo y solo ve lo suyo; el propietario ve a los dos", async () => {
++    await anadirTramo(
++      sbColab,
++      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T08:00:00Z", fin: "2026-08-31T09:00:00Z" },
++      AHORA
++    );
++    await anadirTramo(
++      sbDuenyo,
++      { proyectoId: null, clienteId: null, nota: null, inicio: "2026-08-31T10:00:00Z", fin: "2026-08-31T11:00:00Z" },
++      AHORA
++    );
++    const veColab = soloMios(await listarTramos(sbColab, RANGO));
++    expect(veColab.map((t) => t.usuarioId)).toEqual([idColab]);
++    const veDuenyo = soloMios(await listarTramos(sbDuenyo, RANGO));
++    expect(veDuenyo).toHaveLength(2);
++    // El nombre viaja con el tramo: el propietario sabe de quién es cada hora.
++    expect(veDuenyo.map((t) => t.usuarioNombre).sort()).toEqual(["Colab", "Dueño"]);
++  });
++
++  it("un proyecto que el colaborador no puede ver no le esconde su propio fichaje", async () => {
++    // Sin `permisos` sobre el proyecto, RLS le oculta la fila de `proyectos`.
++    // La unión tiene que ser externa: el tramo aparece, con el nombre a null.
++    await empezar(sbColab, { proyectoId: idProyecto, clienteId: null, nota: null });
++    const en = await fichajeEnCurso(sbColab);
++    expect(en).not.toBeNull();
++    expect(en?.proyectoId).toBe(idProyecto);
++    expect(en?.proyectoNombre).toBeNull();
++  });
++});
+diff --git a/apps/atlas/src/tests/db/nombres.test.ts b/apps/atlas/src/tests/db/nombres.test.ts
+new file mode 100644
+index 0000000..e008957
+--- /dev/null
++++ b/apps/atlas/src/tests/db/nombres.test.ts
+@@ -0,0 +1,92 @@
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import { nombresDeClientes } from "@/lib/db/clientes";
++import { nombresDeProyectos } from "@/lib/db/proyectos";
++import type { Database } from "@/types/supabase";
++
++// Valores fijos y públicos de Supabase local (`npx supabase status`).
++// No son credenciales: son idénticos en todas las instalaciones.
++const URL_API = "http://127.0.0.1:54321";
++const ANON =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++
++let pg: Client;
++let idUsuario = "";
++let sbUsuario: ReturnType<typeof createClient<Database>>;
++let admin: ReturnType<typeof createClient<Database>>;
++
++// Nombres a propósito fuera de orden alfabético al insertarlos: si la consulta
++// no llevara `.order("nombre")`, el test pasaría igual por casualidad del
++// orden de inserción.
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++
++  admin = createClient<Database>(URL_API, SERVICE, {
++    auth: { persistSession: false },
++  });
++  const creado = await admin.auth.admin.createUser({
++    email: "nombres@atlas.test",
++    password: "contrasena-de-prueba",
++    email_confirm: true,
++  });
++  if (creado.error) throw creado.error;
++  idUsuario = creado.data.user.id;
++
++  await pg.query(
++    `INSERT INTO perfiles (id, nombre, es_propietario) VALUES ($1, 'Nombres', true)`,
++    [idUsuario]
++  );
++
++  await pg.query(
++    `INSERT INTO clientes (nombre, slug, sector)
++     VALUES ('Zeta Cliente','zeta-cliente-nombres-db','Odontología'),
++            ('Alfa Cliente','alfa-cliente-nombres-db','Odontología')`
++  );
++  await pg.query(
++    `INSERT INTO proyectos (nombre, slug, tipo, estado)
++     VALUES ('Zeta Proyecto','zeta-proyecto-nombres-db','voz','produccion'),
++            ('Alfa Proyecto','alfa-proyecto-nombres-db','voz','produccion')`
++  );
++
++  sbUsuario = createClient<Database>(URL_API, ANON);
++  const { error } = await sbUsuario.auth.signInWithPassword({
++    email: "nombres@atlas.test",
++    password: "contrasena-de-prueba",
++  });
++  if (error) throw error;
++});
++
++afterAll(async () => {
++  await pg.query(`DELETE FROM clientes  WHERE slug LIKE '%-nombres-db'`);
++  await pg.query(`DELETE FROM proyectos WHERE slug LIKE '%-nombres-db'`);
++  if (idUsuario) await admin.auth.admin.deleteUser(idUsuario);
++  await pg.end();
++});
++
++describe("nombresDeClientes y nombresDeProyectos", () => {
++  it("nombresDeClientes devuelve solo id y nombre, ordenado por nombre", async () => {
++    const lista = await nombresDeClientes(sbUsuario);
++    const propios = lista.filter((c) => c.nombre.endsWith("Cliente"));
++    expect(propios.map((c) => c.nombre)).toEqual(["Alfa Cliente", "Zeta Cliente"]);
++    // Sin campos de más: ni slug, ni sector, ni estado, ni cuotaTotal. Si
++    // alguien vuelve a hacer esta función un alias de `listarClientes`,
++    // este assert es el que lo pilla.
++    for (const fila of propios) {
++      expect(Object.keys(fila).sort()).toEqual(["id", "nombre"]);
++    }
++  });
++
++  it("nombresDeProyectos devuelve solo id y nombre, ordenado por nombre", async () => {
++    const lista = await nombresDeProyectos(sbUsuario);
++    const propios = lista.filter((p) => p.nombre.endsWith("Proyecto"));
++    expect(propios.map((p) => p.nombre)).toEqual(["Alfa Proyecto", "Zeta Proyecto"]);
++    for (const fila of propios) {
++      expect(Object.keys(fila).sort()).toEqual(["id", "nombre"]);
++    }
++  });
++});
+diff --git a/apps/atlas/src/tests/esquema/aviso-fichaje.test.ts b/apps/atlas/src/tests/esquema/aviso-fichaje.test.ts
+new file mode 100644
+index 0000000..9fa528d
+--- /dev/null
++++ b/apps/atlas/src/tests/esquema/aviso-fichaje.test.ts
+@@ -0,0 +1,73 @@
++// src/tests/esquema/aviso-fichaje.test.ts
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import type { Database } from "@/types/supabase";
++
++const URL_API = "http://127.0.0.1:54321";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++const CORREO = "aviso-fichaje@atlas.test";
++
++let pg: Client;
++let admin: ReturnType<typeof createClient<Database>>;
++let idUsuario = "";
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
++  const { data: listado } = await admin.auth.admin.listUsers();
++  for (const u of listado?.users ?? []) {
++    if (u.email === CORREO) await admin.auth.admin.deleteUser(u.id);
++  }
++  const creado = await admin.auth.admin.createUser({ email: CORREO, password: "contrasena-de-prueba", email_confirm: true });
++  if (creado.error) throw creado.error;
++  idUsuario = creado.data.user.id;
++  await pg.query(`INSERT INTO perfiles (id, es_propietario) VALUES ($1, true)`, [idUsuario]);
++});
++
++afterAll(async () => {
++  try {
++    if (idUsuario !== "") {
++      try {
++        await pg.query(`DELETE FROM notificaciones WHERE usuario_id = $1`, [idUsuario]);
++      } catch {
++        /* ya no está */
++      }
++      try {
++        await admin.auth.admin.deleteUser(idUsuario);
++      } catch {
++        /* ya no está */
++      }
++    }
++  } finally {
++    await pg.end();
++  }
++});
++
++describe("el aviso de fichaje", () => {
++  it("las notificaciones admiten el tipo fichaje, y siguen sin admitir otros", async () => {
++    await expect(
++      pg.query(`INSERT INTO notificaciones (usuario_id, canal, ok, tipo) VALUES ($1,'push',true,'fichaje')`, [idUsuario])
++    ).resolves.toBeDefined();
++    await expect(
++      pg.query(`INSERT INTO notificaciones (usuario_id, canal, ok, tipo) VALUES ($1,'push',true,'chuches')`, [idUsuario])
++    ).rejects.toThrow(/violates check constraint "notificaciones_tipo_check"/);
++  });
++
++  it("la tarea horaria está dada de alta al minuto 41", async () => {
++    const { rows } = await pg.query(`SELECT schedule FROM cron.job WHERE jobname = 'atlas-fichajes'`);
++    expect(rows[0].schedule).toBe("41 * * * *");
++  });
++
++  // Ejecutando con el rol, no leyendo el catálogo: lo que importa es qué pasa
++  // cuando alguien llama.
++  it("un rol autenticado no puede dispararla", async () => {
++    await pg.query("begin");
++    await pg.query("set local role authenticated");
++    await expect(pg.query("select atlas_disparar_fichajes()")).rejects.toThrow(/permission denied|permiso denegado/i);
++    await pg.query("rollback");
++  });
++});
+diff --git a/apps/atlas/src/tests/esquema/fichajes.test.ts b/apps/atlas/src/tests/esquema/fichajes.test.ts
+new file mode 100644
+index 0000000..46238d4
+--- /dev/null
++++ b/apps/atlas/src/tests/esquema/fichajes.test.ts
+@@ -0,0 +1,164 @@
++// src/tests/esquema/fichajes.test.ts
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import type { Database } from "@/types/supabase";
++
++const URL_API = "http://127.0.0.1:54321";
++const ANON =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++
++const CORREO_DUENYO = "duenyo-fichajes-esquema@atlas.test";
++const CORREO_COLAB = "colab-fichajes-esquema@atlas.test";
++
++let pg: Client;
++let admin: ReturnType<typeof createClient<Database>>;
++let sbDuenyo: ReturnType<typeof createClient<Database>>;
++let sbColab: ReturnType<typeof createClient<Database>>;
++let idDuenyo = "";
++let idColab = "";
++
++async function altaUsuario(correo: string, propietario: boolean, clave: string) {
++  const creado = await admin.auth.admin.createUser({
++    email: correo,
++    password: "contrasena-de-prueba",
++    email_confirm: true,
++  });
++  if (creado.error) throw creado.error;
++  await pg.query(`INSERT INTO perfiles (id, es_propietario) VALUES ($1,$2)`, [
++    creado.data.user.id,
++    propietario,
++  ]);
++  const sb = createClient<Database>(URL_API, ANON, {
++    auth: { persistSession: false, autoRefreshToken: false, storageKey: clave },
++  });
++  const { error } = await sb.auth.signInWithPassword({
++    email: correo,
++    password: "contrasena-de-prueba",
++  });
++  if (error) throw error;
++  return { sb, id: creado.data.user.id };
++}
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
++
++  // Limpieza defensiva: si una corrida anterior murió a medias, el correo
++  // sigue ocupado y `createUser` fallaría aquí sin llegar a limpiar nunca.
++  // La FK de `usuario_id` es `on delete restrict` a propósito, así que
++  // primero se borran los fichajes de esos correos y luego los usuarios.
++  const { data: listado } = await admin.auth.admin.listUsers();
++  for (const u of listado?.users ?? []) {
++    if (u.email === CORREO_DUENYO || u.email === CORREO_COLAB) {
++      await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [u.id]);
++      await admin.auth.admin.deleteUser(u.id);
++    }
++  }
++
++  const d = await altaUsuario(CORREO_DUENYO, true, "fe-d");
++  const c = await altaUsuario(CORREO_COLAB, false, "fe-c");
++  sbDuenyo = d.sb;
++  idDuenyo = d.id;
++  sbColab = c.sb;
++  idColab = c.id;
++});
++
++afterAll(async () => {
++  try {
++    for (const id of [idDuenyo, idColab]) {
++      if (id === "") continue; // beforeAll murió antes de asignarlo
++      try {
++        await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [id]);
++      } catch {
++        /* ya no está */
++      }
++      try {
++        await admin.auth.admin.deleteUser(id);
++      } catch {
++        /* ya no está */
++      }
++    }
++  } finally {
++    await pg.end();
++  }
++});
++
++describe("la tabla fichajes", () => {
++  it("rechaza un fin anterior al inicio", async () => {
++    await expect(
++      pg.query(
++        `INSERT INTO fichajes (usuario_id, inicio, fin)
++         VALUES ($1, '2026-08-30T10:00:00Z', '2026-08-30T09:00:00Z')`,
++        [idDuenyo]
++      )
++    ).rejects.toThrow(/fichajes_check/);
++  });
++
++  it("rechaza un tramo añadido sin fin", async () => {
++    await expect(
++      pg.query(
++        `INSERT INTO fichajes (usuario_id, inicio, origen)
++         VALUES ($1, '2026-08-30T10:00:00Z', 'anadido')`,
++        [idDuenyo]
++      )
++    ).rejects.toThrow(/fichajes_check/);
++  });
++
++  it("solo admite una entrada en curso por persona, desde la base", async () => {
++    await pg.query(`INSERT INTO fichajes (usuario_id, inicio) VALUES ($1, now())`, [
++      idDuenyo,
++    ]);
++    await expect(
++      pg.query(`INSERT INTO fichajes (usuario_id, inicio) VALUES ($1, now())`, [
++        idDuenyo,
++      ])
++    ).rejects.toThrow(/fichajes_uno_en_curso/);
++    await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [idDuenyo]);
++  });
++});
++
++describe("quién ve y escribe qué", () => {
++  it("un colaborador ficha lo suyo", async () => {
++    const { error } = await sbColab
++      .from("fichajes")
++      .insert({ usuario_id: idColab, inicio: "2026-08-30T08:00:00Z", fin: "2026-08-30T09:00:00Z" });
++    expect(error).toBeNull();
++  });
++
++  it("un colaborador no puede fichar a nombre de otro", async () => {
++    const { error } = await sbColab
++      .from("fichajes")
++      .insert({ usuario_id: idDuenyo, inicio: "2026-08-30T08:00:00Z", fin: "2026-08-30T09:00:00Z" });
++    expect(error).not.toBeNull();
++    expect(error?.message).toMatch(/row-level security/);
++  });
++
++  it("un colaborador solo ve sus filas; el propietario ve las de todos", async () => {
++    await pg.query(
++      `INSERT INTO fichajes (usuario_id, inicio, fin)
++       VALUES ($1, '2026-08-30T10:00:00Z', '2026-08-30T11:00:00Z')`,
++      [idDuenyo]
++    );
++    const mios = [idDuenyo, idColab];
++
++    const { data: veColab } = await sbColab.from("fichajes").select("usuario_id").in("usuario_id", mios);
++    expect(veColab?.every((f) => f.usuario_id === idColab)).toBe(true);
++    expect(veColab).toHaveLength(1);
++
++    const { data: veDuenyo } = await sbDuenyo.from("fichajes").select("usuario_id").in("usuario_id", mios);
++    expect(veDuenyo).toHaveLength(2);
++  });
++
++  it("el propietario no edita las horas de otro", async () => {
++    // RLS sin fila que casar no falla: devuelve cero filas actualizadas. Se
++    // comprueba releyendo, que es lo que importa.
++    await sbDuenyo.from("fichajes").update({ nota: "toqueteado" }).eq("usuario_id", idColab);
++    const { rows } = await pg.query(`SELECT nota FROM fichajes WHERE usuario_id = $1`, [idColab]);
++    expect(rows[0].nota).toBeNull();
++  });
++});
+diff --git a/apps/atlas/src/tests/esquema/service-role-lee.test.ts b/apps/atlas/src/tests/esquema/service-role-lee.test.ts
+index 4d9f225..74b215f 100644
+--- a/apps/atlas/src/tests/esquema/service-role-lee.test.ts
++++ b/apps/atlas/src/tests/esquema/service-role-lee.test.ts
+@@ -16,30 +16,33 @@ beforeAll(async () => {
+   pg = new Client({ connectionString: URL_PG });
+   await pg.connect();
+ });
+ 
+ afterAll(async () => {
+   // Cerrar pase lo que pase: un test que reviente dentro de su transacción
+   // no debe dejar el cliente colgado y bloqueando el resto de la suite.
+   await pg.end();
+ });
+ 
+-// Todas las relaciones que `avisarDeCobro` toca con la service_role. Si
+-// alguien añade una lectura nueva a la Edge Function, la añade aquí.
++// Todas las relaciones que las dos ramas de la Edge Function tocan con la
++// service_role —`avisarDeCobro` y `avisarDeFichajes`—. Si alguien añade una
++// lectura nueva a la Edge Function, la añade aquí.
+ const TABLAS_QUE_LEE_LA_EDGE_FUNCTION = [
+   "periodos_contrato",
+   "contratos",
+   "clientes",
+   "facturas",
+   "perfiles",
+   "notificaciones",
+   "suscripciones_push",
++  "fichajes",
++  "proyectos",
+ ];
+ 
+ describe("lo que la service_role puede leer", () => {
+   for (const tabla of TABLAS_QUE_LEE_LA_EDGE_FUNCTION) {
+     it(`lee ${tabla}`, async () => {
+       // Se comprueba ejecutando con el rol, no leyendo el catálogo: lo que
+       // importa es qué pasa cuando la Edge Function pregunta. Dentro de una
+       // transacción con rollback para que `set local role` no se escape.
+       await pg.query("begin");
+       try {
+diff --git a/apps/atlas/src/tests/horas/abiertos.test.ts b/apps/atlas/src/tests/horas/abiertos.test.ts
+new file mode 100644
+index 0000000..7c6daef
+--- /dev/null
++++ b/apps/atlas/src/tests/horas/abiertos.test.ts
+@@ -0,0 +1,53 @@
++import { describe, it, expect } from "vitest";
++import { abiertosDemasiado, AVISO_HORAS, type Abierto } from "@/lib/horas/abiertos";
++
++const AHORA = Date.parse("2026-08-31T20:00:00Z");
++const h = (n: number) => n * 3_600_000;
++
++function abierto(p: Partial<Abierto> = {}): Abierto {
++  return {
++    id: "f1",
++    usuarioId: "u1",
++    inicio: new Date(AHORA - h(11)).toISOString(),
++    proyectoNombre: "Kairos",
++    clienteNombre: "Biodental",
++    ...p,
++  };
++}
++
++describe("abiertosDemasiado", () => {
++  it("con nada abierto no avisa", () => {
++    expect(abiertosDemasiado([], AHORA)).toEqual([]);
++  });
++
++  it("uno de once horas avisa; uno de nueve no", () => {
++    const r = abiertosDemasiado(
++      [abierto(), abierto({ id: "f2", usuarioId: "u2", inicio: new Date(AHORA - h(9)).toISOString() })],
++      AHORA
++    );
++    expect(r.map((a) => a.fichajeId)).toEqual(["f1"]);
++    expect(r[0]?.horas).toBe(11);
++  });
++
++  it("el umbral es inclusivo: justo a las diez horas avisa", () => {
++    const r = abiertosDemasiado([abierto({ inicio: new Date(AHORA - h(AVISO_HORAS)).toISOString() })], AHORA);
++    expect(r).toHaveLength(1);
++  });
++
++  it("el título dice cuánto y de qué; sin proyecto ni cliente, dice «sin asignar»", () => {
++    const [con] = abiertosDemasiado([abierto()], AHORA);
++    expect(con?.titulo).toBe("Llevas 11 horas fichado en Kairos · Biodental");
++    const [sin] = abiertosDemasiado([abierto({ proyectoNombre: null, clienteNombre: null })], AHORA);
++    expect(sin?.titulo).toBe("Llevas 11 horas fichado sin asignar");
++    expect(sin?.cuerpo).toMatch(/ciérralo/i);
++  });
++
++  it("las horas se redondean hacia abajo", () => {
++    const [a] = abiertosDemasiado([abierto({ inicio: new Date(AHORA - h(10.9)).toISOString() })], AHORA);
++    expect(a?.horas).toBe(10);
++  });
++
++  it("admite otro límite", () => {
++    expect(abiertosDemasiado([abierto()], AHORA, 12)).toEqual([]);
++  });
++});
+diff --git a/apps/atlas/src/tests/horas/tramos.test.ts b/apps/atlas/src/tests/horas/tramos.test.ts
+new file mode 100644
+index 0000000..edd7096
+--- /dev/null
++++ b/apps/atlas/src/tests/horas/tramos.test.ts
+@@ -0,0 +1,114 @@
++import { describe, it, expect } from "vitest";
++import { minutosDe, resumir, formatearMinutos, type Tramo } from "@/lib/horas/tramos";
++import { TOPE_HORAS } from "@/lib/horas/abiertos";
++
++const AHORA = Date.parse("2026-08-31T20:00:00Z");
++const min = (n: number) => n * 60_000;
++
++function tramo(p: Partial<Tramo> = {}): Tramo {
++  return {
++    id: "t1",
++    usuarioId: "u1",
++    usuarioNombre: "Jose",
++    proyectoId: "p1",
++    proyectoNombre: "Kairos",
++    clienteId: "c1",
++    clienteNombre: "Biodental",
++    inicio: new Date(AHORA - min(90)).toISOString(),
++    fin: new Date(AHORA - min(30)).toISOString(),
++    origen: "atlas",
++    nota: null,
++    ...p,
++  };
++}
++
++describe("minutosDe", () => {
++  it("un tramo cerrado dura lo que dura", () => {
++    expect(minutosDe(tramo(), AHORA)).toBe(60);
++  });
++
++  it("uno en curso dura hasta ahora", () => {
++    expect(minutosDe(tramo({ fin: null }), AHORA)).toBe(90);
++  });
++
++  it("nunca cuenta más del tope, aunque siga abierto", () => {
++    const viejo = tramo({ fin: null, inicio: new Date(AHORA - min(60 * 30)).toISOString() });
++    expect(minutosDe(viejo, AHORA)).toBe(TOPE_HORAS * 60);
++  });
++
++  it("los segundos sueltos se redondean al minuto más cercano", () => {
++    const t = tramo({ inicio: new Date(AHORA - 90_500).toISOString(), fin: new Date(AHORA).toISOString() });
++    expect(minutosDe(t, AHORA)).toBe(2);
++  });
++});
++
++describe("resumir", () => {
++  it("con nada, todo a cero y sin sospechosos", () => {
++    const r = resumir([], AHORA);
++    expect(r.totalMin).toBe(0);
++    expect(r.porCliente).toEqual([]);
++    expect(r.sospechosos).toEqual([]);
++    expect(r.ultimoInicio).toBeNull();
++  });
++
++  it("los tres desgloses suman lo mismo que el total, aunque haya tramos sin asignar", () => {
++    const r = resumir(
++      [
++        tramo(),
++        tramo({ id: "t2", clienteId: null, clienteNombre: null }),
++        tramo({ id: "t3", proyectoId: null, proyectoNombre: null, usuarioId: "u2", usuarioNombre: "Ana" }),
++      ],
++      AHORA
++    );
++    const suma = (f: { minutos: number }[]) => f.reduce((t, x) => t + x.minutos, 0);
++    expect(r.totalMin).toBe(180);
++    expect(suma(r.porCliente)).toBe(180);
++    expect(suma(r.porProyecto)).toBe(180);
++    expect(suma(r.porPersona)).toBe(180);
++    expect(r.porCliente.find((f) => f.id === null)?.nombre).toBe("Sin asignar");
++  });
++
++  it("separa lo medido de lo añadido", () => {
++    const r = resumir([tramo(), tramo({ id: "t2", origen: "anadido" })], AHORA);
++    expect(r.medidosMin).toBe(60);
++    expect(r.anadidosMin).toBe(60);
++  });
++
++  it("ordena cada desglose de más a menos minutos", () => {
++    const r = resumir(
++      [tramo(), tramo({ id: "t2", clienteId: "c2", clienteNombre: "Club", inicio: new Date(AHORA - min(300)).toISOString(), fin: new Date(AHORA).toISOString() })],
++      AHORA
++    );
++    expect(r.porCliente.map((f) => f.nombre)).toEqual(["Club", "Biodental"]);
++  });
++
++  it("un abierto de más de AVISO_HORAS es sospechoso; uno reciente no", () => {
++    const r = resumir(
++      [tramo({ fin: null, inicio: new Date(AHORA - min(60 * 11)).toISOString() }), tramo({ id: "t2", fin: null })],
++      AHORA
++    );
++    expect(r.sospechosos.map((t) => t.id)).toEqual(["t1"]);
++  });
++
++  it("el último inicio es el más reciente, cerrado o no", () => {
++    const r = resumir([tramo(), tramo({ id: "t2", inicio: new Date(AHORA - min(10)).toISOString(), fin: null })], AHORA);
++    expect(r.ultimoInicio).toBe(new Date(AHORA - min(10)).toISOString());
++  });
++
++  it("usuario sin nombre pero con ID usa «Sin nombre» en porPersona; sin cliente usa «Sin asignar» en porCliente", () => {
++    const r = resumir([tramo({ usuarioNombre: null }), tramo({ id: "t2", clienteId: null, clienteNombre: null })], AHORA);
++    const sinNombrePersona = r.porPersona.find((f) => f.nombre === "Sin nombre");
++    expect(sinNombrePersona?.id).toBe("u1");
++    const sinAsignarCliente = r.porCliente.find((f) => f.nombre === "Sin asignar");
++    expect(sinAsignarCliente?.id).toBeNull();
++  });
++});
++
++describe("formatearMinutos", () => {
++  it("horas y minutos, sin ceros de relleno", () => {
++    expect(formatearMinutos(0)).toBe("0 min");
++    expect(formatearMinutos(45)).toBe("45 min");
++    expect(formatearMinutos(60)).toBe("1 h");
++    expect(formatearMinutos(150)).toBe("2 h 30 min");
++  });
++});
+diff --git a/apps/atlas/src/tests/migrar/fichajes.test.ts b/apps/atlas/src/tests/migrar/fichajes.test.ts
+new file mode 100644
+index 0000000..11ed4bc
+--- /dev/null
++++ b/apps/atlas/src/tests/migrar/fichajes.test.ts
+@@ -0,0 +1,47 @@
++import { describe, it, expect } from "vitest";
++import { convertir, type FichajeViejo } from "../../../scripts/migrar/fichajes";
++
++const CLIENTES = new Map([["biodental", "c-bio"], ["100-montaditos", "c-100"]]);
++
++describe("convertir", () => {
++  it("un tramo cerrado con cliente conocido se convierte", () => {
++    const viejo: FichajeViejo = { entrada: "2026-08-06T14:05:02+02:00", salida: "2026-08-07T00:57:27+02:00", cliente_principal: "100-montaditos" };
++    const r = convertir([viejo], CLIENTES);
++    expect(r.filas).toEqual([
++      { inicio: "2026-08-06T12:05:02.000Z", fin: "2026-08-06T22:57:27.000Z", clienteId: "c-100", clienteSlug: "100-montaditos" },
++    ]);
++    expect(r.sinCliente).toEqual([]);
++  });
++
++  it("un cliente desconocido se conserva sin cliente y se cuenta", () => {
++    const r = convertir([{ entrada: "2026-08-07T21:07:38+02:00", salida: "2026-08-08T00:22:04+02:00", cliente_principal: "mtdi" }], CLIENTES);
++    // `noUncheckedIndexedAccess` obliga a la aserción: el índice [0] existe
++    // porque el array de entrada tiene un elemento, tsc no puede saberlo.
++    expect(r.filas[0]!.clienteId).toBeNull();
++    expect(r.sinCliente).toEqual(["mtdi"]);
++  });
++
++  it("un tramo de segundos se descarta: es una prueba del botón, no trabajo", () => {
++    const r = convertir([{ entrada: "2026-08-06T03:29:41+02:00", salida: "2026-08-06T03:29:44+02:00", cliente_principal: "biodental" }], CLIENTES);
++    expect(r.filas).toEqual([]);
++    expect(r.descartados).toBe(1);
++  });
++
++  it("un tramo de más de 16 horas se parte en tramos de 16 y el resto", () => {
++    const r = convertir([{ entrada: "2026-08-01T00:00:00Z", salida: "2026-08-01T20:00:00Z", cliente_principal: "biodental" }], CLIENTES);
++    expect(r.filas.map((f) => [f.inicio, f.fin])).toEqual([
++      ["2026-08-01T00:00:00.000Z", "2026-08-01T16:00:00.000Z"],
++      ["2026-08-01T16:00:00.000Z", "2026-08-01T20:00:00.000Z"],
++    ]);
++  });
++
++  it("un resto de partición por debajo del minuto se descarta, no se inserta", () => {
++    // 16 h y 30 s: el tramo de 16 h completo se guarda, el resto de 30 s no
++    // llega al mínimo y se cuenta como descartado, no como una fila más.
++    const r = convertir([{ entrada: "2026-08-01T00:00:00Z", salida: "2026-08-01T16:00:30Z", cliente_principal: "biodental" }], CLIENTES);
++    expect(r.filas.map((f) => [f.inicio, f.fin])).toEqual([
++      ["2026-08-01T00:00:00.000Z", "2026-08-01T16:00:00.000Z"],
++    ]);
++    expect(r.descartados).toBe(1);
++  });
++});
+diff --git a/apps/atlas/src/tests/vigia/copias.test.ts b/apps/atlas/src/tests/vigia/copias.test.ts
+index 5c4510e..4965d6d 100644
+--- a/apps/atlas/src/tests/vigia/copias.test.ts
++++ b/apps/atlas/src/tests/vigia/copias.test.ts
+@@ -26,20 +26,23 @@ function leer(ruta: string): string {
+ describe.each([
+   ["vigia", "incidencias", "maquina", "maquina"],
+   ["vigia", "incidencias", "evaluar", "evaluar"],
+   ["avisar", "alertas", "agrupar", "agrupar"],
+   ["avisar", "alertas", "firma", "firma"],
+   ["avisar", "alertas", "pendientes", "pendientes"],
+   // El original vive en `cobro/pendientes.ts`, pero en la carpeta de la Edge
+   // Function ya hay un `pendientes.ts` — el de incidencias. Se copia con
+   // nombre distinto, `cobro.ts`, para no pisarlo.
+   ["avisar", "cobro", "pendientes", "cobro"],
++  // El original vive en `horas/abiertos.ts`, con el mismo nombre en la Edge
++  // Function porque ahí no hay ya un `abiertos.ts` con el que choque.
++  ["avisar", "horas", "abiertos", "fichajes"],
+ ])("copia de %s/%s.ts para Deno", (funcion, carpeta, nombreOriginal, nombreCopia) => {
+   const original = leer(`src/lib/${carpeta}/${nombreOriginal}.ts`);
+   const copia = leer(`supabase/functions/${funcion}/${nombreCopia}.ts`);
+ 
+   it("lleva la cabecera que avisa de que es una copia", () => {
+     const lineas = copia.split("\n").slice(0, 3);
+     expect(lineas[0]).toBe(
+       `// COPIA de src/lib/${carpeta}/${nombreOriginal}.ts — NO editar aquí.`
+     );
+     expect(lineas[1]).toBe(CABECERA_2);
+diff --git a/apps/atlas/src/types/supabase.ts b/apps/atlas/src/types/supabase.ts
+index 5991f01..b7b3a40 100644
+--- a/apps/atlas/src/types/supabase.ts
++++ b/apps/atlas/src/types/supabase.ts
+@@ -619,20 +619,78 @@ export type Database = {
+           },
+           {
+             foreignKeyName: "facturas_rectifica_a_fkey"
+             columns: ["rectifica_a"]
+             isOneToOne: false
+             referencedRelation: "facturas"
+             referencedColumns: ["id"]
+           },
+         ]
+       }
++      fichajes: {
++        Row: {
++          cliente_id: string | null
++          creado_en: string
++          fin: string | null
++          id: string
++          inicio: string
++          nota: string | null
++          origen: string
++          proyecto_id: string | null
++          usuario_id: string
++        }
++        Insert: {
++          cliente_id?: string | null
++          creado_en?: string
++          fin?: string | null
++          id?: string
++          inicio: string
++          nota?: string | null
++          origen?: string
++          proyecto_id?: string | null
++          usuario_id: string
++        }
++        Update: {
++          cliente_id?: string | null
++          creado_en?: string
++          fin?: string | null
++          id?: string
++          inicio?: string
++          nota?: string | null
++          origen?: string
++          proyecto_id?: string | null
++          usuario_id?: string
++        }
++        Relationships: [
++          {
++            foreignKeyName: "fichajes_cliente_id_fkey"
++            columns: ["cliente_id"]
++            isOneToOne: false
++            referencedRelation: "clientes"
++            referencedColumns: ["id"]
++          },
++          {
++            foreignKeyName: "fichajes_proyecto_id_fkey"
++            columns: ["proyecto_id"]
++            isOneToOne: false
++            referencedRelation: "proyectos"
++            referencedColumns: ["id"]
++          },
++          {
++            foreignKeyName: "fichajes_usuario_id_fkey"
++            columns: ["usuario_id"]
++            isOneToOne: false
++            referencedRelation: "perfiles"
++            referencedColumns: ["id"]
++          },
++        ]
++      }
+       gastos: {
+         Row: {
+           base: number
+           categoria: string
+           cliente_id: string | null
+           concepto: string
+           creado_en: string
+           fecha: string
+           id: string
+           iva: number
+@@ -1291,20 +1349,21 @@ export type Database = {
+             referencedColumns: ["id"]
+           },
+         ]
+       }
+     }
+     Functions: {
+       atlas_consolidar_retencion: { Args: never; Returns: undefined }
+       atlas_disparar_avisos: { Args: never; Returns: undefined }
+       atlas_disparar_cobro: { Args: never; Returns: undefined }
+       atlas_disparar_descubridor: { Args: never; Returns: undefined }
++      atlas_disparar_fichajes: { Args: never; Returns: undefined }
+       atlas_disparar_vigia: { Args: never; Returns: undefined }
+       atlas_edita_proyecto: { Args: { p: string }; Returns: boolean }
+       atlas_es_propietario: { Args: never; Returns: boolean }
+       atlas_materializar_periodos: { Args: { mes: string }; Returns: number }
+       atlas_materializar_recurrentes: { Args: { mes: string }; Returns: number }
+       atlas_podar_descubrimientos: { Args: never; Returns: undefined }
+       atlas_ve_cliente: { Args: { c: string }; Returns: boolean }
+       atlas_ve_proyecto: { Args: { p: string }; Returns: boolean }
+     }
+     Enums: {
+diff --git a/apps/atlas/supabase/functions/avisar/fichajes.ts b/apps/atlas/supabase/functions/avisar/fichajes.ts
+new file mode 100644
+index 0000000..57b074a
+--- /dev/null
++++ b/apps/atlas/supabase/functions/avisar/fichajes.ts
+@@ -0,0 +1,73 @@
++// COPIA de src/lib/horas/abiertos.ts — NO editar aquí.
++// Si cambias el original, vuelve a copiarlo.
++// El test copias.test.ts falla si divergen.
++//
++// Qué fichaje lleva abierto demasiado tiempo. Sin base, sin red, sin reloj:
++// el instante entra por parámetro.
++//
++// ESTE FICHERO SE COPIA BYTE A BYTE a `supabase/functions/avisar/fichajes.ts`.
++// Por eso no importa nada ni usa `Intl`: Deno no resuelve el alias `@/` y la
++// copia la vigila `src/tests/vigia/copias.test.ts`.
++//
++
++/**
++ * A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido.
++ *
++ * La salida rápida de `atlas_disparar_fichajes()` usa el mismo número en SQL
++ * (`interval '10 hours'`, en la migración ya aplicada `20260830110000_aviso_fichaje.sql`);
++ * si cambia uno, cambia el otro: si el SQL corta más tarde que este número, se
++ * avisa más tarde de lo que promete la pantalla; si corta antes, la Edge
++ * Function recibe invocaciones vacías que no encuentran nada que avisar.
++ */
++export const AVISO_HORAS = 10;
++
++/**
++ * A partir de aquí ya no se cuenta. Un fichaje abierto desde el lunes no son
++ * 26 horas de trabajo: son un olvido, y contarlas inflaría el coste del
++ * cliente. El tramo sigue abierto —hay que cerrarlo y corregir el fin— pero
++ * los minutos que se suman se paran aquí.
++ */
++export const TOPE_HORAS = 16;
++
++export type Abierto = {
++  id: string;
++  usuarioId: string;
++  /** ISO con zona. */
++  inicio: string;
++  proyectoNombre: string | null;
++  clienteNombre: string | null;
++};
++
++export type AvisoAbierto = {
++  fichajeId: string;
++  usuarioId: string;
++  /** Horas enteras, hacia abajo. */
++  horas: number;
++  titulo: string;
++  cuerpo: string;
++};
++
++export function abiertosDemasiado(
++  abiertos: Abierto[],
++  ahoraMs: number,
++  limiteHoras: number = AVISO_HORAS
++): AvisoAbierto[] {
++  const avisos: AvisoAbierto[] = [];
++  for (const a of abiertos) {
++    const horas = Math.floor((ahoraMs - Date.parse(a.inicio)) / 3_600_000);
++    if (horas < limiteHoras) continue;
++    const donde =
++      a.proyectoNombre || a.clienteNombre
++        ? "en " + [a.proyectoNombre, a.clienteNombre].filter(Boolean).join(" · ")
++        : "sin asignar";
++    avisos.push({
++      fichajeId: a.id,
++      usuarioId: a.usuarioId,
++      horas,
++      titulo: `Llevas ${horas} horas fichado ${donde}`,
++      // Se dice qué hacer, no solo qué pasa: el aviso sirve para corregir.
++      cuerpo: "Si ya no estás trabajando, ciérralo y corrige la hora de fin desde Horas.",
++    });
++  }
++  return avisos;
++}
+diff --git a/apps/atlas/supabase/functions/avisar/index.ts b/apps/atlas/supabase/functions/avisar/index.ts
+index 57b4d50..903446a 100644
+--- a/apps/atlas/supabase/functions/avisar/index.ts
++++ b/apps/atlas/supabase/functions/avisar/index.ts
+@@ -5,20 +5,21 @@
+ // Va aparte del vigía a propósito: comprobar servicios no debe quedarse
+ // esperando a un servidor de correo.
+ //
+ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+ import { agrupar, type SucesoAviso, type Aviso } from "./agrupar.ts";
+ import { clasificar, repartirSellos, type FilaPendiente } from "./pendientes.ts";
+ import { firmar } from "./firma.ts";
+ import { enviarCorreo, type AvisoEnviable } from "./correo.ts";
+ import { enviarPush } from "./push.ts";
+ import { pendientesDeCobro } from "./cobro.ts";
++import { abiertosDemasiado } from "./fichajes.ts";
+ 
+ const VENTANA_MS = 2 * 60 * 1000;
+ const CADUCIDAD_ENLACE_MS = 24 * 60 * 60 * 1000;
+ 
+ type FilaIncidencia = {
+   id: string;
+   abierta_en: string;
+   cerrada_en: string | null;
+   causa: string | null;
+   silenciada_hasta: string | null;
+@@ -53,20 +54,23 @@ Deno.serve(async (peticion: Request) => {
+ 
+   // La misma función sirve a dos cadencias: las incidencias van cada minuto y
+   // el cobro una vez al día, disparados por dos tareas de cron distintas. Se
+   // reutiliza esta y no se escribe una nueva porque una nueva necesitaría su
+   // propia copia de `push.ts` y `correo.ts`, y dos copias del envío divergen
+   // siempre.
+   const cuerpo = await peticion.json().catch(() => ({}));
+   if (cuerpo?.cobro === true) {
+     return await avisarDeCobro(sb);
+   }
++  if (cuerpo?.fichajes === true) {
++    return await avisarDeFichajes(sb);
++  }
+ 
+   const ahora = new Date().toISOString();
+ 
+   // Los dos sellos son el candado contra el doble envío: si pg_net reintenta,
+   // la segunda invocación no encuentra nada que mandar. Se piden las filas a
+   // las que les falte alguno; cuál toca lo decide `clasificar`.
+   const { data, error } = await sb
+     .from("incidencias")
+     .select(
+       `id, abierta_en, cerrada_en, causa, silenciada_hasta,
+@@ -235,34 +239,105 @@ async function registrar(
+   usuarioId: string,
+   // Un aviso de cobro no tiene incidencia: admite `null` para que esa rama
+   // pueda registrar sin fingir una que no existe.
+   incidenciaId: string | null,
+   canal: "push" | "email",
+   ok: boolean,
+   error: string | null,
+   // Al final y con valor por defecto para que las dos llamadas que ya
+   // existían (las de incidencia, arriba) no tengan que tocarse: siguen
+   // pasando sus mismos seis argumentos y siguen quedando marcadas 'incidencia'.
+-  tipo: "incidencia" | "cobro" = "incidencia"
++  tipo: "incidencia" | "cobro" | "fichaje" = "incidencia"
+ ): Promise<void> {
+   // Los fallos se registran igual que los aciertos: una suscripción caducada o
+   // un canal sin configurar tienen que verse, no perderse en silencio.
+   await sb.from("notificaciones").insert({
+     usuario_id: usuarioId,
+     incidencia_id: incidenciaId,
+     canal,
+     ok,
+     error,
+     tipo,
+   });
+ }
+ 
++/**
++ * El envío a una persona por los dos canales, con su registro. Lo comparten
++ * `avisarDeCobro` y `avisarDeFichajes`: las dos mandan push + correo a un
++ * único destinatario y registran cada intento con `registrar`, y una segunda
++ * copia de ese cuerpo en el mismo fichero habría divergido igual que si
++ * viviera en dos ficheros distintos.
++ *
++ * `ahora` entra por parámetro y no se calcula aquí dentro a propósito: cada
++ * llamante fija un único instante para todo su ciclo (el mismo que usa para
++ * su propio candado), así que el sello `ultima_ok_en` de todas las
++ * suscripciones tratadas en una misma invocación cae en la misma fecha, sin
++ * depender de cuánto tarde la vuelta a la base entre una persona y la
++ * siguiente.
++ */
++async function enviarA(
++  sb: SupabaseClient,
++  usuarioId: string,
++  titulo: string,
++  cuerpo: string,
++  url: string,
++  tipo: "cobro" | "fichaje",
++  ahora: string
++): Promise<number> {
++  const enviable: AvisoEnviable = { titulo, cuerpo, url };
++
++  const claves = {
++    publica: Deno.env.get("VAPID_PUBLICA") ?? "",
++    privada: Deno.env.get("VAPID_PRIVADA") ?? "",
++    contacto: Deno.env.get("VAPID_CONTACTO") ?? "mailto:info@hat3x.com",
++  };
++  const apiKeyCorreo = Deno.env.get("RESEND_API_KEY") ?? "";
++
++  let enviados = 0;
++
++  const { data: suscripciones } = await sb
++    .from("suscripciones_push")
++    .select("id, endpoint, p256dh, auth")
++    .eq("usuario_id", usuarioId);
++
++  for (const s of suscripciones ?? []) {
++    const r = await enviarPush(
++      { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
++      enviable,
++      claves
++    );
++    await registrar(sb, usuarioId, null, "push", r.ok, r.error, tipo);
++    if (r.ok) {
++      enviados++;
++      // Igual que hace `repartir` para las incidencias: sin este sello la
++      // columna se queda en null para siempre y el runbook de
++      // MANTENIMIENTO.md acusaría a las claves VAPID de un problema que no
++      // existe.
++      await sb
++        .from("suscripciones_push")
++        .update({ ultima_ok_en: ahora })
++        .eq("id", s.id);
++    }
++    // Una suscripción que el navegador tiró se borra: si no, se reintentaría
++    // en cada aviso, para siempre.
++    if (r.caducada) await sb.from("suscripciones_push").delete().eq("id", s.id);
++  }
++
++  // El correo se intenta aunque el push haya salido: es el rastro escrito.
++  const correo = await correoDe(sb, usuarioId);
++  const rc = await enviarCorreo(correo, enviable, apiKeyCorreo, fetch);
++  await registrar(sb, usuarioId, null, "email", rc.ok, rc.error, tipo);
++  if (rc.ok) enviados++;
++
++  return enviados;
++}
++
+ /**
+  * El resumen diario de cobro: qué lleva sin facturarse y qué sin cobrarse.
+  *
+  * No manda nada si no hay nada. Un aviso diario que llega vacío se convierte
+  * en ruido, y el ruido se deja de leer — con lo que el día que sí importe
+  * tampoco se leerá.
+  *
+  * No usa `repartir`: esa función construye un enlace firmado para silenciar
+  * UNA incidencia, y un aviso de cobro no tiene incidencia que silenciar.
+  * Forzar la firma habría sido más código para menos verdad; en su lugar se
+@@ -352,33 +427,26 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
+     })),
+     hoy
+   );
+ 
+   if (!cobro.hayAlgo) {
+     return new Response(JSON.stringify({ enviados: 0, motivo: "nada pendiente" }), {
+       headers: { "content-type": "application/json" },
+     });
+   }
+ 
+-  const enviable: AvisoEnviable = {
+-    titulo: cobro.titulo,
+-    cuerpo: cobro.cuerpo,
+-    // Abre la pantalla que enseña esto mismo con detalle, no la raíz.
+-    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`,
+-  };
+-
+-  const claves = {
+-    publica: Deno.env.get("VAPID_PUBLICA") ?? "",
+-    privada: Deno.env.get("VAPID_PRIVADA") ?? "",
+-    contacto: Deno.env.get("VAPID_CONTACTO") ?? "mailto:info@hat3x.com",
+-  };
+-  const apiKeyCorreo = Deno.env.get("RESEND_API_KEY") ?? "";
++  // Solo la url hace falta aquí: `enviarA` arma su propio `AvisoEnviable`
++  // con `titulo`/`cuerpo`/`url` a partir de sus parámetros, así que guardar
++  // los tres en un objeto aparte para leer luego un único campo sería
++  // repetir sin necesidad lo que ya tienen `cobro.titulo` y `cobro.cuerpo`.
++  // Abre la pantalla que enseña esto mismo con detalle, no la raíz.
++  const url = `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`;
+ 
+   const { data: perfiles, error: errorPerfiles } = await sb
+     .from("perfiles")
+     .select("id")
+     .eq("es_propietario", true);
+   // Igual que arriba: sin la lista de destinatarios no se puede fingir que
+   // se avisó, ni callar que no se pudo saber a quién.
+   if (errorPerfiles) {
+     return new Response(JSON.stringify({ error: errorPerfiles.message }), {
+       status: 500,
+@@ -406,49 +474,103 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
+     // saber si ya se avisó hoy, y enviar de todos modos convertiría el
+     // candado en decorativo justo el día en que hace falta. Y el fallo se
+     // cuenta en la respuesta en vez de callarse, porque un candado roto en
+     // silencio se lee igual que un día sin nada pendiente.
+     if (errorYaHoy) {
+       noComprobados.push(p.id);
+       continue;
+     }
+     if (yaHoy && yaHoy.length > 0) continue;
+ 
+-    const { data: suscripciones } = await sb
+-      .from("suscripciones_push")
+-      .select("id, endpoint, p256dh, auth")
+-      .eq("usuario_id", p.id);
++    enviados += await enviarA(sb, p.id, cobro.titulo, cobro.cuerpo, url, "cobro", ahora);
++  }
+ 
+-    for (const s of suscripciones ?? []) {
+-      const r = await enviarPush(
+-        { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
+-        enviable,
+-        claves
+-      );
+-      await registrar(sb, p.id, null, "push", r.ok, r.error, "cobro");
+-      if (r.ok) {
+-        enviados++;
+-        // Igual que hace `repartir` para las incidencias: sin este sello la
+-        // columna se queda en null para siempre y el runbook de
+-        // MANTENIMIENTO.md acusaría a las claves VAPID de un problema que no
+-        // existe.
+-        await sb
+-          .from("suscripciones_push")
+-          .update({ ultima_ok_en: ahora })
+-          .eq("id", s.id);
+-      }
+-      // Una suscripción que el navegador tiró se borra: si no, se reintentaría
+-      // en cada aviso, para siempre.
+-      if (r.caducada) await sb.from("suscripciones_push").delete().eq("id", s.id);
++  return new Response(JSON.stringify({ enviados, noComprobados }), {
++    headers: { "content-type": "application/json" },
++  });
++}
++
++/**
++ * El aviso del fichaje que se dejó abierto. Cada hora se mira qué lleva
++ * abierto más de AVISO_HORAS y se avisa a su dueño —a él, no al propietario:
++ * es su olvido y es él quien puede cerrarlo.
++ *
++ * Lee TABLAS: la service_role no tiene `auth.uid()` y las vistas filtradas
++ * la rechazan (lección del cobro).
++ */
++async function avisarDeFichajes(sb: SupabaseClient): Promise<Response> {
++  const ahora = Date.now();
++  const ahoraIso = new Date(ahora).toISOString();
++
++  const { data: abiertos, error: errorAbiertos } = await sb
++    .from("fichajes")
++    .select("id, usuario_id, inicio, proyectos(nombre), clientes(nombre)")
++    .is("fin", null);
++  if (errorAbiertos) {
++    // Un permiso denegado disfrazado de «nada abierto» sería invisible.
++    return new Response(JSON.stringify({ error: errorAbiertos.message }), {
++      status: 500,
++      headers: { "content-type": "application/json" },
++    });
++  }
++
++  const uno = (u: unknown) => (Array.isArray(u) ? u[0] : u);
++  const avisos = abiertosDemasiado(
++    (abiertos ?? []).map((f) => ({
++      id: f.id,
++      usuarioId: f.usuario_id,
++      inicio: f.inicio,
++      proyectoNombre: uno(f.proyectos)?.nombre ?? null,
++      clienteNombre: uno(f.clientes)?.nombre ?? null,
++    })),
++    ahora
++  );
++
++  if (avisos.length === 0) {
++    return new Response(JSON.stringify({ enviados: 0, motivo: "nada abierto de más" }), {
++      headers: { "content-type": "application/json" },
++    });
++  }
++
++  // id → inicio. Un `abiertos!.find(...)!.inicio` dentro del bucle mentiría
++  // sobre lo que el compilador puede garantizar: nada asegura que ESE id siga
++  // en el array (y de hecho no hace falta que lo compruebe, porque `avisos`
++  // sale de mapear el propio `abiertos`). Un mapa hecho una vez, antes del
++  // bucle, dice lo mismo sin el `!`.
++  const inicioPorFichaje = new Map((abiertos ?? []).map((f) => [f.id, f.inicio] as const));
++
++  let enviados = 0;
++  const noComprobados: string[] = [];
++  for (const a of avisos) {
++    const inicio = inicioPorFichaje.get(a.fichajeId)!;
++    // El candado: un aviso por fichaje, no uno por hora. Si ya hay un aviso
++    // de fichaje a esta persona POSTERIOR al inicio del fichaje, es de este
++    // mismo, y no se repite. Falla cerrado: si no se puede comprobar, no se
++    // manda, y se cuenta.
++    //
++    // El candado no filtra por `ok`: una fila de `notificaciones` con
++    // ok=false también lo cierra. Si el push Y el correo de un fichaje
++    // fallan los dos, ese fichaje no se reintenta en la siguiente hora.
++    // Mismo criterio que `avisarDeCobro`, y aceptado por el mismo motivo: lo
++    // cubre el runbook semanal de mirar `notificaciones` por `ok = false`
++    // (ver «Tareas periódicas» en MANTENIMIENTO.md).
++    const { data: ya, error: errorYa } = await sb
++      .from("notificaciones")
++      .select("id")
++      .eq("usuario_id", a.usuarioId)
++      .eq("tipo", "fichaje")
++      .gte("enviada_en", inicio)
++      .limit(1);
++    if (errorYa) {
++      noComprobados.push(a.usuarioId);
++      continue;
+     }
++    if (ya && ya.length > 0) continue;
+ 
+-    // El correo se intenta aunque el push haya salido: es el rastro escrito.
+-    const correo = await correoDe(sb, p.id);
+-    const rc = await enviarCorreo(correo, enviable, apiKeyCorreo, fetch);
+-    await registrar(sb, p.id, null, "email", rc.ok, rc.error, "cobro");
+-    if (rc.ok) enviados++;
++    const url = `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/horas`;
++    enviados += await enviarA(sb, a.usuarioId, a.titulo, a.cuerpo, url, "fichaje", ahoraIso);
+   }
+ 
+   return new Response(JSON.stringify({ enviados, noComprobados }), {
+     headers: { "content-type": "application/json" },
+   });
+ }
+diff --git a/apps/atlas/supabase/migrations/20260830100000_fichajes.sql b/apps/atlas/supabase/migrations/20260830100000_fichajes.sql
+new file mode 100644
+index 0000000..a71705f
+--- /dev/null
++++ b/apps/atlas/supabase/migrations/20260830100000_fichajes.sql
+@@ -0,0 +1,54 @@
++-- apps/atlas/supabase/migrations/20260830100000_fichajes.sql
++--
++-- Las horas, medidas desde Atlas.
++--
++-- Dos ejes, no uno: trabajar en Kairos PARA Biodental y trabajar en Kairos en
++-- general no son lo mismo, y con un solo campo no se distinguen. Los dos son
++-- opcionales porque también hay horas de estructura que no van a nadie.
++create table fichajes (
++  id           uuid primary key default gen_random_uuid(),
++  usuario_id   uuid not null references perfiles(id) on delete restrict,
++  proyecto_id  uuid references proyectos(id) on delete set null,
++  cliente_id   uuid references clientes(id)  on delete set null,
++  inicio       timestamptz not null,
++  fin          timestamptz,                  -- nulo = en curso
++  nota         text,
++  -- 'atlas' = fichado en vivo. 'anadido' = reconstruido después. Separa lo
++  -- medido de lo recordado: la pantalla enseña qué parte del mes es cada cosa,
++  -- y esa señal es la que dice si la regla «ficha antes de empezar» se cumple.
++  origen       text not null default 'atlas'
++               check (origen in ('atlas','anadido')),
++  creado_en    timestamptz not null default now(),
++  check (fin is null or fin > inicio),
++  -- Un tramo reconstruido siempre está cerrado: nadie «recuerda» que sigue
++  -- trabajando. Sin esto, un añadido sin fin quedaría en curso para siempre y
++  -- bloquearía el índice de abajo.
++  check (origen = 'atlas' or fin is not null)
++);
++
++-- Una sola en curso por persona, garantizado en la base. Un `if` en el código
++-- lo saltaría cualquier escritura directa; un índice único, no.
++create unique index fichajes_uno_en_curso
++  on fichajes (usuario_id) where fin is null;
++
++create index fichajes_usuario_inicio on fichajes (usuario_id, inicio desc);
++create index fichajes_cliente        on fichajes (cliente_id, inicio desc);
++create index fichajes_proyecto       on fichajes (proyecto_id, inicio desc);
++
++-- Los `grant` generales del bloque 1 solo alcanzaron a las tablas que existían
++-- entonces. Esta hay que concederla a mano, a los dos roles.
++grant select, insert, update, delete on fichajes to authenticated;
++grant all privileges on fichajes to service_role;
++
++alter table fichajes enable row level security;
++
++-- Primera vez que un colaborador ESCRIBE en Atlas. Lo suyo, y solo lo suyo:
++-- el `with check` impide que inserte una fila a nombre de otro.
++create policy fichajes_propios on fichajes for all to authenticated
++  using (usuario_id = auth.uid()) with check (usuario_id = auth.uid());
++
++-- El propietario ve las horas de todos. Verlas, no editarlas: corregir el
++-- tramo de otra persona a sus espaldas es justo lo que la marca `origen`
++-- quiere hacer imposible.
++create policy fichajes_propietario_ve on fichajes for select to authenticated
++  using (atlas_es_propietario());
+diff --git a/apps/atlas/supabase/migrations/20260830110000_aviso_fichaje.sql b/apps/atlas/supabase/migrations/20260830110000_aviso_fichaje.sql
+new file mode 100644
+index 0000000..ad3fcbe
+--- /dev/null
++++ b/apps/atlas/supabase/migrations/20260830110000_aviso_fichaje.sql
+@@ -0,0 +1,61 @@
++-- apps/atlas/supabase/migrations/20260830110000_aviso_fichaje.sql
++--
++-- El aviso del fichaje que se dejó abierto.
++--
++-- El `check` de `notificaciones.tipo` nació en el 2B con dos valores. Una
++-- migración aplicada no se edita: se suelta la restricción y se vuelve a crear
++-- con el tercero. El nombre es el que Postgres le dio por convención.
++alter table notificaciones drop constraint notificaciones_tipo_check;
++alter table notificaciones add constraint notificaciones_tipo_check
++  check (tipo in ('incidencia','cobro','fichaje'));
++
++-- El candado: «¿ya avisé a esta persona de ESTE fichaje?». Se resuelve
++-- comparando `enviada_en` con el inicio del fichaje abierto, así que el
++-- índice es por usuario y tipo, con la fecha detrás.
++create index notificaciones_fichaje_por_usuario
++  on notificaciones (usuario_id, enviada_en desc) where tipo = 'fichaje';
++
++-- ---------- el disparo ----------
++-- Misma Edge Function que incidencias y cobro, con otro cuerpo. Cada hora, y
++-- con salida rápida si no hay ningún fichaje abierto desde hace diez horas:
++-- la mayoría de las horas no habrá nada, y no se gasta una invocación.
++create or replace function atlas_disparar_fichajes() returns void
++language plpgsql security definer set search_path = public as $$
++declare
++  url   text := current_setting('app.atlas_funciones_url', true);
++  clave text := current_setting('app.atlas_service_key', true);
++begin
++  if url is null or clave is null then
++    raise warning 'atlas: faltan app.atlas_funciones_url o app.atlas_service_key; no se dispara el aviso de fichajes';
++    return;
++  end if;
++
++  if not exists (
++    select 1 from fichajes where fin is null and inicio < now() - interval '10 hours'
++  ) then
++    return;
++  end if;
++
++  perform net.http_post(
++    url     := url || '/avisar',
++    headers := jsonb_build_object(
++                 'Content-Type',  'application/json',
++                 'Authorization', 'Bearer ' || clave),
++    body    := '{"fichajes": true}'::jsonb,
++    timeout_milliseconds := 30000
++  );
++end $$;
++
++-- `create or replace` restaura el permiso de ejecución a PUBLIC. Sin estos
++-- tres, cualquier autenticado la dispararía desde /rest/v1/rpc.
++revoke all on function atlas_disparar_fichajes() from public;
++revoke all on function atlas_disparar_fichajes() from anon;
++revoke all on function atlas_disparar_fichajes() from authenticated;
++
++-- Al minuto 41 de cada hora: ni en punto ni coincidiendo con el cobro (9:07)
++-- ni con la materialización (6:13). pg_cron corre en UTC; para este aviso da
++-- igual, porque se mide en horas transcurridas, no en hora del día.
++-- `cron.schedule` reemplaza la tarea si el nombre ya existe: reaplicar la
++-- migración no duplica nada.
++select cron.schedule('atlas-fichajes', '41 * * * *',
++                     $$select atlas_disparar_fichajes()$$);
+diff --git a/apps/fichaje/README.md b/apps/fichaje/README.md
+index 7be6321..c51f3af 100644
+--- a/apps/fichaje/README.md
++++ b/apps/fichaje/README.md
+@@ -1,10 +1,12 @@
++> **JUBILADA (agosto 2026).** Las horas se fichan desde Atlas (`/dinero/horas` y el botón del marco). Su histórico está volcado en `fichajes` con `origen='anadido'` por `apps/atlas/scripts/migrar/fichajes.ts`. Este código no se mantiene; borrar la carpeta es decisión del propietario.
++
+ # HAT3X Fichaje
+ 
+ Herramienta de fichaje (time tracking) para HAT3X. Lee los logs de Claude Code, reparte las horas
+ trabajadas por cliente (con solape cuando hay sesiones paralelas) y las muestra en un dashboard
+ HTML embebido dentro de una app de escritorio (pywebview), con fichaje manual de entrada/salida.
+ 
+ ## Que es
+ 
+ - **Motor** (`fichaje/`): solo librería estándar de Python. Parsea los `.jsonl` de sesiones de
+   Claude Code, atribuye cada tramo de actividad a un cliente según las rutas de fichero tocadas

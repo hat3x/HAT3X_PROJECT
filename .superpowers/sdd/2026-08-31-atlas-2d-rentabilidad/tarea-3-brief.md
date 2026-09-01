@@ -1,0 +1,390 @@
+## Tarea 3: Leer lo que el margen necesita, y guardar lo que lo configura
+
+**Ficheros:**
+- Crear: `apps/atlas/src/lib/db/ajustes-economia.ts`
+- Crear: `apps/atlas/src/lib/db/cierres.ts`
+- Crear: `apps/atlas/src/lib/db/rentabilidad.ts`
+- Test: `apps/atlas/src/tests/db/rentabilidad.test.ts`
+
+**Interfaces:**
+- `ajustes-economia.ts`: `type AjustesEconomia = { razonSocial: string | null; cif: string | null; direccion: string | null; costeHoraCentimos: number }`, `leerAjustes(sb): Promise<AjustesEconomia>`, `validarAjustes(e: EntradaAjustes): Ok`, `escribirAjustes(sb, e: EntradaAjustes): Promise<Ok>` con `type EntradaAjustes = { razonSocial: string | null; cif: string | null; direccion: string | null; costeHoraCentimos: number }`.
+- `cierres.ts`: `type Cierre = { mes: string; costeHoraCentimos: number; cerradoEn: string }`, `cierreDe(sb, mes: string): Promise<Cierre | null>` (`mes` = `AAAA-MM`), `cerrarMes(sb, mes, costeHoraCentimos, ahoraMs): Promise<Ok>` (rechaza cerrar el mes en curso o uno futuro: «no se cierra lo que no ha terminado»), `reabrirMes(sb, mes): Promise<Ok>`.
+- `rentabilidad.ts`: `rentabilidadDelMes(sb, mes): Promise<{ r: Rentabilidad; costeHoraCentimos: number; cerrado: Cierre | null }>` — trae facturas emitidas con `fecha_emision` en el mes (con líneas), gastos con `fecha` en el mes, tramos **cerrados** con `inicio` en el mes (por `limitesMesMadrid`), el coste (del cierre si lo hay, si no de ajustes), y llama a `calcularMargen`.
+
+- [ ] **Paso 1: el test**
+
+```ts
+// src/tests/db/rentabilidad.test.ts
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { createClient } from "@supabase/supabase-js";
+import { Client } from "pg";
+import { leerAjustes, escribirAjustes, validarAjustes } from "@/lib/db/ajustes-economia";
+import { cierreDe, cerrarMes, reabrirMes } from "@/lib/db/cierres";
+import { rentabilidadDelMes } from "@/lib/db/rentabilidad";
+import type { Database } from "@/types/supabase";
+
+const URL_API = "http://127.0.0.1:54321";
+const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+const SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+
+const CORREO_DUENYO = "duenyo-rentabilidad@atlas.test";
+const CORREO_COLAB = "colab-rentabilidad@atlas.test";
+const SLUG = "rentabilidad-prueba";
+// Un mes lejano que ningún otro test toca: la rentabilidad se filtra por fecha
+// y el propietario ve TODO, así que el aislamiento es por mes, no por fila.
+const MES = "2090-03";
+const AHORA = Date.parse("2090-05-15T12:00:00Z");
+
+let pg: Client;
+let admin: ReturnType<typeof createClient<Database>>;
+let sbDuenyo: ReturnType<typeof createClient<Database>>;
+let sbColab: ReturnType<typeof createClient<Database>>;
+let idDuenyo = "";
+let idColab = "";
+let idCliente = "";
+let idProyecto = "";
+let idFactura = "";
+let costeOriginal = 0;
+
+async function altaUsuario(correo: string, propietario: boolean, clave: string) {
+  const creado = await admin.auth.admin.createUser({ email: correo, password: "contrasena-de-prueba", email_confirm: true });
+  if (creado.error) throw creado.error;
+  await pg.query(`INSERT INTO perfiles (id, es_propietario) VALUES ($1,$2)`, [creado.data.user.id, propietario]);
+  const sb = createClient<Database>(URL_API, ANON, { auth: { persistSession: false, autoRefreshToken: false, storageKey: clave } });
+  const { error } = await sb.auth.signInWithPassword({ email: correo, password: "contrasena-de-prueba" });
+  if (error) throw error;
+  return { sb, id: creado.data.user.id };
+}
+
+async function limpiarDatos() {
+  await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, [`${MES}-01`]);
+  await pg.query(`DELETE FROM fichajes WHERE inicio >= '2090-03-01' AND inicio < '2090-04-01'`);
+  await pg.query(`DELETE FROM gastos WHERE fecha >= '2090-03-01' AND fecha < '2090-04-01'`);
+  await pg.query(`DELETE FROM facturas WHERE fecha_emision >= '2090-03-01' AND fecha_emision < '2090-04-01'`);
+  await pg.query(`DELETE FROM proyectos WHERE slug = $1`, [SLUG]);
+  await pg.query(`DELETE FROM clientes WHERE slug = $1`, [SLUG]);
+}
+
+beforeAll(async () => {
+  pg = new Client({ connectionString: URL_PG });
+  await pg.connect();
+  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
+  const { data: listado } = await admin.auth.admin.listUsers();
+  for (const u of listado?.users ?? []) {
+    if (u.email === CORREO_DUENYO || u.email === CORREO_COLAB) {
+      await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [u.id]);
+      await admin.auth.admin.deleteUser(u.id);
+    }
+  }
+  await limpiarDatos();
+  const { rows } = await pg.query(`SELECT coste_hora FROM ajustes_economia WHERE id = 1`);
+  costeOriginal = Math.round(Number(rows[0].coste_hora) * 100);
+
+  const d = await altaUsuario(CORREO_DUENYO, true, "rt-d");
+  const c = await altaUsuario(CORREO_COLAB, false, "rt-c");
+  sbDuenyo = d.sb; idDuenyo = d.id; sbColab = c.sb; idColab = c.id;
+
+  idCliente = (await pg.query(`INSERT INTO clientes (nombre, slug) VALUES ('Cliente rentabilidad', $1) RETURNING id`, [SLUG])).rows[0].id;
+  idProyecto = (await pg.query(`INSERT INTO proyectos (nombre, slug, tipo, estado) VALUES ('Proyecto rentabilidad', $1, 'web-app', 'produccion') RETURNING id`, [SLUG])).rows[0].id;
+
+  // Una factura emitida de 350 € base (dos líneas: 290 al proyecto, 60 sin proyecto),
+  // un borrador que NO debe contar, un gasto con cliente de 40 € base, un gasto
+  // de estructura de 20 €, un tramo cerrado de 2 h al cliente y uno ABIERTO que no cuenta.
+  idFactura = (await pg.query(
+    `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado)
+     VALUES ('externa','RT',1,$1,'2090-03-10',350,21,73.5,423.5,'emitida') RETURNING id`, [idCliente])).rows[0].id;
+  await pg.query(`INSERT INTO factura_lineas (factura_id, orden, concepto, cantidad, precio_unitario, importe, proyecto_id) VALUES ($1,0,'Sara',1,290,290,$2), ($1,1,'Otro',1,60,60,NULL)`, [idFactura, idProyecto]);
+  await pg.query(`INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision, base, iva_tipo, iva_cuota, total, estado) VALUES ('externa','RT',NULL,$1,'2090-03-11',999,21,0,999,'borrador')`, [idCliente]);
+  await pg.query(`INSERT INTO gastos (fecha, concepto, base, iva, total, categoria, cliente_id) VALUES ('2090-03-05','Minutos',40,8.4,48.4,'ia',$1)`, [idCliente]);
+  await pg.query(`INSERT INTO gastos (fecha, concepto, base, iva, total, categoria) VALUES ('2090-03-06','Vercel',20,4.2,24.2,'infraestructura')`);
+  await pg.query(`INSERT INTO fichajes (usuario_id, cliente_id, proyecto_id, inicio, fin) VALUES ($1,$2,$3,'2090-03-07T08:00:00Z','2090-03-07T10:00:00Z')`, [idDuenyo, idCliente, idProyecto]);
+  await pg.query(`INSERT INTO fichajes (usuario_id, cliente_id, inicio) VALUES ($1,$2,'2090-03-08T08:00:00Z')`, [idDuenyo, idCliente]);
+});
+
+afterAll(async () => {
+  try {
+    try { await limpiarDatos(); } catch { /* ya no está */ }
+    try { await pg.query(`UPDATE ajustes_economia SET coste_hora = $1 WHERE id = 1`, [costeOriginal / 100]); } catch { /* ya no está */ }
+    for (const id of [idDuenyo, idColab]) {
+      if (id === "") continue;
+      try { await pg.query(`DELETE FROM fichajes WHERE usuario_id = $1`, [id]); } catch { /* ya no está */ }
+      try { await admin.auth.admin.deleteUser(id); } catch { /* ya no está */ }
+    }
+  } finally {
+    await pg.end();
+  }
+});
+
+describe("ajustes", () => {
+  it("validar: el coste no puede ser negativo ni el CIF una cadena vacía disfrazada", () => {
+    expect(validarAjustes({ razonSocial: null, cif: null, direccion: null, costeHoraCentimos: -1 }).ok).toBe(false);
+    expect(validarAjustes({ razonSocial: "  ", cif: "", direccion: null, costeHoraCentimos: 0 })).toEqual({ ok: true });
+  });
+
+  it("el propietario fija el coste de la hora y lo relee en céntimos", async () => {
+    const r = await escribirAjustes(sbDuenyo, { razonSocial: "HAT3X S.L.", cif: null, direccion: null, costeHoraCentimos: 3000 });
+    expect(r).toEqual({ ok: true });
+    const a = await leerAjustes(sbDuenyo);
+    expect(a.costeHoraCentimos).toBe(3000);
+    expect(a.razonSocial).toBe("HAT3X S.L.");
+  });
+
+  it("un colaborador no lee ni escribe", async () => {
+    await expect(leerAjustes(sbColab)).rejects.toThrow(/no hay configuración|permission|row/i);
+    const r = await escribirAjustes(sbColab, { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 1 });
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("rentabilidadDelMes", () => {
+  it("cuenta la factura emitida (no el borrador), los gastos por base y solo el tramo cerrado", async () => {
+    await escribirAjustes(sbDuenyo, { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3000 });
+    const { r, costeHoraCentimos, cerrado } = await rentabilidadDelMes(sbDuenyo, MES);
+    expect(cerrado).toBeNull();
+    expect(costeHoraCentimos).toBe(3000);
+    const c = r.porCliente.find((f) => f.id === idCliente)!;
+    expect(c.facturadoCentimos).toBe(35000);
+    expect(c.gastosCentimos).toBe(4000);
+    expect(c.minutos).toBe(120);
+    expect(c.horasCentimos).toBe(6000);
+    expect(c.margenCentimos).toBe(25000);
+    const p = r.porProyecto.find((f) => f.id === idProyecto)!;
+    expect(p.facturadoCentimos).toBe(29000);
+    expect(r.estructura.gastosCentimos).toBeGreaterThanOrEqual(2000);
+  });
+
+  it("un colaborador no ve nada del margen", async () => {
+    await expect(rentabilidadDelMes(sbColab, MES)).rejects.toThrow();
+  });
+});
+
+describe("cierres", () => {
+  it("no se cierra el mes en curso ni uno futuro", async () => {
+    const r = await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA);
+    expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });
+  });
+
+  it("cerrar congela el coste: cambiarlo después no mueve el mes cerrado", async () => {
+    expect(await cerrarMes(sbDuenyo, MES, 3000, AHORA)).toEqual({ ok: true });
+    await escribirAjustes(sbDuenyo, { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 9900 });
+    const { costeHoraCentimos, cerrado } = await rentabilidadDelMes(sbDuenyo, MES);
+    expect(costeHoraCentimos).toBe(3000);
+    expect(cerrado?.mes).toBe(MES);
+    expect(await cierreDe(sbDuenyo, MES)).not.toBeNull();
+  });
+
+  it("cerrar dos veces lo dice", async () => {
+    const r = await cerrarMes(sbDuenyo, MES, 3000, AHORA);
+    expect(r).toEqual({ ok: false, error: "Ese mes ya está cerrado." });
+  });
+
+  it("reabrir vuelve al coste actual", async () => {
+    expect(await reabrirMes(sbDuenyo, MES)).toEqual({ ok: true });
+    const { costeHoraCentimos } = await rentabilidadDelMes(sbDuenyo, MES);
+    expect(costeHoraCentimos).toBe(9900);
+    expect(await reabrirMes(sbDuenyo, MES)).toEqual({ ok: false, error: "Ese mes no estaba cerrado." });
+  });
+});
+```
+
+- [ ] **Paso 2: falla** — `npx vitest run src/tests/db/rentabilidad.test.ts`.
+
+- [ ] **Paso 3: implementar**
+
+```ts
+// src/lib/db/ajustes-economia.ts
+//
+// La configuración económica: una fila (§4.8). Recibe `sb` para probarse; el
+// envoltorio "use server" está en `acciones-economia.ts`.
+//
+import type { Sb } from "./clientes";
+import type { Ok } from "./proyectos";
+
+export type AjustesEconomia = {
+  razonSocial: string | null;
+  cif: string | null;
+  direccion: string | null;
+  costeHoraCentimos: number;
+};
+
+export type EntradaAjustes = AjustesEconomia;
+
+const limpia = (s: string | null) => {
+  const t = (s ?? "").trim();
+  return t === "" ? null : t;
+};
+
+/** Puro. Una acción de servidor es un endpoint público: se valida aquí, no en el formulario. */
+export function validarAjustes(e: EntradaAjustes): Ok {
+  if (!Number.isInteger(e.costeHoraCentimos) || e.costeHoraCentimos < 0) {
+    return { ok: false, error: "El coste de la hora tiene que ser un importe de cero o más." };
+  }
+  if (e.costeHoraCentimos > 99_999_999) {
+    return { ok: false, error: "El coste de la hora no cabe en la base." };
+  }
+  return { ok: true };
+}
+
+export async function leerAjustes(sb: Sb): Promise<AjustesEconomia> {
+  const { data, error } = await sb
+    .from("ajustes_economia")
+    .select("razon_social, cif, direccion, coste_hora")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) throw error;
+  // RLS devuelve cero filas al colaborador. Lanzar y no devolver ceros: unos
+  // ceros parecerían «no configurado» y no «no tienes permiso».
+  if (!data) throw new Error("No hay configuración económica visible para este usuario.");
+  return {
+    razonSocial: data.razon_social,
+    cif: data.cif,
+    direccion: data.direccion,
+    // numeric(8,2) → céntimos, una sola vez.
+    costeHoraCentimos: Math.round(Number(data.coste_hora) * 100),
+  };
+}
+
+export async function escribirAjustes(sb: Sb, e: EntradaAjustes): Promise<Ok> {
+  const valido = validarAjustes(e);
+  if (!valido.ok) return valido;
+  const { data, error } = await sb
+    .from("ajustes_economia")
+    .update({
+      razon_social: limpia(e.razonSocial),
+      cif: limpia(e.cif),
+      direccion: limpia(e.direccion),
+      coste_hora: e.costeHoraCentimos / 100,
+      actualizado_en: new Date().toISOString(),
+    })
+    .eq("id", 1)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: "No tienes permiso para cambiar la configuración." };
+  return { ok: true };
+}
+```
+
+```ts
+// src/lib/db/cierres.ts
+//
+// Cerrar un mes congela el coste de la hora con el que se calculó (§4.8).
+//
+import type { Sb } from "./clientes";
+import type { Ok } from "./proyectos";
+import { mesDe } from "@/lib/dinero";
+
+export type Cierre = { mes: string; costeHoraCentimos: number; cerradoEn: string };
+
+export async function cierreDe(sb: Sb, mes: string): Promise<Cierre | null> {
+  const { data, error } = await sb
+    .from("cierres_mes")
+    .select("mes, coste_hora, cerrado_en")
+    .eq("mes", `${mes}-01`)
+    .maybeSingle();
+  if (error) throw error;
+  return data
+    ? { mes: mesDe(data.mes), costeHoraCentimos: Math.round(Number(data.coste_hora) * 100), cerradoEn: data.cerrado_en }
+    : null;
+}
+
+export async function cerrarMes(sb: Sb, mes: string, costeHoraCentimos: number, ahoraMs: number): Promise<Ok> {
+  // El mes en curso no se cierra: le faltan días. Se compara por texto de mes
+  // porque el instante viene por parámetro y así se prueba sin esperar.
+  const mesActual = new Date(ahoraMs).toISOString().slice(0, 7);
+  if (mes >= mesActual) return { ok: false, error: "No se cierra un mes que no ha terminado." };
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  const { error } = await sb.from("cierres_mes").insert({
+    mes: `${mes}-01`,
+    coste_hora: costeHoraCentimos / 100,
+    cerrado_por: user?.id ?? null,
+  });
+  if (!error) return { ok: true };
+  if (error.code === "23505") return { ok: false, error: "Ese mes ya está cerrado." };
+  return { ok: false, error: error.message };
+}
+
+export async function reabrirMes(sb: Sb, mes: string): Promise<Ok> {
+  const { data, error } = await sb.from("cierres_mes").delete().eq("mes", `${mes}-01`).select("mes");
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: "Ese mes no estaba cerrado." };
+  return { ok: true };
+}
+```
+
+```ts
+// src/lib/db/rentabilidad.ts
+//
+// Trae lo que el margen necesita y lo convierte a céntimos. No decide nada:
+// decide `calcularMargen`. No filtra por permisos: RLS deja fuera al
+// colaborador en las cuatro tablas, y `leerAjustes` lanza si no ve la fila.
+//
+import type { Sb } from "./clientes";
+import { listarFacturas } from "./facturas";
+import { listarGastos } from "./gastos";
+import { listarTramos } from "./fichajes";
+import { leerAjustes } from "./ajustes-economia";
+import { cierreDe, type Cierre } from "./cierres";
+import { limitesMesMadrid, mesVecino } from "@/lib/dinero";
+import { minutosDe } from "@/lib/horas/tramos";
+import { calcularMargen, type Rentabilidad, type FacturaMes, type GastoMes, type TramoMes } from "@/lib/rentabilidad/margen";
+
+const cent = (n: number) => Math.round(n * 100);
+
+export async function rentabilidadDelMes(
+  sb: Sb,
+  mes: string
+): Promise<{ r: Rentabilidad; costeHoraCentimos: number; cerrado: Cierre | null }> {
+  const desdeDia = `${mes}-01`;
+  const hastaDia = `${mesVecino(mes, 1)}-01`; // primer día del mes siguiente
+  const rango = limitesMesMadrid(mes);
+
+  const [ajustes, cerrado, facturas, gastos, tramos] = await Promise.all([
+    leerAjustes(sb),
+    cierreDe(sb, mes),
+    listarFacturas(sb, {}),
+    listarGastos(sb, { desde: desdeDia, hasta: hastaDia }),
+    listarTramos(sb, rango),
+  ]);
+
+  // `listarFacturas` no filtra por fecha (trae las últimas 200): se filtra aquí
+  // por mes de emisión y estado. Si algún día hay más de 200 en un mes,
+  // ampliarla es de `facturas.ts`, no de aquí.
+  const facturasMes: FacturaMes[] = facturas
+    .filter((f) => f.estado === "emitida" && f.fechaEmision >= desdeDia && f.fechaEmision < hastaDia)
+    .map((f) => ({
+      clienteId: f.clienteId,
+      clienteNombre: f.clienteNombre,
+      baseCentimos: cent(f.base),
+      lineas: f.lineas.map((l) => ({ proyectoId: l.proyectoId, proyectoNombre: l.proyectoNombre ?? null, importeCentimos: cent(l.importe) })),
+    }));
+
+  const gastosMes: GastoMes[] = gastos
+    .filter((g) => g.fecha < hastaDia)
+    .map((g) => ({ clienteId: g.clienteId, clienteNombre: g.clienteNombre, proyectoId: g.proyectoId, proyectoNombre: g.proyectoNombre, baseCentimos: cent(g.base) }));
+
+  // Solo cerrados (§6.3). Un abierto está en curso y se contará al cerrarse.
+  const tramosMes: TramoMes[] = tramos
+    .filter((t) => t.fin !== null)
+    .map((t) => ({ clienteId: t.clienteId, clienteNombre: t.clienteNombre, proyectoId: t.proyectoId, proyectoNombre: t.proyectoNombre, minutos: minutosDe(t, 0) }));
+
+  const costeHoraCentimos = cerrado ? cerrado.costeHoraCentimos : ajustes.costeHoraCentimos;
+  return { r: calcularMargen({ facturas: facturasMes, gastos: gastosMes, tramos: tramosMes, costeHoraCentimos }), costeHoraCentimos, cerrado };
+}
+```
+
+**Notas para el implementador:** `listarGastos` con `hasta` inclusivo (`lte`) — por eso se filtra `< hastaDia` encima; mira su firma real. `LineaFactura` puede no traer `proyectoNombre`: si no lo trae, resuélvelo con `nombresDeProyectos` una vez y un `Map`, y dilo. `minutosDe(t, 0)` con `fin` no nulo no usa `ahora`.
+
+- [ ] **Paso 4: verde, dos veces** — `npx vitest run src/tests/db/rentabilidad.test.ts`; `npx tsc --noEmit` → 0.
+
+- [ ] **Paso 5: commit**
+
+```bash
+git add apps/atlas/src/lib/db/ajustes-economia.ts apps/atlas/src/lib/db/cierres.ts apps/atlas/src/lib/db/rentabilidad.ts apps/atlas/src/tests/db/rentabilidad.test.ts
+git commit -m "feat(atlas): leer el margen del mes, la configuracion economica y los cierres"
+```
+
+---
+

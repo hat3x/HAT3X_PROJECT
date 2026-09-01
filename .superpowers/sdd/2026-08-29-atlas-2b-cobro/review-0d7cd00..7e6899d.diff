@@ -1,0 +1,410 @@
+# Review package: 0d7cd00..7e6899d
+
+## Commits
+7e6899d feat(atlas): el aviso diario de cobro, en la funcion que ya enviaba
+
+## Files changed
+ apps/atlas/src/tests/vigia/copias.test.ts     |  22 ++--
+ apps/atlas/supabase/functions/avisar/cobro.ts | 113 ++++++++++++++++++
+ apps/atlas/supabase/functions/avisar/index.ts | 158 +++++++++++++++++++++++++-
+ 3 files changed, 282 insertions(+), 11 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/src/tests/vigia/copias.test.ts b/apps/atlas/src/tests/vigia/copias.test.ts
+index 5e383ca..5c4510e 100644
+--- a/apps/atlas/src/tests/vigia/copias.test.ts
++++ b/apps/atlas/src/tests/vigia/copias.test.ts
+@@ -17,33 +17,37 @@ import { fileURLToPath } from "node:url";
+ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+ 
+ const CABECERA_2 = "// Si cambias el original, vuelve a copiarlo.";
+ const CABECERA_3 = "// El test copias.test.ts falla si divergen.";
+ 
+ function leer(ruta: string): string {
+   return readFileSync(resolve(RAIZ, ruta), "utf8").replace(/\r\n/g, "\n");
+ }
+ 
+ describe.each([
+-  ["vigia", "incidencias", "maquina"],
+-  ["vigia", "incidencias", "evaluar"],
+-  ["avisar", "alertas", "agrupar"],
+-  ["avisar", "alertas", "firma"],
+-  ["avisar", "alertas", "pendientes"],
+-])("copia de %s/%s.ts para Deno", (funcion, carpeta, nombre) => {
+-  const original = leer(`src/lib/${carpeta}/${nombre}.ts`);
+-  const copia = leer(`supabase/functions/${funcion}/${nombre}.ts`);
++  ["vigia", "incidencias", "maquina", "maquina"],
++  ["vigia", "incidencias", "evaluar", "evaluar"],
++  ["avisar", "alertas", "agrupar", "agrupar"],
++  ["avisar", "alertas", "firma", "firma"],
++  ["avisar", "alertas", "pendientes", "pendientes"],
++  // El original vive en `cobro/pendientes.ts`, pero en la carpeta de la Edge
++  // Function ya hay un `pendientes.ts` — el de incidencias. Se copia con
++  // nombre distinto, `cobro.ts`, para no pisarlo.
++  ["avisar", "cobro", "pendientes", "cobro"],
++])("copia de %s/%s.ts para Deno", (funcion, carpeta, nombreOriginal, nombreCopia) => {
++  const original = leer(`src/lib/${carpeta}/${nombreOriginal}.ts`);
++  const copia = leer(`supabase/functions/${funcion}/${nombreCopia}.ts`);
+ 
+   it("lleva la cabecera que avisa de que es una copia", () => {
+     const lineas = copia.split("\n").slice(0, 3);
+     expect(lineas[0]).toBe(
+-      `// COPIA de src/lib/${carpeta}/${nombre}.ts — NO editar aquí.`
++      `// COPIA de src/lib/${carpeta}/${nombreOriginal}.ts — NO editar aquí.`
+     );
+     expect(lineas[1]).toBe(CABECERA_2);
+     expect(lineas[2]).toBe(CABECERA_3);
+   });
+ 
+   it("es idéntica al original quitando esa cabecera", () => {
+     const sinCabecera = copia.split("\n").slice(3).join("\n");
+     expect(sinCabecera).toBe(original);
+   });
+ 
+diff --git a/apps/atlas/supabase/functions/avisar/cobro.ts b/apps/atlas/supabase/functions/avisar/cobro.ts
+new file mode 100644
+index 0000000..6167096
+--- /dev/null
++++ b/apps/atlas/supabase/functions/avisar/cobro.ts
+@@ -0,0 +1,113 @@
++// COPIA de src/lib/cobro/pendientes.ts — NO editar aquí.
++// Si cambias el original, vuelve a copiarlo.
++// El test copias.test.ts falla si divergen.
++// src/lib/cobro/pendientes.ts
++//
++// Qué hay que perseguir hoy.
++//
++// Función pura: sin base, sin red, sin reloj. La fecha entra por parámetro, que
++// es lo que permite probar un vencimiento a noventa días sin esperar noventa
++// días — igual que `transicion()` y `agrupar()` del bloque 1.
++//
++// Sin imports de la aplicación: esto se copia tal cual dentro de la Edge
++// Function, y Deno no resuelve el alias `@/`.
++//
++
++export type PeriodoSinFacturar = {
++  contratoId: string;
++  clienteNombre: string;
++  /** Primer día del mes, ISO AAAA-MM-DD. */
++  periodo: string;
++  importeEsperadoCentimos: number;
++};
++
++export type FacturaSinCobrar = {
++  id: string;
++  serie: string;
++  numero: number | null;
++  clienteNombre: string;
++  totalCentimos: number;
++  /** ISO AAAA-MM-DD. Nulo cuando no se acordó plazo. */
++  fechaVencimiento: string | null;
++};
++
++export type Cobro = {
++  sinFacturar: PeriodoSinFacturar[];
++  vencidas: FacturaSinCobrar[];
++  totalSinFacturarCentimos: number;
++  totalVencidoCentimos: number;
++  hayAlgo: boolean;
++  titulo: string;
++  cuerpo: string;
++};
++
++/**
++ * Céntimos → euros con dos decimales, sin depender de `Intl`, para que la
++ * copia que corre en Deno produzca exactamente el mismo texto que la de Node.
++ */
++function euros(centimos: number): string {
++  const signo = centimos < 0 ? "-" : "";
++  const abs = Math.abs(centimos);
++  return `${signo}${Math.floor(abs / 100)},${String(abs % 100).padStart(2, "0")}`;
++}
++
++export function pendientesDeCobro(
++  periodos: PeriodoSinFacturar[],
++  facturas: FacturaSinCobrar[],
++  hoy: string
++): Cobro {
++  // Comparar cadenas ISO solo es válido si las dos tienen el mismo formato.
++  // Confiar en que el llamador pase siempre AAAA-MM-DD puro —y nunca, por
++  // ejemplo, un `toISOString()` entero, con hora— es confiar en algo que esta
++  // función no puede comprobar. Con hora incluida, la fecha sola es prefijo
++  // estricto y por tanto «menor», así que la factura que vence hoy se
++  // colaría como vencida. Recortar aquí a los diez primeros caracteres hace
++  // que el contrato se cumpla sin depender del llamador.
++  const hoySolo = hoy.slice(0, 10);
++
++  // Vencida es la que pasó su plazo, no la que lo tiene hoy: un plazo se
++  // cumple durante todo su último día. Y sin fecha no hay plazo que incumplir,
++  // así que esas no se persiguen — avisar de ellas llenaría el mensaje de
++  // facturas que nadie acordó cuándo pagar.
++  const vencidas = facturas
++    .filter((f) => f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo)
++    // Lo más viejo primero: es lo que más urge y lo que peor pinta tiene.
++    .sort((a, b) =>
++      a.fechaVencimiento!.slice(0, 10) < b.fechaVencimiento!.slice(0, 10) ? -1 : 1
++    );
++
++  const totalSinFacturarCentimos = periodos.reduce(
++    (t, p) => t + p.importeEsperadoCentimos,
++    0
++  );
++  const totalVencidoCentimos = vencidas.reduce((t, f) => t + f.totalCentimos, 0);
++
++  const nSin = periodos.length;
++  const nVen = vencidas.length;
++  const hayAlgo = nSin > 0 || nVen > 0;
++
++  // El plural concuerda a propósito: un aviso que dice «1 meses» se lee como un
++  // fallo del sistema, y un aviso que parece roto se deja de leer.
++  const trozoSin = `${nSin} ${nSin === 1 ? "mes" : "meses"} sin facturar`;
++  const trozoVen = `${nVen} ${nVen === 1 ? "factura vencida" : "facturas vencidas"}`;
++
++  let titulo: string;
++  if (nSin > 0 && nVen > 0) titulo = `Cobro: ${trozoSin} y ${trozoVen}`;
++  else if (nVen > 0) titulo = `Cobro: ${trozoVen}`;
++  else if (nSin > 0) titulo = `Cobro: ${trozoSin}`;
++  else titulo = "Cobro: nada pendiente";
++
++  const partes: string[] = [];
++  if (nSin > 0) partes.push(`${euros(totalSinFacturarCentimos)} € sin facturar`);
++  if (nVen > 0) partes.push(`${euros(totalVencidoCentimos)} € vencidos sin cobrar`);
++
++  return {
++    sinFacturar: periodos,
++    vencidas,
++    totalSinFacturarCentimos,
++    totalVencidoCentimos,
++    hayAlgo,
++    titulo,
++    cuerpo: partes.join(". "),
++  };
++}
+diff --git a/apps/atlas/supabase/functions/avisar/index.ts b/apps/atlas/supabase/functions/avisar/index.ts
+index 927e655..eb9b2df 100644
+--- a/apps/atlas/supabase/functions/avisar/index.ts
++++ b/apps/atlas/supabase/functions/avisar/index.ts
+@@ -4,20 +4,21 @@
+ //
+ // Va aparte del vigía a propósito: comprobar servicios no debe quedarse
+ // esperando a un servidor de correo.
+ //
+ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+ import { agrupar, type SucesoAviso, type Aviso } from "./agrupar.ts";
+ import { clasificar, repartirSellos, type FilaPendiente } from "./pendientes.ts";
+ import { firmar } from "./firma.ts";
+ import { enviarCorreo, type AvisoEnviable } from "./correo.ts";
+ import { enviarPush } from "./push.ts";
++import { pendientesDeCobro } from "./cobro.ts";
+ 
+ const VENTANA_MS = 2 * 60 * 1000;
+ const CADUCIDAD_ENLACE_MS = 24 * 60 * 60 * 1000;
+ 
+ type FilaIncidencia = {
+   id: string;
+   abierta_en: string;
+   cerrada_en: string | null;
+   causa: string | null;
+   silenciada_hasta: string | null;
+@@ -43,20 +44,30 @@ Deno.serve(async (peticion: Request) => {
+   if (autorizacion !== `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`) {
+     return new Response("No autorizado", { status: 401 });
+   }
+ 
+   const sb = createClient(
+     Deno.env.get("SUPABASE_URL")!,
+     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+     { auth: { persistSession: false } }
+   );
+ 
++  // La misma función sirve a dos cadencias: las incidencias van cada minuto y
++  // el cobro una vez al día, disparados por dos tareas de cron distintas. Se
++  // reutiliza esta y no se escribe una nueva porque una nueva necesitaría su
++  // propia copia de `push.ts` y `correo.ts`, y dos copias del envío divergen
++  // siempre.
++  const cuerpo = await peticion.json().catch(() => ({}));
++  if (cuerpo?.cobro === true) {
++    return await avisarDeCobro(sb);
++  }
++
+   const ahora = new Date().toISOString();
+ 
+   // Los dos sellos son el candado contra el doble envío: si pg_net reintenta,
+   // la segunda invocación no encuentra nada que mandar. Se piden las filas a
+   // las que les falte alguno; cuál toca lo decide `clasificar`.
+   const { data, error } = await sb
+     .from("incidencias")
+     .select(
+       `id, abierta_en, cerrada_en, causa, silenciada_hasta,
+        notificada_en, recuperacion_notificada_en,
+@@ -215,25 +226,168 @@ async function repartir(
+ 
+ /** El correo vive en auth.users, al que solo llega la service_role key. */
+ async function correoDe(sb: SupabaseClient, usuarioId: string): Promise<string> {
+   const { data } = await sb.auth.admin.getUserById(usuarioId);
+   return data?.user?.email ?? "";
+ }
+ 
+ async function registrar(
+   sb: SupabaseClient,
+   usuarioId: string,
+-  incidenciaId: string,
++  // Un aviso de cobro no tiene incidencia: admite `null` para que esa rama
++  // pueda registrar sin fingir una que no existe.
++  incidenciaId: string | null,
+   canal: "push" | "email",
+   ok: boolean,
+-  error: string | null
++  error: string | null,
++  // Al final y con valor por defecto para que las dos llamadas que ya
++  // existían (las de incidencia, arriba) no tengan que tocarse: siguen
++  // pasando sus mismos seis argumentos y siguen quedando marcadas 'incidencia'.
++  tipo: "incidencia" | "cobro" = "incidencia"
+ ): Promise<void> {
+   // Los fallos se registran igual que los aciertos: una suscripción caducada o
+   // un canal sin configurar tienen que verse, no perderse en silencio.
+   await sb.from("notificaciones").insert({
+     usuario_id: usuarioId,
+     incidencia_id: incidenciaId,
+     canal,
+     ok,
+     error,
++    tipo,
++  });
++}
++
++/**
++ * El resumen diario de cobro: qué lleva sin facturarse y qué sin cobrarse.
++ *
++ * No manda nada si no hay nada. Un aviso diario que llega vacío se convierte
++ * en ruido, y el ruido se deja de leer — con lo que el día que sí importe
++ * tampoco se leerá.
++ *
++ * No usa `repartir`: esa función construye un enlace firmado para silenciar
++ * UNA incidencia, y un aviso de cobro no tiene incidencia que silenciar.
++ * Forzar la firma habría sido más código para menos verdad; en su lugar se
++ * llama a `enviarPush` y `enviarCorreo` directamente, que es lo que
++ * `repartir` hace por dentro.
++ */
++async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
++  const hoy = new Date().toISOString().slice(0, 10);
++  const mesEnCurso = `${hoy.slice(0, 7)}-01`;
++
++  // Se lee `contratos_visibles`, no `contratos`: la tabla tiene la lectura
++  // revocada para los roles de API (`20260815100300_rls.sql`) y embeber
++  // `contratos` aquí haría fallar la consulta con «permission denied for
++  // table contratos» aunque esta función use la service_role key para todo
++  // lo demás. Se escribe igual que `src/lib/db/cobro.ts` (misma selección,
++  // mismos filtros, mismo orden): la misma pregunta hecha de dos formas
++  // distintas puede acabar respondiendo cosas distintas, y entonces el aviso
++  // diario y la pantalla dirían números que no cuadran.
++  const { data: per } = await sb
++    .from("periodos_contrato")
++    .select(
++      `contrato_id, periodo, importe_esperado,
++       contratos_visibles!inner(clientes!inner(nombre))`
++    )
++    .is("factura_id", null)
++    .lt("periodo", mesEnCurso)
++    .order("periodo");
++
++  const { data: fac } = await sb
++    .from("facturas")
++    .select("id, serie, numero, total, fecha_vencimiento, clientes!inner(nombre)")
++    .is("cobrada_en", null)
++    .eq("estado", "emitida")
++    .order("fecha_vencimiento");
++
++  // PostgREST devuelve cada relación como objeto o como array según la
++  // cardinalidad que infiera. Se normaliza en un solo sitio, igual que en
++  // `src/lib/db/cobro.ts`.
++  const uno = (u: unknown) => (Array.isArray(u) ? u[0] : u);
++
++  const cobro = pendientesDeCobro(
++    (per ?? []).map((p) => ({
++      contratoId: p.contrato_id,
++      clienteNombre: uno(uno(p.contratos_visibles).clientes).nombre,
++      periodo: p.periodo,
++      // Ningún float toca un importe: el numeric(12,2) de Postgres se
++      // convierte a céntimos enteros aquí, una sola vez, al leerlo.
++      importeEsperadoCentimos: Math.round(Number(p.importe_esperado) * 100),
++    })),
++    (fac ?? []).map((f) => ({
++      id: f.id,
++      serie: f.serie,
++      numero: f.numero,
++      clienteNombre: uno(f.clientes).nombre,
++      totalCentimos: Math.round(Number(f.total) * 100),
++      fechaVencimiento: f.fecha_vencimiento,
++    })),
++    hoy
++  );
++
++  if (!cobro.hayAlgo) {
++    return new Response(JSON.stringify({ enviados: 0, motivo: "nada pendiente" }), {
++      headers: { "content-type": "application/json" },
++    });
++  }
++
++  const enviable: AvisoEnviable = {
++    titulo: cobro.titulo,
++    cuerpo: cobro.cuerpo,
++    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/`,
++  };
++
++  const claves = {
++    publica: Deno.env.get("VAPID_PUBLICA") ?? "",
++    privada: Deno.env.get("VAPID_PRIVADA") ?? "",
++    contacto: Deno.env.get("VAPID_CONTACTO") ?? "mailto:info@hat3x.com",
++  };
++  const apiKeyCorreo = Deno.env.get("RESEND_API_KEY") ?? "";
++
++  const { data: perfiles } = await sb
++    .from("perfiles")
++    .select("id")
++    .eq("es_propietario", true);
++
++  let enviados = 0;
++  for (const p of perfiles ?? []) {
++    // El candado del día. Si el cron se dispara dos veces, el segundo no manda
++    // nada: un aviso repetido enseña que el sistema no se controla a sí mismo.
++    // Escrita así (usuario_id + tipo='cobro' + enviada_en), la consulta encaja
++    // exactamente con el índice parcial `notificaciones_cobro_del_dia`.
++    const { data: yaHoy } = await sb
++      .from("notificaciones")
++      .select("id")
++      .eq("usuario_id", p.id)
++      .eq("tipo", "cobro")
++      .gte("enviada_en", `${hoy}T00:00:00Z`)
++      .limit(1);
++    if (yaHoy && yaHoy.length > 0) continue;
++
++    const { data: suscripciones } = await sb
++      .from("suscripciones_push")
++      .select("id, endpoint, p256dh, auth")
++      .eq("usuario_id", p.id);
++
++    for (const s of suscripciones ?? []) {
++      const r = await enviarPush(
++        { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
++        enviable,
++        claves
++      );
++      await registrar(sb, p.id, null, "push", r.ok, r.error, "cobro");
++      if (r.ok) enviados++;
++      // Una suscripción que el navegador tiró se borra: si no, se reintentaría
++      // en cada aviso, para siempre.
++      if (r.caducada) await sb.from("suscripciones_push").delete().eq("id", s.id);
++    }
++
++    // El correo se intenta aunque el push haya salido: es el rastro escrito.
++    const correo = await correoDe(sb, p.id);
++    const rc = await enviarCorreo(correo, enviable, apiKeyCorreo, fetch);
++    await registrar(sb, p.id, null, "email", rc.ok, rc.error, "cobro");
++    if (rc.ok) enviados++;
++  }
++
++  return new Response(JSON.stringify({ enviados }), {
++    headers: { "content-type": "application/json" },
+   });
+ }

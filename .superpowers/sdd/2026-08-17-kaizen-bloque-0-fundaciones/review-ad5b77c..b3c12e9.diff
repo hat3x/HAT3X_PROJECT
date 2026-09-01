@@ -1,0 +1,93 @@
+# Review package: ad5b77c..b3c12e9
+
+## Commits
+b3c12e9 fix(kaizen): calculo del dia local - manejo correcto de cambios de hora DST
+
+## Files changed
+ apps/kaizen/src/dominio/dia.test.ts | 16 ++++++++++++++++
+ apps/kaizen/src/dominio/dia.ts      | 28 ++++++++++++++++++++++++----
+ 2 files changed, 40 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/apps/kaizen/src/dominio/dia.test.ts b/apps/kaizen/src/dominio/dia.test.ts
+index 857a140..f32ecbb 100644
+--- a/apps/kaizen/src/dominio/dia.test.ts
++++ b/apps/kaizen/src/dominio/dia.test.ts
+@@ -22,11 +22,27 @@ describe('fechaLocal', () => {
+     const instante = new Date('2026-08-17T23:30:00Z') // 01:30 del 18 en Madrid
+     expect(fechaLocal(instante, 'Europe/Madrid', 0)).toBe('2026-08-18')
+   })
+ 
+   it('el mismo instante da días distintos en zonas distintas', () => {
+     const instante = new Date('2026-08-17T23:00:00Z')
+     expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-08-17')
+     expect(fechaLocal(instante, 'America/Mexico_City', 4)).toBe('2026-08-17')
+     expect(fechaLocal(instante, 'Pacific/Auckland', 4)).toBe('2026-08-18')
+   })
++
++  // Los dos cambios de hora del año. Son el caso que rompe la implementación
++  // ingenua de restar horas al instante absoluto.
++  it('el cambio de hora de otoño no adelanta el día', () => {
++    // Madrid atrasa el reloj a las 03:00 CEST del 25-oct (01:00 UTC).
++    // 03:30 hora local del 25, ya en CET (+1), son las 02:30 UTC.
++    const instante = new Date('2026-10-25T02:30:00Z')
++    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-10-24')
++  })
++
++  it('el cambio de hora de primavera no atrasa el día', () => {
++    // Madrid adelanta el reloj a las 02:00 CET del 29-mar (01:00 UTC).
++    // 04:30 hora local del 29, ya en CEST (+2), son las 02:30 UTC.
++    const instante = new Date('2026-03-29T02:30:00Z')
++    expect(fechaLocal(instante, 'Europe/Madrid', 4)).toBe('2026-03-29')
++  })
+ })
+diff --git a/apps/kaizen/src/dominio/dia.ts b/apps/kaizen/src/dominio/dia.ts
+index 573a92d..94ee7ec 100644
+--- a/apps/kaizen/src/dominio/dia.ts
++++ b/apps/kaizen/src/dominio/dia.ts
+@@ -1,21 +1,41 @@
+ /**
+  * Devuelve el día (YYYY-MM-DD) al que cuenta un instante, según la zona
+  * horaria del usuario y su corte de día.
+  *
+  * Con corte a las 4, todo lo registrado entre las 00:00 y las 03:59 cuenta
+  * como el día anterior.
++ *
++ * Se razona sobre el reloj de pared local y se mueve la fecha de calendario.
++ * La alternativa aparente —restar `corteHora` horas al instante absoluto y
++ * formatear— es incorrecta: en los dos cambios de hora del año la ventana
++ * desplazada cruza la transición y el desfase que se aplica al formatear ya
++ * no es el que regía en el instante original, así que el día sale corrido.
++ *
++ * No valida `corteHora`; se espera 0-12, que es lo que impone la base de datos.
+  */
+ export function fechaLocal(
+   instante: Date,
+   zonaHoraria: string,
+   corteHora: number,
+ ): string {
+-  const desplazado = new Date(instante.getTime() - corteHora * 3_600_000)
+-  const formateador = new Intl.DateTimeFormat('en-CA', {
++  const partes = new Intl.DateTimeFormat('en-CA', {
+     timeZone: zonaHoraria,
+     year: 'numeric',
+     month: '2-digit',
+     day: '2-digit',
+-  })
+-  return formateador.format(desplazado)
++    hour: '2-digit',
++    hourCycle: 'h23',
++  }).formatToParts(instante)
++
++  const valor = (tipo: Intl.DateTimeFormatPartTypes): number => {
++    const parte = partes.find((p) => p.type === tipo)
++    if (!parte) throw new Error(`El formateador no devolvió ${tipo}`)
++    return Number(parte.value)
++  }
++
++  const fecha = new Date(Date.UTC(valor('year'), valor('month') - 1, valor('day')))
++  if (valor('hour') < corteHora) {
++    fecha.setUTCDate(fecha.getUTCDate() - 1)
++  }
++  return fecha.toISOString().slice(0, 10)
+ }

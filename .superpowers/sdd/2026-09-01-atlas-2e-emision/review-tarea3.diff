@@ -1,0 +1,472 @@
+diff --git a/apps/atlas/src/lib/db/ajustes-economia.ts b/apps/atlas/src/lib/db/ajustes-economia.ts
+index f9b966d..a3a0a01 100644
+--- a/apps/atlas/src/lib/db/ajustes-economia.ts
++++ b/apps/atlas/src/lib/db/ajustes-economia.ts
+@@ -6,14 +6,20 @@
+ import type { Sb } from "./clientes";
+ import type { Ok } from "./proyectos";
+ 
+-export type AjustesEconomia = {
++// Lo que se escribe desde el formulario. `validadoGestoria` no viaja aquí: no
++// hay control en la interfaz para ese aviso todavía (§7 solo lo consulta), y
++// meterlo en `EntradaAjustes` obligaría a mandarlo en cada guardado normal.
++export type EntradaAjustes = {
+   razonSocial: string | null;
+   cif: string | null;
+   direccion: string | null;
+   costeHoraCentimos: number;
+ };
+ 
+-export type EntradaAjustes = AjustesEconomia;
++export type AjustesEconomia = EntradaAjustes & {
++  /** El aviso de «la gestoría aún no ha validado esto» (§7, migración de emisión). No bloquea: informa. */
++  validadoGestoria: boolean;
++};
+ 
+ const limpia = (s: string | null) => {
+   const t = (s ?? "").trim();
+@@ -34,7 +40,7 @@ export function validarAjustes(e: EntradaAjustes): Ok {
+ export async function leerAjustes(sb: Sb): Promise<AjustesEconomia> {
+   const { data, error } = await sb
+     .from("ajustes_economia")
+-    .select("razon_social, cif, direccion, coste_hora")
++    .select("razon_social, cif, direccion, coste_hora, validado_gestoria")
+     .eq("id", 1)
+     .maybeSingle();
+   if (error) throw error;
+@@ -47,6 +53,7 @@ export async function leerAjustes(sb: Sb): Promise<AjustesEconomia> {
+     direccion: data.direccion,
+     // numeric(8,2) → céntimos, una sola vez.
+     costeHoraCentimos: Math.round(Number(data.coste_hora) * 100),
++    validadoGestoria: data.validado_gestoria,
+   };
+ }
+ 
+diff --git a/apps/atlas/src/lib/facturas/ajustes-emision.ts b/apps/atlas/src/lib/facturas/ajustes-emision.ts
+new file mode 100644
+index 0000000..3597fa4
+--- /dev/null
++++ b/apps/atlas/src/lib/facturas/ajustes-emision.ts
+@@ -0,0 +1,90 @@
++// La puerta de emisión (§7): todo lo que hace falta tener puesto ANTES de
++// poder emitir una factura fiscal. Sigue el patrón de
++// `lib/descubrir/ajustes.ts` — cada fallo nombra qué falta y dónde ponerlo, en
++// vez de un `undefined` que no explica nada.
++//
++// No filtra por rol «a mano» más allá del primer mensaje: la única excepción
++// deliberada es esa, porque sin ella el colaborador vería «falta el CIF» en
++// vez de «no tienes permiso», y eso confundiría configuración con permiso.
++// De ahí para abajo, quien decide es RLS: `leerAjustes` lanza si no hay fila
++// visible, y aquí se captura.
++import type { Sb } from "../db/clientes";
++import { obtenerPerfil } from "../db/perfil";
++import { leerAjustes } from "../db/ajustes-economia";
++
++export type AjustesEmision = {
++  razonSocial: string;
++  cif: string;
++  direccion: string;
++  credencialFirmaId: string;
++  validadoGestoria: boolean;
++};
++
++/** Proveedor y etiqueta de la credencial de firma en el llavero. Global: `proyecto_id` null, como el resto de credenciales de Atlas mismo. */
++export const PROVEEDOR_FIRMA = "AEAT";
++export const ETIQUETA_FIRMA = "firma";
++
++export type ResultadoAjustesEmision =
++  | { ok: true; ajustes: AjustesEmision }
++  | { ok: false; error: string };
++
++export async function ajustesDeEmision(sb: Sb): Promise<ResultadoAjustesEmision> {
++  const perfil = await obtenerPerfil(sb);
++  if (!perfil?.esPropietario) {
++    return { ok: false, error: "Solo el propietario puede emitir facturas." };
++  }
++
++  let datos;
++  try {
++    datos = await leerAjustes(sb);
++  } catch {
++    // El propietario ya está confirmado arriba; si aun así `leerAjustes`
++    // lanza, RLS está negando algo que no debería (p.ej. una política mal
++    // desplegada). Es un error de permiso, no de configuración: no tiene
++    // sentido decir «rellena el CIF» cuando el problema es que no se puede
++    // ni leer la fila.
++    return { ok: false, error: "No tienes permiso para leer la configuración económica." };
++  }
++
++  if (!datos.razonSocial) {
++    return {
++      ok: false,
++      error: "Falta la razón social del emisor: rellénala en Ajustes → Economía.",
++    };
++  }
++  if (!datos.cif) {
++    return { ok: false, error: "Falta el CIF del emisor: rellénalo en Ajustes → Economía." };
++  }
++  if (!datos.direccion) {
++    return {
++      ok: false,
++      error: "Falta la dirección del emisor: rellénala en Ajustes → Economía.",
++    };
++  }
++
++  const { data: credencial, error } = await sb
++    .from("credenciales")
++    .select("id")
++    .is("proyecto_id", null)
++    .eq("proveedor", PROVEEDOR_FIRMA)
++    .eq("etiqueta", ETIQUETA_FIRMA)
++    .maybeSingle();
++  if (error) throw error;
++  if (!credencial) {
++    return {
++      ok: false,
++      error: `No hay en el llavero una credencial «${PROVEEDOR_FIRMA} / ${ETIQUETA_FIRMA}»: genérala en Ajustes → Economía.`,
++    };
++  }
++
++  return {
++    ok: true,
++    ajustes: {
++      razonSocial: datos.razonSocial,
++      cif: datos.cif,
++      direccion: datos.direccion,
++      credencialFirmaId: credencial.id,
++      validadoGestoria: datos.validadoGestoria,
++    },
++  };
++}
+diff --git a/apps/atlas/src/lib/facturas/firma.ts b/apps/atlas/src/lib/facturas/firma.ts
+new file mode 100644
+index 0000000..69345f8
+--- /dev/null
++++ b/apps/atlas/src/lib/facturas/firma.ts
+@@ -0,0 +1,60 @@
++// La firma electrónica de cada factura emitida (§7): ECDSA sobre la curva
++// P-256, con SHA-256, vía `node:crypto`. Solo servidor: la clave privada pasa
++// por el llavero y de ahí a memoria, nunca al navegador. El proyecto no usa el
++// paquete "server-only" en ningún otro módulo (ni `cripto/cifrado.ts`, que
++// hace lo mismo con WebCrypto) — aquí la barrera es la misma: solo lo importa
++// código de servidor.
++import crypto from "node:crypto";
++
++/**
++ * Un par de claves nuevo, en PEM. Para el alta inicial de la credencial de
++ * firma y para los tests: en producción la privada se guarda cifrada en el
++ * llavero y no vuelve a generarse.
++ */
++export function generarClavePem(): { privada: string; publica: string } {
++  const { privateKey, publicKey } = crypto.generateKeyPairSync("ec", {
++    namedCurve: "P-256",
++    privateKeyEncoding: { type: "pkcs8", format: "pem" },
++    publicKeyEncoding: { type: "spki", format: "pem" },
++  });
++  return { privada: privateKey, publica: publicKey };
++}
++
++/**
++ * Firma en DER, codificada en base64: es el formato que produce `node:crypto`
++ * por defecto y el que entiende cualquier verificador ECDSA estándar (no hay
++ * que pedir el formato IEEE P1363 aparte).
++ */
++export function firmar(cadena: string, clavePrivadaPem: string): string {
++  return crypto.sign("sha256", Buffer.from(cadena, "utf8"), clavePrivadaPem).toString("base64");
++}
++
++/**
++ * Nunca lanza: una cadena alterada, una firma alterada o una clave que no
++ * corresponde son un «no verifica» para quien llama, no una excepción que
++ * tumbe la comprobación de una factura ya emitida.
++ */
++export function verificarFirma(cadena: string, firmaB64: string, clavePublicaPem: string): boolean {
++  try {
++    return crypto.verify(
++      "sha256",
++      Buffer.from(cadena, "utf8"),
++      clavePublicaPem,
++      Buffer.from(firmaB64, "base64")
++    );
++  } catch {
++    // Una firma con base64 inválido, o una clave pública mal formada, hacen
++    // que `crypto.verify` lance en vez de devolver `false`. Aquí se trata
++    // igual que cualquier otra firma que no verifica.
++    return false;
++  }
++}
++
++/**
++ * La pública que corresponde a una privada dada, derivada sin generar un par
++ * nuevo. Sirve para guardar solo la privada en el llavero y recalcular la
++ * pública cuando haga falta verificar.
++ */
++export function clavePublicaDe(clavePrivadaPem: string): string {
++  return crypto.createPublicKey(clavePrivadaPem).export({ type: "spki", format: "pem" }).toString();
++}
+diff --git a/apps/atlas/src/tests/componentes/form-economia.test.tsx b/apps/atlas/src/tests/componentes/form-economia.test.tsx
+index a21d687..8b03b7a 100644
+--- a/apps/atlas/src/tests/componentes/form-economia.test.tsx
++++ b/apps/atlas/src/tests/componentes/form-economia.test.tsx
+@@ -5,7 +5,7 @@ import { FormEconomia } from "@/components/ajustes/FormEconomia";
+ const acciones = vi.hoisted(() => ({ guardarAjustesEconomia: vi.fn() }));
+ vi.mock("@/lib/db/acciones-economia", () => acciones);
+ 
+-const ACTUAL = { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3000 };
++const ACTUAL = { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 3000, validadoGestoria: false };
+ 
+ beforeEach(() => acciones.guardarAjustesEconomia.mockReset().mockResolvedValue({ ok: true }));
+ 
+diff --git a/apps/atlas/src/tests/db/ajustes-emision.test.ts b/apps/atlas/src/tests/db/ajustes-emision.test.ts
+new file mode 100644
+index 0000000..038ea84
+--- /dev/null
++++ b/apps/atlas/src/tests/db/ajustes-emision.test.ts
+@@ -0,0 +1,200 @@
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import { escribirCredencial } from "@/lib/db/credenciales";
++import {
++  ajustesDeEmision,
++  PROVEEDOR_FIRMA,
++  ETIQUETA_FIRMA,
++} from "@/lib/facturas/ajustes-emision";
++import type { Database } from "@/types/supabase";
++
++const URL_API = "http://127.0.0.1:54321";
++const ANON =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++
++// 32 bytes exactos, igual que en credenciales.test.ts: clave de pruebas, no abre nada real.
++const CLAVE = Buffer.from("clave-de-32-bytes-para-pruebas!!").toString("base64");
++
++const CORREO_DUENYO = "duenyo-emision@atlas.test";
++const CORREO_COLAB = "colab-emision@atlas.test";
++
++let pg: Client;
++let admin: ReturnType<typeof createClient<Database>>;
++let sbDuenyo: ReturnType<typeof createClient<Database>>;
++let sbColab: ReturnType<typeof createClient<Database>>;
++let idDuenyo = "";
++let idColab = "";
++
++// Lo que hubiera en la fila antes de este fichero: se restaura en `afterAll`,
++// porque `ajustes_economia` es una fila única compartida con el resto de la
++// suite (rentabilidad, ajustes de economía…).
++let original: { razonSocial: string | null; cif: string | null; direccion: string | null; validadoGestoria: boolean };
++
++async function ponerAjustes(razonSocial: string | null, cif: string | null, direccion: string | null, validadoGestoria = false) {
++  await pg.query(
++    `UPDATE ajustes_economia SET razon_social=$1, cif=$2, direccion=$3, validado_gestoria=$4 WHERE id=1`,
++    [razonSocial, cif, direccion, validadoGestoria]
++  );
++}
++
++async function limpiarCredencialFirma() {
++  await pg.query(
++    `DELETE FROM credenciales WHERE proveedor=$1 AND etiqueta=$2 AND proyecto_id IS NULL`,
++    [PROVEEDOR_FIRMA, ETIQUETA_FIRMA]
++  );
++}
++
++async function altaUsuario(correo: string, propietario: boolean, storageKey: string) {
++  const creado = await admin.auth.admin.createUser({
++    email: correo,
++    password: "contrasena-de-prueba",
++    email_confirm: true,
++  });
++  if (creado.error) throw creado.error;
++  await pg.query(`INSERT INTO perfiles (id, es_propietario) VALUES ($1,$2)`, [creado.data.user.id, propietario]);
++  const sb = createClient<Database>(URL_API, ANON, {
++    auth: { persistSession: false, autoRefreshToken: false, storageKey },
++  });
++  const { error } = await sb.auth.signInWithPassword({ email: correo, password: "contrasena-de-prueba" });
++  if (error) throw error;
++  return { sb, id: creado.data.user.id };
++}
++
++beforeAll(async () => {
++  process.env.ATLAS_MASTER_KEY = CLAVE;
++
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++
++  admin = createClient<Database>(URL_API, SERVICE, { auth: { persistSession: false } });
++
++  // Limpieza también antes: un fallo previo puede haber dejado usuarios o la
++  // credencial de firma a medio crear.
++  const { data: listado } = await admin.auth.admin.listUsers();
++  for (const u of listado?.users ?? []) {
++    if (u.email === CORREO_DUENYO || u.email === CORREO_COLAB) {
++      await admin.auth.admin.deleteUser(u.id);
++    }
++  }
++  await limpiarCredencialFirma();
++
++  const { rows } = await pg.query(
++    `SELECT razon_social, cif, direccion, validado_gestoria FROM ajustes_economia WHERE id=1`
++  );
++  original = {
++    razonSocial: rows[0].razon_social,
++    cif: rows[0].cif,
++    direccion: rows[0].direccion,
++    validadoGestoria: rows[0].validado_gestoria,
++  };
++
++  const d = await altaUsuario(CORREO_DUENYO, true, "emision-d");
++  const c = await altaUsuario(CORREO_COLAB, false, "emision-c");
++  sbDuenyo = d.sb;
++  idDuenyo = d.id;
++  sbColab = c.sb;
++  idColab = c.id;
++});
++
++afterAll(async () => {
++  try {
++    try {
++      await ponerAjustes(original.razonSocial, original.cif, original.direccion, original.validadoGestoria);
++    } catch {
++      /* la fila ya no está */
++    }
++    try {
++      await limpiarCredencialFirma();
++    } catch {
++      /* ya no está */
++    }
++    for (const id of [idDuenyo, idColab]) {
++      if (id === "") continue;
++      try {
++        await admin.auth.admin.deleteUser(id);
++      } catch {
++        /* ya no está */
++      }
++    }
++  } finally {
++    await pg.end();
++  }
++});
++
++describe("ajustesDeEmision — la puerta de emisión", () => {
++  it("un colaborador recibe un error de permiso, no de configuración, aunque la fila esté vacía", async () => {
++    await ponerAjustes(null, null, null);
++    const r = await ajustesDeEmision(sbColab);
++    expect(r).toEqual({ ok: false, error: "Solo el propietario puede emitir facturas." });
++  });
++
++  it("con la fila vacía, nombra primero la razón social", async () => {
++    await ponerAjustes(null, null, null);
++    const r = await ajustesDeEmision(sbDuenyo);
++    expect(r.ok).toBe(false);
++    expect(!r.ok && r.error).toMatch(/razón social/i);
++    expect(!r.ok && r.error).toMatch(/Ajustes → Economía/);
++  });
++
++  it("con razón social pero sin CIF, nombra el CIF", async () => {
++    await ponerAjustes("HAT3X S.L.", null, null);
++    const r = await ajustesDeEmision(sbDuenyo);
++    expect(r.ok).toBe(false);
++    expect(!r.ok && r.error).toBe("Falta el CIF del emisor: rellénalo en Ajustes → Economía.");
++  });
++
++  it("con razón social y CIF pero sin dirección, nombra la dirección", async () => {
++    await ponerAjustes("HAT3X S.L.", "B12345678", null);
++    const r = await ajustesDeEmision(sbDuenyo);
++    expect(r.ok).toBe(false);
++    expect(!r.ok && r.error).toMatch(/dirección/i);
++  });
++
++  it("con los tres datos fiscales pero sin credencial de firma, nombra el llavero", async () => {
++    await ponerAjustes("HAT3X S.L.", "B12345678", "Calle Falsa 123, Madrid");
++    await limpiarCredencialFirma();
++    const r = await ajustesDeEmision(sbDuenyo);
++    expect(r.ok).toBe(false);
++    expect(!r.ok && r.error).toBe(
++      `No hay en el llavero una credencial «${PROVEEDOR_FIRMA} / ${ETIQUETA_FIRMA}»: genérala en Ajustes → Economía.`
++    );
++  });
++
++  it("con todo puesto, devuelve ok con el id de la credencial y el aviso de gestoría", async () => {
++    await ponerAjustes("HAT3X S.L.", "B12345678", "Calle Falsa 123, Madrid", true);
++    const alta = await escribirCredencial(sbDuenyo, {
++      proveedor: PROVEEDOR_FIRMA,
++      etiqueta: ETIQUETA_FIRMA,
++      secreto: "clave-privada-de-prueba-para-firmar",
++      proyectoId: null,
++    });
++    expect(alta.ok, alta.ok ? "" : alta.error).toBe(true);
++
++    const { rows } = await pg.query(
++      `SELECT id FROM credenciales WHERE proveedor=$1 AND etiqueta=$2 AND proyecto_id IS NULL`,
++      [PROVEEDOR_FIRMA, ETIQUETA_FIRMA]
++    );
++    expect(rows).toHaveLength(1);
++
++    const r = await ajustesDeEmision(sbDuenyo);
++    expect(r).toEqual({
++      ok: true,
++      ajustes: {
++        razonSocial: "HAT3X S.L.",
++        cif: "B12345678",
++        direccion: "Calle Falsa 123, Madrid",
++        credencialFirmaId: rows[0].id,
++        validadoGestoria: true,
++      },
++    });
++  });
++
++  it("un colaborador sigue sin poder, incluso con la configuración completa", async () => {
++    const r = await ajustesDeEmision(sbColab);
++    expect(r).toEqual({ ok: false, error: "Solo el propietario puede emitir facturas." });
++  });
++});
+diff --git a/apps/atlas/src/tests/facturas/firma.test.ts b/apps/atlas/src/tests/facturas/firma.test.ts
+new file mode 100644
+index 0000000..8b6dfd1
+--- /dev/null
++++ b/apps/atlas/src/tests/facturas/firma.test.ts
+@@ -0,0 +1,41 @@
++import { describe, it, expect } from "vitest";
++import { firmar, verificarFirma, clavePublicaDe, generarClavePem } from "@/lib/facturas/firma";
++
++describe("firmar / verificarFirma", () => {
++  const { privada, publica } = generarClavePem();
++  const cadena = "IDEmisorFactura=89890001K&NumSerieFactura=A-1&Huella=";
++
++  it("una firma hecha con la privada verifica con la pública", () => {
++    const firma = firmar(cadena, privada);
++    expect(verificarFirma(cadena, firma, publica)).toBe(true);
++  });
++
++  it("una firma alterada no verifica", () => {
++    const firma = firmar(cadena, privada);
++    // Cambia el último carácter base64 por otro válido pero distinto: sigue
++    // siendo base64 decodificable, solo que ya no es la firma que se generó.
++    const alterada = firma.slice(0, -1) + (firma.endsWith("A") ? "B" : "A");
++    expect(verificarFirma(cadena, alterada, publica)).toBe(false);
++  });
++
++  it("una cadena alterada no verifica con la firma original", () => {
++    const firma = firmar(cadena, privada);
++    expect(verificarFirma(cadena + " ", firma, publica)).toBe(false);
++  });
++
++  it("la pública derivada de la privada verifica igual que la generada junto a ella", () => {
++    const derivada = clavePublicaDe(privada);
++    const firma = firmar(cadena, privada);
++    expect(verificarFirma(cadena, firma, derivada)).toBe(true);
++  });
++
++  it("una firma con base64 corrupto no lanza: devuelve false", () => {
++    expect(verificarFirma(cadena, "esto no es base64 válido ni firma", publica)).toBe(false);
++  });
++
++  it("dos claves generadas por separado no son intercambiables", () => {
++    const otra = generarClavePem();
++    const firma = firmar(cadena, privada);
++    expect(verificarFirma(cadena, firma, otra.publica)).toBe(false);
++  });
++});

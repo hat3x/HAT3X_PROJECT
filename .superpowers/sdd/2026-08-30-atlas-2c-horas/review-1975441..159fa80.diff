@@ -1,0 +1,384 @@
+# Review package: 1975441..159fa80
+
+## Commits
+159fa80 fix(atlas): flex-1 en el nav, consultas ligeras para el fichaje y sin desajuste de hidratacion
+
+## Files changed
+ apps/atlas/src/app/layout.tsx                    | 16 +++--
+ apps/atlas/src/components/marco/BarraLateral.tsx |  7 +-
+ apps/atlas/src/components/marco/Fichaje.tsx      | 25 +++++--
+ apps/atlas/src/lib/db/clientes.ts                | 18 +++++
+ apps/atlas/src/lib/db/proyectos.ts               | 18 +++++
+ apps/atlas/src/tests/db/nombres.test.ts          | 92 ++++++++++++++++++++++++
+ 6 files changed, 164 insertions(+), 12 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/src/app/layout.tsx b/apps/atlas/src/app/layout.tsx
+index 66caf56..56f5d9a 100644
+--- a/apps/atlas/src/app/layout.tsx
++++ b/apps/atlas/src/app/layout.tsx
+@@ -1,22 +1,22 @@
+ import type { Metadata, Viewport } from "next";
+ import { headers } from "next/headers";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+ import { obtenerPerfil } from "@/lib/db/perfil";
+ import { atributosTema } from "@/lib/tema/tokens";
+ import { BarraLateral } from "@/components/marco/BarraLateral";
+ import { Fichaje, type EnCurso } from "@/components/marco/Fichaje";
+ import { Auroras } from "@/components/marco/Auroras";
+ import { RegistrarSW } from "@/components/marco/RegistrarSW";
+ import { fichajeEnCurso } from "@/lib/db/fichajes";
+-import { listarProyectos } from "@/lib/db/proyectos";
+-import { listarClientes } from "@/lib/db/clientes";
++import { nombresDeProyectos } from "@/lib/db/proyectos";
++import { nombresDeClientes } from "@/lib/db/clientes";
+ import "./globals.css";
+ 
+ export const metadata: Metadata = {
+   title: "Atlas — HAT3X",
+   description: "Todo lo que HAT3X tiene en producción, en un solo sitio.",
+   manifest: "/manifest.webmanifest",
+   // En iOS esto es lo que hace que «Añadir a inicio» abra Atlas a pantalla
+   // completa — y ahí no es un lujo: sin instalar, iOS no da push.
+   appleWebApp: { capable: true, title: "Atlas", statusBarStyle: "black-translucent" },
+   icons: { icon: "/iconos/atlas-192.png", apple: "/iconos/atlas-192.png" },
+@@ -39,37 +39,41 @@ export default async function RootLayout({
+   const rutaActual = headers().get("x-pathname") ?? "/";
+ 
+   // Sin perfil (pantallas de entrada): tema por defecto y sin barra lateral.
+   const tema = perfil?.tema ?? "oscuro";
+   const paleta = perfil?.paleta ?? "zafiro";
+ 
+   let enCurso: EnCurso | null = null;
+   let proyectos: { id: string; nombre: string }[] = [];
+   let clientes: { id: string; nombre: string }[] = [];
+   if (perfil) {
++    // `nombresDeProyectos`/`nombresDeClientes`, no `listarProyectos`/
++    // `listarClientes`: el marco se renderiza en TODAS las páginas, y estas
++    // últimas arrastran `contratos_visibles` entera y agregan cuotas — cuatro
++    // consultas de más solo para quedarse con `{id, nombre}`.
+     const [f, ps, cs] = await Promise.all([
+       fichajeEnCurso(sb),
+-      listarProyectos(sb),
+-      listarClientes(sb),
++      nombresDeProyectos(sb),
++      nombresDeClientes(sb),
+     ]);
+     // La etiqueta se compone aquí, una vez, y viaja como texto: el componente
+     // cliente no tiene por qué saber de proyectos ni de clientes.
+     enCurso = f
+       ? {
+           id: f.id,
+           inicio: f.inicio,
+           etiqueta:
+             [f.proyectoNombre, f.clienteNombre].filter(Boolean).join(" · ") || "Sin asignar",
+         }
+       : null;
+-    proyectos = ps.map((p) => ({ id: p.id, nombre: p.nombre }));
+-    clientes = cs.map((c) => ({ id: c.id, nombre: c.nombre }));
++    proyectos = ps;
++    clientes = cs;
+   }
+ 
+   return (
+     <html lang="es" {...atributosTema(tema, paleta)}>
+       <body className="min-h-dvh">
+         <Auroras />
+         <RegistrarSW />
+         {perfil ? (
+           <div className="flex min-h-dvh">
+             <div className="m-3 flex w-56 shrink-0 flex-col gap-3">
+diff --git a/apps/atlas/src/components/marco/BarraLateral.tsx b/apps/atlas/src/components/marco/BarraLateral.tsx
+index 1cce3ae..55366bb 100644
+--- a/apps/atlas/src/components/marco/BarraLateral.tsx
++++ b/apps/atlas/src/components/marco/BarraLateral.tsx
+@@ -18,23 +18,28 @@ const ENTRADAS = [
+  * decidir quién eres.
+  */
+ export function BarraLateral({
+   esPropietario,
+   rutaActual,
+ }: {
+   esPropietario: boolean;
+   rutaActual: string;
+ }) {
+   return (
++    // `flex-1`: desde que el marco (tarea 4) puso este <nav> dentro de una
++    // columna flex-col junto al bloque de fichaje, el <nav> ya no se estira
++    // solo. Sin `flex-1` el rótulo «Propietario» de abajo (con `mt-auto`) no
++    // tiene espacio sobrante que ocupar y queda pegado a la última entrada,
++    // en vez de al fondo de la columna, encima del fichaje.
+     <nav
+       aria-label="Navegación principal"
+-      className="cristal flex flex-col gap-1 p-3"
++      className="cristal flex flex-1 flex-col gap-1 p-3"
+     >
+       <div className="px-2 pb-3 text-sm font-bold tracking-widest">ATLAS</div>
+       {ENTRADAS.map(({ href, etiqueta, Icono }) => {
+         const activa =
+           href === "/" ? rutaActual === "/" : rutaActual.startsWith(href);
+         return (
+           <Link
+             key={href}
+             href={href}
+             aria-current={activa ? "page" : undefined}
+diff --git a/apps/atlas/src/components/marco/Fichaje.tsx b/apps/atlas/src/components/marco/Fichaje.tsx
+index 1fda731..849b51b 100644
+--- a/apps/atlas/src/components/marco/Fichaje.tsx
++++ b/apps/atlas/src/components/marco/Fichaje.tsx
+@@ -19,51 +19,66 @@ export function Fichaje({
+   enCurso,
+   proyectos,
+   clientes,
+ }: {
+   enCurso: EnCurso | null;
+   proyectos: { id: string; nombre: string }[];
+   clientes: { id: string; nombre: string }[];
+ }) {
+   const [error, setError] = useState<string | null>(null);
+   const [enviando, setEnviando] = useState(false);
+-  const [ahora, setAhora] = useState(() => Date.now());
++  // Nace en `null` y no en `Date.now()`: el servidor renderiza en un
++  // instante y el cliente hidrata en otro, y si esos dos instantes caen a
++  // ambos lados de un cambio de minuto el texto del cronómetro no coincide
++  // — error de hidratación. Mientras es `null` no se pinta el cronómetro,
++  // solo la etiqueta; en el primer efecto tras montar se fija el valor real,
++  // ya solo en el cliente.
++  const [ahora, setAhora] = useState<number | null>(null);
+ 
+   // El cronómetro se refresca cada medio minuto: basta para leerlo y no
+-  // vuelve a pintar el marco entero cada segundo.
++  // vuelve a pintar el marco entero cada segundo. La dependencia es
++  // `enCurso?.inicio` (una cadena) y no `enCurso` (un objeto nuevo en cada
++  // render del layout): con el objeto, el efecto se reiniciaría de más.
+   useEffect(() => {
+     if (!enCurso) return;
++    setAhora(Date.now());
+     const t = setInterval(() => setAhora(Date.now()), 30_000);
+     return () => clearInterval(t);
+-  }, [enCurso]);
++  }, [enCurso?.inicio]);
+ 
+   async function ejecutar(accion: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+     setError(null);
+     setEnviando(true);
+     try {
+       const r = await accion();
+       if (!r.ok) setError(r.error);
+     } catch {
+       setError("No se pudo guardar. Comprueba la conexión.");
+     } finally {
+       // En el finally: si la promesa se rechaza, el botón no puede quedar muerto.
+       setEnviando(false);
+     }
+   }
+ 
+   if (enCurso) {
+-    const minutos = Math.round((ahora - Date.parse(enCurso.inicio)) / 60_000);
++    // `ahora` es `null` hasta que el efecto corre en el cliente (ver el
++    // comentario del `useState` de arriba): mientras tanto no hay minutos
++    // fiables que pintar, solo la etiqueta de qué está en curso.
++    const minutos =
++      ahora === null ? null : Math.round((ahora - Date.parse(enCurso.inicio)) / 60_000);
+     return (
+       <div className="cristal space-y-2 p-3" aria-live="polite">
+         <div className="text-[11px] uppercase tracking-wider opacity-60">Fichado en</div>
+         <div className="truncate text-sm font-medium">{enCurso.etiqueta}</div>
+-        <div className="text-sm tabular-nums opacity-80">{formatearMinutos(Math.max(0, minutos))}</div>
++        {minutos !== null && (
++          <div className="text-sm tabular-nums opacity-80">{formatearMinutos(Math.max(0, minutos))}</div>
++        )}
+         {error && (
+           <p role="alert" className="text-xs" style={{ color: "var(--estado-caido)" }}>
+             {error}
+           </p>
+         )}
+         <button
+           type="button"
+           disabled={enviando}
+           onClick={() => ejecutar(pararFichaje)}
+           className="flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium disabled:opacity-50"
+diff --git a/apps/atlas/src/lib/db/clientes.ts b/apps/atlas/src/lib/db/clientes.ts
+index 00724b0..cd8ece1 100644
+--- a/apps/atlas/src/lib/db/clientes.ts
++++ b/apps/atlas/src/lib/db/clientes.ts
+@@ -78,20 +78,38 @@ function aContrato(f: FilaContrato): ContratoVisible {
+  * contrato trae importe: eso significa que quien consulta no es propietario, y
+  * mostrar 0 € sería mentir.
+  */
+ function cuotaTotal(contratos: ContratoVisible[]): number | null {
+   const activos = contratos.filter((c) => c.estado === "activo");
+   const conImporte = activos.filter((c) => c.cuotaMensual !== null);
+   if (activos.length > 0 && conImporte.length === 0) return null;
+   return conImporte.reduce((suma, c) => suma + (c.cuotaMensual ?? 0), 0);
+ }
+ 
++/**
++ * Solo `id` y `nombre`, ordenados. Existe aparte de `listarClientes` porque
++ * quien la llama —el selector de fichar, en el marco— no necesita ni
++ * `contratos_visibles` ni las cuotas agregadas: pedirlas ahí sería arrastrar
++ * cuatro consultas de más en CADA página, porque el marco se renderiza en
++ * todas.
++ */
++export async function nombresDeClientes(
++  sb: Sb
++): Promise<{ id: string; nombre: string }[]> {
++  const { data, error } = await sb
++    .from("clientes")
++    .select("id, nombre")
++    .order("nombre");
++  if (error) throw error;
++  return data ?? [];
++}
++
+ export async function listarClientes(sb: Sb): Promise<ClienteResumen[]> {
+   const { data, error } = await sb
+     .from("clientes")
+     .select("id, nombre, slug, sector, estado")
+     .order("nombre");
+   if (error) throw error;
+ 
+   // Siempre de la vista, nunca de la tabla `contratos`. Ver README.md.
+   const { data: contratos, error: errC } = await sb
+     .from("contratos_visibles")
+diff --git a/apps/atlas/src/lib/db/proyectos.ts b/apps/atlas/src/lib/db/proyectos.ts
+index 6b30ab5..60bec14 100644
+--- a/apps/atlas/src/lib/db/proyectos.ts
++++ b/apps/atlas/src/lib/db/proyectos.ts
+@@ -7,20 +7,38 @@ export type ProyectoResumen = {
+   id: string;
+   nombre: string;
+   slug: string;
+   tipo: string;
+   estado: string;
+   portadaUrl: string | null;
+   gradiente: string | null;
+   numClientes: number;
+ };
+ 
++/**
++ * Solo `id` y `nombre`, ordenados. Existe aparte de `listarProyectos` porque
++ * quien la llama —el selector de fichar, en el marco— no necesita ni
++ * `contratos_visibles` ni las cuotas agregadas: pedirlas ahí sería arrastrar
++ * cuatro consultas de más en CADA página, porque el marco se renderiza en
++ * todas.
++ */
++export async function nombresDeProyectos(
++  sb: Sb
++): Promise<{ id: string; nombre: string }[]> {
++  const { data, error } = await sb
++    .from("proyectos")
++    .select("id, nombre")
++    .order("nombre");
++  if (error) throw error;
++  return data ?? [];
++}
++
+ export async function listarProyectos(sb: Sb): Promise<ProyectoResumen[]> {
+   const { data, error } = await sb
+     .from("proyectos")
+     .select("id, nombre, slug, tipo, estado, portada_url, gradiente")
+     .order("nombre");
+   if (error) throw error;
+ 
+   // Siempre de la vista, nunca de la tabla `contratos`. Ver README.md.
+   const { data: contratos, error: errC } = await sb
+     .from("contratos_visibles")
+diff --git a/apps/atlas/src/tests/db/nombres.test.ts b/apps/atlas/src/tests/db/nombres.test.ts
+new file mode 100644
+index 0000000..e008957
+--- /dev/null
++++ b/apps/atlas/src/tests/db/nombres.test.ts
+@@ -0,0 +1,92 @@
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { createClient } from "@supabase/supabase-js";
++import { Client } from "pg";
++import { nombresDeClientes } from "@/lib/db/clientes";
++import { nombresDeProyectos } from "@/lib/db/proyectos";
++import type { Database } from "@/types/supabase";
++
++// Valores fijos y públicos de Supabase local (`npx supabase status`).
++// No son credenciales: son idénticos en todas las instalaciones.
++const URL_API = "http://127.0.0.1:54321";
++const ANON =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
++const SERVICE =
++  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++
++let pg: Client;
++let idUsuario = "";
++let sbUsuario: ReturnType<typeof createClient<Database>>;
++let admin: ReturnType<typeof createClient<Database>>;
++
++// Nombres a propósito fuera de orden alfabético al insertarlos: si la consulta
++// no llevara `.order("nombre")`, el test pasaría igual por casualidad del
++// orden de inserción.
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++
++  admin = createClient<Database>(URL_API, SERVICE, {
++    auth: { persistSession: false },
++  });
++  const creado = await admin.auth.admin.createUser({
++    email: "nombres@atlas.test",
++    password: "contrasena-de-prueba",
++    email_confirm: true,
++  });
++  if (creado.error) throw creado.error;
++  idUsuario = creado.data.user.id;
++
++  await pg.query(
++    `INSERT INTO perfiles (id, nombre, es_propietario) VALUES ($1, 'Nombres', true)`,
++    [idUsuario]
++  );
++
++  await pg.query(
++    `INSERT INTO clientes (nombre, slug, sector)
++     VALUES ('Zeta Cliente','zeta-cliente-nombres-db','Odontología'),
++            ('Alfa Cliente','alfa-cliente-nombres-db','Odontología')`
++  );
++  await pg.query(
++    `INSERT INTO proyectos (nombre, slug, tipo, estado)
++     VALUES ('Zeta Proyecto','zeta-proyecto-nombres-db','voz','produccion'),
++            ('Alfa Proyecto','alfa-proyecto-nombres-db','voz','produccion')`
++  );
++
++  sbUsuario = createClient<Database>(URL_API, ANON);
++  const { error } = await sbUsuario.auth.signInWithPassword({
++    email: "nombres@atlas.test",
++    password: "contrasena-de-prueba",
++  });
++  if (error) throw error;
++});
++
++afterAll(async () => {
++  await pg.query(`DELETE FROM clientes  WHERE slug LIKE '%-nombres-db'`);
++  await pg.query(`DELETE FROM proyectos WHERE slug LIKE '%-nombres-db'`);
++  if (idUsuario) await admin.auth.admin.deleteUser(idUsuario);
++  await pg.end();
++});
++
++describe("nombresDeClientes y nombresDeProyectos", () => {
++  it("nombresDeClientes devuelve solo id y nombre, ordenado por nombre", async () => {
++    const lista = await nombresDeClientes(sbUsuario);
++    const propios = lista.filter((c) => c.nombre.endsWith("Cliente"));
++    expect(propios.map((c) => c.nombre)).toEqual(["Alfa Cliente", "Zeta Cliente"]);
++    // Sin campos de más: ni slug, ni sector, ni estado, ni cuotaTotal. Si
++    // alguien vuelve a hacer esta función un alias de `listarClientes`,
++    // este assert es el que lo pilla.
++    for (const fila of propios) {
++      expect(Object.keys(fila).sort()).toEqual(["id", "nombre"]);
++    }
++  });
++
++  it("nombresDeProyectos devuelve solo id y nombre, ordenado por nombre", async () => {
++    const lista = await nombresDeProyectos(sbUsuario);
++    const propios = lista.filter((p) => p.nombre.endsWith("Proyecto"));
++    expect(propios.map((p) => p.nombre)).toEqual(["Alfa Proyecto", "Zeta Proyecto"]);
++    for (const fila of propios) {
++      expect(Object.keys(fila).sort()).toEqual(["id", "nombre"]);
++    }
++  });
++});

@@ -1,0 +1,88 @@
+# Review package: 69d417b..b74867c
+
+## Commits
+b74867c fix(kaizen): añadir arte de botón al contrato de temas
+
+## Files changed
+ apps/kaizen/src/design/tema.ts          | 8 +++++++-
+ apps/kaizen/src/design/temas/claro.ts   | 2 ++
+ apps/kaizen/src/design/temas/defecto.ts | 2 ++
+ 3 files changed, 11 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/apps/kaizen/src/design/tema.ts b/apps/kaizen/src/design/tema.ts
+index e1d0706..a336ce5 100644
+--- a/apps/kaizen/src/design/tema.ts
++++ b/apps/kaizen/src/design/tema.ts
+@@ -34,20 +34,26 @@ export interface Tema {
+     familiaTitular: string | null
+     familiaCuerpo: string | null
+     pesoTitular: '600' | '700' | '800'
+     pesoCuerpo: '400' | '500' | '600'
+     ajusteLinea: number
+     mayusculasEtiquetas: boolean
+   }
+ 
+   fondo: { pantalla: Fondo; velo: string }
+ 
+-  superficie: { tarjeta: Fondo; barraInferior: Fondo; desenfoque: number }
++  superficie: {
++    tarjeta: Fondo
++    barraInferior: Fondo
++    botonPrimario: Fondo
++    botonSecundario: Fondo
++    desenfoque: number
++  }
+ 
+   recetas: { barra: RecetaBarra; anillo: RecetaAnillo }
+ 
+   decoracion: {
+     cabecera: ImageSourcePropType | null
+     tarjetaEntrenamiento: ImageSourcePropType | null
+     tarjetaMision: ImageSourcePropType | null
+   }
+ }
+diff --git a/apps/kaizen/src/design/temas/claro.ts b/apps/kaizen/src/design/temas/claro.ts
+index eb2eed1..117dfa7 100644
+--- a/apps/kaizen/src/design/temas/claro.ts
++++ b/apps/kaizen/src/design/temas/claro.ts
+@@ -24,15 +24,17 @@ export const temaClaro: Tema = {
+     ajusteLinea: 1,
+     mayusculasEtiquetas: true,
+   },
+   fondo: {
+     pantalla: { tipo: 'color', valor: '#FAF9F7' },
+     velo: 'rgba(255,255,255,0)',
+   },
+   superficie: {
+     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },
+     barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.92)', hasta: 'rgba(255,255,255,0.75)' },
++    botonPrimario: { tipo: 'color', valor: '#1E9E73' },
++    botonSecundario: { tipo: 'color', valor: 'rgba(0,0,0,0.06)' },
+     desenfoque: 22,
+   },
+   recetas: { barra: 'continua', anillo: 'liso' },
+   decoracion: { cabecera: null, tarjetaEntrenamiento: null, tarjetaMision: null },
+ }
+diff --git a/apps/kaizen/src/design/temas/defecto.ts b/apps/kaizen/src/design/temas/defecto.ts
+index 76c834d..8de0315 100644
+--- a/apps/kaizen/src/design/temas/defecto.ts
++++ b/apps/kaizen/src/design/temas/defecto.ts
+@@ -24,15 +24,17 @@ export const temaDefecto: Tema = {
+     ajusteLinea: 1,
+     mayusculasEtiquetas: true,
+   },
+   fondo: {
+     pantalla: { tipo: 'color', valor: '#060807' },
+     velo: 'rgba(0,0,0,0)',
+   },
+   superficie: {
+     tarjeta: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
+     barraInferior: { tipo: 'degradado', desde: 'rgba(255,255,255,0.085)', hasta: 'rgba(255,255,255,0.038)' },
++    botonPrimario: { tipo: 'color', valor: '#4ECB9C' },
++    botonSecundario: { tipo: 'color', valor: 'rgba(255,255,255,0.10)' },
+     desenfoque: 22,
+   },
+   recetas: { barra: 'continua', anillo: 'liso' },
+   decoracion: { cabecera: null, tarjetaEntrenamiento: null, tarjetaMision: null },
+ }

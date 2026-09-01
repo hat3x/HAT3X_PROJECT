@@ -1,0 +1,87 @@
+# Review package: e978f34..6544734
+
+## Commits
+6544734 fix(kaizen): ronda 2 de arreglos — accesibilidad y test real en Barra
+
+## Files changed
+ apps/kaizen/src/design/componentes/barra.tsx            |  4 ++++
+ apps/kaizen/src/design/componentes/componentes.test.tsx | 16 ++++++++++++++++
+ 2 files changed, 20 insertions(+)
+
+## Diff
+diff --git a/apps/kaizen/src/design/componentes/barra.tsx b/apps/kaizen/src/design/componentes/barra.tsx
+index be841d9..c7eaeff 100644
+--- a/apps/kaizen/src/design/componentes/barra.tsx
++++ b/apps/kaizen/src/design/componentes/barra.tsx
+@@ -1,19 +1,23 @@
+ import { View } from 'react-native'
+ import { useTema } from '../proveedor'
+ 
+ export function Barra({ progreso, color, alto = 7 }:
+   { progreso: number; color: string; alto?: number }) {
+   const t = useTema()
+   const recortado = Math.min(1, Math.max(0, progreso))
+ 
++  // `accessible` no es opcional: sin él, React Native recorre los hijos en vez
++  // de tratar la vista como una unidad, y ni VoiceOver ni TalkBack llegan a
++  // anunciar el rol ni el valor. Las otras dos props quedarían inertes.
+   const accesibilidad = {
++    accessible: true,
+     accessibilityRole: 'progressbar' as const,
+     accessibilityValue: { min: 0, max: 100, now: Math.round(recortado * 100) },
+   }
+ 
+   if (t.recetas.barra === 'segmentada') {
+     const total = 10
+     const llenos = Math.round(recortado * total)
+     // El contenedor ocupa el ancho completo y son los segmentos los que se
+     // encienden o se apagan. Encoger el contenedor al progreso comprimiría
+     // los diez dentro de esa fracción y dejaría el resto de la barra vacío.
+diff --git a/apps/kaizen/src/design/componentes/componentes.test.tsx b/apps/kaizen/src/design/componentes/componentes.test.tsx
+index 14530d4..ae3dc45 100644
+--- a/apps/kaizen/src/design/componentes/componentes.test.tsx
++++ b/apps/kaizen/src/design/componentes/componentes.test.tsx
+@@ -1,11 +1,12 @@
+ import { render, screen, fireEvent } from '@testing-library/react-native'
++import { StyleSheet } from 'react-native'
+ import { Line } from 'react-native-svg'
+ import { ProveedorTema, ContextoTema } from '../proveedor'
+ import type { Tema } from '../tema'
+ import { temaDefecto } from '../temas/defecto'
+ import { Texto } from './texto'
+ import { Boton } from './boton'
+ import { Barra } from './barra'
+ import { Anillo } from './anillo'
+ 
+ function envolver(nodo: React.ReactNode) {
+@@ -73,15 +74,30 @@ describe('recetas que ningún tema registrado activa', () => {
+     // El recuento por sí solo no basta: un envoltorio intermedio que encoja
+     // el ancho seguiría conteniendo los diez segmentos sin que el test lo
+     // note. Comprobar sobre el árbol host serializado que los diez cuelgan
+     // directamente del contenedor de ancho completo (sin ningún nodo
+     // adicional entre medias) es lo que de verdad detecta el encogido.
+     const arbol = toJSON()
+     if (arbol === null || Array.isArray(arbol)) throw new Error('se esperaba un único nodo raíz')
+     expect(arbol.children).toHaveLength(10)
+   })
+ 
++  // Contar segmentos NO basta: los diez siguen existiendo aunque estén
++  // comprimidos. La invariante que de verdad hay que fijar es que el
++  // contenedor no lleve ancho, porque basta añadírselo —sin reintroducir
++  // ningún envoltorio— para reproducir el bug con los contadores en verde.
++  it('el contenedor de segmentos nunca lleva ancho propio', () => {
++    conReceta({ barra: 'segmentada' }, <Barra progreso={0.5} color="#4ECB9C" />)
++    const contenedor = screen.getByTestId('barra-segmentos')
++    expect(StyleSheet.flatten(contenedor.props.style).width).toBeUndefined()
++  })
++
++  it('la barra anuncia su progreso a un lector de pantalla', () => {
++    conReceta({ barra: 'segmentada' }, <Barra progreso={0.4} color="#4ECB9C" />)
++    expect(screen.getByRole('progressbar').props.accessibilityValue.now).toBe(40)
++  })
++
+   it('el anillo medidor dibuja sus marcas de escala', () => {
+     const { UNSAFE_root } = conReceta({ anillo: 'medidor' }, <Anillo progreso={0.5} />)
+     expect(UNSAFE_root.findAllByType(Line)).toHaveLength(4)
+   })
+ })

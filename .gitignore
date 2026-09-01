@@ -9,7 +9,8 @@ dist/
 .env 
 
 # Maquetas del companion visual de brainstorming
-.superpowers/
+.superpowers/*
+!.superpowers/sdd/
 
 # Exports y copias de seguridad de workflows de n8n.
 #

@@ -1,0 +1,241 @@
+# Review package: 29a616a..HEAD
+
+## Commits
+bc1156a feat(atlas): la decision de que hay que perseguir hoy
+
+## Files changed
+ apps/atlas/src/lib/cobro/pendientes.ts        |  99 +++++++++++++++++++++
+ apps/atlas/src/tests/cobro/pendientes.test.ts | 119 ++++++++++++++++++++++++++
+ 2 files changed, 218 insertions(+)
+
+## Diff
+diff --git a/apps/atlas/src/lib/cobro/pendientes.ts b/apps/atlas/src/lib/cobro/pendientes.ts
+new file mode 100644
+index 0000000..c1fd1d4
+--- /dev/null
++++ b/apps/atlas/src/lib/cobro/pendientes.ts
+@@ -0,0 +1,99 @@
++// src/lib/cobro/pendientes.ts
++//
++// Qué hay que perseguir hoy.
++//
++// Función pura: sin base, sin red, sin reloj. La fecha entra por parámetro, que
++// es lo que permite probar un vencimiento a noventa días sin esperar noventa
++// días — igual que `transicion()` y `agrupar()` del bloque 1.
++//
++// Sin imports de la aplicación: esto se copia tal cual dentro de la Edge
++// Function, y Deno no resuelve el alias `@/`.
++//
++
++export type PeriodoSinFacturar = {
++  contratoId: string;
++  clienteNombre: string;
++  /** Primer día del mes, ISO AAAA-MM-DD. */
++  periodo: string;
++  importeEsperadoCentimos: number;
++};
++
++export type FacturaSinCobrar = {
++  id: string;
++  serie: string;
++  numero: number | null;
++  clienteNombre: string;
++  totalCentimos: number;
++  /** ISO AAAA-MM-DD. Nulo cuando no se acordó plazo. */
++  fechaVencimiento: string | null;
++};
++
++export type Cobro = {
++  sinFacturar: PeriodoSinFacturar[];
++  vencidas: FacturaSinCobrar[];
++  totalSinFacturarCentimos: number;
++  totalVencidoCentimos: number;
++  hayAlgo: boolean;
++  titulo: string;
++  cuerpo: string;
++};
++
++/**
++ * Céntimos → euros con dos decimales, sin depender de `Intl`, para que la
++ * copia que corre en Deno produzca exactamente el mismo texto que la de Node.
++ */
++function euros(centimos: number): string {
++  const signo = centimos < 0 ? "-" : "";
++  const abs = Math.abs(centimos);
++  return `${signo}${Math.floor(abs / 100)},${String(abs % 100).padStart(2, "0")}`;
++}
++
++export function pendientesDeCobro(
++  periodos: PeriodoSinFacturar[],
++  facturas: FacturaSinCobrar[],
++  hoy: string
++): Cobro {
++  // Vencida es la que pasó su plazo, no la que lo tiene hoy: un plazo se
++  // cumple durante todo su último día. Y sin fecha no hay plazo que incumplir,
++  // así que esas no se persiguen — avisar de ellas llenaría el mensaje de
++  // facturas que nadie acordó cuándo pagar.
++  const vencidas = facturas
++    .filter((f) => f.fechaVencimiento !== null && f.fechaVencimiento < hoy)
++    // Lo más viejo primero: es lo que más urge y lo que peor pinta tiene.
++    .sort((a, b) => (a.fechaVencimiento! < b.fechaVencimiento! ? -1 : 1));
++
++  const totalSinFacturarCentimos = periodos.reduce(
++    (t, p) => t + p.importeEsperadoCentimos,
++    0
++  );
++  const totalVencidoCentimos = vencidas.reduce((t, f) => t + f.totalCentimos, 0);
++
++  const nSin = periodos.length;
++  const nVen = vencidas.length;
++  const hayAlgo = nSin > 0 || nVen > 0;
++
++  // El plural concuerda a propósito: un aviso que dice «1 meses» se lee como un
++  // fallo del sistema, y un aviso que parece roto se deja de leer.
++  const trozoSin = `${nSin} ${nSin === 1 ? "mes" : "meses"} sin facturar`;
++  const trozoVen = `${nVen} ${nVen === 1 ? "factura vencida" : "vencidas"}`;
++
++  let titulo: string;
++  if (nSin > 0 && nVen > 0) titulo = `Cobro: ${nSin} sin facturar y ${trozoVen}`;
++  else if (nVen > 0) titulo = `Cobro: ${trozoVen}`;
++  else if (nSin > 0) titulo = `Cobro: ${trozoSin}`;
++  else titulo = "Cobro: nada pendiente";
++
++  const partes: string[] = [];
++  if (nSin > 0) partes.push(`${euros(totalSinFacturarCentimos)} € sin facturar`);
++  if (nVen > 0) partes.push(`${euros(totalVencidoCentimos)} € vencidos sin cobrar`);
++
++  return {
++    sinFacturar: periodos,
++    vencidas,
++    totalSinFacturarCentimos,
++    totalVencidoCentimos,
++    hayAlgo,
++    titulo,
++    cuerpo: partes.join(". "),
++  };
++}
+diff --git a/apps/atlas/src/tests/cobro/pendientes.test.ts b/apps/atlas/src/tests/cobro/pendientes.test.ts
+new file mode 100644
+index 0000000..5785788
+--- /dev/null
++++ b/apps/atlas/src/tests/cobro/pendientes.test.ts
+@@ -0,0 +1,119 @@
++// src/tests/cobro/pendientes.test.ts
++import { describe, it, expect } from "vitest";
++import {
++  pendientesDeCobro,
++  type PeriodoSinFacturar,
++  type FacturaSinCobrar,
++} from "@/lib/cobro/pendientes";
++
++const HOY = "2026-09-15";
++
++function periodo(p: Partial<PeriodoSinFacturar> = {}): PeriodoSinFacturar {
++  return {
++    contratoId: "c1",
++    clienteNombre: "Biodental",
++    periodo: "2026-08-01",
++    importeEsperadoCentimos: 35000,
++    ...p,
++  };
++}
++
++function factura(f: Partial<FacturaSinCobrar> = {}): FacturaSinCobrar {
++  return {
++    id: "f1",
++    serie: "A",
++    numero: 1,
++    clienteNombre: "Biodental",
++    totalCentimos: 42350,
++    fechaVencimiento: "2026-09-01",
++    ...f,
++  };
++}
++
++describe("pendientes de cobro", () => {
++  it("sin nada pendiente, no hay nada que avisar", () => {
++    const c = pendientesDeCobro([], [], HOY);
++    expect(c.hayAlgo).toBe(false);
++    expect(c.totalSinFacturarCentimos).toBe(0);
++    expect(c.totalVencidoCentimos).toBe(0);
++  });
++
++  it("suma lo que falta por facturar", () => {
++    const c = pendientesDeCobro(
++      [periodo(), periodo({ contratoId: "c2", importeEsperadoCentimos: 6000 })],
++      [],
++      HOY
++    );
++    expect(c.totalSinFacturarCentimos).toBe(41000);
++    expect(c.hayAlgo).toBe(true);
++  });
++
++  // Una factura que aún no ha vencido NO es una deuda: es un plazo en curso.
++  // Perseguirla sería avisar de algo que el cliente está cumpliendo.
++  it("una factura que todavía no ha vencido no cuenta", () => {
++    const c = pendientesDeCobro([], [factura({ fechaVencimiento: "2026-10-01" })], HOY);
++    expect(c.vencidas).toEqual([]);
++    expect(c.hayAlgo).toBe(false);
++  });
++
++  it("la que vence hoy tampoco: se cumple durante todo el día", () => {
++    const c = pendientesDeCobro([], [factura({ fechaVencimiento: HOY })], HOY);
++    expect(c.vencidas).toEqual([]);
++  });
++
++  it("la que venció ayer sí", () => {
++    const c = pendientesDeCobro([], [factura({ fechaVencimiento: "2026-09-14" })], HOY);
++    expect(c.vencidas).toHaveLength(1);
++    expect(c.totalVencidoCentimos).toBe(42350);
++  });
++
++  // Sin fecha de vencimiento no hay plazo que incumplir. Tratarla como vencida
++  // llenaría el aviso de facturas que nadie acordó cuándo pagar.
++  it("una factura sin vencimiento no se persigue", () => {
++    const c = pendientesDeCobro([], [factura({ fechaVencimiento: null })], HOY);
++    expect(c.vencidas).toEqual([]);
++  });
++
++  // Lo más viejo primero: es lo que más urge y lo que peor pinta tiene.
++  it("ordena las vencidas de más antigua a más reciente", () => {
++    const c = pendientesDeCobro(
++      [],
++      [
++        factura({ id: "nueva", fechaVencimiento: "2026-09-10" }),
++        factura({ id: "vieja", fechaVencimiento: "2026-06-01" }),
++      ],
++      HOY
++    );
++    expect(c.vencidas.map((f) => f.id)).toEqual(["vieja", "nueva"]);
++  });
++
++  it("el aviso dice las dos cosas cuando las hay", () => {
++    const c = pendientesDeCobro(
++      [periodo()],
++      [factura({ fechaVencimiento: "2026-09-01" })],
++      HOY
++    );
++    expect(c.titulo).toBe("Cobro: 1 sin facturar y 1 factura vencida");
++    expect(c.cuerpo).toContain("350,00");
++    expect(c.cuerpo).toContain("423,50");
++  });
++
++  it("y solo lo que hay cuando falta una de las dos", () => {
++    const soloVencidas = pendientesDeCobro(
++      [],
++      [factura({ fechaVencimiento: "2026-09-01" })],
++      HOY
++    );
++    expect(soloVencidas.titulo).toBe("Cobro: 1 factura vencida");
++
++    const soloSinFacturar = pendientesDeCobro([periodo()], [], HOY);
++    expect(soloSinFacturar.titulo).toBe("Cobro: 1 mes sin facturar");
++  });
++
++  // El plural importa más de lo que parece: un aviso que dice «1 meses» se lee
++  // como un fallo del sistema, y un aviso que parece roto se deja de leer.
++  it("concuerda el plural", () => {
++    const c = pendientesDeCobro([periodo(), periodo({ contratoId: "c2" })], [], HOY);
++    expect(c.titulo).toBe("Cobro: 2 meses sin facturar");
++  });
++});

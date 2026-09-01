@@ -1,0 +1,363 @@
+## Tarea 5: La pantalla de horas
+
+**`/dinero/horas`.** A diferencia del resto de `/dinero`, **la ve cualquiera**: el colaborador ve sus horas y el propietario las de todos, y eso lo decide RLS, no la pantalla. Enseña el mes, cuánto es medido y cuánto añadido, los desgloses, el último fichaje, los abiertos sospechosos, y el formulario para añadir un tramo olvidado.
+
+**Ficheros:**
+- Crear: `apps/atlas/src/app/dinero/horas/page.tsx`
+- Crear: `apps/atlas/src/components/dinero/FormTramo.tsx`
+- Modificar: `apps/atlas/src/app/dinero/page.tsx` (un enlace)
+- Modificar: `apps/atlas/scripts/humo.mjs` (una entrada)
+
+**Interfaces:**
+- Consume: `listarTramos` (tarea 3), `resumir`, `formatearMinutos` (tarea 2), `anadirFichaje` (tarea 4), `hoyEnMadrid`, `Distintivo`.
+- Produce: la ruta `/dinero/horas`.
+
+- [ ] **Paso 1: el formulario**
+
+```tsx
+// src/components/dinero/FormTramo.tsx
+"use client";
+
+import { useState } from "react";
+import { anadirFichaje } from "@/lib/db/acciones-fichajes";
+
+/**
+ * Añadir un tramo que se olvidó fichar. Queda marcado como añadido, y la
+ * pantalla lo enseña: la regla es fichar antes, y esto es la excepción, no el
+ * camino.
+ *
+ * Las horas se teclean en la zona del dispositivo (`datetime-local` no lleva
+ * zona) y se mandan en ISO con zona: `new Date(valor)` las interpreta en la
+ * zona del navegador, que es la de quien las recuerda.
+ */
+export function FormTramo({
+  proyectos,
+  clientes,
+}: {
+  proyectos: { id: string; nombre: string }[];
+  clientes: { id: string; nombre: string }[];
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  async function alEnviar(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formulario = e.currentTarget;
+    const datos = new FormData(formulario);
+    setError(null);
+
+    const inicio = new Date(String(datos.get("inicio") ?? ""));
+    const fin = new Date(String(datos.get("fin") ?? ""));
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+      return setError("Hace falta un inicio y un fin.");
+    }
+    const proyectoId = String(datos.get("proyectoId") ?? "");
+    const clienteId = String(datos.get("clienteId") ?? "");
+    const nota = String(datos.get("nota") ?? "").trim();
+
+    setEnviando(true);
+    try {
+      const r = await anadirFichaje({
+        proyectoId: proyectoId === "" ? null : proyectoId,
+        clienteId: clienteId === "" ? null : clienteId,
+        nota: nota === "" ? null : nota,
+        inicio: inicio.toISOString(),
+        fin: fin.toISOString(),
+      });
+      if (r.ok) formulario.reset();
+      else setError(r.error);
+    } catch {
+      setError("No se pudo guardar. Comprueba la conexión e inténtalo otra vez.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={alEnviar} className="cristal space-y-3 p-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm">
+          <span className="mb-1 block">Inicio</span>
+          <input name="inicio" type="datetime-local" className="w-full rounded-lg px-2 py-1.5" />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block">Fin</span>
+          <input name="fin" type="datetime-local" className="w-full rounded-lg px-2 py-1.5" />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block">Proyecto</span>
+          <select name="proyectoId" className="w-full rounded-lg px-2 py-1.5">
+            <option value="">— ninguno —</option>
+            {proyectos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block">Cliente</span>
+          <select name="clienteId" className="w-full rounded-lg px-2 py-1.5">
+            <option value="">— ninguno —</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm sm:col-span-2">
+          <span className="mb-1 block">Nota</span>
+          <input name="nota" className="w-full rounded-lg px-2 py-1.5" placeholder="Qué fue: llamada, visita, lectura…" />
+        </label>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>
+          {error}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={enviando}
+        className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+        style={{ background: "var(--cristal-fondo-denso)" }}
+      >
+        Añadir tramo olvidado
+      </button>
+    </form>
+  );
+}
+```
+
+- [ ] **Paso 2: la pantalla**
+
+```tsx
+// src/app/dinero/horas/page.tsx
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { clienteServidor } from "@/lib/supabase/servidor";
+import { obtenerPerfil } from "@/lib/db/perfil";
+import { listarTramos } from "@/lib/db/fichajes";
+import { listarProyectos } from "@/lib/db/proyectos";
+import { listarClientes } from "@/lib/db/clientes";
+import { resumir, formatearMinutos, type FilaHoras } from "@/lib/horas/tramos";
+import { hoyEnMadrid } from "@/lib/dinero";
+import { FormTramo } from "@/components/dinero/FormTramo";
+import { Distintivo } from "@/components/ui/Distintivo";
+
+const FECHA_HORA = new Intl.DateTimeFormat("es-ES", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Madrid",
+});
+
+/**
+ * El mes en curso, en Madrid, como instantes ISO. Se resta el desfase de la
+ * zona para que «el día 1 a las 00:00» sea el de Madrid y no el de UTC: a
+ * medianoche del día 1 en Madrid aún es día 30 en UTC.
+ */
+function mesEnCurso(hoy: string): { desde: string; hasta: string } {
+  const [a, m] = hoy.split("-").map(Number);
+  const desfase = (d: Date) => {
+    const madrid = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Madrid",
+      hour12: false,
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    }).formatToParts(d);
+    const g = (t: string) => Number(madrid.find((p) => p.type === t)?.value);
+    const comoUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"));
+    return comoUtc - d.getTime();
+  };
+  const inicioUtc = new Date(Date.UTC(a, m - 1, 1));
+  const finUtc = new Date(Date.UTC(a, m, 1));
+  return {
+    desde: new Date(inicioUtc.getTime() - desfase(inicioUtc)).toISOString(),
+    hasta: new Date(finUtc.getTime() - desfase(finUtc)).toISOString(),
+  };
+}
+
+function Desglose({ titulo, filas }: { titulo: string; filas: FilaHoras[] }) {
+  return (
+    <div className="cristal cristal-denso p-4">
+      <h3 className="mb-2 text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>
+        {titulo}
+      </h3>
+      {filas.length === 0 ? (
+        <p className="text-sm" style={{ color: "var(--texto-tenue)" }}>Nada este mes.</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {filas.map((f) => (
+            <li key={f.id ?? "sin"} className="flex items-baseline justify-between gap-3">
+              <span className="truncate">{f.nombre}</span>
+              <span className="shrink-0 tabular-nums">{formatearMinutos(f.minutos)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export default async function PaginaHoras() {
+  const sb = await clienteServidor();
+  const perfil = await obtenerPerfil(sb);
+  // Sin doble puerta: aquí entra cualquiera. Un colaborador ve sus horas y el
+  // propietario las de todos, y eso lo decide RLS al leer, no esta pantalla.
+  const esPropietario = perfil?.esPropietario ?? false;
+
+  const rango = mesEnCurso(hoyEnMadrid());
+  const [tramos, proyectos, clientes] = await Promise.all([
+    listarTramos(sb, rango),
+    listarProyectos(sb),
+    listarClientes(sb),
+  ]);
+  const r = resumir(tramos, Date.now());
+  const pctAnadido = r.totalMin === 0 ? 0 : Math.round((r.anadidosMin / r.totalMin) * 100);
+
+  return (
+    <section className="max-w-5xl space-y-4">
+      <header>
+        <Link href="/dinero" className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100">
+          <ChevronLeft size={15} aria-hidden="true" />
+          Dinero
+        </Link>
+        <h1 className="text-2xl font-semibold tracking-tight">Horas</h1>
+        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+          Lo fichado este mes. La regla es fichar antes de empezar; lo que se añade después cuenta, pero se ve.
+        </p>
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="cristal cristal-denso p-4">
+          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Total del mes</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{formatearMinutos(r.totalMin)}</div>
+        </div>
+        <div className="cristal cristal-denso p-4">
+          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Añadido a posteriori</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{pctAnadido} %</div>
+          {/* Más de un cuarto reconstruido: la regla no se está cumpliendo. */}
+          {pctAnadido > 25 && <Distintivo estado="aviso" texto="Se está fichando tarde" />}
+        </div>
+        <div className="cristal cristal-denso p-4">
+          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--texto-tenue)" }}>Último fichaje</div>
+          <div className="mt-1 text-lg font-semibold">
+            {r.ultimoInicio ? FECHA_HORA.format(new Date(r.ultimoInicio)) : <Distintivo estado="desconocido" texto="Nunca" />}
+          </div>
+        </div>
+      </div>
+
+      {r.sospechosos.length > 0 && (
+        <div className="cristal p-4" role="alert">
+          <p className="font-medium">
+            {r.sospechosos.length === 1 ? "Hay un fichaje abierto desde hace demasiado." : `Hay ${r.sospechosos.length} fichajes abiertos desde hace demasiado.`}
+          </p>
+          <ul className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+            {r.sospechosos.map((t) => (
+              <li key={t.id}>
+                {t.usuarioNombre ?? "Alguien"} · desde {FECHA_HORA.format(new Date(t.inicio))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className={esPropietario ? "grid gap-3 lg:grid-cols-3" : "grid gap-3 lg:grid-cols-2"}>
+        <Desglose titulo="Por cliente" filas={r.porCliente} />
+        <Desglose titulo="Por proyecto" filas={r.porProyecto} />
+        {esPropietario && <Desglose titulo="Por persona" filas={r.porPersona} />}
+      </div>
+
+      <h2 className="pt-2 text-lg font-semibold">Se me olvidó fichar</h2>
+      <FormTramo
+        proyectos={proyectos.map((p) => ({ id: p.id, nombre: p.nombre }))}
+        clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
+      />
+
+      <h2 className="pt-2 text-lg font-semibold">Los tramos del mes</h2>
+      {tramos.length === 0 ? (
+        <div className="cristal p-8 text-center">
+          <p className="font-medium">Ningún tramo este mes.</p>
+          <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>Ficha desde el marco, a la izquierda, antes de empezar.</p>
+        </div>
+      ) : (
+        <div className="cristal cristal-denso overflow-x-auto">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Tramos fichados en el mes en curso</caption>
+            <thead>
+              <tr className="border-b text-left text-xs uppercase tracking-wider" style={{ borderColor: "var(--cristal-borde)", color: "var(--texto-tenue)" }}>
+                {esPropietario && <th scope="col" className="px-4 py-2 font-medium">Quién</th>}
+                <th scope="col" className="px-4 py-2 font-medium">Inicio</th>
+                <th scope="col" className="px-4 py-2 font-medium">Duración</th>
+                <th scope="col" className="px-4 py-2 font-medium">Para</th>
+                <th scope="col" className="px-4 py-2 font-medium">Origen</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
+              {tramos.map((t) => {
+                const minutos = t.fin === null ? null : Math.round((Date.parse(t.fin) - Date.parse(t.inicio)) / 60_000);
+                return (
+                  <tr key={t.id}>
+                    {esPropietario && <td className="px-4 py-2.5">{t.usuarioNombre ?? "—"}</td>}
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">{FECHA_HORA.format(new Date(t.inicio))}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
+                      {minutos === null ? <Distintivo estado="ok" texto="En curso" /> : formatearMinutos(minutos)}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {[t.proyectoNombre, t.clienteNombre].filter(Boolean).join(" · ") || (
+                        <span style={{ color: "var(--texto-tenue)" }}>Sin asignar</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {t.origen === "anadido" ? <Distintivo estado="aviso" texto="Añadido" /> : <span style={{ color: "var(--texto-tenue)" }}>Medido</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+```
+
+- [ ] **Paso 3: el enlace y la prueba de humo**
+
+En `src/app/dinero/page.tsx`, junto a los enlaces a gastos y cobro:
+
+```tsx
+      <p className="text-sm">
+        <Link href="/dinero/horas" className="underline opacity-80 hover:opacity-100">
+          Ver las horas del mes →
+        </Link>
+      </p>
+```
+
+En `scripts/humo.mjs`, en `PANTALLAS`, tras la de `/dinero/cobro`:
+
+```js
+    { ruta: "/dinero/horas", exige: ["Horas"] },
+```
+
+- [ ] **Paso 4: comprobar**
+
+```bash
+npx tsc --noEmit
+npx vitest run
+# parar el servidor de desarrollo antes del build: comparten .next
+npm run build
+```
+Esperado: `tsc` limpio, batería en verde, build con `/dinero/horas` en la lista de rutas.
+
+- [ ] **Paso 5: comprometer**
+
+```bash
+git add apps/atlas/src/app/dinero/ apps/atlas/src/components/dinero/FormTramo.tsx apps/atlas/scripts/humo.mjs
+git commit -m "feat(atlas): la pantalla de horas, con lo medido y lo anadido a la vista"
+```
+
+---
+

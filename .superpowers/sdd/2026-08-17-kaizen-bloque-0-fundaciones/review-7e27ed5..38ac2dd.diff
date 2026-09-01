@@ -1,0 +1,313 @@
+# Review package: 7e27ed5..38ac2dd
+
+## Commits
+38ac2dd fix(kaizen): crear el bucket de fotos con RLS y desbloquear el borrado
+02b8be5 feat(kaizen): borrado real de cuenta con limpieza de Storage
+
+## Files changed
+ .../kaizen/pruebas/aislamiento.integracion.test.ts | 18 +++++
+ apps/kaizen/pruebas/borrado.integracion.test.ts    | 51 +++++++++++++++
+ apps/kaizen/src/features/perfil/borrar-cuenta.tsx  | 76 ++++++++++++++++++++++
+ .../supabase/functions/borrar-cuenta/index.ts      | 38 +++++++++++
+ .../supabase/migrations/0003_almacenamiento.sql    | 15 +++++
+ .../migrations/0004_privilegios_service_role.sql   | 14 ++++
+ apps/kaizen/tsconfig.json                          |  3 +-
+ 7 files changed, 214 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/apps/kaizen/pruebas/aislamiento.integracion.test.ts b/apps/kaizen/pruebas/aislamiento.integracion.test.ts
+index 513228c..b18db24 100644
+--- a/apps/kaizen/pruebas/aislamiento.integracion.test.ts
++++ b/apps/kaizen/pruebas/aislamiento.integracion.test.ts
+@@ -19,20 +19,27 @@ describe('aislamiento entre usuarios', () => {
+   let a: Awaited<ReturnType<typeof crearUsuario>>
+   let b: Awaited<ReturnType<typeof crearUsuario>>
+ 
+   beforeAll(async () => {
+     a = await crearUsuario(`a-${Date.now()}@prueba.local`)
+     b = await crearUsuario(`b-${Date.now()}@prueba.local`)
+     const { error } = await a.cliente.from('pesos').insert({
+       id: crypto.randomUUID(), user_id: a.id, fecha_local: '2026-08-17', kg: 80,
+     })
+     expect(error).toBeNull()
++
++    // Fotos corporales: categoría especial de RGPD, igual que `pesos`. El
++    // bucket y la política salen de la migración 0003, no de este test.
++    const { error: errorSubida } = await a.cliente.storage
++      .from('fotos')
++      .upload(`${a.id}/foto-a.txt`, Buffer.from('contenido de a'), { contentType: 'text/plain' })
++    expect(errorSubida).toBeNull()
+   })
+ 
+   it('B no puede leer los pesos de A', async () => {
+     const { data } = await b.cliente.from('pesos').select('*')
+     expect(data).toEqual([])
+   })
+ 
+   it('B no puede modificar los pesos de A', async () => {
+     const { data } = await b.cliente.from('pesos').update({ kg: 99 }).eq('user_id', a.id).select()
+     expect(data).toEqual([])
+@@ -43,11 +50,22 @@ describe('aislamiento entre usuarios', () => {
+     const { data } = await a.cliente.from('pesos').select('*')
+     expect(data).toHaveLength(1)
+   })
+ 
+   it('B no puede insertar un registro a nombre de A', async () => {
+     const { error } = await b.cliente.from('pesos').insert({
+       id: crypto.randomUUID(), user_id: a.id, fecha_local: '2026-08-18', kg: 70,
+     })
+     expect(error).not.toBeNull()
+   })
++
++  it('B no puede listar las fotos de A', async () => {
++    const { data } = await b.cliente.storage.from('fotos').list(a.id)
++    expect(data).toEqual([])
++  })
++
++  it('B no puede descargar una foto de A', async () => {
++    const { data, error } = await b.cliente.storage.from('fotos').download(`${a.id}/foto-a.txt`)
++    expect(data).toBeNull()
++    expect(error).not.toBeNull()
++  })
+ })
+diff --git a/apps/kaizen/pruebas/borrado.integracion.test.ts b/apps/kaizen/pruebas/borrado.integracion.test.ts
+new file mode 100644
+index 0000000..7625f74
+--- /dev/null
++++ b/apps/kaizen/pruebas/borrado.integracion.test.ts
+@@ -0,0 +1,51 @@
++import { createClient } from '@supabase/supabase-js'
++
++const URL = process.env.SUPABASE_URL!
++const ANON = process.env.SUPABASE_ANON_KEY!
++const SERVICIO = process.env.SUPABASE_SERVICE_ROLE_KEY!
++
++// El bucket `fotos` lo crea la migración 0003_almacenamiento.sql (privado,
++// con política de acceso por carpeta propia) — este test se lo encuentra
++// hecho, no lo crea: crearlo aquí probaría un mundo que no existe en
++// producción, donde el bucket ya está ahí desde el primer despliegue.
++const BUCKET = 'fotos'
++
++it('borrar la cuenta elimina al usuario y todos sus datos', async () => {
++  const admin = createClient(URL, SERVICIO)
++  const correo = `borrar-${Date.now()}@prueba.local`
++  const { data } = await admin.auth.admin.createUser({
++    email: correo, password: 'contrasena-de-prueba', email_confirm: true,
++  })
++  const id = data.user!.id
++
++  const cliente = createClient(URL, ANON)
++  const { data: acceso } = await cliente.auth.signInWithPassword({
++    email: correo, password: 'contrasena-de-prueba',
++  })
++  await cliente.from('pesos').insert({
++    id: crypto.randomUUID(), user_id: id, fecha_local: '2026-08-17', kg: 80,
++  })
++
++  const { error: errorSubida } = await admin.storage
++    .from(BUCKET)
++    .upload(`${id}/foto-prueba.txt`, Buffer.from('contenido de prueba'), { contentType: 'text/plain' })
++  expect(errorSubida).toBeNull()
++
++  const respuesta = await fetch(`${URL}/functions/v1/borrar-cuenta`, {
++    method: 'POST',
++    headers: { Authorization: `Bearer ${acceso.session!.access_token}` },
++  })
++  expect(respuesta.status).toBe(200)
++
++  const { data: usuario } = await admin.auth.admin.getUserById(id)
++  expect(usuario.user).toBeNull()
++
++  const { count } = await admin.from('pesos').select('*', { count: 'exact', head: true }).eq('user_id', id)
++  expect(count).toBe(0)
++
++  // Esta es la comprobación que de verdad prueba la función: el cascade de
++  // auth.users limpia las tablas solo, pero nunca toca Storage. Sin esto, el
++  // test pasaría igual aunque la función no borrase ni un fichero.
++  const { data: ficherosRestantes } = await admin.storage.from(BUCKET).list(id)
++  expect(ficherosRestantes).toEqual([])
++})
+diff --git a/apps/kaizen/src/features/perfil/borrar-cuenta.tsx b/apps/kaizen/src/features/perfil/borrar-cuenta.tsx
+new file mode 100644
+index 0000000..b512613
+--- /dev/null
++++ b/apps/kaizen/src/features/perfil/borrar-cuenta.tsx
+@@ -0,0 +1,76 @@
++import { useState } from 'react'
++import { TextInput } from 'react-native'
++import { Texto } from '@/design/componentes/texto'
++import { Boton } from '@/design/componentes/boton'
++import { Pantalla } from '@/design/componentes/pantalla'
++import { useTema } from '@/design/proveedor'
++import { supabase } from '@/datos/supabase'
++
++const PALABRA_CONFIRMACION = 'BORRAR'
++
++/**
++ * A diferencia de borrar un registro (que va sin confirmación y con
++ * «deshacer»), esto es irreversible y no tiene deshacer: por eso exige
++ * escribir la palabra exacta antes de habilitar el botón, en vez del patrón
++ * habitual de esta app.
++ */
++export function BorrarCuenta() {
++  const t = useTema()
++  const [confirmacion, setConfirmacion] = useState('')
++  const [error, setError] = useState<string | null>(null)
++  const [borrando, setBorrando] = useState(false)
++
++  const habilitado = confirmacion === PALABRA_CONFIRMACION && !borrando
++
++  async function confirmar() {
++    if (!habilitado) return
++    setBorrando(true)
++    setError(null)
++    const { error: errorFuncion } = await supabase.functions.invoke('borrar-cuenta', { method: 'POST' })
++    if (errorFuncion) {
++      setError('No hemos podido borrar la cuenta. Inténtalo de nuevo.')
++      setBorrando(false)
++      return
++    }
++    // El servidor ya ha borrado el usuario y sus datos: cerrar sesión limpia
++    // el estado local y dispara la redirección a `/acceso` desde la raíz de
++    // la app (ver `src/app/_layout.tsx`), sin que esta pantalla tenga que
++    // saber nada de navegación.
++    await supabase.auth.signOut()
++  }
++
++  const campo = {
++    borderWidth: 1, borderColor: t.color.borde, borderRadius: t.radio.boton,
++    padding: t.espaciado[2], color: t.color.texto,
++  }
++
++  return (
++    <Pantalla style={{ padding: t.espaciado[5], gap: t.espaciado[2] }}>
++      <Texto variante="titulo">Borrar cuenta</Texto>
++      <Texto variante="cuerpo">
++        Esto borra tu cuenta y todos tus datos —peso, medidas, fotos y alimentación— de forma
++        permanente. No se puede deshacer.
++      </Texto>
++      <Texto variante="cuerpo">Escribe {PALABRA_CONFIRMACION} para confirmar.</Texto>
++
++      <TextInput
++        style={campo}
++        value={confirmacion}
++        onChangeText={setConfirmacion}
++        placeholder={PALABRA_CONFIRMACION}
++        placeholderTextColor={t.color.textoTenue}
++        autoCorrect={false}
++        editable={!borrando}
++      />
++
++      {error && <Texto variante="tenue" style={{ color: t.color.peligro }}>{error}</Texto>}
++
++      <Boton
++        titulo={borrando ? 'Borrando…' : 'Borrar mi cuenta'}
++        tono="peligro"
++        deshabilitado={!habilitado}
++        alPulsar={confirmar}
++      />
++    </Pantalla>
++  )
++}
+diff --git a/apps/kaizen/supabase/functions/borrar-cuenta/index.ts b/apps/kaizen/supabase/functions/borrar-cuenta/index.ts
+new file mode 100644
+index 0000000..6c4fc8d
+--- /dev/null
++++ b/apps/kaizen/supabase/functions/borrar-cuenta/index.ts
+@@ -0,0 +1,38 @@
++import { createClient } from 'jsr:@supabase/supabase-js@2'
++
++Deno.serve(async (peticion) => {
++  const cabecera = peticion.headers.get('Authorization')
++  if (!cabecera) return new Response('Falta autorización', { status: 401 })
++
++  const admin = createClient(
++    Deno.env.get('SUPABASE_URL')!,
++    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
++  )
++
++  // El id de a quién se borra sale SIEMPRE del token verificado por Auth, no
++  // de nada que venga en la petición: así nadie puede borrar la cuenta de
++  // otra persona aunque manipule el cuerpo o la URL.
++  const { data, error } = await admin.auth.getUser(cabecera.replace('Bearer ', ''))
++  if (error || !data.user) return new Response('Sesión no válida', { status: 401 })
++
++  const id = data.user.id
++
++  // Los objetos de Storage no se borran en cascada: hay que quitarlos a mano.
++  // Si el listado o el borrado fallan, se aborta AQUÍ, antes de tocar
++  // auth.users: borrar el usuario y dejar ficheros huérfanos sería peor que
++  // no borrar nada, porque ya no quedaría dueño al que reclamárselos.
++  const { data: ficheros, error: errorListado } = await admin.storage.from('fotos').list(id)
++  if (errorListado) return new Response(errorListado.message, { status: 500 })
++
++  if (ficheros?.length) {
++    const { error: errorFicheros } = await admin.storage
++      .from('fotos')
++      .remove(ficheros.map((f) => `${id}/${f.name}`))
++    if (errorFicheros) return new Response(errorFicheros.message, { status: 500 })
++  }
++
++  const { error: errorBorrado } = await admin.auth.admin.deleteUser(id)
++  if (errorBorrado) return new Response(errorBorrado.message, { status: 500 })
++
++  return new Response('ok', { status: 200 })
++})
+diff --git a/apps/kaizen/supabase/migrations/0003_almacenamiento.sql b/apps/kaizen/supabase/migrations/0003_almacenamiento.sql
+new file mode 100644
+index 0000000..290df35
+--- /dev/null
++++ b/apps/kaizen/supabase/migrations/0003_almacenamiento.sql
+@@ -0,0 +1,15 @@
++-- Igual que las diez tablas de datos, el bucket de fotos es categoría
++-- especial de RGPD (fotos corporales): cada persona solo puede ver, subir y
++-- borrar objetos bajo su propio prefijo de carpeta, que es su id de usuario
++-- — el mismo convenio que ya usa la Edge Function `borrar-cuenta` al listar
++-- `${id}/...`. RLS en `storage.objects` ya viene activada por la propia
++-- extensión de Storage (no por este proyecto): aquí solo se añaden el bucket
++-- y la política que decide qué filas ve cada quién.
++insert into storage.buckets (id, name, public)
++values ('fotos', 'fotos', false)
++on conflict (id) do nothing;
++
++create policy "propio" on storage.objects
++  for all
++  using (bucket_id = 'fotos' and (storage.foldername(name))[1] = auth.uid()::text)
++  with check (bucket_id = 'fotos' and (storage.foldername(name))[1] = auth.uid()::text);
+diff --git a/apps/kaizen/supabase/migrations/0004_privilegios_service_role.sql b/apps/kaizen/supabase/migrations/0004_privilegios_service_role.sql
+new file mode 100644
+index 0000000..dceed00
+--- /dev/null
++++ b/apps/kaizen/supabase/migrations/0004_privilegios_service_role.sql
+@@ -0,0 +1,14 @@
++-- Descubierto al verificar en verde el test de borrado de cuenta (Tarea 10):
++-- `service_role` no tiene privilegios de tabla sobre `public` en esta
++-- instancia de Supabase CLI, por la misma razón ya documentada en
++-- `0002_rls.sql` para `authenticated` -- y el propio `config.toml` lo deja
++-- explícito: `auto_expose_new_tables` habla de los roles de la API
++-- (`anon`, `authenticated`, `service_role`), no solo de `authenticated`.
++-- 0002_rls.sql concedió a `authenticated` pero se dejó `service_role` fuera.
++--
++-- Sin esto, cualquier consulta hecha con la clave de servicio contra una
++-- tabla de `public` a través de PostgREST falla con "permission denied"
++-- (42501) antes de que RLS llegue a evaluarse -- exactamente el mismo modo
++-- de fallo que ya se corrigió una vez para `authenticated`, ahora repetido
++-- para el otro rol que también usa la Data API.
++grant select, insert, update, delete on all tables in schema public to service_role;
+diff --git a/apps/kaizen/tsconfig.json b/apps/kaizen/tsconfig.json
+index 819d59e..5119a4d 100644
+--- a/apps/kaizen/tsconfig.json
++++ b/apps/kaizen/tsconfig.json
+@@ -1,10 +1,11 @@
+ {
+   "extends": "expo/tsconfig.base",
+   "compilerOptions": {
+     "strict": true,
+     "noUncheckedIndexedAccess": true,
+     "paths": { "@/*": ["./src/*"] },
+     "types": ["jest"]
+   },
+-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
++  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
++  "exclude": ["node_modules", "supabase/functions"]
+ }

@@ -1,0 +1,350 @@
+# Review package: d38892a..a6e6351
+
+## Commits
+a6e6351 fix(atlas): cierres — el mes en curso se decide en Madrid, no en UTC, y el cierre no acepta el coste desde el cliente
+
+## Files changed
+ apps/atlas/src/app/dinero/rentabilidad/page.tsx    |  2 +-
+ .../atlas/src/components/dinero/BotonCierreMes.tsx |  4 ++--
+ apps/atlas/src/lib/db/acciones-economia.ts         | 12 +++++++---
+ apps/atlas/src/lib/db/cierres.ts                   | 11 ++++++---
+ apps/atlas/src/lib/db/rentabilidad.ts              |  9 +++++---
+ apps/atlas/src/lib/dinero.ts                       |  9 ++++++++
+ apps/atlas/src/tests/db/rentabilidad.test.ts       | 26 ++++++++++++++++++++++
+ 7 files changed, 61 insertions(+), 12 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/src/app/dinero/rentabilidad/page.tsx b/apps/atlas/src/app/dinero/rentabilidad/page.tsx
+index 6915d8b..c2fae6a 100644
+--- a/apps/atlas/src/app/dinero/rentabilidad/page.tsx
++++ b/apps/atlas/src/app/dinero/rentabilidad/page.tsx
+@@ -111,21 +111,21 @@ export default async function PaginaRentabilidad({ searchParams }: { searchParam
+         <span className="text-lg font-semibold capitalize">{MES.format(new Date(`${mes}-01T12:00:00Z`))}</span>
+         {!esActual && <Link href={`/dinero/rentabilidad?mes=${mesVecino(mes, 1)}`} className="text-sm underline opacity-80 hover:opacity-100">siguiente →</Link>}
+         {cerrado ? (
+           <Distintivo estado="ok" texto={`Cerrado a ${formatear(cerrado.costeHoraCentimos)}/h`} />
+         ) : costeHoraCentimos === 0 ? (
+           <Distintivo estado="aviso" texto="Sin coste de la hora: las horas cuentan cero" />
+         ) : (
+           <span className="text-sm" style={{ color: "var(--texto-tenue)" }}>{formatear(costeHoraCentimos)}/h</span>
+         )}
+         {/* El mes en curso no se cierra: le faltan días. */}
+-        {!esActual && <BotonCierreMes mes={mes} cerrado={cerrado !== null} costeHoraCentimos={costeHoraCentimos} />}
++        {!esActual && <BotonCierreMes mes={mes} cerrado={cerrado !== null} />}
+       </div>
+ 
+       <div className="grid gap-3 sm:grid-cols-4">
+         {[
+           ["Facturado (base)", r.total.facturadoCentimos],
+           ["Gastos (base)", r.total.gastosCentimos],
+           ["Horas", r.total.horasCentimos],
+           ["Resultado del negocio", r.total.margenCentimos],
+         ].map(([t, v]) => (
+           <div key={String(t)} className="cristal cristal-denso p-4">
+diff --git a/apps/atlas/src/components/dinero/BotonCierreMes.tsx b/apps/atlas/src/components/dinero/BotonCierreMes.tsx
+index 10beab7..0c6174d 100644
+--- a/apps/atlas/src/components/dinero/BotonCierreMes.tsx
++++ b/apps/atlas/src/components/dinero/BotonCierreMes.tsx
+@@ -3,21 +3,21 @@
+ 
+ import { useState } from "react";
+ import { Lock, LockOpen } from "lucide-react";
+ import { cerrarMesAccion, reabrirMesAccion } from "@/lib/db/acciones-economia";
+ 
+ /**
+  * Cerrar un mes congela el coste de la hora con el que se calculó. Reabrirlo
+  * vuelve al coste actual. Son dos botones y no un conmutador para que cada
+  * acción diga lo que hace.
+  */
+-export function BotonCierreMes({ mes, cerrado, costeHoraCentimos }: { mes: string; cerrado: boolean; costeHoraCentimos: number }) {
++export function BotonCierreMes({ mes, cerrado }: { mes: string; cerrado: boolean }) {
+   const [error, setError] = useState<string | null>(null);
+   const [enviando, setEnviando] = useState(false);
+ 
+   async function ejecutar(accion: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+     setError(null);
+     setEnviando(true);
+     try {
+       const r = await accion();
+       if (!r.ok) setError(r.error);
+     } catch {
+@@ -27,18 +27,18 @@ export function BotonCierreMes({ mes, cerrado, costeHoraCentimos }: { mes: strin
+     }
+   }
+ 
+   return (
+     <div className="flex items-center gap-3">
+       {cerrado ? (
+         <button type="button" disabled={enviando} onClick={() => ejecutar(() => reabrirMesAccion(mes))} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
+           <LockOpen size={14} aria-hidden="true" /> Reabrir el mes
+         </button>
+       ) : (
+-        <button type="button" disabled={enviando} onClick={() => ejecutar(() => cerrarMesAccion(mes, costeHoraCentimos))} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
++        <button type="button" disabled={enviando} onClick={() => ejecutar(() => cerrarMesAccion(mes))} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50" style={{ background: "var(--cristal-fondo-denso)" }}>
+           <Lock size={14} aria-hidden="true" /> Cerrar el mes
+         </button>
+       )}
+       {error && <p role="alert" className="text-sm" style={{ color: "var(--estado-caido)" }}>{error}</p>}
+     </div>
+   );
+ }
+diff --git a/apps/atlas/src/lib/db/acciones-economia.ts b/apps/atlas/src/lib/db/acciones-economia.ts
+index fd27a0b..7d34820 100644
+--- a/apps/atlas/src/lib/db/acciones-economia.ts
++++ b/apps/atlas/src/lib/db/acciones-economia.ts
+@@ -1,36 +1,42 @@
+ // src/lib/db/acciones-economia.ts
+ "use server";
+ 
+ import { revalidatePath } from "next/cache";
+ import { clienteServidor } from "@/lib/supabase/servidor";
+-import { escribirAjustes, type EntradaAjustes } from "./ajustes-economia";
++import { escribirAjustes, leerAjustes, type EntradaAjustes } from "./ajustes-economia";
+ import { cerrarMes, reabrirMes } from "./cierres";
+ import type { Ok } from "./proyectos";
+ 
+ // Envoltorios del límite HTTP; validar y escribir es de los módulos que
+ // reciben `sb`. Un módulo "use server" expone TODO lo exportado, así que
+ // aquí no hay nada más que estas tres funciones: ninguna lógica que no deba
+ // ser un endpoint público.
+ 
+ export async function guardarAjustesEconomia(entrada: EntradaAjustes): Promise<Ok> {
+   const sb = await clienteServidor();
+   const r = await escribirAjustes(sb, entrada);
+   if (!r.ok) return r;
+   revalidatePath("/ajustes/economia");
+   revalidatePath("/dinero/rentabilidad");
+   return { ok: true };
+ }
+ 
+-export async function cerrarMesAccion(mes: string, costeHoraCentimos: number): Promise<Ok> {
++// Recibe solo `mes`, no el coste: lo que llega por la red no decide con qué
++// coste se congela un mes. Una pestaña abierta antes de cambiar el coste en
++// Ajustes mandaría aquí un valor obsoleto si el cliente lo escogiera; leerlo
++// en el servidor, justo antes de cerrar, es la única fuente que puede ser el
++// coste vigente en ese instante.
++export async function cerrarMesAccion(mes: string): Promise<Ok> {
+   const sb = await clienteServidor();
+-  const r = await cerrarMes(sb, mes, costeHoraCentimos, Date.now());
++  const ajustes = await leerAjustes(sb);
++  const r = await cerrarMes(sb, mes, ajustes.costeHoraCentimos, Date.now());
+   if (!r.ok) return r;
+   revalidatePath("/dinero/rentabilidad");
+   return { ok: true };
+ }
+ 
+ export async function reabrirMesAccion(mes: string): Promise<Ok> {
+   const sb = await clienteServidor();
+   const r = await reabrirMes(sb, mes);
+   if (!r.ok) return r;
+   revalidatePath("/dinero/rentabilidad");
+diff --git a/apps/atlas/src/lib/db/cierres.ts b/apps/atlas/src/lib/db/cierres.ts
+index 14e21ff..38bf419 100644
+--- a/apps/atlas/src/lib/db/cierres.ts
++++ b/apps/atlas/src/lib/db/cierres.ts
+@@ -1,36 +1,41 @@
+ // src/lib/db/cierres.ts
+ //
+ // Cerrar un mes congela el coste de la hora con el que se calculó (§4.8).
+ //
+ import type { Sb } from "./clientes";
+ import type { Ok } from "./proyectos";
+-import { mesDe } from "@/lib/dinero";
++import { mesDe, mesEnMadrid } from "@/lib/dinero";
+ 
+ export type Cierre = { mes: string; costeHoraCentimos: number; cerradoEn: string };
+ 
+ export async function cierreDe(sb: Sb, mes: string): Promise<Cierre | null> {
+   const { data, error } = await sb
+     .from("cierres_mes")
+     .select("mes, coste_hora, cerrado_en")
+     .eq("mes", `${mes}-01`)
+     .maybeSingle();
+   if (error) throw error;
+   return data
+     ? { mes: mesDe(data.mes), costeHoraCentimos: Math.round(Number(data.coste_hora) * 100), cerradoEn: data.cerrado_en }
+     : null;
+ }
+ 
+ export async function cerrarMes(sb: Sb, mes: string, costeHoraCentimos: number, ahoraMs: number): Promise<Ok> {
+   // El mes en curso no se cierra: le faltan días. Se compara por texto de mes
+-  // porque el instante viene por parámetro y así se prueba sin esperar.
+-  const mesActual = new Date(ahoraMs).toISOString().slice(0, 7);
++  // porque el instante viene por parámetro y así se prueba sin esperar. Se
++  // corta en Madrid, no en UTC: el resto de la app (`limitesMesMadrid`,
++  // `hoyEnMadrid`) corta meses ahí, y entre las 00:00 y las ~02:00 de Madrid
++  // del día 1, el mes que acaba de terminar todavía es el anterior en UTC —
++  // con `toISOString` esa ventana de dos horas impediría cerrar un mes que sí
++  // ha terminado.
++  const mesActual = mesEnMadrid(ahoraMs);
+   if (mes >= mesActual) return { ok: false, error: "No se cierra un mes que no ha terminado." };
+   const {
+     data: { user },
+   } = await sb.auth.getUser();
+   const { error } = await sb.from("cierres_mes").insert({
+     mes: `${mes}-01`,
+     coste_hora: costeHoraCentimos / 100,
+     cerrado_por: user?.id ?? null,
+   });
+   if (!error) return { ok: true };
+diff --git a/apps/atlas/src/lib/db/rentabilidad.ts b/apps/atlas/src/lib/db/rentabilidad.ts
+index 1238459..e1ddc28 100644
+--- a/apps/atlas/src/lib/db/rentabilidad.ts
++++ b/apps/atlas/src/lib/db/rentabilidad.ts
+@@ -31,23 +31,26 @@ export async function rentabilidadDelMes(
+     listarFacturas(sb, {}),
+     listarGastos(sb, { desde: desdeDia, hasta: hastaDia }),
+     listarTramos(sb, rango),
+     // `LineaFactura` solo trae `proyectoId` (no `proyectoNombre`): se resuelve
+     // aquí una sola vez con un Map, en vez de tocar `facturas.ts` — el brief
+     // pide no modificarlo, y una consulta por línea sería una N+1.
+     nombresDeProyectos(sb),
+   ]);
+   const nombreProyecto = new Map(proyectos.map((p) => [p.id, p.nombre]));
+ 
+-  // `listarFacturas` no filtra por fecha (trae las últimas 200): se filtra aquí
+-  // por mes de emisión y estado. Si algún día hay más de 200 en un mes,
+-  // ampliarla es de `facturas.ts`, no de aquí.
++  // `listarFacturas` no filtra por fecha: trae las últimas 200 EN TOTAL (no
++  // 200 del mes), así que un mes antiguo puede perder facturas en silencio en
++  // cuanto el negocio pase de 200 facturas totales. Aquí solo se filtra por
++  // mes de emisión y estado sobre lo que llegó; ampliar `listarFacturas` con
++  // un filtro de fecha (para no depender del límite de 200) es de
++  // `facturas.ts`, no de aquí.
+   const facturasMes: FacturaMes[] = facturas
+     .filter((f) => f.estado === "emitida" && f.fechaEmision >= desdeDia && f.fechaEmision < hastaDia)
+     .map((f) => ({
+       clienteId: f.clienteId,
+       clienteNombre: f.clienteNombre,
+       baseCentimos: cent(f.base),
+       lineas: f.lineas.map((l) => ({
+         proyectoId: l.proyectoId,
+         proyectoNombre: l.proyectoId ? (nombreProyecto.get(l.proyectoId) ?? null) : null,
+         importeCentimos: cent(l.importe),
+diff --git a/apps/atlas/src/lib/dinero.ts b/apps/atlas/src/lib/dinero.ts
+index b584d69..d35b50d 100644
+--- a/apps/atlas/src/lib/dinero.ts
++++ b/apps/atlas/src/lib/dinero.ts
+@@ -20,20 +20,29 @@ const EUROS = new Intl.NumberFormat("es-ES", {
+ // o una factura con la fecha de ayer — y el día 1 del mes, eso la saca del
+ // mes que le tocaba. «en-CA» se elige porque da AAAA-MM-DD, el formato que
+ // esperan los `<input type="date">` y la base.
+ const DIA_MADRID = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" });
+ 
+ /** AAAA-MM-DD del día de hoy en Madrid, sin pasar por el día UTC. */
+ export function hoyEnMadrid(): string {
+   return DIA_MADRID.format(new Date());
+ }
+ 
++// El mismo desfase que `hoyEnMadrid`, pero para un instante cualquiera y
++// recortado a mes: lo usa `cerrarMes` para decidir si un mes «ya terminó» en
++// Madrid, no en UTC. Entre las 00:00 y las ~02:00 de Madrid del día 1, el mes
++// que acaba de terminar todavía es el anterior en UTC — sin esto, esa
++// ventana de dos horas impediría cerrar el mes que sí ha terminado.
++export function mesEnMadrid(ms: number): string {
++  return DIA_MADRID.format(new Date(ms)).slice(0, 7);
++}
++
+ // Tope de `aCentimos`: el máximo que cabe en `numeric(12,2)`, el tipo de las
+ // columnas de importe en la base (migración de la Tarea 2). No es un número
+ // redondo elegido a ojo: es ese máximo exacto, para que el límite de
+ // TypeScript y el de Postgres sean el mismo número y no puedan divergir. Por
+ // encima, `aCentimos("1e21")` daría `1e+23` — ya no un entero exacto, que es
+ // justo el fallo que este módulo existe para impedir.
+ const MAX_CENTIMOS = 999_999_999_999;
+ 
+ /**
+  * Texto de un formulario → céntimos.
+diff --git a/apps/atlas/src/tests/db/rentabilidad.test.ts b/apps/atlas/src/tests/db/rentabilidad.test.ts
+index 6452dcf..abc049b 100644
+--- a/apps/atlas/src/tests/db/rentabilidad.test.ts
++++ b/apps/atlas/src/tests/db/rentabilidad.test.ts
+@@ -11,20 +11,28 @@ const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vI
+ const SERVICE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+ const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+ 
+ const CORREO_DUENYO = "duenyo-rentabilidad@atlas.test";
+ const CORREO_COLAB = "colab-rentabilidad@atlas.test";
+ const SLUG = "rentabilidad-prueba";
+ // Un mes lejano que ningún otro test toca: la rentabilidad se filtra por fecha
+ // y el propietario ve TODO, así que el aislamiento es por mes, no por fila.
+ const MES = "2090-03";
+ const AHORA = Date.parse("2090-05-15T12:00:00Z");
++// Ronda de arreglo 1: el corte de mes de `cerrarMes` debe ser en Madrid, no
++// en UTC (igual que `limitesMesMadrid`/`hoyEnMadrid`). A las 00:30 Madrid del
++// 1 de junio (verano, UTC+2) todavía es 31 de mayo en UTC: con un corte por
++// UTC, mayo seguiría pareciendo el mes en curso y no se podría cerrar aunque
++// en Madrid ya haya terminado. El literal en UTC de este instante es
++// "2090-05-31T22:30:00Z" — no "2090-06-01T00:30:00Z", que ya es junio en
++// ambos calendarios y no ejercitaría el caso.
++const AHORA_LIMITE = Date.parse("2090-05-31T22:30:00Z");
+ 
+ let pg: Client;
+ let admin: ReturnType<typeof createClient<Database>>;
+ let sbDuenyo: ReturnType<typeof createClient<Database>>;
+ let sbColab: ReturnType<typeof createClient<Database>>;
+ let idDuenyo = "";
+ let idColab = "";
+ let idCliente = "";
+ let idProyecto = "";
+ let idFactura = "";
+@@ -35,20 +43,23 @@ async function altaUsuario(correo: string, propietario: boolean, clave: string)
+   if (creado.error) throw creado.error;
+   await pg.query(`INSERT INTO perfiles (id, es_propietario) VALUES ($1,$2)`, [creado.data.user.id, propietario]);
+   const sb = createClient<Database>(URL_API, ANON, { auth: { persistSession: false, autoRefreshToken: false, storageKey: clave } });
+   const { error } = await sb.auth.signInWithPassword({ email: correo, password: "contrasena-de-prueba" });
+   if (error) throw error;
+   return { sb, id: creado.data.user.id };
+ }
+ 
+ async function limpiarDatos() {
+   await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, [`${MES}-01`]);
++  // El cierre de mayo que ejercita el corte Madrid/UTC (más abajo): un mes
++  // distinto de MES, así que necesita su propia limpieza.
++  await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, ["2090-05-01"]);
+   await pg.query(`DELETE FROM fichajes WHERE inicio >= '2090-03-01' AND inicio < '2090-04-01'`);
+   await pg.query(`DELETE FROM gastos WHERE fecha >= '2090-03-01' AND fecha < '2090-04-01'`);
+   await pg.query(`DELETE FROM facturas WHERE fecha_emision >= '2090-03-01' AND fecha_emision < '2090-04-01'`);
+   await pg.query(`DELETE FROM proyectos WHERE slug = $1`, [SLUG]);
+   await pg.query(`DELETE FROM clientes WHERE slug = $1`, [SLUG]);
+ }
+ 
+ beforeAll(async () => {
+   pg = new Client({ connectionString: URL_PG });
+   await pg.connect();
+@@ -141,20 +152,35 @@ describe("rentabilidadDelMes", () => {
+     await expect(rentabilidadDelMes(sbColab, MES)).rejects.toThrow();
+   });
+ });
+ 
+ describe("cierres", () => {
+   it("no se cierra el mes en curso ni uno futuro", async () => {
+     const r = await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA);
+     expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });
+   });
+ 
++  it("el mes en curso se decide en Madrid, no en UTC", async () => {
++    // A las 00:30 Madrid del 1 de junio (AHORA_LIMITE), mayo ya ha terminado
++    // en Madrid aunque en UTC siga siendo 31 de mayo: mayo se puede cerrar, y
++    // junio (el mes en curso en Madrid) no.
++    try {
++      expect(await cerrarMes(sbDuenyo, "2090-05", 3000, AHORA_LIMITE)).toEqual({ ok: true });
++      const r = await cerrarMes(sbDuenyo, "2090-06", 3000, AHORA_LIMITE);
++      expect(r).toEqual({ ok: false, error: "No se cierra un mes que no ha terminado." });
++    } finally {
++      // Este cierre es ajeno a MES ("2090-03"): limpiarDatos() en afterAll no
++      // lo toca, así que se retira aquí para no dejarlo en la base.
++      await pg.query(`DELETE FROM cierres_mes WHERE mes = $1`, ["2090-05-01"]);
++    }
++  });
++
+   it("cerrar congela el coste: cambiarlo después no mueve el mes cerrado", async () => {
+     expect(await cerrarMes(sbDuenyo, MES, 3000, AHORA)).toEqual({ ok: true });
+     await escribirAjustes(sbDuenyo, { razonSocial: null, cif: null, direccion: null, costeHoraCentimos: 9900 });
+     const { costeHoraCentimos, cerrado } = await rentabilidadDelMes(sbDuenyo, MES);
+     expect(costeHoraCentimos).toBe(3000);
+     expect(cerrado?.mes).toBe(MES);
+     expect(await cierreDe(sbDuenyo, MES)).not.toBeNull();
+   });
+ 
+   it("cerrar dos veces lo dice", async () => {

@@ -1,0 +1,58 @@
+diff --git a/apps/atlas/package.json b/apps/atlas/package.json
+index cb4971c..d84b1a9 100644
+--- a/apps/atlas/package.json
++++ b/apps/atlas/package.json
+@@ -18,6 +18,7 @@
+     "migrar:ensayo": "tsx scripts/migrar/traer.ts --ensayo",
+     "migrar": "tsx scripts/migrar/traer.ts"
+   },
++  "engines": { "node": ">=20" },
+   "dependencies": {
+     "@supabase/ssr": "^0.5.2",
+     "@supabase/supabase-js": "2.49.4",
+diff --git a/apps/atlas/src/lib/facturas/huella.ts b/apps/atlas/src/lib/facturas/huella.ts
+index afeda8c..48c0db2 100644
+--- a/apps/atlas/src/lib/facturas/huella.ts
++++ b/apps/atlas/src/lib/facturas/huella.ts
+@@ -78,7 +78,15 @@ export async function huellaDe(r: RegistroAlta): Promise<string> {
+   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+ }
+ 
+-/** Recorre la cadena y recalcula cada huella. Si algo no encaja, dice dónde. */
++/**
++ * Recorre la cadena y recalcula cada huella. Si algo no encaja, dice dónde.
++ *
++ * `eslabones` debe venir ordenado por `genEn` (fecha de generación): esta
++ * función no reordena ni asume nada sobre el orden de llegada, solo compara
++ * cada `huellaAnterior` contra la huella calculada del eslabón previo en el
++ * array. Un array desordenado (o con eslabones fuera de secuencia) se informa
++ * como una rotura de cadena igual que una huella manipulada.
++ */
+ export async function verificarCadena(
+   eslabones: Eslabon[]
+ ): Promise<{ ok: true } | { ok: false; rotaEn: number; esperada: string; encontrada: string }> {
+diff --git a/apps/atlas/src/tests/facturas/huella.test.ts b/apps/atlas/src/tests/facturas/huella.test.ts
+index 085455a..824a1af 100644
+--- a/apps/atlas/src/tests/facturas/huella.test.ts
++++ b/apps/atlas/src/tests/facturas/huella.test.ts
+@@ -16,6 +16,20 @@ describe("cadenaCanonica", () => {
+   it("recorta espacios de los valores", () => {
+     expect(cadenaCanonica({ ...V1, nifEmisor: " 89890001K " })).toBe(cadenaCanonica(V1));
+   });
++  it("recorta espacios de los cinco campos de texto, no solo el NIF", () => {
++    // huellaAnterior no puede probarse con V1 (es null); se usa un registro
++    // encadenado como V2, con huella real, para que el recorte sea observable.
++    const base: RegistroAlta = { ...V2 };
++    const conEspacios: RegistroAlta = {
++      ...base,
++      nifEmisor: ` ${base.nifEmisor} `,
++      numSerie: ` ${base.numSerie} `,
++      fechaExpedicion: ` ${base.fechaExpedicion} `,
++      huellaAnterior: base.huellaAnterior === null ? null : ` ${base.huellaAnterior} `,
++      genEn: ` ${base.genEn} `,
++    };
++    expect(cadenaCanonica(conEspacios)).toBe(cadenaCanonica(base));
++  });
+ });
+ 
+ describe("huellaDe — vectores de la AEAT", () => {

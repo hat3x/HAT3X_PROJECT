@@ -1,0 +1,408 @@
+# Review package: 8b1e7ce..4312c6c
+
+## Commits
+4312c6c feat(atlas): la pantalla de cobro, con los dias de retraso a la vista
+
+## Files changed
+ apps/atlas/scripts/humo.mjs                   |   1 +
+ apps/atlas/src/app/dinero/cobro/page.tsx      | 189 ++++++++++++++++++++++++++
+ apps/atlas/src/app/dinero/page.tsx            |   6 +
+ apps/atlas/src/lib/cobro/pendientes.ts        |  23 +++-
+ apps/atlas/supabase/functions/avisar/cobro.ts |  23 +++-
+ 5 files changed, 232 insertions(+), 10 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/scripts/humo.mjs b/apps/atlas/scripts/humo.mjs
+index 20b93c4..aadef3b 100644
+--- a/apps/atlas/scripts/humo.mjs
++++ b/apps/atlas/scripts/humo.mjs
+@@ -164,20 +164,21 @@ try {
+     { ruta: "/proyectos", exige: proyectos.slice(0, 3).map((p) => p.nombre) },
+     { ruta: "/alertas", exige: [] },
+     // `exige` con contenido y no vacío: la pantalla se pinta desde tablas que
+     // al principio estarán vacías, y un 200 con el cuerpo en blanco sería
+     // indistinguible de una que funciona.
+     { ruta: "/dinero", exige: ["Dinero", "Coste de estructura"] },
+     // Se exige el texto de los tres desgloses: la pantalla se pinta entera
+     // desde tablas que estaran vacias al principio, y un 200 con el cuerpo en
+     // blanco seria indistinguible de una que funciona.
+     { ruta: "/dinero/gastos", exige: ["Por plataforma", "Por cliente", "Por proyecto"] },
++    { ruta: "/dinero/cobro", exige: ["Cobro"] },
+     { ruta: "/ajustes", exige: [] },
+     { ruta: "/ajustes/apariencia", exige: [] },
+     { ruta: "/ajustes/notificaciones", exige: [] },
+     { ruta: "/ajustes/usuarios", exige: [] },
+     { ruta: "/ajustes/credenciales", exige: [] },
+     // `exige` con contenido y no vacío: esta pantalla se pinta entera desde una
+     // tabla que casi siempre estará vacía, y un 200 con el cuerpo en blanco
+     // sería indistinguible de una que funciona.
+     { ruta: "/ajustes/descubridor", exige: ["Descubridor"] },
+   ];
+diff --git a/apps/atlas/src/app/dinero/cobro/page.tsx b/apps/atlas/src/app/dinero/cobro/page.tsx
+new file mode 100644
+index 0000000..6ac8346
+--- /dev/null
++++ b/apps/atlas/src/app/dinero/cobro/page.tsx
+@@ -0,0 +1,189 @@
++// src/app/dinero/cobro/page.tsx
++import { notFound } from "next/navigation";
++import Link from "next/link";
++import { ChevronLeft } from "lucide-react";
++import { clienteServidor } from "@/lib/supabase/servidor";
++import { obtenerPerfil } from "@/lib/db/perfil";
++import { leerCobro } from "@/lib/db/cobro";
++import { pendientesDeCobro } from "@/lib/cobro/pendientes";
++import { formatear, hoyEnMadrid } from "@/lib/dinero";
++import { Distintivo } from "@/components/ui/Distintivo";
++
++const FECHA = new Intl.DateTimeFormat("es-ES", {
++  day: "numeric",
++  month: "short",
++  year: "numeric",
++  timeZone: "Europe/Madrid",
++});
++
++const MES = new Intl.DateTimeFormat("es-ES", {
++  month: "long",
++  year: "numeric",
++  timeZone: "Europe/Madrid",
++});
++
++/** Días que lleva vencida, para que se vea cuál duele más. */
++function diasDeRetraso(vencimiento: string, hoy: string): number {
++  const ms = Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${vencimiento}T00:00:00Z`);
++  return Math.floor(ms / 86_400_000);
++}
++
++export default async function PaginaCobro() {
++  const sb = await clienteServidor();
++  const perfil = await obtenerPerfil(sb);
++  // Doble puerta: RLS ya devolvería listas vacías, pero un 404 es más honesto
++  // que una pantalla en blanco que parece rota.
++  if (!perfil?.esPropietario) notFound();
++
++  const hoy = hoyEnMadrid();
++  const { periodos, facturas } = await leerCobro(sb, hoy);
++  const c = pendientesDeCobro(periodos, facturas, hoy);
++
++  return (
++    <section className="max-w-4xl space-y-4">
++      <header>
++        <Link
++          href="/dinero"
++          className="mb-2 inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100"
++        >
++          <ChevronLeft size={15} aria-hidden="true" />
++          Dinero
++        </Link>
++        <h1 className="text-2xl font-semibold tracking-tight">Cobro</h1>
++        <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
++          Lo que falta por facturar y lo que falta por cobrar. Llega también al
++          móvil, una vez al día.
++        </p>
++      </header>
++
++      {!c.hayAlgo ? (
++        <div className="cristal p-8 text-center">
++          <p className="font-medium">Nada pendiente. Buena señal.</p>
++          <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
++            Todos los meses cerrados están facturados y ninguna factura ha
++            pasado su plazo.
++          </p>
++        </div>
++      ) : (
++        <div className="grid gap-3 sm:grid-cols-2">
++          <div className="cristal cristal-denso p-4">
++            <div
++              className="text-xs uppercase tracking-wider"
++              style={{ color: "var(--texto-tenue)" }}
++            >
++              Sin facturar
++            </div>
++            <div className="mt-1 text-xl font-semibold tabular-nums">
++              {formatear(c.totalSinFacturarCentimos)}
++            </div>
++          </div>
++          <div className="cristal cristal-denso p-4">
++            <div
++              className="text-xs uppercase tracking-wider"
++              style={{ color: "var(--texto-tenue)" }}
++            >
++              Vencido sin cobrar
++            </div>
++            <div className="mt-1 text-xl font-semibold tabular-nums">
++              {formatear(c.totalVencidoCentimos)}
++            </div>
++          </div>
++        </div>
++      )}
++
++      {c.sinFacturar.length > 0 && (
++        <>
++          <h2 className="pt-2 text-lg font-semibold">Meses sin facturar</h2>
++          <div className="cristal cristal-denso overflow-x-auto">
++            <table className="w-full text-sm">
++              <caption className="sr-only">Periodos de contrato sin factura</caption>
++              <thead>
++                <tr
++                  className="border-b text-left text-xs uppercase tracking-wider"
++                  style={{
++                    borderColor: "var(--cristal-borde)",
++                    color: "var(--texto-tenue)",
++                  }}
++                >
++                  <th scope="col" className="px-4 py-2 font-medium">Cliente</th>
++                  <th scope="col" className="px-4 py-2 font-medium">Mes</th>
++                  <th scope="col" className="px-4 py-2 font-medium">Esperado</th>
++                </tr>
++              </thead>
++              <tbody className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
++                {c.sinFacturar.map((p) => (
++                  <tr key={`${p.contratoId}-${p.periodo}`}>
++                    <td className="px-4 py-2.5">{p.clienteNombre}</td>
++                    <td className="px-4 py-2.5 capitalize">
++                      {MES.format(new Date(p.periodo))}
++                    </td>
++                    <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
++                      {formatear(p.importeEsperadoCentimos)}
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        </>
++      )}
++
++      {c.vencidas.length > 0 && (
++        <>
++          <h2 className="pt-2 text-lg font-semibold">Facturas vencidas</h2>
++          <div className="cristal cristal-denso overflow-x-auto">
++            <table className="w-full text-sm">
++              <caption className="sr-only">Facturas emitidas que pasaron su plazo</caption>
++              <thead>
++                <tr
++                  className="border-b text-left text-xs uppercase tracking-wider"
++                  style={{
++                    borderColor: "var(--cristal-borde)",
++                    color: "var(--texto-tenue)",
++                  }}
++                >
++                  <th scope="col" className="px-4 py-2 font-medium">Número</th>
++                  <th scope="col" className="px-4 py-2 font-medium">Cliente</th>
++                  <th scope="col" className="px-4 py-2 font-medium">Venció</th>
++                  <th scope="col" className="px-4 py-2 font-medium">Retraso</th>
++                  <th scope="col" className="px-4 py-2 font-medium">Total</th>
++                </tr>
++              </thead>
++              <tbody className="divide-y" style={{ borderColor: "var(--cristal-borde)" }}>
++                {c.vencidas.map((f) => {
++                  // Sin `!`: `f.fechaVencimiento` ya es `string` en el tipo —
++                  // `pendientesDeCobro` estrecha `vencidas` porque su propio
++                  // filtro descarta las facturas sin plazo antes de llegar
++                  // aquí, así que la pantalla no tiene que asegurar a gritos
++                  // algo que la función ya garantiza.
++                  const dias = diasDeRetraso(f.fechaVencimiento, hoy);
++                  return (
++                    <tr key={f.id}>
++                      <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
++                        {f.serie}-{f.numero ?? "—"}
++                      </td>
++                      <td className="px-4 py-2.5">{f.clienteNombre}</td>
++                      <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
++                        {FECHA.format(new Date(f.fechaVencimiento))}
++                      </td>
++                      <td className="px-4 py-2.5">
++                        {/* Más de un mes de retraso deja de ser un despiste. */}
++                        <Distintivo
++                          estado={dias > 30 ? "caido" : "aviso"}
++                          texto={`${dias} ${dias === 1 ? "día" : "días"}`}
++                        />
++                      </td>
++                      <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
++                        {formatear(f.totalCentimos)}
++                      </td>
++                    </tr>
++                  );
++                })}
++              </tbody>
++            </table>
++          </div>
++        </>
++      )}
++    </section>
++  );
++}
+diff --git a/apps/atlas/src/app/dinero/page.tsx b/apps/atlas/src/app/dinero/page.tsx
+index f1cda72..3e71c03 100644
+--- a/apps/atlas/src/app/dinero/page.tsx
++++ b/apps/atlas/src/app/dinero/page.tsx
+@@ -89,20 +89,26 @@ export default async function PaginaDinero() {
+         clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
+         plataformas={plataformas.map((p) => ({ id: p.id, nombre: p.nombre }))}
+       />
+ 
+       <p className="text-sm">
+         <Link href="/dinero/gastos" className="underline opacity-80 hover:opacity-100">
+           Ver los gastos del mes, con su desglose por plataforma, cliente y proyecto →
+         </Link>
+       </p>
+ 
++      <p className="text-sm">
++        <Link href="/dinero/cobro" className="underline opacity-80 hover:opacity-100">
++          Ver lo que falta por facturar y por cobrar →
++        </Link>
++      </p>
++
+       <h2 className="pt-2 text-lg font-semibold">Facturas</h2>
+ 
+       {facturas.length === 0 ? (
+         <div className="cristal p-8 text-center">
+           <p className="font-medium">Todavía no hay ninguna factura.</p>
+           <p className="mt-1 text-sm" style={{ color: "var(--texto-tenue)" }}>
+             Aquí aparecerán las que registres, con lo que falta por cobrar.
+           </p>
+         </div>
+       ) : (
+diff --git a/apps/atlas/src/lib/cobro/pendientes.ts b/apps/atlas/src/lib/cobro/pendientes.ts
+index 40a746d..f459575 100644
+--- a/apps/atlas/src/lib/cobro/pendientes.ts
++++ b/apps/atlas/src/lib/cobro/pendientes.ts
+@@ -23,21 +23,26 @@ export type FacturaSinCobrar = {
+   serie: string;
+   numero: number | null;
+   clienteNombre: string;
+   totalCentimos: number;
+   /** ISO AAAA-MM-DD. Nulo cuando no se acordó plazo. */
+   fechaVencimiento: string | null;
+ };
+ 
+ export type Cobro = {
+   sinFacturar: PeriodoSinFacturar[];
+-  vencidas: FacturaSinCobrar[];
++  // Estrechado a `fechaVencimiento: string` (sin el `| null` del tipo base):
++  // el filtro de abajo ya descarta las facturas sin plazo, así que quien
++  // consuma `vencidas` —la pantalla— puede leer la fecha sin repetir esa
++  // comprobación ni recurrir a `!` para acallar al compilador sobre algo que
++  // la función ya garantiza.
++  vencidas: (FacturaSinCobrar & { fechaVencimiento: string })[];
+   totalSinFacturarCentimos: number;
+   totalVencidoCentimos: number;
+   hayAlgo: boolean;
+   titulo: string;
+   cuerpo: string;
+ };
+ 
+ /**
+  * Céntimos → euros con dos decimales, sin depender de `Intl`, para que la
+  * copia que corre en Deno produzca exactamente el mismo texto que la de Node.
+@@ -59,26 +64,34 @@ export function pendientesDeCobro(
+   // función no puede comprobar. Con hora incluida, la fecha sola es prefijo
+   // estricto y por tanto «menor», así que la factura que vence hoy se
+   // colaría como vencida. Recortar aquí a los diez primeros caracteres hace
+   // que el contrato se cumpla sin depender del llamador.
+   const hoySolo = hoy.slice(0, 10);
+ 
+   // Vencida es la que pasó su plazo, no la que lo tiene hoy: un plazo se
+   // cumple durante todo su último día. Y sin fecha no hay plazo que incumplir,
+   // así que esas no se persiguen — avisar de ellas llenaría el mensaje de
+   // facturas que nadie acordó cuándo pagar.
++  //
++  // El predicado lleva forma de type guard (`f is ... & { fechaVencimiento:
++  // string }`) para que el `!== null` de aquí sea la única vez que se
++  // comprueba: de ahí en adelante —el `.sort` de debajo, y quien lea
++  // `Cobro.vencidas` fuera de esta función— el tipo ya dice que la fecha
++  // existe, sin más aserciones que repitan una garantía que este filtro ya
++  // dio.
+   const vencidas = facturas
+-    .filter((f) => f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo)
++    .filter(
++      (f): f is FacturaSinCobrar & { fechaVencimiento: string } =>
++        f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo
++    )
+     // Lo más viejo primero: es lo que más urge y lo que peor pinta tiene.
+-    .sort((a, b) =>
+-      a.fechaVencimiento!.slice(0, 10) < b.fechaVencimiento!.slice(0, 10) ? -1 : 1
+-    );
++    .sort((a, b) => (a.fechaVencimiento.slice(0, 10) < b.fechaVencimiento.slice(0, 10) ? -1 : 1));
+ 
+   const totalSinFacturarCentimos = periodos.reduce(
+     (t, p) => t + p.importeEsperadoCentimos,
+     0
+   );
+   const totalVencidoCentimos = vencidas.reduce((t, f) => t + f.totalCentimos, 0);
+ 
+   const nSin = periodos.length;
+   const nVen = vencidas.length;
+   const hayAlgo = nSin > 0 || nVen > 0;
+diff --git a/apps/atlas/supabase/functions/avisar/cobro.ts b/apps/atlas/supabase/functions/avisar/cobro.ts
+index 6167096..a15f9b2 100644
+--- a/apps/atlas/supabase/functions/avisar/cobro.ts
++++ b/apps/atlas/supabase/functions/avisar/cobro.ts
+@@ -26,21 +26,26 @@ export type FacturaSinCobrar = {
+   serie: string;
+   numero: number | null;
+   clienteNombre: string;
+   totalCentimos: number;
+   /** ISO AAAA-MM-DD. Nulo cuando no se acordó plazo. */
+   fechaVencimiento: string | null;
+ };
+ 
+ export type Cobro = {
+   sinFacturar: PeriodoSinFacturar[];
+-  vencidas: FacturaSinCobrar[];
++  // Estrechado a `fechaVencimiento: string` (sin el `| null` del tipo base):
++  // el filtro de abajo ya descarta las facturas sin plazo, así que quien
++  // consuma `vencidas` —la pantalla— puede leer la fecha sin repetir esa
++  // comprobación ni recurrir a `!` para acallar al compilador sobre algo que
++  // la función ya garantiza.
++  vencidas: (FacturaSinCobrar & { fechaVencimiento: string })[];
+   totalSinFacturarCentimos: number;
+   totalVencidoCentimos: number;
+   hayAlgo: boolean;
+   titulo: string;
+   cuerpo: string;
+ };
+ 
+ /**
+  * Céntimos → euros con dos decimales, sin depender de `Intl`, para que la
+  * copia que corre en Deno produzca exactamente el mismo texto que la de Node.
+@@ -62,26 +67,34 @@ export function pendientesDeCobro(
+   // función no puede comprobar. Con hora incluida, la fecha sola es prefijo
+   // estricto y por tanto «menor», así que la factura que vence hoy se
+   // colaría como vencida. Recortar aquí a los diez primeros caracteres hace
+   // que el contrato se cumpla sin depender del llamador.
+   const hoySolo = hoy.slice(0, 10);
+ 
+   // Vencida es la que pasó su plazo, no la que lo tiene hoy: un plazo se
+   // cumple durante todo su último día. Y sin fecha no hay plazo que incumplir,
+   // así que esas no se persiguen — avisar de ellas llenaría el mensaje de
+   // facturas que nadie acordó cuándo pagar.
++  //
++  // El predicado lleva forma de type guard (`f is ... & { fechaVencimiento:
++  // string }`) para que el `!== null` de aquí sea la única vez que se
++  // comprueba: de ahí en adelante —el `.sort` de debajo, y quien lea
++  // `Cobro.vencidas` fuera de esta función— el tipo ya dice que la fecha
++  // existe, sin más aserciones que repitan una garantía que este filtro ya
++  // dio.
+   const vencidas = facturas
+-    .filter((f) => f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo)
++    .filter(
++      (f): f is FacturaSinCobrar & { fechaVencimiento: string } =>
++        f.fechaVencimiento !== null && f.fechaVencimiento.slice(0, 10) < hoySolo
++    )
+     // Lo más viejo primero: es lo que más urge y lo que peor pinta tiene.
+-    .sort((a, b) =>
+-      a.fechaVencimiento!.slice(0, 10) < b.fechaVencimiento!.slice(0, 10) ? -1 : 1
+-    );
++    .sort((a, b) => (a.fechaVencimiento.slice(0, 10) < b.fechaVencimiento.slice(0, 10) ? -1 : 1));
+ 
+   const totalSinFacturarCentimos = periodos.reduce(
+     (t, p) => t + p.importeEsperadoCentimos,
+     0
+   );
+   const totalVencidoCentimos = vencidas.reduce((t, f) => t + f.totalCentimos, 0);
+ 
+   const nSin = periodos.length;
+   const nVen = vencidas.length;
+   const hayAlgo = nSin > 0 || nVen > 0;

@@ -1,0 +1,473 @@
+# Review package: db0f4fc..68e080f
+
+## Commits
+68e080f fix(atlas): el aviso de cobro lee contratos, no la vista, y falla cerrado
+
+## Files changed
+ apps/atlas/MANTENIMIENTO.md                        | 16 ++++-
+ apps/atlas/README.md                               | 15 +++--
+ apps/atlas/src/tests/db/cobro.test.ts              | 26 ++++++--
+ .../src/tests/esquema/service-role-lee.test.ts     | 72 ++++++++++++++++++++++
+ apps/atlas/supabase/functions/avisar/index.ts      | 65 ++++++++++++++-----
+ 5 files changed, 168 insertions(+), 26 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/MANTENIMIENTO.md b/apps/atlas/MANTENIMIENTO.md
+index a900407..2e1406c 100644
+--- a/apps/atlas/MANTENIMIENTO.md
++++ b/apps/atlas/MANTENIMIENTO.md
+@@ -16,21 +16,23 @@ curl -s localhost:3010/login -o /dev/null -w '%{http_code}\n'    # ¿está la ap
+ ```
+ 
+ ```sql
+ -- ¿está el planificador haciendo su trabajo?
+ select j.jobname, d.status, d.return_message, d.start_time
+   from cron.job_run_details d join cron.job j on j.jobid = d.jobid
+  where d.start_time > now() - interval '15 minutes'
+  order by d.start_time desc;
+ ```
+ 
+-Las tres tareas —`atlas-vigia`, `atlas-avisos` y `atlas-retencion`— deben aparecer con `succeeded`. Las dos primeras, cada minuto.
++Las cuatro tareas —`atlas-vigia`, `atlas-avisos`, `atlas-retencion` y `atlas-cobro`— deben aparecer con `succeeded`. Las dos primeras, cada minuto; `atlas-cobro`, una vez al día.
++
++**pg_cron corre en UTC.** `atlas-cobro` está dada de alta como `7 9 * * *`, que son las **11:07 de Madrid en verano y las 10:07 en invierno**. El comentario de la migración `20260829170000_aviso_cobro.sql` dice «9:07 de la mañana» y no se puede corregir porque ya está aplicada: la verdad vive aquí.
+ 
+ ---
+ 
+ ## «No me llega ningún aviso»
+ 
+ El síntoma más habitual y el que más sitios tiene donde romperse. Recórrelos en este orden, que es el del flujo.
+ 
+ ### 1. ¿Se está detectando la caída?
+ 
+ ```sql
+@@ -98,20 +100,31 @@ Si salen nulos, `pg_cron` corre pero no llama a nadie — la función avisa con
+ 
+ ```sql
+ alter database postgres set app.atlas_funciones_url = '<url de las funciones>';
+ alter database postgres set app.atlas_service_key   = '<service_role key>';
+ ```
+ 
+ En local la URL es la de dentro de Docker: `http://kong:8000/functions/v1`. Y las funciones tienen que estar servidas (`npx supabase functions serve --env-file .env.local`).
+ 
+ ---
+ 
++## «El aviso de cobro no llega»
++
++Es un aviso diario y **no manda nada si no hay nada pendiente**, así que un día sin aviso puede ser un día sin deudas. Para distinguirlo:
++
++1. **Qué respondió la Edge Function.** La tarea `atlas-cobro` llama a `avisar` con `{"cobro": true}`; la respuesta queda en el registro de la función (`npx supabase functions logs avisar`, o el panel). Un 500 con `error` significa que una lectura falló y **no se envió nada a propósito**: la función falla cerrado, porque un permiso denegado disfrazado de «nada pendiente» es exactamente el fallo que no se nota. Un 200 con `noComprobados` no vacío es que el candado del día no se pudo consultar para esos propietarios y se les saltó.
++2. **`ultima_ok_en` en `suscripciones_push`.** Si el push salió, ese sello se mueve; si lleva días parado con avisos que sí deberían haber llegado, sospecha de las claves VAPID (punto 3 de arriba).
++3. **La Edge Function lee la tabla `contratos`, no la vista `contratos_visibles`.** La vista filtra por `auth.uid()` y solo está concedida a `authenticated`; la service_role no la puede leer. Si alguien «unifica» la consulta con la de la pantalla (`src/lib/db/cobro.ts`) embebiendo la vista, la función vuelve al 500. Lo vigila `src/tests/esquema/service-role-lee.test.ts`.
++4. **La hora.** `atlas-cobro` corre a las 9:07 UTC (ver arriba). Antes de esa hora no ha pasado nada todavía.
++
++---
++
+ ## «Kairos tiene un salón nuevo y Atlas no lo vigila»
+ 
+ O al revés: se dio de baja un cliente y Atlas sigue alertando de su 404. Lo resuelve el descubridor, que pasa **cada hora al minuto 23**. Si lleva más de eso sin moverse, mira lo que dejó escrito:
+ 
+ ```sql
+ select ejecutado_en, ok, altas, pausados, reactivados, error
+ from descubrimientos order by ejecutado_en desc limit 10;
+ ```
+ 
+ Esa tabla es el diagnóstico entero. Casos por orden de frecuencia:
+@@ -254,20 +267,21 @@ select atlas_consolidar_retencion();
+ 
+ ## Tareas periódicas
+ 
+ | Cada | Qué |
+ |---|---|
+ | Semana | Mirar `notificaciones` por `ok = false`: un canal roto no se nota hasta que hace falta |
+ | Mes | Confirmar que llega el latido a healthchecks.io, si está dado de alta |
+ | Mes | Revisar `credencial_usos`: quién ha descifrado qué |
+ | Mes | Mirar `descubrimientos` por `ok = false`: un descubridor roto no se nota hasta que un cliente nuevo lleva semanas sin vigilar |
+ | Mes | Comprobar que los recibos fijos se materializaron: `select count(*) from gastos where recurrente_id is not null and date_trunc('month', fecha) = date_trunc('month', current_date);` |
++| Día (automático) | `atlas-cobro` avisa a los propietarios de los meses de contrato sin facturar y de las facturas vencidas, a las 9:07 UTC. Si no llega, ver «El aviso de cobro no llega» |
+ | Trimestre | Comprobar el tamaño de la base |
+ 
+ **Un gasto recurrente puede estar apuntado en dos sitios a la vez.** `apps/jarvis/src/lib/company-brain.ts` todavía escribe en `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue` — su propia copia de `gastos_recurrentes`, `gastos` y `facturas` — porque jubilarlas es un plan aparte (bloque 2A solo jubiló `hat3x_transactions`, vía `finance.ts`). Si una suma no cuadra, antes de sospechar de Atlas mira si ese gasto se dio de alta también desde jarvis.
+ 
+ ---
+ 
+ ## Al tocar el código
+ 
+ - **`npm run build` antes de dar nada por terminado.** Los tests y `tsc` en verde no bastan: una función de servidor sin `async` en un módulo `"use server"` solo la caza el build. **Pero para el servidor de desarrollo antes** — comparten `.next` y el build se lo deja inservible.
+ - **Si tocas lógica compartida con las Edge Functions, vuelve a copiarla.** `copias.test.ts` falla si divergen aunque sea un byte. Las cinco copias son `maquina`, `evaluar`, `agrupar`, `firma` y `pendientes`.
+diff --git a/apps/atlas/README.md b/apps/atlas/README.md
+index 274317e..46224e4 100644
+--- a/apps/atlas/README.md
++++ b/apps/atlas/README.md
+@@ -9,36 +9,41 @@ Vigila cada minuto, avisa al móvil cuando algo se rompe y se instala como aplic
+ - **Cuando algo falla:** [MANTENIMIENTO.md](./MANTENIMIENTO.md)
+ 
+ ---
+ 
+ ## Los dos ejes
+ 
+ Lo que hay que entender antes de tocar nada: **clientes** y **proyectos** son ejes independientes que se cruzan en `contratos`.
+ 
+ Un proyecto puede servir a varios clientes; un cliente puede tener varios proyectos. Y hay proyectos internos que no son de nadie — por eso `servicios.cliente_id` es **opcional**. Modelarlo como «un cliente tiene proyectos» parece más simple hasta que llega Kairos, que es un producto propio vendido a varias peluquerías.
+ 
+-Los importes (`cuota_mensual`, `notas`) los ve **solo el propietario**. Toda lectura de contratos pasa por la vista `contratos_visibles`, nunca por la tabla.
++Los importes (`cuota_mensual`, `notas`) los ve **solo el propietario**. Toda lectura de contratos desde la app pasa por la vista `contratos_visibles`, nunca por la tabla. La única excepción es la Edge Function `avisar` en su rama de cobro: entra con la service_role, que no puede leer la vista, y lee `contratos` directamente (ver MANTENIMIENTO.md, «El aviso de cobro no llega»).
+ 
+ ## Cómo funciona la vigilancia
+ 
+ ```
+ pg_cron (cada minuto)
+    │
+    ├── atlas_disparar_vigia()   ── pg_net ──▶  Edge Function «vigia»
+    │      ¿hay algún check que toque?              │
+    │                                    comprueba, escribe check_resultados,
+    │                                    abre o cierra incidencias
+    │
+-   └── atlas_disparar_avisos()  ── pg_net ──▶  Edge Function «avisar»
+-          ¿hay incidencias sin sellar?             │
+-                                          agrupa por proyecto, resuelve
+-                                          destinatarios, envía push y correo
++   ├── atlas_disparar_avisos()  ── pg_net ──▶  Edge Function «avisar»
++   │      ¿hay incidencias sin sellar?             │
++   │                                      agrupa por proyecto, resuelve
++   │                                      destinatarios, envía push y correo
++   │
++   └── atlas_disparar_cobro()   ── pg_net ──▶  Edge Function «avisar»  {"cobro": true}
++   (una vez al día, 9:07 UTC)     ¿meses sin facturar o facturas vencidas?
++                                          si hay algo, un resumen a los
++                                          propietarios, push y correo
+ ```
+ 
+ Van separadas a propósito: comprobar servicios no debe quedarse esperando a un servidor de correo.
+ 
+ **La decisión es pura; el envío es lo único que toca el mundo.** `transicion()`, `agrupar()` y `clasificar()` no leen el reloj ni la red — el instante entra por parámetro. Es lo que permite probar la agrupación por ventana sin esperar dos minutos.
+ 
+ ### Una incidencia avisa dos veces
+ 
+ Al abrirse y al cerrarse, y cada suceso tiene su propio candado: `notificada_en` y `recuperacion_notificada_en`. Con un solo sello la recuperación no se enviaba nunca — la fila seguía marcada de la apertura. Si tocas `src/lib/alertas/pendientes.ts`, es esto lo que estás tocando.
+ 
+diff --git a/apps/atlas/src/tests/db/cobro.test.ts b/apps/atlas/src/tests/db/cobro.test.ts
+index cbc33d2..d5ff0e6 100644
+--- a/apps/atlas/src/tests/db/cobro.test.ts
++++ b/apps/atlas/src/tests/db/cobro.test.ts
+@@ -170,74 +170,90 @@ async function factura(numero: number, vence: string | null, cobrada: string | n
+   const { rows } = await pg.query(
+     `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision,
+                            fecha_vencimiento, base, iva_cuota, total, estado, cobrada_en)
+      VALUES ('externa','C',$1,$2,'2026-08-01',$3,350,73.5,423.5,'emitida',$4)
+      RETURNING id`,
+     [numero, idCliente, vence, cobrada]
+   );
+   return rows[0].id as string;
+ }
+ 
++// Otros ficheros de la suite (tests de facturas, de periodos, de económica)
++// dejan filas en las mismas tablas, y un fichero abortado a medias las deja
++// para siempre. Un `toEqual([])` sobre TODO lo que ve el propietario
++// rompería por culpa ajena; se compara solo lo que pertenece al cliente y
++// al contrato de este test.
++async function soloMio(c: Awaited<ReturnType<typeof leerCobro>>) {
++  const { rows } = await pg.query(`SELECT id FROM facturas WHERE cliente_id = $1`, [
++    idCliente,
++  ]);
++  const misFacturas = new Set(rows.map((r) => r.id as string));
++  return {
++    periodos: c.periodos.filter((p) => p.contratoId === idContrato),
++    facturas: c.facturas.filter((f) => misFacturas.has(f.id)),
++  };
++}
++
+ describe("leer lo pendiente de cobro", () => {
+   it("sin nada, las dos listas vienen vacías", async () => {
+-    const c = await leerCobro(sbDuenyo, "2026-09-15");
++    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
+     expect(c.periodos).toEqual([]);
+     expect(c.facturas).toEqual([]);
+   });
+ 
+   it("trae el periodo sin factura, con el nombre del cliente", async () => {
+     await periodo("2026-08-01");
+     const c = await leerCobro(sbDuenyo, "2026-09-15");
+     expect(c.periodos).toHaveLength(1);
+     expect(c.periodos[0]!.clienteNombre).toBe("Cobro Prueba");
+     expect(c.periodos[0]!.importeEsperadoCentimos).toBe(35000);
+   });
+ 
+   // El mes en curso todavía se puede facturar: perseguirlo el día 3 sería
+   // avisar de algo que no ha llegado a ser un descuido.
+   it("el mes en curso no cuenta como sin facturar", async () => {
+     await periodo("2026-09-01");
+-    const c = await leerCobro(sbDuenyo, "2026-09-15");
++    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
+     expect(c.periodos).toEqual([]);
+   });
+ 
+   it("un periodo ya facturado no cuenta", async () => {
+     const id = await factura(1, "2026-09-01", null);
+     await periodo("2026-08-01", id);
+-    const c = await leerCobro(sbDuenyo, "2026-09-15");
++    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
+     expect(c.periodos).toEqual([]);
+   });
+ 
+   it("trae la factura sin cobrar en céntimos", async () => {
+     await factura(2, "2026-09-01", null);
+     const c = await leerCobro(sbDuenyo, "2026-09-15");
+     expect(c.facturas).toHaveLength(1);
+     expect(c.facturas[0]!.totalCentimos).toBe(42350);
+   });
+ 
+   it("una cobrada no viene", async () => {
+     await factura(3, "2026-09-01", "2026-09-05");
+-    const c = await leerCobro(sbDuenyo, "2026-09-15");
++    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
+     expect(c.facturas).toEqual([]);
+   });
+ 
+   // Un borrador no se ha mandado a nadie, y una anulada no se debe. Ninguna de
+   // las dos es una deuda que perseguir.
+   it("ni un borrador ni una anulada", async () => {
+     await pg.query(
+       `INSERT INTO facturas (origen, serie, numero, cliente_id, fecha_emision,
+                              fecha_vencimiento, base, iva_cuota, total, estado)
+        VALUES ('externa','C',4,$1,'2026-08-01','2026-09-01',350,73.5,423.5,'borrador'),
+               ('externa','C',5,$1,'2026-08-01','2026-09-01',350,73.5,423.5,'anulada')`,
+       [idCliente]
+     );
+-    const c = await leerCobro(sbDuenyo, "2026-09-15");
++    const c = await soloMio(await leerCobro(sbDuenyo, "2026-09-15"));
+     expect(c.facturas).toEqual([]);
+   });
+ 
+   // No filtra la consulta: de eso se encarga RLS, y se comprueba con un
+   // colaborador real en vez de suponerlo.
+   it("un colaborador no ve nada", async () => {
+     await periodo("2026-08-01");
+     await factura(6, "2026-09-01", null);
+     const c = await leerCobro(sbColaborador, "2026-09-15");
+     expect(c.periodos).toEqual([]);
+diff --git a/apps/atlas/src/tests/esquema/service-role-lee.test.ts b/apps/atlas/src/tests/esquema/service-role-lee.test.ts
+new file mode 100644
+index 0000000..4d9f225
+--- /dev/null
++++ b/apps/atlas/src/tests/esquema/service-role-lee.test.ts
+@@ -0,0 +1,72 @@
++// src/tests/esquema/service-role-lee.test.ts
++//
++// Lo que la Edge Function «avisar» necesita leer con la service_role, y lo
++// que NO puede leer con ella. Nace de un fallo real: `avisarDeCobro` embebía
++// la vista `contratos_visibles` en su consulta, la vista solo tiene `grant
++// select` para `authenticated`, y la service_role recibía «permission denied»
++// que la función leía como lista vacía — «nada pendiente», todos los días,
++// sin que nadie lo notara. Este fichero hace que ese fallo sea rojo.
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { Client } from "pg";
++
++const URL_PG = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
++let pg: Client;
++
++beforeAll(async () => {
++  pg = new Client({ connectionString: URL_PG });
++  await pg.connect();
++});
++
++afterAll(async () => {
++  // Cerrar pase lo que pase: un test que reviente dentro de su transacción
++  // no debe dejar el cliente colgado y bloqueando el resto de la suite.
++  await pg.end();
++});
++
++// Todas las relaciones que `avisarDeCobro` toca con la service_role. Si
++// alguien añade una lectura nueva a la Edge Function, la añade aquí.
++const TABLAS_QUE_LEE_LA_EDGE_FUNCTION = [
++  "periodos_contrato",
++  "contratos",
++  "clientes",
++  "facturas",
++  "perfiles",
++  "notificaciones",
++  "suscripciones_push",
++];
++
++describe("lo que la service_role puede leer", () => {
++  for (const tabla of TABLAS_QUE_LEE_LA_EDGE_FUNCTION) {
++    it(`lee ${tabla}`, async () => {
++      // Se comprueba ejecutando con el rol, no leyendo el catálogo: lo que
++      // importa es qué pasa cuando la Edge Function pregunta. Dentro de una
++      // transacción con rollback para que `set local role` no se escape.
++      await pg.query("begin");
++      try {
++        await pg.query("set local role service_role");
++        await expect(pg.query(`select * from ${tabla} limit 1`)).resolves.toBeDefined();
++      } finally {
++        await pg.query("rollback");
++      }
++    });
++  }
++
++  // Esto es lo que obliga a la Edge Function a leer la tabla `contratos` y no
++  // la vista que usa la pantalla: la vista filtra por `auth.uid()` y solo se
++  // concede a `authenticated` (`20260815100300_rls.sql`). Si algún día se le
++  // diera el grant a la service_role este test se pondría rojo a propósito —
++  // habría que decidir entonces si la vista con `auth.uid()` nulo sigue
++  // teniendo sentido para un proceso sin sesión (no la tiene: devolvería
++  // cero filas, que es el mismo silencio de siempre con otro disfraz).
++  it("NO lee contratos_visibles: por eso la Edge Function lee contratos", async () => {
++    await pg.query("begin");
++    try {
++      await pg.query("set local role service_role");
++      await expect(pg.query("select * from contratos_visibles limit 1")).rejects.toThrow(
++        /permission denied for view contratos_visibles/
++      );
++    } finally {
++      await pg.query("rollback");
++    }
++  });
++});
+diff --git a/apps/atlas/supabase/functions/avisar/index.ts b/apps/atlas/supabase/functions/avisar/index.ts
+index 74ae149..57b4d50 100644
+--- a/apps/atlas/supabase/functions/avisar/index.ts
++++ b/apps/atlas/supabase/functions/avisar/index.ts
+@@ -267,57 +267,83 @@ async function registrar(
+  * UNA incidencia, y un aviso de cobro no tiene incidencia que silenciar.
+  * Forzar la firma habría sido más código para menos verdad; en su lugar se
+  * llama a `enviarPush` y `enviarCorreo` directamente, que es lo que
+  * `repartir` hace por dentro.
+  */
+ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
+   // Un solo instante para todo el ciclo, igual que hace `repartir` con su
+   // propio `ahora`: así el filtro del día y el sello de `ultima_ok_en` no
+   // pueden caer en fechas distintas por una carrera contra el reloj.
+   const ahora = new Date().toISOString();
+-  const hoy = ahora.slice(0, 10);
++  // «Hoy» se calcula en Madrid, no en UTC, igual que hace `hoyEnMadrid()` en
++  // `src/lib/dinero.ts` para la pantalla. A la hora del cron coinciden, pero
++  // una invocación a mano entre las 00:00 y las 02:00 de Madrid daría «ayer»
++  // con el día UTC — y el día 1 eso hace desaparecer el mes recién cerrado,
++  // que es justo el que hay que perseguir. Se calcula aquí y no en
++  // `cobro.ts`, que tiene que seguir byte a byte igual que su original.
++  const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(
++    new Date(ahora)
++  );
+   const mesEnCurso = `${hoy.slice(0, 7)}-01`;
+ 
+-  // Se lee `contratos_visibles`, no `contratos`: la tabla tiene la lectura
+-  // revocada para los roles de API (`20260815100300_rls.sql`) y embeber
+-  // `contratos` aquí haría fallar la consulta con «permission denied for
+-  // table contratos» aunque esta función use la service_role key para todo
+-  // lo demás. Se escribe igual que `src/lib/db/cobro.ts` (misma selección,
+-  // mismos filtros, mismo orden): la misma pregunta hecha de dos formas
+-  // distintas puede acabar respondiendo cosas distintas, y entonces el aviso
+-  // diario y la pantalla dirían números que no cuadran.
+-  const { data: per } = await sb
++  // Se lee la tabla `contratos`, NO la vista `contratos_visibles` que usa la
++  // pantalla (`src/lib/db/cobro.ts`). La vista filtra por `auth.uid()` y solo
++  // tiene `grant select` para `authenticated`; esta función entra con la
++  // service_role, que no tiene ni `auth.uid()` ni ese grant, y la consulta
++  // fallaba con «permission denied for view contratos_visibles». Las tablas
++  // base sí las lee la service_role (lo comprueba
++  // `src/tests/esquema/service-role-lee.test.ts`, que también comprueba que
++  // la vista sigue vedada a ese rol). Quién llama decide qué puede leer: la
++  // app entra con el JWT del propietario y debe pasar por la vista; esta
++  // función entra con la service_role y debe ir a la tabla. Lo que tiene que
++  // ser idéntico entre las dos consultas —y lo es— son los filtros, las
++  // exclusiones, el corte del mes y el orden: la misma pregunta hecha de dos
++  // formas distintas puede acabar respondiendo cosas distintas, y entonces
++  // el aviso diario y la pantalla dirían números que no cuadran.
++  const { data: per, error: errorPer } = await sb
+     .from("periodos_contrato")
+     .select(
+       `contrato_id, periodo, importe_esperado,
+-       contratos_visibles!inner(clientes!inner(nombre))`
++       contratos!inner(clientes!inner(nombre))`
+     )
+     .is("factura_id", null)
+     .lt("periodo", mesEnCurso)
+     .order("periodo");
+ 
+-  const { data: fac } = await sb
++  const { data: fac, error: errorFac } = await sb
+     .from("facturas")
+     .select("id, serie, numero, total, fecha_vencimiento, clientes!inner(nombre)")
+     .is("cobrada_en", null)
+     .eq("estado", "emitida")
+     .order("fecha_vencimiento");
+ 
++  // Mismo criterio que el candado del día, más abajo: si una lectura falla,
++  // no se envía nada y la respuesta lo dice. Un permiso denegado o un corte
++  // de red que se leyera como lista vacía se convertiría en «nada pendiente»
++  // — el peor fallo posible, porque nadie lo nota: el aviso no llega y el
++  // silencio se parece exactamente a un día sin deudas.
++  if (errorPer || errorFac) {
++    return new Response(
++      JSON.stringify({ error: (errorPer ?? errorFac)!.message }),
++      { status: 500, headers: { "content-type": "application/json" } }
++    );
++  }
++
+   // PostgREST devuelve cada relación como objeto o como array según la
+   // cardinalidad que infiera. Se normaliza en un solo sitio, igual que en
+   // `src/lib/db/cobro.ts`.
+   const uno = (u: unknown) => (Array.isArray(u) ? u[0] : u);
+ 
+   const cobro = pendientesDeCobro(
+     (per ?? []).map((p) => ({
+       contratoId: p.contrato_id,
+-      clienteNombre: uno(uno(p.contratos_visibles).clientes).nombre,
++      clienteNombre: uno(uno(p.contratos).clientes).nombre,
+       periodo: p.periodo,
+       // Ningún float toca un importe: el numeric(12,2) de Postgres se
+       // convierte a céntimos enteros aquí, una sola vez, al leerlo.
+       importeEsperadoCentimos: Math.round(Number(p.importe_esperado) * 100),
+     })),
+     (fac ?? []).map((f) => ({
+       id: f.id,
+       serie: f.serie,
+       numero: f.numero,
+       clienteNombre: uno(f.clientes).nombre,
+@@ -329,34 +355,43 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
+ 
+   if (!cobro.hayAlgo) {
+     return new Response(JSON.stringify({ enviados: 0, motivo: "nada pendiente" }), {
+       headers: { "content-type": "application/json" },
+     });
+   }
+ 
+   const enviable: AvisoEnviable = {
+     titulo: cobro.titulo,
+     cuerpo: cobro.cuerpo,
+-    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/`,
++    // Abre la pantalla que enseña esto mismo con detalle, no la raíz.
++    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`,
+   };
+ 
+   const claves = {
+     publica: Deno.env.get("VAPID_PUBLICA") ?? "",
+     privada: Deno.env.get("VAPID_PRIVADA") ?? "",
+     contacto: Deno.env.get("VAPID_CONTACTO") ?? "mailto:info@hat3x.com",
+   };
+   const apiKeyCorreo = Deno.env.get("RESEND_API_KEY") ?? "";
+ 
+-  const { data: perfiles } = await sb
++  const { data: perfiles, error: errorPerfiles } = await sb
+     .from("perfiles")
+     .select("id")
+     .eq("es_propietario", true);
++  // Igual que arriba: sin la lista de destinatarios no se puede fingir que
++  // se avisó, ni callar que no se pudo saber a quién.
++  if (errorPerfiles) {
++    return new Response(JSON.stringify({ error: errorPerfiles.message }), {
++      status: 500,
++      headers: { "content-type": "application/json" },
++    });
++  }
+ 
+   let enviados = 0;
+   // Propietarios para los que el candado del día no se pudo comprobar: se
+   // cuentan aparte, no se confunden con "ya avisado" ni con "nada pendiente".
+   const noComprobados: string[] = [];
+   for (const p of perfiles ?? []) {
+     // El candado del día. Si el cron se dispara dos veces, el segundo no manda
+     // nada: un aviso repetido enseña que el sistema no se controla a sí mismo.
+     // Escrita así (usuario_id + tipo='cobro' + enviada_en), la consulta encaja
+     // exactamente con el índice parcial `notificaciones_cobro_del_dia`.

@@ -1,0 +1,361 @@
+# Review package: 6544734..62e5667
+
+## Commits
+62e5667 feat(kaizen): navegacion de cinco pestanas, hoja de anadir y acceso
+
+## Files changed
+ apps/kaizen/src/app/(pestanas)/_layout.tsx       | 50 ++++++++++++++++++++
+ apps/kaizen/src/app/(pestanas)/anadir-hueco.tsx  |  3 ++
+ apps/kaizen/src/app/(pestanas)/coach.tsx         | 16 +++++++
+ apps/kaizen/src/app/(pestanas)/entrenamiento.tsx | 15 ++++++
+ apps/kaizen/src/app/(pestanas)/evolucion.tsx     | 15 ++++++
+ apps/kaizen/src/app/(pestanas)/index.tsx         | 16 +++++++
+ apps/kaizen/src/app/(pestanas)/nutricion.tsx     | 16 +++++++
+ apps/kaizen/src/app/_layout.tsx                  | 38 +++++++++++++++
+ apps/kaizen/src/app/acceso.tsx                   | 60 ++++++++++++++++++++++++
+ apps/kaizen/src/app/anadir.tsx                   | 38 +++++++++++++++
+ apps/kaizen/src/app/navegacion.test.tsx          |  8 ++++
+ 11 files changed, 275 insertions(+)
+
+## Diff
+diff --git a/apps/kaizen/src/app/(pestanas)/_layout.tsx b/apps/kaizen/src/app/(pestanas)/_layout.tsx
+new file mode 100644
+index 0000000..3c71fcd
+--- /dev/null
++++ b/apps/kaizen/src/app/(pestanas)/_layout.tsx
+@@ -0,0 +1,50 @@
++import { Tabs, useRouter } from 'expo-router'
++import { Pressable, View } from 'react-native'
++import { Superficie } from '@/design/componentes/superficie'
++import { Texto } from '@/design/componentes/texto'
++import { useTema } from '@/design/proveedor'
++
++function BotonAnadir() {
++  const t = useTema()
++  const router = useRouter()
++  return (
++    <Pressable
++      onPress={() => router.push('/anadir')}
++      accessibilityRole="button"
++      accessibilityLabel="Añadir registro"
++      style={{
++        width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
++        backgroundColor: t.color.acento, marginTop: -18,
++      }}
++    >
++      <Texto variante="titulo" style={{ color: t.color.sobreAcento }}>+</Texto>
++    </Pressable>
++  )
++}
++
++export default function LayoutPestanas() {
++  const t = useTema()
++  return (
++    <Tabs
++      screenOptions={{
++        headerShown: false,
++        tabBarActiveTintColor: t.color.acento,
++        tabBarInactiveTintColor: t.color.textoTenue,
++        tabBarStyle: { position: 'absolute', borderTopWidth: 0, backgroundColor: 'transparent' },
++        tabBarBackground: () => (
++          <Superficie fondo={t.superficie.barraInferior} radio={0} style={{ flex: 1 }} />
++        ),
++      }}
++    >
++      <Tabs.Screen name="index" options={{ title: 'Hoy' }} />
++      <Tabs.Screen name="nutricion" options={{ title: 'Nutrición' }} />
++      <Tabs.Screen
++        name="anadir-hueco"
++        options={{ title: '', tabBarButton: () => <BotonAnadir /> }}
++      />
++      <Tabs.Screen name="entrenamiento" options={{ title: 'Entreno' }} />
++      <Tabs.Screen name="evolucion" options={{ title: 'Evolución' }} />
++      <Tabs.Screen name="coach" options={{ title: 'Coach' }} />
++    </Tabs>
++  )
++}
+diff --git a/apps/kaizen/src/app/(pestanas)/anadir-hueco.tsx b/apps/kaizen/src/app/(pestanas)/anadir-hueco.tsx
+new file mode 100644
+index 0000000..810355c
+--- /dev/null
++++ b/apps/kaizen/src/app/(pestanas)/anadir-hueco.tsx
+@@ -0,0 +1,3 @@
++export default function Hueco() {
++  return null
++}
+diff --git a/apps/kaizen/src/app/(pestanas)/coach.tsx b/apps/kaizen/src/app/(pestanas)/coach.tsx
+new file mode 100644
+index 0000000..44049d3
+--- /dev/null
++++ b/apps/kaizen/src/app/(pestanas)/coach.tsx
+@@ -0,0 +1,16 @@
++import { View } from 'react-native'
++import { Texto } from '@/design/componentes/texto'
++import { useTema } from '@/design/proveedor'
++
++export default function Coach() {
++  const t = useTema()
++  return (
++    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++      <Texto variante="titulo">Coach</Texto>
++      <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
++        Todavía no tengo datos suficientes sobre ti. Registra unos días y aquí
++        empezaré a decirte cosas que valgan la pena.
++      </Texto>
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/app/(pestanas)/entrenamiento.tsx b/apps/kaizen/src/app/(pestanas)/entrenamiento.tsx
+new file mode 100644
+index 0000000..193f58a
+--- /dev/null
++++ b/apps/kaizen/src/app/(pestanas)/entrenamiento.tsx
+@@ -0,0 +1,15 @@
++import { View } from 'react-native'
++import { Texto } from '@/design/componentes/texto'
++import { useTema } from '@/design/proveedor'
++
++export default function Entrenamiento() {
++  const t = useTema()
++  return (
++    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++      <Texto variante="titulo">Entreno</Texto>
++      <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
++        Tus entrenamientos aparecerán aquí en cuanto registres el primero.
++      </Texto>
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/app/(pestanas)/evolucion.tsx b/apps/kaizen/src/app/(pestanas)/evolucion.tsx
+new file mode 100644
+index 0000000..81316c8
+--- /dev/null
++++ b/apps/kaizen/src/app/(pestanas)/evolucion.tsx
+@@ -0,0 +1,15 @@
++import { View } from 'react-native'
++import { Texto } from '@/design/componentes/texto'
++import { useTema } from '@/design/proveedor'
++
++export default function Evolucion() {
++  const t = useTema()
++  return (
++    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++      <Texto variante="titulo">Evolución</Texto>
++      <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
++        Cuando lleves unas semanas registrando, aquí verás cómo has cambiado.
++      </Texto>
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/app/(pestanas)/index.tsx b/apps/kaizen/src/app/(pestanas)/index.tsx
+new file mode 100644
+index 0000000..7d1c387
+--- /dev/null
++++ b/apps/kaizen/src/app/(pestanas)/index.tsx
+@@ -0,0 +1,16 @@
++import { View } from 'react-native'
++import { Texto } from '@/design/componentes/texto'
++import { useTema } from '@/design/proveedor'
++
++export default function Hoy() {
++  const t = useTema()
++  return (
++    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++      <Texto variante="titulo">Hola</Texto>
++      <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
++        Este es el resumen de tu día. Todavía no hay nada registrado: usa el
++        botón + para empezar.
++      </Texto>
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/app/(pestanas)/nutricion.tsx b/apps/kaizen/src/app/(pestanas)/nutricion.tsx
+new file mode 100644
+index 0000000..d687fea
+--- /dev/null
++++ b/apps/kaizen/src/app/(pestanas)/nutricion.tsx
+@@ -0,0 +1,16 @@
++import { View } from 'react-native'
++import { Texto } from '@/design/componentes/texto'
++import { useTema } from '@/design/proveedor'
++
++export default function Nutricion() {
++  const t = useTema()
++  return (
++    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5] }}>
++      <Texto variante="titulo">Nutrición</Texto>
++      <Texto variante="tenue" style={{ marginTop: t.espaciado[1] }}>
++        Aquí verás tu histórico de comidas. Empieza registrando algo desde el
++        botón +.
++      </Texto>
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/app/_layout.tsx b/apps/kaizen/src/app/_layout.tsx
+new file mode 100644
+index 0000000..966090b
+--- /dev/null
++++ b/apps/kaizen/src/app/_layout.tsx
+@@ -0,0 +1,38 @@
++import { Stack, Redirect } from 'expo-router'
++import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
++import { ProveedorSesion, useSesion } from '@/datos/sesion'
++import { crearClienteConsultas, persistidor } from '@/datos/cliente-consultas'
++import { ProveedorTema } from '@/design/proveedor'
++
++const cliente = crearClienteConsultas()
++
++function Puerta() {
++  const { sesion, cargando } = useSesion()
++  if (cargando) return null
++  if (!sesion) return <Redirect href="/acceso" />
++  return (
++    <Stack screenOptions={{ headerShown: false }}>
++      <Stack.Screen name="(pestanas)" />
++      <Stack.Screen name="anadir" options={{ presentation: 'modal' }} />
++    </Stack>
++  )
++}
++
++export default function Raiz() {
++  return (
++    <PersistQueryClientProvider
++      client={cliente}
++      persistOptions={{ persister: persistidor }}
++      // Rehidratar NO reanuda nada por sí solo: `PersistQueryClientProvider`
++      // solo restaura el estado. Sin esta llamada, lo que registraste sin
++      // cobertura se guarda y no se envía jamás.
++      onSuccess={() => cliente.resumePausedMutations()}
++    >
++      <ProveedorSesion>
++        <ProveedorTema nombre="defecto">
++          <Puerta />
++        </ProveedorTema>
++      </ProveedorSesion>
++    </PersistQueryClientProvider>
++  )
++}
+diff --git a/apps/kaizen/src/app/acceso.tsx b/apps/kaizen/src/app/acceso.tsx
+new file mode 100644
+index 0000000..c8b7580
+--- /dev/null
++++ b/apps/kaizen/src/app/acceso.tsx
+@@ -0,0 +1,60 @@
++import { useState } from 'react'
++import { View, TextInput, Platform } from 'react-native'
++import { Texto } from '@/design/componentes/texto'
++import { Boton } from '@/design/componentes/boton'
++import { useTema } from '@/design/proveedor'
++import { entrarConCorreo, registrarConCorreo, entrarConApple } from '@/datos/autenticacion'
++
++export default function Acceso() {
++  const t = useTema()
++  const [correo, setCorreo] = useState('')
++  const [contrasena, setContrasena] = useState('')
++  const [error, setError] = useState<string | null>(null)
++  const [ocupado, setOcupado] = useState(false)
++
++  async function ejecutar(accion: () => Promise<{ error: string | null }>) {
++    setOcupado(true)
++    setError((await accion()).error)
++    setOcupado(false)
++  }
++
++  const campo = {
++    borderWidth: 1, borderColor: t.color.borde, borderRadius: t.radio.boton,
++    padding: t.espaciado[2], color: t.color.texto,
++  }
++
++  return (
++    <View style={{ flex: 1, justifyContent: 'center', padding: t.espaciado[5], gap: t.espaciado[2] }}>
++      <Texto variante="titulo">Entrar en KAIZEN</Texto>
++
++      <TextInput
++        style={campo}
++        value={correo}
++        onChangeText={setCorreo}
++        placeholder="Correo"
++        placeholderTextColor={t.color.textoTenue}
++        autoCapitalize="none"
++        keyboardType="email-address"
++      />
++      <TextInput
++        style={campo}
++        value={contrasena}
++        onChangeText={setContrasena}
++        placeholder="Contraseña"
++        placeholderTextColor={t.color.textoTenue}
++        secureTextEntry
++      />
++
++      {error && <Texto variante="tenue" style={{ color: '#E2574C' }}>{error}</Texto>}
++
++      <Boton titulo={ocupado ? 'Un momento…' : 'Entrar'}
++             alPulsar={() => ejecutar(() => entrarConCorreo(correo, contrasena))} />
++      <Boton titulo="Crear cuenta" tono="secundario"
++             alPulsar={() => ejecutar(() => registrarConCorreo(correo, contrasena))} />
++      {Platform.OS === 'ios' && (
++        <Boton titulo="Continuar con Apple" tono="secundario"
++               alPulsar={() => ejecutar(entrarConApple)} />
++      )}
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/app/anadir.tsx b/apps/kaizen/src/app/anadir.tsx
+new file mode 100644
+index 0000000..5be7bd4
+--- /dev/null
++++ b/apps/kaizen/src/app/anadir.tsx
+@@ -0,0 +1,38 @@
++import { View, Pressable } from 'react-native'
++import { useRouter } from 'expo-router'
++import { Texto } from '@/design/componentes/texto'
++import { useTema } from '@/design/proveedor'
++
++// Las seis rutas de destino (buscar alimento, escanear código, entrada
++// rápida, agua, entrenamiento, peso) se crean en el bloque 1. Hasta entonces
++// todas apuntan a "/" para no navegar a una pantalla que no existe: las
++// entradas quedan visibles y funcionales, sin opciones deshabilitadas ni
++// «próximamente».
++const OPCIONES = [
++  { clave: 'buscar',   titulo: 'Buscar alimento', ruta: '/' },
++  { clave: 'escanear', titulo: 'Escanear código', ruta: '/' },
++  { clave: 'rapida',   titulo: 'Entrada rápida', ruta: '/' },
++  { clave: 'agua',     titulo: 'Agua', ruta: '/' },
++  { clave: 'entreno',  titulo: 'Entrenamiento', ruta: '/' },
++  { clave: 'peso',     titulo: 'Peso', ruta: '/' },
++] as const
++
++export default function Anadir() {
++  const t = useTema()
++  const router = useRouter()
++  return (
++    <View style={{ flex: 1, padding: t.espaciado[3], gap: t.espaciado[1] }}>
++      <Texto variante="etiqueta">Añadir</Texto>
++      {OPCIONES.map((o) => (
++        <Pressable
++          key={o.clave}
++          accessibilityRole="button"
++          onPress={() => router.replace(o.ruta)}
++          style={{ paddingVertical: t.espaciado[3] }}
++        >
++          <Texto>{o.titulo}</Texto>
++        </Pressable>
++      ))}
++    </View>
++  )
++}
+diff --git a/apps/kaizen/src/app/navegacion.test.tsx b/apps/kaizen/src/app/navegacion.test.tsx
+new file mode 100644
+index 0000000..e67fcd5
+--- /dev/null
++++ b/apps/kaizen/src/app/navegacion.test.tsx
+@@ -0,0 +1,8 @@
++import { render, screen } from '@testing-library/react-native'
++import Coach from './(pestanas)/coach'
++import { ProveedorTema } from '@/design/proveedor'
++
++it('Coach muestra su estado vacío explicando por qué', () => {
++  render(<ProveedorTema nombre="defecto"><Coach /></ProveedorTema>)
++  expect(screen.getByText(/todavía no tengo datos suficientes/i)).toBeTruthy()
++})

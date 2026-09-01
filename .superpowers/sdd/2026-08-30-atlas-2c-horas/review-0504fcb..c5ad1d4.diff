@@ -1,0 +1,277 @@
+# Review package: 0504fcb..c5ad1d4
+
+## Commits
+c5ad1d4 fix(atlas): ronda de arreglo 1 del aviso de fichaje — proyectos, la nota de las 10h y el candado sin filtrar por ok
+
+## Files changed
+ apps/atlas/MANTENIMIENTO.md                         |  4 ++--
+ apps/atlas/README.md                                |  2 +-
+ apps/atlas/src/lib/horas/abiertos.ts                | 10 +++++++++-
+ .../src/tests/esquema/service-role-lee.test.ts      |  6 ++++--
+ apps/atlas/supabase/functions/avisar/fichajes.ts    | 10 +++++++++-
+ apps/atlas/supabase/functions/avisar/index.ts       | 21 ++++++++++++++-------
+ 6 files changed, 39 insertions(+), 14 deletions(-)
+
+## Diff
+diff --git a/apps/atlas/MANTENIMIENTO.md b/apps/atlas/MANTENIMIENTO.md
+index b29b19e..abfa383 100644
+--- a/apps/atlas/MANTENIMIENTO.md
++++ b/apps/atlas/MANTENIMIENTO.md
+@@ -279,31 +279,31 @@ select atlas_consolidar_retencion();
+ ## Tareas periódicas
+ 
+ | Cada | Qué |
+ |---|---|
+ | Semana | Mirar `notificaciones` por `ok = false`: un canal roto no se nota hasta que hace falta |
+ | Mes | Confirmar que llega el latido a healthchecks.io, si está dado de alta |
+ | Mes | Revisar `credencial_usos`: quién ha descifrado qué |
+ | Mes | Mirar `descubrimientos` por `ok = false`: un descubridor roto no se nota hasta que un cliente nuevo lleva semanas sin vigilar |
+ | Mes | Comprobar que los recibos fijos se materializaron: `select count(*) from gastos where recurrente_id is not null and date_trunc('month', fecha) = date_trunc('month', current_date);` |
+ | Día (automático) | `atlas-cobro` avisa a los propietarios de los meses de contrato sin facturar y de las facturas vencidas, a las 9:07 UTC. Si no llega, ver «El aviso de cobro no llega» |
+-| Hora (automático) | `atlas-fichajes` avisa a quien lleva un fichaje abierto más de diez horas, al minuto 41. Si no llega, ver «No llega el aviso de fichaje abierto» |
++| Hora (automático) | `atlas-fichajes` avisa a quien lleva un fichaje abierto más de diez horas, al minuto 41 (las diez horas están por duplicado, en el SQL y en `AVISO_HORAS`: si cambia una, cambia la otra). Si no llega, ver «No llega el aviso de fichaje abierto» |
+ | Trimestre | Comprobar el tamaño de la base |
+ 
+ **Un gasto recurrente puede estar apuntado en dos sitios a la vez.** `apps/jarvis/src/lib/company-brain.ts` todavía escribe en `hat3x_recurring_expenses`, `hat3x_project_costs` y `hat3x_project_revenue` — su propia copia de `gastos_recurrentes`, `gastos` y `facturas` — porque jubilarlas es un plan aparte (bloque 2A solo jubiló `hat3x_transactions`, vía `finance.ts`). Si una suma no cuadra, antes de sospechar de Atlas mira si ese gasto se dio de alta también desde jarvis.
+ 
+ ---
+ 
+ ## Al tocar el código
+ 
+ - **`npm run build` antes de dar nada por terminado.** Los tests y `tsc` en verde no bastan: una función de servidor sin `async` en un módulo `"use server"` solo la caza el build. **Pero para el servidor de desarrollo antes** — comparten `.next` y el build se lo deja inservible.
+-- **Si tocas lógica compartida con las Edge Functions, vuelve a copiarla.** `copias.test.ts` falla si divergen aunque sea un byte. Las cinco copias son `maquina`, `evaluar`, `agrupar`, `firma` y `pendientes`.
++- **Si tocas lógica compartida con las Edge Functions, vuelve a copiarla.** `copias.test.ts` falla si divergen aunque sea un byte. La lista de copias vigentes vive en ese fichero, no aquí: repetirla a mano en dos sitios es exactamente lo que la dejó desactualizada la última vez.
+ - **Migraciones con `npx supabase migration up --local`.** **Nunca `db reset`** — no hay `seed.sql` y borra los datos dados de alta a mano.
+ - **Una migración aplicada no se edita.** Se corrige con otra encima.
+ 
+ ---
+ 
+ ## Cuando nada de esto lo explica
+ 
+ La prueba que encuentra lo que la batería no ve, entera en el punto 5 del [plan 1C](../../docs/superpowers/plans/2026-08-16-atlas-1c-alertas.md): tira un servicio a un puerto cerrado, deja pasar dos minutos sin tocar nada y mira si llega el aviso; luego levántalo y mira si llega la recuperación.
+ 
+ Cuatro fallos reales salieron así, con los 435 tests en verde.
+diff --git a/apps/atlas/README.md b/apps/atlas/README.md
+index e88425d..8fff190 100644
+--- a/apps/atlas/README.md
++++ b/apps/atlas/README.md
+@@ -168,21 +168,21 @@ supabase/
+ ├── kairos/         SQL para OTRA base: la RPC del censo. No la aplica la CLI
+ └── migrations/     Se aplican en orden. Nunca se editan una vez aplicadas
+ ```
+ 
+ ### Tres reglas que no son evidentes
+ 
+ **1. Las consultas y las mutaciones van en módulos separados.** Un módulo `"use server"` expone *todas* sus funciones exportadas como endpoints invocables desde el navegador. Meter `usarCredencial()` —que descifra— en el mismo fichero que una consulta la convierte en un endpoint público. Por eso `db/proyectos.ts` (lee) y `db/acciones-proyecto.ts` (escribe) están separados.
+ 
+ **2. Ningún componente cliente importa de un módulo de consultas ni de `lib/cripto`.** Arrastra `next/headers` y rompe la compilación. El gating por rol se calcula en la página de servidor y baja como prop.
+ 
+-**3. La lógica que comparten la aplicación y las Edge Functions va copiada**, no importada: Deno no resuelve el alias `@/` y el despliegue solo sube `supabase/functions`. Las cinco copias las vigila `src/tests/vigia/copias.test.ts`, que falla si divergen aunque sea un byte. Si tocas el original, vuelve a copiarlo.
++**3. La lógica que comparten la aplicación y las Edge Functions va copiada**, no importada: Deno no resuelve el alias `@/` y el despliegue solo sube `supabase/functions`. Las copias las vigila `src/tests/vigia/copias.test.ts` —ahí está la lista completa, no aquí, para no tener dos sitios que desactualizar—, que falla si divergen aunque sea un byte. Si tocas el original, vuelve a copiarlo.
+ 
+ ## Seguridad
+ 
+ - **Segundo factor obligatorio.** Sin él no se pasa de `/alta-2fa`.
+ - **RLS en todas las tablas.** Las consultas no filtran por permiso: lo hace la base. Si una consulta filtrase por su cuenta, un fallo de RLS pasaría desapercibido.
+ - **El enlace de silenciar va firmado** con HMAC-SHA256 y caduca en 24 h. Se pulsa desde una notificación, sin sesión: sin firma, cualquiera que la adivinara podría callar tus alertas. Un token manipulado da 410, no 403 — no confirma si la incidencia existe.
+ - **Las credenciales se descifran solo en el servidor**, y cada uso queda registrado en `credencial_usos`.
+ 
+ ## Lo que falta
+ 
+diff --git a/apps/atlas/src/lib/horas/abiertos.ts b/apps/atlas/src/lib/horas/abiertos.ts
+index 8d5461c..e4c8fad 100644
+--- a/apps/atlas/src/lib/horas/abiertos.ts
++++ b/apps/atlas/src/lib/horas/abiertos.ts
+@@ -1,20 +1,28 @@
+ //
+ // Qué fichaje lleva abierto demasiado tiempo. Sin base, sin red, sin reloj:
+ // el instante entra por parámetro.
+ //
+ // ESTE FICHERO SE COPIA BYTE A BYTE a `supabase/functions/avisar/fichajes.ts`.
+ // Por eso no importa nada ni usa `Intl`: Deno no resuelve el alias `@/` y la
+ // copia la vigila `src/tests/vigia/copias.test.ts`.
+ //
+ 
+-/** A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido. */
++/**
++ * A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido.
++ *
++ * La salida rápida de `atlas_disparar_fichajes()` usa el mismo número en SQL
++ * (`interval '10 hours'`, en la migración ya aplicada `20260830110000_aviso_fichaje.sql`);
++ * si cambia uno, cambia el otro: si el SQL corta más tarde que este número, se
++ * avisa más tarde de lo que promete la pantalla; si corta antes, la Edge
++ * Function recibe invocaciones vacías que no encuentran nada que avisar.
++ */
+ export const AVISO_HORAS = 10;
+ 
+ /**
+  * A partir de aquí ya no se cuenta. Un fichaje abierto desde el lunes no son
+  * 26 horas de trabajo: son un olvido, y contarlas inflaría el coste del
+  * cliente. El tramo sigue abierto —hay que cerrarlo y corregir el fin— pero
+  * los minutos que se suman se paran aquí.
+  */
+ export const TOPE_HORAS = 16;
+ 
+diff --git a/apps/atlas/src/tests/esquema/service-role-lee.test.ts b/apps/atlas/src/tests/esquema/service-role-lee.test.ts
+index c5818cf..74b215f 100644
+--- a/apps/atlas/src/tests/esquema/service-role-lee.test.ts
++++ b/apps/atlas/src/tests/esquema/service-role-lee.test.ts
+@@ -16,31 +16,33 @@ beforeAll(async () => {
+   pg = new Client({ connectionString: URL_PG });
+   await pg.connect();
+ });
+ 
+ afterAll(async () => {
+   // Cerrar pase lo que pase: un test que reviente dentro de su transacción
+   // no debe dejar el cliente colgado y bloqueando el resto de la suite.
+   await pg.end();
+ });
+ 
+-// Todas las relaciones que `avisarDeCobro` toca con la service_role. Si
+-// alguien añade una lectura nueva a la Edge Function, la añade aquí.
++// Todas las relaciones que las dos ramas de la Edge Function tocan con la
++// service_role —`avisarDeCobro` y `avisarDeFichajes`—. Si alguien añade una
++// lectura nueva a la Edge Function, la añade aquí.
+ const TABLAS_QUE_LEE_LA_EDGE_FUNCTION = [
+   "periodos_contrato",
+   "contratos",
+   "clientes",
+   "facturas",
+   "perfiles",
+   "notificaciones",
+   "suscripciones_push",
+   "fichajes",
++  "proyectos",
+ ];
+ 
+ describe("lo que la service_role puede leer", () => {
+   for (const tabla of TABLAS_QUE_LEE_LA_EDGE_FUNCTION) {
+     it(`lee ${tabla}`, async () => {
+       // Se comprueba ejecutando con el rol, no leyendo el catálogo: lo que
+       // importa es qué pasa cuando la Edge Function pregunta. Dentro de una
+       // transacción con rollback para que `set local role` no se escape.
+       await pg.query("begin");
+       try {
+diff --git a/apps/atlas/supabase/functions/avisar/fichajes.ts b/apps/atlas/supabase/functions/avisar/fichajes.ts
+index b2785c2..57b074a 100644
+--- a/apps/atlas/supabase/functions/avisar/fichajes.ts
++++ b/apps/atlas/supabase/functions/avisar/fichajes.ts
+@@ -3,21 +3,29 @@
+ // El test copias.test.ts falla si divergen.
+ //
+ // Qué fichaje lleva abierto demasiado tiempo. Sin base, sin red, sin reloj:
+ // el instante entra por parámetro.
+ //
+ // ESTE FICHERO SE COPIA BYTE A BYTE a `supabase/functions/avisar/fichajes.ts`.
+ // Por eso no importa nada ni usa `Intl`: Deno no resuelve el alias `@/` y la
+ // copia la vigila `src/tests/vigia/copias.test.ts`.
+ //
+ 
+-/** A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido. */
++/**
++ * A partir de aquí se avisa. Una jornada larga son diez horas; más, un olvido.
++ *
++ * La salida rápida de `atlas_disparar_fichajes()` usa el mismo número en SQL
++ * (`interval '10 hours'`, en la migración ya aplicada `20260830110000_aviso_fichaje.sql`);
++ * si cambia uno, cambia el otro: si el SQL corta más tarde que este número, se
++ * avisa más tarde de lo que promete la pantalla; si corta antes, la Edge
++ * Function recibe invocaciones vacías que no encuentran nada que avisar.
++ */
+ export const AVISO_HORAS = 10;
+ 
+ /**
+  * A partir de aquí ya no se cuenta. Un fichaje abierto desde el lunes no son
+  * 26 horas de trabajo: son un olvido, y contarlas inflaría el coste del
+  * cliente. El tramo sigue abierto —hay que cerrarlo y corregir el fin— pero
+  * los minutos que se suman se paran aquí.
+  */
+ export const TOPE_HORAS = 16;
+ 
+diff --git a/apps/atlas/supabase/functions/avisar/index.ts b/apps/atlas/supabase/functions/avisar/index.ts
+index d3d7a04..903446a 100644
+--- a/apps/atlas/supabase/functions/avisar/index.ts
++++ b/apps/atlas/supabase/functions/avisar/index.ts
+@@ -427,26 +427,26 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
+     })),
+     hoy
+   );
+ 
+   if (!cobro.hayAlgo) {
+     return new Response(JSON.stringify({ enviados: 0, motivo: "nada pendiente" }), {
+       headers: { "content-type": "application/json" },
+     });
+   }
+ 
+-  const enviable: AvisoEnviable = {
+-    titulo: cobro.titulo,
+-    cuerpo: cobro.cuerpo,
+-    // Abre la pantalla que enseña esto mismo con detalle, no la raíz.
+-    url: `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`,
+-  };
++  // Solo la url hace falta aquí: `enviarA` arma su propio `AvisoEnviable`
++  // con `titulo`/`cuerpo`/`url` a partir de sus parámetros, así que guardar
++  // los tres en un objeto aparte para leer luego un único campo sería
++  // repetir sin necesidad lo que ya tienen `cobro.titulo` y `cobro.cuerpo`.
++  // Abre la pantalla que enseña esto mismo con detalle, no la raíz.
++  const url = `${Deno.env.get("ATLAS_URL_PUBLICA") ?? "http://localhost:3010"}/dinero/cobro`;
+ 
+   const { data: perfiles, error: errorPerfiles } = await sb
+     .from("perfiles")
+     .select("id")
+     .eq("es_propietario", true);
+   // Igual que arriba: sin la lista de destinatarios no se puede fingir que
+   // se avisó, ni callar que no se pudo saber a quién.
+   if (errorPerfiles) {
+     return new Response(JSON.stringify({ error: errorPerfiles.message }), {
+       status: 500,
+@@ -474,21 +474,21 @@ async function avisarDeCobro(sb: SupabaseClient): Promise<Response> {
+     // saber si ya se avisó hoy, y enviar de todos modos convertiría el
+     // candado en decorativo justo el día en que hace falta. Y el fallo se
+     // cuenta en la respuesta en vez de callarse, porque un candado roto en
+     // silencio se lee igual que un día sin nada pendiente.
+     if (errorYaHoy) {
+       noComprobados.push(p.id);
+       continue;
+     }
+     if (yaHoy && yaHoy.length > 0) continue;
+ 
+-    enviados += await enviarA(sb, p.id, cobro.titulo, cobro.cuerpo, enviable.url, "cobro", ahora);
++    enviados += await enviarA(sb, p.id, cobro.titulo, cobro.cuerpo, url, "cobro", ahora);
+   }
+ 
+   return new Response(JSON.stringify({ enviados, noComprobados }), {
+     headers: { "content-type": "application/json" },
+   });
+ }
+ 
+ /**
+  * El aviso del fichaje que se dejó abierto. Cada hora se mira qué lleva
+  * abierto más de AVISO_HORAS y se avisa a su dueño —a él, no al propietario:
+@@ -539,20 +539,27 @@ async function avisarDeFichajes(sb: SupabaseClient): Promise<Response> {
+   const inicioPorFichaje = new Map((abiertos ?? []).map((f) => [f.id, f.inicio] as const));
+ 
+   let enviados = 0;
+   const noComprobados: string[] = [];
+   for (const a of avisos) {
+     const inicio = inicioPorFichaje.get(a.fichajeId)!;
+     // El candado: un aviso por fichaje, no uno por hora. Si ya hay un aviso
+     // de fichaje a esta persona POSTERIOR al inicio del fichaje, es de este
+     // mismo, y no se repite. Falla cerrado: si no se puede comprobar, no se
+     // manda, y se cuenta.
++    //
++    // El candado no filtra por `ok`: una fila de `notificaciones` con
++    // ok=false también lo cierra. Si el push Y el correo de un fichaje
++    // fallan los dos, ese fichaje no se reintenta en la siguiente hora.
++    // Mismo criterio que `avisarDeCobro`, y aceptado por el mismo motivo: lo
++    // cubre el runbook semanal de mirar `notificaciones` por `ok = false`
++    // (ver «Tareas periódicas» en MANTENIMIENTO.md).
+     const { data: ya, error: errorYa } = await sb
+       .from("notificaciones")
+       .select("id")
+       .eq("usuario_id", a.usuarioId)
+       .eq("tipo", "fichaje")
+       .gte("enviada_en", inicio)
+       .limit(1);
+     if (errorYa) {
+       noComprobados.push(a.usuarioId);
+       continue;

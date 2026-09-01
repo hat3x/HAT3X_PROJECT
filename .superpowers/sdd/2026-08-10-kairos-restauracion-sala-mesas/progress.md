@@ -1,0 +1,16 @@
+# SDD ledger — plan: docs/superpowers/plans/2026-08-10-kairos-restauracion-sala-mesas.md
+Task 1: complete — eccf976 (migración sala) · spec ✅ calidad ✅ sin hallazgos · 1879 tests, typecheck 0, aplicada 201[]
+Task 2: complete — d4aabff (Realtime dining_tables+orders) · spec ✅ calidad ✅ sin hallazgos · aplicada 201[]
+Task 3: complete — 8c39204 (lógica pura tables.ts) · spec ✅ calidad ✅ sin hallazgos · 5/5 tests, typecheck 0
+Task 4: complete — 24bc11d (queries+hooks+Realtime) · spec ✅ calidad ✅ sin hallazgos · table-keys 1/1, typecheck 0
+Task 5: complete — 3eac19b + fix 28a65fb (server actions sala) · spec ✅ calidad ✅ · fix round 1: Important (compensación openTable condicionada por status) + Minor (defaults Zod) corregidos · Minor PARKEADO por diseño: RLS dining_tables UPDATE=miembro (no column-level; staff cambia status; gate de layout solo a nivel de action, ya documentado en el plan) · 1891 tests, typecheck 0
+Task 6: complete — cad72a3 + fix 008d8b3 (panel de mesa) · spec ✅ calidad ✅ · fix round 1: Important (estado vacío ofrece Limpiar/Marcar-para-limpiar vía canTransition + error post-cobro surfaceado con changeStatus) corregido · 9/9 tests, suite 1900, typecheck 0 · CROSS-TASK pendiente para T7: (a) nombre de producto real en comanda (hoy "Producto"), (b) paymentMethods reales a PaymentSheet
+Task 7: complete — a4a23cf + fix fea00ce (plano /sala arrastrable + TablePanel names/pagos) · spec ✅ calidad ✅ · fix round 1: Important (mostrador lee ?order= y reanuda la cuenta de la mesa, cierra flujo Añadir E2E) + Minor (onError arrastre, onPointerCancel) · sin regresión mostrador · 1909 tests, typecheck 0
+NOTA: working tree del repo anidado tiene trabajo AJENO sin commitear (booking/availability, booking/server, availability.test, types/database.ts, y migración nueva 20260810150000_salon_opening_hours.sql) — de otro proceso; NO tocar; nuestros commits van por pathspec.
+Task 8: complete — ff881e1 (nav Sala + retirar Caja) · spec ✅ calidad ✅ sin hallazgos · sin regresión otros sectores · 20/20 nav, suite 1918, typecheck 0
+---
+TODAS LAS 8 TAREAS COMPLETAS. Pendiente: revisión final amplia (whole-branch) + finishing.
+FINAL REVIEW (opus, whole-branch 9e02d3f..ff881e1): LISTO PARA MERGE · sin Critical/Important · correctness financiera + multi-tenant + concurrencia + Realtime verificados E2E · 47/47 tests sala, typecheck 0.
+Minor (follow-ups, NO bloquean): (1) CRUD update/delete de zonas/mesas sin UI en FloorEditor (crear+arrastrar sí; renombrar/borrar no) — actions/hooks ya existen; (2) RLS dining_tables UPDATE=miembro cubre name/capacity/zone_id/active además de pos (salon-scoped, sin cruce tenant) — parkeado por diseño.
+SUB-PROYECTO SALA (MESAS+PLANO) COMPLETO.
+POST-MERGE FIX (c719523): /sala no compilaba en Next dev — sala-view.tsx (cliente) importaba canManageSettings de @/lib/salon, que arrastra @/lib/supabase/server (next/headers) al bundle de cliente -> "You are importing a component that needs next/headers". Ni typecheck ni jsdom lo detectan (solo next build/dev). Fix: page.tsx calcula canEdit en servidor y lo pasa como prop; sala-view no importa @/lib/salon. LECCIÓN para Reservas/FloorEditor: componentes cliente NUNCA importan de @/lib/salon; gating de rol/permiso se calcula en el page servidor y se pasa como boolean prop.
