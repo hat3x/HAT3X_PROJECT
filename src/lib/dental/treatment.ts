@@ -157,11 +157,18 @@ const FINDING_TYPE_KEYWORDS: ReadonlyArray<{
   keywords: readonly string[];
 }> = [
   { type: "caries", keywords: ["caries"] },
-  { type: "endodoncia", keywords: ["endodoncia", "conducto"] },
+  { type: "endodoncia", keywords: ["endodoncia", "conducto", "pulpotomia", "pulpectomia"] },
   { type: "corona", keywords: ["corona"] },
   { type: "implante", keywords: ["implante"] },
   { type: "extraccion", keywords: ["extraccion"] },
-  { type: "obturacion", keywords: ["obturacion", "empaste"] },
+  // "Reconstrucción" es como la mayoría de clínicas españolas llama a rehacer
+  // un diente con composite: una obturación. Sin esta palabra el mapeo fallaba
+  // en el procedimiento MÁS frecuente —1.839 de 5.142 líneas en Biodental— y
+  // materializaba un hallazgo `nota` en vez del real.
+  {
+    type: "obturacion",
+    keywords: ["obturacion", "empaste", "reconstruccion", "restauracion", "amalgama"],
+  },
   { type: "blanqueamiento", keywords: ["blanqueamiento"] },
   { type: "sellador", keywords: ["sellador"] },
 ];

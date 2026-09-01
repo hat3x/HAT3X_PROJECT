@@ -189,6 +189,29 @@ describe("mapServiceToFindingType", () => {
     );
   });
 
+  it("'reconstrucción' ⇒ 'obturacion' — es como la llaman las clínicas", () => {
+    // El procedimiento más frecuente de Biodental (1.839 de 5.142 líneas) caía
+    // a 'nota' y materializaba un hallazgo neutro en vez de una obturación.
+    expect(mapServiceToFindingType({ name: "RECONSTRUCCIÓN", category: null })).toBe("obturacion");
+    expect(mapServiceToFindingType({ name: "Restauración composite", category: null })).toBe(
+      "obturacion",
+    );
+    expect(mapServiceToFindingType({ name: "Quitar amalgama", category: null })).toBe("obturacion");
+  });
+
+  it("'pulpotomía' y 'pulpectomía' ⇒ 'endodoncia'", () => {
+    expect(mapServiceToFindingType({ name: "Pulpotomía", category: null })).toBe("endodoncia");
+    expect(mapServiceToFindingType({ name: "PULPECTOMIA", category: null })).toBe("endodoncia");
+  });
+
+  it("'caries' sigue ganando a 'reconstrucción' si aparecen juntas", () => {
+    // El orden de la lista importa: caries es el hallazgo, reconstrucción el
+    // tratamiento. Al describir "reconstrucción por caries", manda el hallazgo.
+    expect(mapServiceToFindingType({ name: "Reconstrucción por caries", category: null })).toBe(
+      "caries",
+    );
+  });
+
   it("categoría sugiere implante ⇒ 'implante'", () => {
     expect(mapServiceToFindingType({ name: "Procedimiento X", category: "Implantes" })).toBe(
       "implante",
