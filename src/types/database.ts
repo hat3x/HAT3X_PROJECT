@@ -2051,6 +2051,15 @@ export interface Database {
           /** tstzrange devuelto como literal PostgreSQL, ej: ["2026-01-01 10:00:00+00","2026-01-01 10:15:00+00") */
           occupied_range: string;
           phase: "application" | "post_exposure";
+          /**
+           * Copia de `appointments.allow_overlap`, puesta por el trigger de
+           * sincronización. Un bloque marcado queda FUERA del constraint de
+           * exclusión: ni estorba a otros ni se deja estorbar. Sigue contando
+           * como ocupación para la reserva online — el profesional está igual
+           * de ocupado; lo único que cambia es que se le puede poner otra
+           * encima a mano.
+           */
+          allow_overlap: boolean;
         };
         // Gestionada exclusivamente por trigger SECURITY DEFINER; nunca se inserta desde el cliente.
         Insert: {
@@ -2060,6 +2069,7 @@ export interface Database {
           salon_id: string;
           occupied_range: string;
           phase: "application" | "post_exposure";
+          allow_overlap?: boolean;
         };
         Update: {
           id?: string;
@@ -2068,6 +2078,7 @@ export interface Database {
           salon_id?: string;
           occupied_range?: string;
           phase?: "application" | "post_exposure";
+          allow_overlap?: boolean;
         };
         Relationships: [
           {
