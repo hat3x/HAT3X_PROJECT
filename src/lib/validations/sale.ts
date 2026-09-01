@@ -93,6 +93,17 @@ export const tenderSchema = z.object({
 
 /** Payload completo de una venta a registrar en caja. */
 export const saleSchema = z.object({
+  /**
+   * Ticket ABIERTO que se está cobrando, si el cobro no empieza de cero.
+   *
+   * Es el caso del presupuesto: "Pasar a caja" deja una venta en estado `open`
+   * con sus líneas, y la caja la termina. Sin esto, cobrarla crearía una
+   * SEGUNDA venta y la primera quedaría huérfana —con la línea del presupuesto
+   * apuntando a un ticket que nadie va a cobrar nunca—.
+   *
+   * El servidor comprueba que existe, que es de este salón y que sigue abierta.
+   */
+  saleId: z.string().uuid().nullable().optional(),
   /** Cita de origen (venta "desde cita"); `null` en venta libre. */
   appointmentId: z.string().uuid().nullable().optional(),
   /** Cliente asociado (opcional en venta libre / a cuenta anónima). */

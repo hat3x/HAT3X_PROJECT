@@ -13,7 +13,14 @@ export type PatientInvoiceRow = {
   fullNumber: string | null;
   totalCents: number;
   dateIso: string;
-  docUrl: string;
+  /** Documento imprimible. `null` en un ticket que aún no se ha cobrado. */
+  docUrl: string | null;
+  /**
+   * Venta ABIERTA: trabajo hecho y sin cobrar, normalmente un presupuesto que
+   * pasó a caja. Aparecía mezclada con lo ya cobrado y ofreciendo imprimir un
+   * ticket de algo que nadie ha pagado; ahora se distingue y se puede cobrar.
+   */
+  pendingSaleId: string | null;
 };
 
 export const patientInvoiceKeys = {
@@ -24,6 +31,7 @@ export const patientInvoiceKeys = {
 
 type RawSale = {
   id: string;
+  status: "open" | "completed" | "voided" | "refunded";
   total_cents: number;
   sold_at: string;
   pos_invoices:
@@ -44,7 +52,7 @@ export async function fetchPatientInvoices(
   const { data, error } = await supabase
     .from("pos_sales")
     .select(
-      "id, total_cents, sold_at, pos_invoices(id, full_number, issued_at, total_cents)",
+      "id, status, total_cents, sold_at, pos_invoices(id, full_number, issued_at, total_cents)",
     )
     .eq("salon_id", salonId)
     .eq("customer_id", customerId)
@@ -57,6 +65,20 @@ export async function fetchPatientInvoices(
 
   return (data ?? []).map((sale) => {
     const invoice = Array.isArray(sale.pos_invoices) ? sale.pos_invoices[0] : null;
+
+    // Sin cobrar: no hay documento que imprimir todavía, hay dinero que cobrar.
+    if (sale.status === "open") {
+      return {
+        key: sale.id,
+        kind: "ticket" as const,
+        fullNumber: null,
+        totalCents: sale.total_cents,
+        dateIso: sale.sold_at,
+        docUrl: null,
+        pendingSaleId: sale.id,
+      };
+    }
+
     if (invoice) {
       return {
         key: invoice.id,
@@ -65,6 +87,7 @@ export async function fetchPatientInvoices(
         totalCents: invoice.total_cents,
         dateIso: invoice.issued_at,
         docUrl: `/api/facturacion/documento/${invoice.id}`,
+        pendingSaleId: null,
       };
     }
     return {
@@ -74,6 +97,7 @@ export async function fetchPatientInvoices(
       totalCents: sale.total_cents,
       dateIso: sale.sold_at,
       docUrl: `/api/facturacion/ticket/${sale.id}`,
+      pendingSaleId: null,
     };
   });
 }

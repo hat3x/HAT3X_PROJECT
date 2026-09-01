@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { TpvView } from "@/app/(dashboard)/tpv/tpv-view";
 import { activeSalonHasFeature, getActiveSalon } from "@/lib/salon";
+import type { OpenSaleSeed } from "@/app/(dashboard)/tpv/tpv-view";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 export default async function TpvPage({
   searchParams,
 }: {
-  searchParams: { appointment?: string };
+  searchParams: { appointment?: string; sale?: string };
 }): Promise<React.ReactElement> {
   const supabase = createClient();
   const {
@@ -49,6 +50,44 @@ export default async function TpvPage({
     .eq("id", salon.id)
     .maybeSingle();
 
+  // Ticket ABIERTO que se viene a terminar de cobrar (`/tpv?sale=<id>`). Es el
+  // camino del presupuesto: "Pasar a caja" dejó la venta creada y sin cobrar, y
+  // aquí se recupera con sus líneas para que la caja la cierre.
+  //
+  // Se lee en el servidor y no con un hook para que la caja abra YA con el
+  // ticket puesto: si llegara después, el cajero vería un instante de carrito
+  // vacío sobre el que podría empezar a teclear.
+  let openSale: OpenSaleSeed | null = null;
+  if (typeof searchParams.sale === "string") {
+    const { data } = await supabase
+      .from("pos_sales")
+      .select(
+        "id, status, customer_id, professional_id, notes, customers(full_name), pos_sale_lines(service_id, product_id, description, quantity, unit_price_cents, vat_rate)",
+      )
+      .eq("id", searchParams.sale)
+      .eq("salon_id", salon.id)
+      .eq("status", "open")
+      .maybeSingle();
+
+    if (data !== null) {
+      openSale = {
+        id: data.id,
+        customerId: data.customer_id,
+        professionalId: data.professional_id,
+        label: data.customers?.full_name ?? "Ticket pendiente",
+        notes: data.notes ?? "",
+        lines: (data.pos_sale_lines ?? []).map((l) => ({
+          kind: l.service_id !== null ? "service" : l.product_id !== null ? "product" : "manual",
+          refId: l.service_id ?? l.product_id,
+          description: l.description,
+          quantity: String(l.quantity),
+          unitPriceCents: l.unit_price_cents,
+          vatRate: String(l.vat_rate),
+        })),
+      };
+    }
+  }
+
   return (
     <TpvView
       salonId={salon.id}
@@ -65,6 +104,7 @@ export default async function TpvPage({
           ? searchParams.appointment
           : undefined
       }
+      initialOpenSale={openSale}
     />
   );
 }

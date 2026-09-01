@@ -217,13 +217,18 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
   const sessionId = openSession?.id ?? null;
 
   // 3) Cabecera de la venta.
-  const saleInsert: TablesInsert<"pos_sales"> = {
-    salon_id: salonId,
+  //
+  // Dos caminos. El normal CREA la venta ya cobrada. El otro TERMINA una que ya
+  // existe: es el del presupuesto, donde "Pasar a caja" dejó un ticket abierto
+  // con sus líneas y la caja lo cierra. Crear una segunda venta en ese caso
+  // dejaría la primera huérfana, con la línea del presupuesto colgando de un
+  // ticket que nadie iba a cobrar nunca.
+  const cabecera = {
     session_id: sessionId,
     appointment_id: values.appointmentId ?? null,
     customer_id: values.customerId ?? null,
     professional_id: values.professionalId ?? null,
-    status: "completed",
+    status: "completed" as const,
     subtotal_cents: totals.subtotalCents,
     discount_cents: totals.discountCents,
     tax_cents: totals.taxCents,
@@ -233,21 +238,75 @@ export async function createSale(input: SaleInput): Promise<ActionResult<SaleRec
     notes: values.notes ?? null,
   };
 
-  const { data: sale, error: saleError } = await supabase
-    .from("pos_sales")
-    .insert(saleInsert)
-    .select("id")
-    .single();
+  let saleId: string;
+  /** Cómo deshacer si algo falla después. Depende del camino que se haya tomado. */
+  let rollback: () => Promise<void>;
 
-  if (saleError !== null || sale === null) {
-    return { ok: false, error: saleError?.message ?? "No se pudo crear la venta" };
+  if (values.saleId != null) {
+    // `.eq("status", "open")` no es decoración: es la guarda contra el doble
+    // cobro. Si otra persona cobró ese ticket entre que se abrió la pantalla y
+    // se pulsó el botón, esta actualización no encuentra fila y se para aquí.
+    const { data: actualizada, error: updateError } = await supabase
+      .from("pos_sales")
+      .update(cabecera)
+      .eq("id", values.saleId)
+      .eq("salon_id", salonId)
+      .eq("status", "open")
+      .select("id")
+      .maybeSingle();
+
+    if (updateError !== null) {
+      return { ok: false, error: `No se pudo cerrar el ticket: ${updateError.message}` };
+    }
+    if (actualizada === null) {
+      return {
+        ok: false,
+        error: "Ese ticket ya no está abierto. Actualiza la pantalla y vuelve a mirarlo.",
+      };
+    }
+
+    saleId = actualizada.id;
+    // Aquí NO se borra: la venta existía antes de este cobro y su línea de
+    // presupuesto cuelga de ella. Se devuelve a abierta, como estaba.
+    rollback = async () => {
+      await supabase
+        .from("pos_sales")
+        .update({ status: "open" })
+        .eq("id", saleId)
+        .eq("salon_id", salonId!);
+    };
+  } else {
+    const saleInsert: TablesInsert<"pos_sales"> = { salon_id: salonId, ...cabecera };
+
+    const { data: sale, error: saleError } = await supabase
+      .from("pos_sales")
+      .insert(saleInsert)
+      .select("id")
+      .single();
+
+    if (saleError !== null || sale === null) {
+      return { ok: false, error: saleError?.message ?? "No se pudo crear la venta" };
+    }
+
+    saleId = sale.id;
+    // La venta nació en este cobro: si falla, se borra entera (cascade).
+    rollback = async () => {
+      await supabase.from("pos_sales").delete().eq("id", saleId).eq("salon_id", salonId!);
+    };
   }
 
-  const saleId = sale.id;
-
-  // A partir de aquí, cualquier fallo compensa borrando la venta (cascade).
-  async function rollback(): Promise<void> {
-    await supabase.from("pos_sales").delete().eq("id", saleId).eq("salon_id", salonId!);
+  // Las líneas se reescriben siempre desde el carrito: el cajero puede haber
+  // añadido o quitado conceptos al ticket abierto antes de cobrarlo.
+  if (values.saleId != null) {
+    const { error: limpiarError } = await supabase
+      .from("pos_sale_lines")
+      .delete()
+      .eq("sale_id", saleId)
+      .eq("salon_id", salonId);
+    if (limpiarError !== null) {
+      await rollback();
+      return { ok: false, error: `No se pudieron actualizar las líneas: ${limpiarError.message}` };
+    }
   }
 
   // 4) Líneas del ticket (snapshot de importes por línea). Se usan las líneas

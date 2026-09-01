@@ -148,6 +148,33 @@ interface SaleContext {
   customerId: string | null;
   professionalId: string | null;
   label: string;
+  /**
+   * Ticket ABIERTO que se está terminando de cobrar, si el cobro no empieza de
+   * cero. Viene de "Pasar a caja" en un presupuesto. Al cobrar, el servidor
+   * COMPLETA esa venta en vez de crear otra.
+   */
+  openSaleId?: string | null;
+}
+
+/**
+ * Ticket abierto con el que arranca la caja, ya leído en el servidor.
+ * Los importes viajan en céntimos y se formatean aquí: el carrito trabaja con
+ * texto en euros, y convertir en un solo sitio evita dos redondeos distintos.
+ */
+export interface OpenSaleSeed {
+  id: string;
+  customerId: string | null;
+  professionalId: string | null;
+  label: string;
+  notes: string;
+  lines: {
+    kind: "service" | "product" | "manual";
+    refId: string | null;
+    description: string;
+    quantity: string;
+    unitPriceCents: number;
+    vatRate: string;
+  }[];
 }
 
 interface TpvViewProps {
@@ -169,6 +196,8 @@ interface TpvViewProps {
    * la cita está en las citas abiertas de hoy.
    */
   initialAppointmentId?: string;
+  /** Ticket abierto que se viene a terminar de cobrar (`/tpv?sale=<id>`). */
+  initialOpenSale?: OpenSaleSeed | null;
 }
 
 /**
@@ -184,6 +213,7 @@ export function TpvView({
   loyaltyEnabled,
   issuer,
   initialAppointmentId,
+  initialOpenSale = null,
 }: TpvViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
@@ -214,6 +244,35 @@ export function TpvView({
 
   // "Cobrar" desde el panel de citas abre /tpv?appointment=<id>: en cuanto la
   // lista de citas abiertas de hoy carga, arrancamos esa venta una sola vez.
+  // Ticket abierto que llega por la URL: se vuelca en el carrito UNA vez, al
+  // montar. No depende de ninguna consulta, así que no hace falta esperar a
+  // nada — y por eso va antes que el efecto de la cita.
+  const loadedOpenSaleRef = useRef(false);
+  useEffect(() => {
+    if (loadedOpenSaleRef.current || initialOpenSale === null) return;
+    loadedOpenSaleRef.current = true;
+
+    setContext({
+      appointmentId: null,
+      customerId: initialOpenSale.customerId,
+      professionalId: initialOpenSale.professionalId,
+      label: `${initialOpenSale.label} · ticket pendiente`,
+      openSaleId: initialOpenSale.id,
+    });
+    setNotes(initialOpenSale.notes);
+    setLines(
+      initialOpenSale.lines.map((l, i) => ({
+        localId: `venta-${initialOpenSale.id}-${i}`,
+        kind: l.kind,
+        refId: l.refId,
+        description: l.description,
+        quantity: l.quantity,
+        unitPrice: centsToEuroInput(l.unitPriceCents),
+        vatRate: l.vatRate,
+      })),
+    );
+  }, [initialOpenSale]);
+
   const startedFromParamRef = useRef(false);
   useEffect(() => {
     if (startedFromParamRef.current || initialAppointmentId === undefined) return;
@@ -306,6 +365,7 @@ export function TpvView({
     const scannedCustomerId =
       loyalty.data?.ok === true ? loyalty.data.data.customer.id : null;
     const input: SaleInput = {
+      saleId: context?.openSaleId ?? null,
       appointmentId: context?.appointmentId ?? null,
       customerId: context?.customerId ?? null,
       professionalId: context?.professionalId ?? null,

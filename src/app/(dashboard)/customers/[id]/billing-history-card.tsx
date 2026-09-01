@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { ExternalLink, Receipt } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, Receipt, Wallet } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -29,6 +31,8 @@ type MergedRow = {
   source: "kairos" | "historico";
   docUrl: string | null;
   unpaid: boolean;
+  /** Ticket abierto: hay dinero que cobrar, no un documento que abrir. */
+  pendingSaleId: string | null;
 };
 
 export function BillingHistoryCard({
@@ -46,7 +50,10 @@ export function BillingHistoryCard({
       totalCents: r.totalCents,
       source: "kairos",
       docUrl: r.docUrl,
-      unpaid: false,
+      // Un ticket abierto es lo mismo que una factura del histórico sin pagar:
+      // trabajo hecho y dinero sin cobrar. Se marca igual.
+      unpaid: r.pendingSaleId !== null,
+      pendingSaleId: r.pendingSaleId,
     }));
     const historico: MergedRow[] = (historyQuery.data ?? []).map((f) => ({
       key: `h-${f.id}`,
@@ -56,6 +63,7 @@ export function BillingHistoryCard({
       source: "historico",
       docUrl: null,
       unpaid: !f.paid,
+      pendingSaleId: null,
     }));
     return [...kairos, ...historico].sort((a, b) => b.date.localeCompare(a.date));
   }, [kairosQuery.data, historyQuery.data]);
@@ -127,8 +135,8 @@ export function BillingHistoryCard({
                     <tr key={r.key} className="border-b last:border-0">
                       <td className="py-2 pr-3 tabular-nums">{formatDate(r.date)}</td>
                       <td className="py-2 pr-3 tabular-nums text-muted-foreground">
-                        {r.fullNumber}
-                        {r.unpaid ? (
+                        {r.pendingSaleId !== null ? "Sin cobrar" : r.fullNumber}
+                        {r.unpaid && r.pendingSaleId === null ? (
                           <span className="ml-1.5 text-xs text-amber-600 dark:text-amber-400">
                             (pendiente)
                           </span>
@@ -143,7 +151,17 @@ export function BillingHistoryCard({
                         {formatMoney(r.totalCents, "EUR")}
                       </td>
                       <td className="py-2 text-right">
-                        {r.docUrl ? (
+                        {r.pendingSaleId !== null ? (
+                          // Al TPV con este ticket cargado. La caja lo TERMINA
+                          // en vez de crear otra venta, así que la línea del
+                          // presupuesto que cuelga de él no se queda huérfana.
+                          <Button asChild size="sm" variant="default">
+                            <Link href={`/tpv?sale=${r.pendingSaleId}`}>
+                              <Wallet className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                              Cobrar
+                            </Link>
+                          </Button>
+                        ) : r.docUrl ? (
                           <a
                             href={r.docUrl}
                             target="_blank"
