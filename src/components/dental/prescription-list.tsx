@@ -8,6 +8,7 @@ import {
   FilePenLine,
   Loader2,
   Pill,
+  Printer,
   ShieldOff,
   Stamp,
   Trash2,
@@ -171,6 +172,21 @@ export function PrescriptionList({
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {/* Solo una receta EMITIDA se imprime: un borrador no es una
+                    receta, y darle un papel al paciente antes de emitirla haría
+                    creer que ya está hecha. Una revocada tampoco se reimprime. */}
+                {prescription.status === "issued" && (
+                  <Button asChild type="button" size="sm" variant="outline" className="gap-1.5">
+                    <a
+                      href={`/api/recetas/${prescription.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                      Imprimir
+                    </a>
+                  </Button>
+                )}
                 {canIssuePrescription(prescription.status) && (
                   <Button
                     type="button"
