@@ -2,13 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getActiveSalonId } from "@/lib/salon";
+import { getActiveMembership, getActiveSalonId } from "@/lib/salon";
 import { createClient } from "@/lib/supabase/server";
 import type { AppointmentStatus } from "@/types/database";
 
 export type ActionResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string };
+  /**
+   * `code` distingue los fallos que la pantalla trata de forma especial, sin
+   * tener que adivinarlo del texto del mensaje —que cambia con cualquier
+   * retoque de redacción y dejaría la interfaz rota en silencio.
+   *
+   * `"overlap"`: el hueco está ocupado. Quien tenga permiso puede reintentar
+   * marcando el solape; a quien no, se le dice que elija otra hora.
+   */
+  | { ok: false; error: string; code?: "overlap" };
 
 export interface RescheduleAppointmentInput {
   appointmentId: string;
@@ -34,6 +42,14 @@ export interface CreateAppointmentInput {
     email?: string;
     notes?: string;
   };
+  /**
+   * Crear la cita AUNQUE pise a otra del mismo profesional.
+   *
+   * Solo lo acepta el servidor si quien lo pide tiene
+   * `can_overlap_appointments`. Marcarlo deja constancia en la fila: el solape
+   * es un acto explícito, no un hueco en la validación.
+   */
+  allowOverlap?: boolean;
 }
 
 /**
@@ -134,8 +150,17 @@ export async function deleteAppointment(
 export async function createAppointment(
   input: CreateAppointmentInput,
 ): Promise<ActionResult<{ id: string }>> {
-  const salonId = await getActiveSalonId();
-  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+  const membership = await getActiveMembership();
+  if (membership === null) return { ok: false, error: "No tienes un salón asignado" };
+  const salonId = membership.salonId;
+
+  // Se pide solapar sin tener el permiso: se para aquí, con un mensaje que se
+  // entiende. El trigger de la base lo impediría igual, pero con un error de
+  // Postgres — esto es para la persona, aquello es la garantía.
+  const allowOverlap = input.allowOverlap === true;
+  if (allowOverlap && !membership.canOverlapAppointments) {
+    return { ok: false, error: "No tienes permiso para solapar citas." };
+  }
 
   const supabase = createClient();
 
@@ -218,13 +243,22 @@ export async function createAppointment(
       price_cents: service.price_cents,
       currency: service.currency,
       notes: input.customer.notes?.trim() || null,
+      allow_overlap: allowOverlap,
     })
     .select("id")
     .single();
 
   if (apptErr !== null) {
     if (apptErr.code === "23P01") {
-      return { ok: false, error: "Ese horario ya está ocupado. Elige otro." };
+      // A quien puede solapar se le dice que existe la salida; a quien no, no
+      // se le enseña una puerta que no puede abrir.
+      return {
+        ok: false,
+        code: "overlap",
+        error: membership.canOverlapAppointments
+          ? "Ese horario ya está ocupado."
+          : "Ese horario ya está ocupado. Elige otro.",
+      };
     }
     return { ok: false, error: apptErr.message };
   }

@@ -30,6 +30,14 @@ export interface ActiveSalon {
 export interface ActiveMembership {
   salonId: string;
   role: MemberRole;
+  /**
+   * Autorización individual para crear citas que pisan a otras.
+   *
+   * No va por rol a propósito: en una clínica hay varias personas con el mismo
+   * rol y esto se le concede a una en concreto (ver la migración
+   * `20260901100000_appointment_overlap.sql`).
+   */
+  canOverlapAppointments: boolean;
 }
 
 /**
@@ -78,7 +86,7 @@ export const getActiveMembership = cache(
     const supabase = createClient();
     const { data, error } = await supabase
       .from("salon_members")
-      .select("salon_id, role")
+      .select("salon_id, role, can_overlap_appointments")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
       .limit(1)
@@ -92,7 +100,11 @@ export const getActiveMembership = cache(
       return null;
     }
 
-    return { salonId: data.salon_id, role: data.role };
+    return {
+      salonId: data.salon_id,
+      role: data.role,
+      canOverlapAppointments: data.can_overlap_appointments,
+    };
   },
 );
 

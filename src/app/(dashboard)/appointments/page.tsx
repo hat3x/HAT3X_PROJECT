@@ -41,6 +41,7 @@ export default async function AppointmentsPage(): Promise<React.ReactElement> {
       timezone={salon.timezone}
       sector={salon.sector}
       role={membership?.role ?? null}
+      canOverlapAppointments={membership?.canOverlapAppointments ?? false}
     />
   );
 }

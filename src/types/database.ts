@@ -469,6 +469,10 @@ export interface Database {
           salon_id: string;
           user_id: string;
           role: MemberRole;
+          // Autoriza a ESTA persona a crear citas solapadas. Ver migración
+          // 20260901100000_appointment_overlap.sql: va por persona y no por
+          // rol porque es una excepción concreta, no una categoría.
+          can_overlap_appointments: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -477,6 +481,7 @@ export interface Database {
           salon_id: string;
           user_id: string;
           role?: MemberRole;
+          can_overlap_appointments?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -485,6 +490,7 @@ export interface Database {
           salon_id?: string;
           user_id?: string;
           role?: MemberRole;
+          can_overlap_appointments?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -1573,6 +1579,12 @@ export interface Database {
           price_cents: number;
           currency: string;
           notes: string | null;
+          /**
+           * Esta cita se creó sabiendo que pisa a otra. Deja fuera del
+           * constraint de exclusión SOLO a esta fila; las demás siguen sin
+           * poder solaparse. Requiere `can_overlap_appointments`.
+           */
+          allow_overlap: boolean;
           cancelled_reason: string | null;
           created_by: string | null;
           created_at: string;
@@ -1592,6 +1604,7 @@ export interface Database {
           price_cents?: number;
           currency?: string;
           notes?: string | null;
+          allow_overlap?: boolean;
           cancelled_reason?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -1610,6 +1623,7 @@ export interface Database {
           price_cents?: number;
           currency?: string;
           notes?: string | null;
+          allow_overlap?: boolean;
           cancelled_reason?: string | null;
           created_by?: string | null;
           created_at?: string;

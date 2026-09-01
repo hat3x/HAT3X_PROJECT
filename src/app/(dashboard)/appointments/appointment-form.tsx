@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search, X } from "lucide-react";
+import { AlertTriangle, Loader2, Search, X } from "lucide-react";
 
 import { DaySlots, DaySlotsSkeleton } from "@/components/booking/day-slots";
 import { buildManualSlot } from "@/lib/booking/manual-slot";
@@ -33,6 +33,13 @@ interface AppointmentFormProps {
   salonId: string;
   salonSlug: string;
   timezone: string;
+  /**
+   * Si esta persona puede crear citas encima de otras. Lo decide el servidor
+   * (`salon_members.can_overlap_appointments`); aquí solo se usa para ofrecer o
+   * no la salida. Aunque llegara `true` de forma indebida, el servidor y el
+   * trigger de la base lo seguirían rechazando.
+   */
+  canOverlapAppointments?: boolean;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -50,6 +57,7 @@ export function AppointmentForm({
   salonId,
   salonSlug,
   timezone,
+  canOverlapAppointments = false,
   onSuccess,
   onCancel,
 }: AppointmentFormProps): React.ReactElement {
@@ -70,6 +78,8 @@ export function AppointmentForm({
   const [manualDuration, setManualDuration] = useState("");
   const [manualError, setManualError] = useState<string | null>(null);
   const [contact, setContact] = useState<ContactState>(EMPTY_CONTACT);
+  /** Último hueco que se intentó reservar, para poder reintentarlo solapando. */
+  const [ultimoHueco, setUltimoHueco] = useState<PublicSlot | null>(null);
 
   // Buscador de cliente existente (por nombre o teléfono). Si se selecciona uno,
   // la cita se crea sobre ese cliente; si no, se crea/reutiliza por los datos manuales.
@@ -142,6 +152,34 @@ export function AppointmentForm({
   // lugar de dejar el botón apagado sin decir por qué.
   const canSubmit = hayCliente && (manualMode ? manualTime !== "" : Boolean(selectedSlot));
 
+  /**
+   * Lanza el alta. `allowOverlap` solo viaja cuando la persona ha confirmado
+   * expresamente que quiere pisar otra cita: nunca se manda por defecto.
+   */
+  function crearCita(elegido: PublicSlot, allowOverlap: boolean): void {
+    createMutation.mutate(
+      {
+        serviceId,
+        professionalId: elegido.professionalId,
+        startsAt: elegido.startsAt,
+        endsAt: elegido.endsAt,
+        customerId: selectedCustomer?.id,
+        customer: {
+          fullName: contact.fullName,
+          phone: contact.phone,
+          email: contact.email || undefined,
+          notes: contact.notes || undefined,
+        },
+        ...(allowOverlap ? { allowOverlap: true } : {}),
+      },
+      {
+        onSuccess: (result) => {
+          if (result.ok) onSuccess();
+        },
+      },
+    );
+  }
+
   function handleSubmit(e: React.FormEvent): void {
     e.preventDefault();
     if (!canSubmit) return;
@@ -164,32 +202,25 @@ export function AppointmentForm({
       slot = r.slot;
     }
     if (slot === null) return;
-    const elegido = slot;
 
-    createMutation.mutate(
-      {
-        serviceId,
-        professionalId: elegido.professionalId,
-        startsAt: elegido.startsAt,
-        endsAt: elegido.endsAt,
-        customerId: selectedCustomer?.id,
-        customer: {
-          fullName: contact.fullName,
-          phone: contact.phone,
-          email: contact.email || undefined,
-          notes: contact.notes || undefined,
-        },
-      },
-      {
-        onSuccess: (result) => {
-          if (result.ok) onSuccess();
-        },
-      },
-    );
+    // Se guarda el hueco resuelto para poder reintentarlo si resulta estar
+    // ocupado y la persona decide solaparlo: sin esto habría que recalcularlo,
+    // y en modo manual eso significa volver a validar la hora escrita.
+    setUltimoHueco(slot);
+    crearCita(slot, false);
   }
 
   const mutationError =
     createMutation.data && !createMutation.data.ok ? createMutation.data.error : null;
+
+  // El hueco está ocupado Y esta persona puede solaparlo: se le ofrece, con el
+  // aviso delante. Si no puede, solo ve el error normal y elige otra hora.
+  const ofrecerSolape =
+    canOverlapAppointments &&
+    createMutation.data !== undefined &&
+    !createMutation.data.ok &&
+    createMutation.data.code === "overlap" &&
+    ultimoHueco !== null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -459,13 +490,62 @@ export function AppointmentForm({
         </div>
       </div>
 
-      {(mutationError ?? createMutation.isError) && (
-        <p className="text-sm text-destructive">
-          {mutationError ??
-            (createMutation.error instanceof Error
-              ? createMutation.error.message
-              : "Error al crear la cita")}
-        </p>
+      {/* Aviso de solape: grande y en rojo a propósito. Pisar una cita no es un
+          error que se corrige, es una decisión que se toma — y tiene que costar
+          verla, no pasarla por alto. Solo aparece a quien puede hacerlo. */}
+      {ofrecerSolape && ultimoHueco !== null ? (
+        <div
+          role="alert"
+          className="space-y-3 rounded-lg border-2 border-destructive bg-destructive/10 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle
+              className="mt-0.5 h-6 w-6 shrink-0 text-destructive"
+              aria-hidden="true"
+            />
+            <div className="space-y-1">
+              <p className="text-base font-bold text-destructive">
+                Vas a solapar esta cita con otra
+              </p>
+              <p className="text-sm text-destructive/90">
+                A las {formatSlotTime(ultimoHueco.startsAt, timezone)} ya hay otra cita con este
+                profesional. Si continúas, las dos quedarán a la misma hora.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setUltimoHueco(null);
+                createMutation.reset();
+              }}
+            >
+              Elegir otra hora
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={createMutation.isPending}
+              onClick={() => crearCita(ultimoHueco, true)}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+              )}
+              Solapar de todas formas
+            </Button>
+          </div>
+        </div>
+      ) : (
+        (mutationError ?? createMutation.isError) && (
+          <p className="text-sm text-destructive">
+            {mutationError ??
+              (createMutation.error instanceof Error
+                ? createMutation.error.message
+                : "Error al crear la cita")}
+          </p>
+        )
       )}
 
       <div className="flex justify-end gap-3">

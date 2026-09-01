@@ -51,6 +51,8 @@ interface AppointmentsViewProps {
   timezone: string;
   sector: SalonSector;
   role: MemberRole | null;
+  /** Si esta persona puede crear citas encima de otras (permiso individual). */
+  canOverlapAppointments?: boolean;
 }
 
 function addDays(date: string, delta: number): string {
@@ -97,6 +99,7 @@ export function AppointmentsView({
   timezone,
   sector,
   role,
+  canOverlapAppointments = false,
 }: AppointmentsViewProps): React.ReactElement {
   const today = localDateInZone(timezone);
 
@@ -509,6 +512,7 @@ export function AppointmentsView({
               salonId={salonId}
               salonSlug={salonSlug}
               timezone={timezone}
+              canOverlapAppointments={canOverlapAppointments}
               onSuccess={() => setCreateOpen(false)}
               onCancel={() => setCreateOpen(false)}
             />
