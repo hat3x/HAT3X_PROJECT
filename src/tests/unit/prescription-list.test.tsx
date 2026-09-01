@@ -55,6 +55,8 @@ function prescription(overrides: Partial<Prescription> & { id: string }): Prescr
     salon_id: "salon-1",
     customer_id: "customer-1",
     prescriber_id: null,
+    prescriber_license: null,
+    prescriber_authority: null,
     prescriber_name: "Dra. Ana Ruiz",
     diagnosis: "Pulpitis irreversible 26",
     notes: null,
