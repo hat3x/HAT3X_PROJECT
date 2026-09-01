@@ -34,10 +34,10 @@ Los cuatro proyectos de cliente con repositorio propio se clonan aparte — ver
 |---|---|---|
 | `node_modules/`, `dist/`, `.next/` | Se regeneran | `npm install` |
 | Los `.env` | Nunca en claro en el repositorio | `secretos.bat restaurar` |
-| `apps/kaizen/assets/skins/` y `personal.skin.ts` | El arte de la piel personal **no puede** entrar en el repositorio ni en el paquete público | `D:\BACKUP-HAT3X\<fecha>\kaizen_piel-personal.tar.gz` |
-| `apps/kaizen/capturas/` | Capturas generadas | `node scripts/captura.mjs` |
 
-Todo lo demás —incluidas las specs de `.superpowers/sdd/`— sí viene en el clone.
+Todo lo demás sí viene en el clone: las specs de `.superpowers/sdd/`, las
+capturas, y la piel personal de kaizen con su arte. Este repositorio es la copia
+de seguridad del proyecto — si algo no está aquí, no está en ningún sitio.
 
 ## El push es automático
 
