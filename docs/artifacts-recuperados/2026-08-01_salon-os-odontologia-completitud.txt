@@ -1,0 +1,195 @@
+Salón OS · Odontología — Análisis de completitud 
+ Salón OS · Vertical Odontología
+ Qué tiene y qué le falta para ser el software dental más completo
+ Mapa de todo lo que ofrece una herramienta de gestión de clínica dental de referencia, contrastado con lo que Salón OS ya hace hoy. Sirve para decidir juntos qué construir a continuación.
+ Preparado para HAT3X · Base: tenant Biodental migrado (1.155 pacientes · 5.252 hallazgos · 1.996 presupuestos)
+ 19
+ Ya lo tiene
+ núcleo clínico sólido
+ 13
+ Parcial
+ existe, falta pulir/ampliar
+ 15
+ Falta
+ oportunidades de diferenciación
+ Completitud estimada frente a un PMS dental líder ~56% 
+ Tiene · cuenta completa 
+ Parcial · media cuenta 
+ Falta 
+ Clínico
+ 8 tiene · 3 parcial · 3 falta 
+ Ficha e historia clínica
+ Datos, alergias, medicación, contraindicaciones, alertas médicas.
+ Tiene — 
+ Odontograma avanzado
+ FDI/ISO, hallazgos por diente y superficie, colores, evolutivo "boca en fecha X".
+ Tiene — 
+ Periodontograma
+ Sondaje 6 sitios, CAL, índices %BoP/PD, estadificación.
+ Tiene — 
+ Planes de tratamiento y presupuestos
+ Fases, líneas, máquina de estados, enlace al odontograma.
+ Tiene — 
+ Consentimientos informados
+ Plantillas por tratamiento, firma, inmutable, RGPD.
+ Tiene — 
+ Imágenes y radiografías
+ Almacenamiento privado por paciente con URLs firmadas.
+ Tiene — 
+ Odontopediatría
+ Dentición temporal en el odontograma.
+ Tiene — 
+ Estadificación periodontal
+ Estadio automático a partir del CAL.
+ Tiene — 
+ Notas de evolución (SOAP)
+ Existe base de notas de visita; falta UI clínica rica y plantillas.
+ Parcial Media 
+ Seguimiento de ortodoncia
+ Guarda imágenes; falta línea temporal de evolución y cefalometría.
+ Parcial Media 
+ Plantillas clínicas
+ Consentimientos sí; faltan plantillas de tratamiento y de notas reutilizables.
+ Parcial Baja 
+ Recetas / prescripciones
+ Emisión de receta privada, historial de prescripciones por paciente.
+ Falta Alta 
+ Órdenes de laboratorio
+ Encargos de prótesis, estado y comunicación con el laboratorio.
+ Falta Media 
+ Visor DICOM / escáner intraoral
+ Guarda archivos; falta visor de radiografía/CBCT y STL integrado.
+ Falta Media 
+ Agenda y operativa
+ 4 tiene · 2 parcial · 2 falta 
+ Agenda de citas
+ Reservas, duración por fases (tiempo libre durante exposición), multi-profesional.
+ Tiene — 
+ Recepcionista IA de voz
+ "Sara" atiende llamadas, agenda, deriva ortodoncia (add-on Retell + n8n).
+ Tiene — 
+ Recordatorios WhatsApp/SMS
+ Confirmaciones y avisos automáticos de cita.
+ Tiene — 
+ Multi-sede
+ Varias clínicas aisladas por tenant, sedes por salón.
+ Tiene — 
+ Reserva online (paciente)
+ Existe API pública de reserva; falta el widget web pulido embebible.
+ Parcial Media 
+ Gestión de gabinetes/sillones
+ Agenda por profesional; falta el recurso "box/sillón" como dimensión.
+ Parcial Baja 
+ Recordatorios de revisión (recall)
+ Campañas de higiene/revisión periódica automáticas — clave para retención.
+ Falta Alta 
+ Ausencias y lista de espera
+ Control de no-shows y reasignación automática de huecos liberados.
+ Falta Media 
+ Facturación y económico
+ 2 tiene · 2 parcial · 5 falta 
+ TPV, cobros y tickets
+ Caja, cobros, arqueo, tickets.
+ Tiene — 
+ Facturación
+ Libro de facturas y emisión (Verifactu retirado temporalmente).
+ Tiene — 
+ Presupuesto → factura
+ Planes con importes sí; falta la traza directa presupuesto-factura en el TPV.
+ Parcial Media 
+ Bonos / membresías / cuotas
+ Hay fidelización; faltan cuotas de mantenimiento dental y bonos.
+ Parcial Baja 
+ Verifactu / Facturae
+ Reimplementar cuando la ley lo exija (retirado a propósito).
+ Falta Alta 
+ Mutuas y seguros
+ Compañías, autorizaciones, baremos y facturación a aseguradora.
+ Falta Alta 
+ Financiación / planes de pago
+ Fraccionar tratamientos en cuotas con seguimiento de cobros.
+ Falta Media 
+ Comisiones por profesional
+ Liquidación de honorarios por doctor sobre lo realizado/cobrado.
+ Falta Media 
+ Exportación contable
+ Asientos y export a gestoría/contabilidad.
+ Falta Baja 
+ Inventario y compras
+ 1 tiene · 0 parcial · 3 falta 
+ Catálogo de productos
+ Existe la sección de productos.
+ Tiene — 
+ Control de stock de material
+ Conteo, mínimos, alertas de reposición, caducidades. Solicitado por ti. 
+ Falta Alta 
+ Proveedores y pedidos
+ Compras, entradas de mercancía, coste por material.
+ Falta Media 
+ Trazabilidad de lotes
+ Lote y caducidad ligados al paciente (implantes, biomateriales) — exigible legalmente.
+ Falta Media 
+ Comunicación y paciente
+ 1 tiene · 2 parcial · 2 falta 
+ Apps de cliente y de personal
+ PWA de paciente (fidelización) y de staff.
+ Tiene — 
+ Portal del paciente
+ Ver su plan, firmar consentimientos online, descargar documentos y radiografías.
+ Parcial Media 
+ Firma en tableta
+ Consentimientos sí; falta captura de firma manuscrita en tablet en consulta.
+ Parcial Media 
+ Marketing / CRM
+ Oportunidades, campañas, seguimiento de leads y reactivación de pacientes.
+ Falta Media 
+ Encuestas de satisfacción
+ NPS/reseñas tras la visita, reputación online.
+ Falta Baja 
+ Gestión, BI y cumplimiento
+ 3 tiene · 4 parcial · 0 falta 
+ Panel y KPIs
+ Resumen del día, citas, ocupación, altas.
+ Tiene — 
+ Personal y roles
+ Owner / manager / staff con permisos y RLS.
+ Tiene — 
+ Copias de seguridad
+ Respaldo gestionado (Supabase) y aislamiento por tenant.
+ Tiene — 
+ Analítica avanzada
+ Producción por doctor, tasa de aceptación de presupuestos, ratio de ausencias.
+ Parcial Media 
+ Control horario / turnos
+ Horarios sí; falta fichaje y turnos del equipo.
+ Parcial Baja 
+ Herramientas LOPD/RGPD
+ RLS y borrado sí; faltan export de datos del paciente y derecho de supresión guiado.
+ Parcial Media 
+ Auditoría / trazabilidad
+ Inmutabilidad en firmas; falta log de auditoría transversal consultable.
+ Parcial Baja 
+ Recomendación — por dónde empezar
+ Ordenado por impacto para una clínica como Biodental frente al esfuerzo de construirlo. Las cuatro primeras diferencian mucho y cuestan poco aprovechando lo que ya hay.
+ 01 Control de stock de material
+ Lo pediste; reutiliza "Productos". Mínimos, caducidad, lotes.
+ esfuerzo medio 
+ 02 Recordatorios de revisión (recall)
+ Retención pura; se apoya en WhatsApp y en Sara, ya existentes.
+ esfuerzo bajo 
+ 03 Recetas / prescripciones
+ Módulo clínico esencial que hoy falta por completo.
+ esfuerzo medio 
+ 04 Mutuas y seguros
+ Muchas clínicas trabajan con aseguradoras; hoy es un "no" comercial.
+ esfuerzo medio-alto 
+ 05 Presupuesto → factura + comisiones
+ Cierra el círculo económico; datos ya migrados de Biodental.
+ esfuerzo medio 
+ 06 Portal del paciente
+ Ver plan, firmar y descargar radiografías online.
+ esfuerzo medio 
+ 07 Verifactu / Facturae
+ Reactivar cuando la normativa obligue.
+ esfuerzo medio 
+ Los porcentajes son una estimación de trabajo, no una nota. Salón OS ya tiene un núcleo clínico (odontograma, periodontograma, planes, expediente) que muchos PMS del mercado no igualan; las carencias se concentran en económico avanzado , inventario y automatización de comunicación . Ninguna capacidad pendiente es bloqueante para operar.

@@ -1,0 +1,505 @@
+<!doctype html><html><head><!-- frame-runtime --><base href="/_f/1788112746-2b49/"><script>window.__FRAME_PREAMBLE={"v":1,"capabilities":{"artifact":"artifact.BizKCZHg.js","assets":"assets.8Gk803W0.js","comments":"comments.vw5vQdGA.js","db":"db.h-3sndFg.js","downloads":"downloads.C3GSvEDP.js","embed":"embed.CxGAyc-v.js","mcp":"mcp.Bvma3qD7.js","network":"network.B5UA9Su4.js","notifications":"notifications.ssU4jy7G.js","permissions":"permissions.BNySkLV5.js","room":"room.BMMoe2BY.js","sample":"sample.BW2Uysoh.js","self":"artifact.BizKCZHg.js","user":"user.BpKav-Rf.js"},"transforms":"_transforms.DSB5x63f.js","comments":"_comments.BcSQU-9b.js","translate":"_translate.5HCW4BJh.js"}</script><script>(function(){"use strict";var te=["light","dark","system"],re=/^[A-Za-z0-9_-]{1,64}$/,$=/^[a-zA-Z_:][a-zA-Z0-9_:.-]{0,127}$/,ne=new Set(["class","hidden","value","checked","style","title","alt","placeholder","lang","dir","role","tabindex","disabled","readonly","contenteditable","open","colspan","rowspan"]);function oe(e){const t=e.toLowerCase();return t.startsWith("data-")||t.startsWith("aria-")||ne.has(t)}var Be="http://www.w3.org/1999/xhtml",se="http://www.w3.org/2000/svg",ae=new Set(["script","style","iframe","noscript","noframes","noembed","xmp","plaintext","template","title","textarea","object","embed"]),ie=new Set(["script","style"]);function ce(e){const t=e.localName.toLowerCase();return e.namespaceURI==="http://www.w3.org/1999/xhtml"?!ae.has(t):e.namespaceURI===se?!ie.has(t):!1}function M(e,t){return e===t||(e===160||e===32)&&(t===160||t===32)}function le(e,t){const r=e.length,n=t.length;let s=0;for(;s<r&&s<n&&M(e.charCodeAt(s),t.charCodeAt(s));)s++;let o=0;for(;o<r-s&&o<n-s&&M(e.charCodeAt(r-1-o),t.charCodeAt(n-1-o));)o++;return{p:s,s:o}}function ue(e,t){const r=e.firstChild;if(e.childNodes.length!==1||r===null||r.nodeType!==Node.TEXT_NODE){e.textContent=t;return}const n=r.data,s=n.length,o=t.length,{p:i,s:c}=le(n,t);i===s&&c===0&&s===o||r.replaceData(i,s-i-c,t.slice(i,o-c));const h=r.data,p=e.ownerDocument.getSelection?.()??null,w=p!==null&&p.rangeCount>0&&(p.anchorNode===r||p.focusNode===r)?{anchor:p.anchorNode,anchorOffset:p.anchorOffset,focus:p.focusNode,focusOffset:p.focusOffset}:null;let m=-1,g=-1;for(let f=0;f<h.length&&f<t.length;f++){const v=h.charCodeAt(f),b=t.charCodeAt(f);v!==b&&M(v,b)&&(m<0&&(m=f),g=f)}const a=m>=0;if(a&&r.replaceData(m,g-m+1,t.slice(m,g+1)),a&&w!==null&&w.anchor!==null&&w.focus!==null)try{p.setBaseAndExtent(w.anchor,w.anchorOffset,w.focus,w.focusOffset)}catch{}}var fe=new Set(["html","head","body","frameset"]);function de(e){return e.namespaceURI==="http://www.w3.org/1999/xhtml"&&fe.has(e.localName)}function pe(e){if(e===null||typeof e!="object")return!1;const t=e;if(typeof t.target!="string"||!re.test(t.target)||t.text!==void 0&&typeof t.text!="string")return!1;if(t.attrsSet!==void 0){if(t.attrsSet===null||typeof t.attrsSet!="object")return!1;for(const[r,n]of Object.entries(t.attrsSet))if(!$.test(r)||typeof n!="string")return!1}if(t.attrsRemoved!==void 0){if(!Array.isArray(t.attrsRemoved))return!1;for(const r of t.attrsRemoved)if(typeof r!="string"||!$.test(r))return!1}return!0}function me(e,t){if(e===null||typeof e!="object")return!1;const{seq:r,elements:n}=e;if(typeof r!="number"||!Number.isSafeInteger(r)||!Array.isArray(n)||n.length===0||n.length>64)return!1;for(let s=0;s<n.length;s++)if(!t(n[s]))return!1;return!0}function he(e){return e===null||typeof e!="object"?!1:me(e.__frame_patch,pe)}function _e(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_init;return t!==null&&typeof t=="object"}function ve(e){return e!==null&&typeof e=="object"&&e.__frame_size_poke===!0}function ye(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_theme;if(t===null||typeof t!="object")return!1;const r=t.theme;return typeof r=="string"&&te.includes(r)}var A=/^[\w.-]+\.js$/;function we(e,t,r){return r?"inert":typeof t=="string"&&A.test(t)?e?[t]:"inert":e?"inert":"framed"}function ge(){return{post(e,t){parent.postMessage(e,t)},on(e){const t=r=>{r.source===parent&&e(r.data,r.origin,r.isTrusted)};return addEventListener("message",t),()=>removeEventListener("message",t)}}}function be(){return{post:()=>{},on:()=>()=>{}}}var j="__frame_scroll",Ee=150,Ae=310,Se=160,Te=3e4;function ke(){let e=0,t=!1,r=!1,n=!1,s=0,o=null;const i=l=>{try{sessionStorage.setItem(j,JSON.stringify({y:l}))}catch{}},c=()=>{if(clearTimeout(e),o===null)return;const l=o;o=null,i(l)},h=()=>{if(t){t=!1;return}r=!0,o=scrollY,clearTimeout(e),e=setTimeout(c,Ee)};try{addEventListener("scroll",h,{passive:!0}),addEventListener("pagehide",c)}catch{}const p=()=>{let l;try{l=sessionStorage.getItem(j)}catch{return null}if(l===null)return null;let _;try{_=JSON.parse(l)}catch{_=null}const d=_?.y;if(!(typeof d=="number"&&Number.isFinite(d)&&d>=0)){try{sessionStorage.removeItem(j)}catch{}return null}return d};let w=!1;const m=l=>{try{const _=scrollY;scrollTo({top:l,left:0,behavior:"instant"}),s=l,n=!0,clearTimeout(e),o=null,i(l);const d=scrollY;d!==_&&(t=!0),d!==l&&!w&&(w=!0,addEventListener("load",()=>{try{if(scrollY===d){const T=p();m(T!==null?T:s)}}catch{}},{once:!0}))}catch{}},g=()=>{try{return!!location.hash}catch{return!0}};let a=!1;const f=()=>{try{if(a||innerWidth>Ae||innerHeight>Se)return;a=!0;const l=Date.now(),_=()=>{try{removeEventListener("resize",_)}catch{}if(Date.now()-l>Te||r||g())return;const d=p();m(d!==null?d:s)};addEventListener("resize",_)}catch{}};let v=!1,b=!1;return{restore(){if(v||(v=!0,g()))return;const l=p();l!==null&&(m(l),f())},promoted(){if(b||(b=!0,g()))return;const l=p();l!==null?(m(l),f()):n&&m(s)}}}function Re(e,t,r,n){let s=null;try{s=window.trustedTypes?.createPolicy("frame-runtime",{createScriptURL:h=>h})??null}catch{}const o=window.Worker,i=o?.prototype,c=Object.freeze({Worker:o,workerOn:i?.addEventListener,workerPost:i?.postMessage,workerTerminate:i?.terminate,fetch:window.fetch.bind(window),preventDefault:Event.prototype.preventDefault,policy:s,origins:t});r(e).then(h=>h?.bootTopLevel?h.bootTopLevel(c,n):n.settle()).catch(()=>n.settle())}var De="modulepreload",Ie=function(e){return"/"+e},Ue={},Le=function(t,r,n){let s=Promise.resolve();function o(i){const c=new Event("vite:preloadError",{cancelable:!0});if(c.payload=i,window.dispatchEvent(c),!c.defaultPrevented)throw i}return s.then(i=>{for(const c of i||[])c.status==="rejected"&&o(c.reason);return t().catch(o)})},Oe=window===top,q=Object.getOwnPropertyDescriptor(window,"claude"),k=we(Oe,window.__FRAME_PREAMBLE?.topLevel,q?.writable===!1),N=typeof k=="object"&&k[0],y=N?be():ge();(function(){const e=Object.defineProperty,t=globalThis,r=["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel","RTCIceCandidate","RTCSessionDescription","RTCRtpSender","RTCRtpReceiver"];let n=0;for(let s=0;s<r.length;s++){const o=r[s];try{e(t,o,{value:void 0,writable:!1,configurable:!1})}catch{try{delete t[o]}catch{}try{e(t,o,{value:void 0,writable:!1,configurable:!0})}catch{}}typeof t[o]=="function"&&n++}if(n&&k==="framed")try{y.post({__frame_rtc_lockdown_failed:n},"*")}catch{}})();var Pe=1e4,Y=Object.freeze([...window.__FRAME_PREAMBLE?.origins??["https://claude.ai","https://preview.claude.ai"]]);function X(e){for(const t of Y)if(t.endsWith(":*"))try{const r=new URL(e);if(`${r.protocol}//${r.hostname}:*`===t)return!0}catch{}else if(e===t)return!0;return!1}var R=Object.freeze({...window.__FRAME_PREAMBLE?.capabilities}),B=window.__FRAME_PREAMBLE?.transforms,D=window.__FRAME_PREAMBLE?.comments,I=window.__FRAME_PREAMBLE?.translate;function S(e){return Le(()=>import("/_runtime/"+e),void 0)}function G(e,t){return{contract:e.contract,changes:new Set(e.changes??[]),flags:new Set(e.flags??[]),capabilities:e.capabilities??{},capBudgets:e.capBudgets??{},transforms:new Map,shellOrigin:t,mount:x,hooks:O,pipe:()=>({wrap:(r,n)=>(...s)=>{try{return n(...s)}catch(o){return Promise.reject(o)}}})}}var L=null,E=null;function V(e,t,r){try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!1,enumerable:!0})}catch{try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!0,enumerable:!0})}catch{}}}var U=!1,O={editBefore:null,edit:null};function Ce(e,t,r=!1){const n=[];let s;if(r)try{O.editBefore?.(e)}catch{}for(const o of e.elements){const i=document.querySelector(`[data-id="${o.target}"]`);if(!i){s=o.target;break}if([...Object.keys(o.attrsSet??{}),...o.attrsRemoved??[]].some(c=>!oe(c))){s=o.target;break}if(o.text!==void 0&&(!ce(i)||de(i))){s=o.target;break}for(const[c,h]of Object.entries(o.attrsSet??{}))if(!J(i,c)){try{i.setAttribute(c,h)}catch{}Z(i,c,h)}for(const c of o.attrsRemoved??[])J(i,c)||(i.removeAttribute(c),Z(i,c,null));typeof o.text=="string"&&ue(i,o.text),n.push(o.target)}if(r)try{O.edit?.(e.seq,n,s)}catch{}if(s!==void 0){y.post({__frame_patch_miss:{seq:e.seq}},t);return}try{document.dispatchEvent(new CustomEvent("claude:edit",{detail:{seq:e.seq,targets:n}}))}catch{}}function Z(e,t,r){if(!(e instanceof HTMLInputElement))return;const n=t.toLowerCase();n==="checked"?e.checked=r!==null:n==="value"&&e.type!=="file"&&(e.value=r??"")}function J(e,t){const r=t.toLowerCase(),n=e;return r==="data-id"||(r==="value"||r==="checked")&&(n.__artifactSecret===!0||/^(password|hidden|file)$/.test(n.type??"")||/(^|\s)(cc-|one-time-code|current-password|new-password)/i.test(`${e.getAttribute("autocomplete")??""} ${n.autocomplete??""}`))}function Q(e){const t=document.documentElement;e==="light"||e==="dark"?(t.dataset.theme=e,t.style.colorScheme=e,U=!0):U&&(delete t.dataset.theme,t.style.colorScheme="",U=!1)}var P=new Map;function Me(){let e;const t={u:new Promise(r=>{e=r}),r:r=>{t.done=!0,e(r)},done:!1,nulled:!1};return t}function F(){for(const e of P.values())e.done||(e.nulled=!0,e.r(null))}var je=Object.freeze(Object.assign(Object.create(null),{call:Function.prototype.call,apply:Function.prototype.apply,bind:Function.prototype.bind})),x=(e,t)=>{const r=P.get(e);if(!r||r.done){r?.nulled&&E&&y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:e}},E);return}const n=typeof t=="function"?Object.setPrototypeOf(t,je):Object.assign(Object.create(null),t);typeof n.then=="function"&&delete n.then,r.r(Object.freeze(n))};function ee(){const e=q?.value??{};V(window,"claude",e);for(const t of Object.keys(R)){if(e[t]!==void 0){V(e,t,e[t]);continue}P.set(t,Me())}if(e.use===void 0){const t=r=>{if(typeof r!="string"||!Object.hasOwn(R,r))return Promise.resolve(null);const n=P.get(r);return n?n.u:Promise.resolve(e[r]??null)};try{Object.defineProperty(e,"use",{value:t,writable:!0,configurable:!0,enumerable:!1})}catch{}}}if(k==="framed"){const e=B&&A.test(B)?S(B).catch(()=>{}):Promise.resolve(void 0),t=a=>{if(a.type==="auxclick"&&a.button!==1)return;const f=a.target,v=f&&f.closest?f.closest("a[href],area[href]"):null;if(!v)return;const b=v.getAttribute("href");if(!b)return;let l;try{l=new URL(b,document.baseURI)}catch{return}if((l.protocol==="http:"||l.protocol==="https:")&&l.origin!==location.origin){a.preventDefault();const _=(v.getAttribute("target")??"").toLowerCase(),d=a.type==="auxclick"||a.metaKey||a.ctrlKey||a.shiftKey||a.altKey||!["","_self","_top","_parent"].includes(_);y.post({__frame_nav:!0,url:l.href,newTab:d},"*")}};addEventListener("click",t,!0),addEventListener("auxclick",t,!0);const r={},n=a=>{a.isTrusted&&(r.pointer=!0)},s=a=>{a.isTrusted&&(r.click=!0)};addEventListener("pointermove",n,{capture:!0,passive:!0}),addEventListener("click",s,{capture:!0,passive:!0}),e.then(a=>{a?.wireNav&&(a.wireNav(),removeEventListener("click",t,!0),removeEventListener("auxclick",t,!0),removeEventListener("pointermove",n,!0),removeEventListener("click",s,!0),a.wireEngagement?.(r))});let o=null;try{o=ke()}catch{}ee();let i=null,c=null,h=0;const p=y.on((a,f)=>{X(f)&&_e(a)&&(i=a.__frame_init,E=f,p(),clearTimeout(h),c?.())});y.post({__frame_connect:!0},"*");const w=new Promise(a=>{c=a,h=setTimeout(()=>{p(),a()},Pe)}),m=document.readyState==="loading"?new Promise(a=>document.addEventListener("DOMContentLoaded",()=>a(),{once:!0})):Promise.resolve();m.then(()=>{try{o?.restore()}catch{}});const g={cb:null};y.on((a,f)=>{if(X(f)&&ve(a)){try{o?.promoted()}catch{}g.cb?.()}}),w.then(async()=>{if(!i||!E){F();return}Q(i.theme);const a=E;let f=!1,v=!1;y.on((u,z,C)=>{if(z!==a)return;ye(u)&&Q(u.__frame_theme.theme),he(u)&&Ce(u.__frame_patch,a,C);const H=u?.__fc_mode;H&&typeof H=="object"&&!f&&D&&A.test(D)&&(f=!0,S(D).then(K=>K.install?.(a,H.on===!0)).catch(()=>{}));const W=u?.__ft_cmd;W&&typeof W=="object"&&!v&&I&&A.test(I)&&(v=!0,S(I).then(K=>K.install?.(a,W)).catch(()=>{}))});const b=Object.keys(i.capabilities??{}).filter(u=>Object.hasOwn(R,u)).map(u=>[u,R[u]]).filter(u=>typeof u[1]=="string"&&A.test(u[1])),l=await Promise.allSettled(b.map(([,u])=>S(u))),_=await e,d=E;if(_?.buildBoot||y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),_?.buildBoot)try{L=_.buildBoot(i,_.TRANSFORMS??{},{shellOrigin:d,mount:x,hooks:O},u=>y.post({__frame_cap_telemetry:u},d))}catch{y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),L=G(i,d)}else L=G(i,d);const T=u=>y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:u}},d),Ne=L;l.forEach((u,z)=>{const C=b[z][0];if(u.status!=="fulfilled"){T(C);return}try{u.value?.install?.(Ne)}catch{T(C)}}),F(),await m,y.post({__frame_ready:!0},E),e.then(u=>u?.installSizeReporter?.(d,g))})}else N&&(ee(),Re(N,Y,S,{settle:F,mount:x}))})();</script><!-- /frame-runtime --><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Kairos en Biodental</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #FAFBFB;
+    --surface:     #FFFFFF;
+    --ink:         #14201F;
+    --muted:       #5B6B69;
+    --line:        #DDE5E3;
+    --accent:      #0F766E;
+    --accent-soft: #E6F2F0;
+    --pending:     #B45309;
+    --pending-soft:#FDF3E3;
+    --shadow:      0 1px 2px rgba(20, 32, 31, .06), 0 8px 24px -16px rgba(20, 32, 31, .18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0E1615;
+      --surface:     #16211F;
+      --ink:         #E7EFED;
+      --muted:       #9AAEAB;
+      --line:        #263532;
+      --accent:      #5EEAD4;
+      --accent-soft: #12302C;
+      --pending:     #F0B65B;
+      --pending-soft:#2D2213;
+      --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0E1615;
+    --surface:     #16211F;
+    --ink:         #E7EFED;
+    --muted:       #9AAEAB;
+    --line:        #263532;
+    --accent:      #5EEAD4;
+    --accent-soft: #12302C;
+    --pending:     #F0B65B;
+    --pending-soft:#2D2213;
+    --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 4.5rem) clamp(1.1rem, 5vw, 2rem) 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.25rem;
+  }
+
+  .head { display: flex; flex-direction: column; gap: .85rem; }
+
+  .kicker {
+    font-size: .74rem;
+    font-weight: 600;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: Spectral, Georgia, "Times New Roman", serif;
+    font-weight: 600;
+    font-size: clamp(2rem, 6vw, 2.9rem);
+    line-height: 1.12;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .lede { margin: 0; color: var(--muted); font-size: 1.06rem; max-width: 38rem; }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem 1.4rem;
+    padding-top: .5rem;
+    border-top: 1px solid var(--line);
+    margin-top: .35rem;
+    font-size: .84rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  section { display: flex; flex-direction: column; gap: 1.15rem; }
+
+  .sec-head { display: flex; flex-direction: column; gap: .3rem; }
+
+  .state {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    padding: .22rem .6rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .state.is-pending { background: var(--pending-soft); color: var(--pending); }
+
+  h2 {
+    font-family: Spectral, Georgia, serif;
+    font-weight: 600;
+    font-size: 1.5rem;
+    line-height: 1.25;
+    letter-spacing: -.01em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .sec-note { margin: 0; color: var(--muted); font-size: .95rem; }
+
+  .items { display: flex; flex-direction: column; gap: .9rem; }
+
+  .item {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.05rem 1.15rem;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+  }
+
+  .item h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 600;
+    letter-spacing: -.005em;
+  }
+
+  .item p { margin: 0; color: var(--muted); font-size: .95rem; }
+  .item strong { color: var(--ink); font-weight: 600; }
+
+  .where {
+    margin-top: .3rem;
+    font-size: .82rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  blockquote {
+    margin: 0;
+    padding: .1rem 0 .1rem 1.05rem;
+    border-left: 2px solid var(--accent);
+    font-family: Spectral, Georgia, serif;
+    font-size: 1.08rem;
+    color: var(--ink);
+  }
+  blockquote cite {
+    display: block;
+    margin-top: .35rem;
+    font: 500 .82rem "IBM Plex Sans", sans-serif;
+    color: var(--muted);
+    font-style: normal;
+  }
+
+  .callout {
+    background: var(--pending-soft);
+    border: 1px solid var(--pending);
+    border-radius: 10px;
+    padding: 1.15rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+  }
+  .callout h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+  .callout p { margin: 0; font-size: .95rem; }
+  .callout ol {
+    margin: .2rem 0 0;
+    padding-left: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    font-size: .95rem;
+  }
+  .callout code {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: .86em;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .08em .35em;
+  }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 1.1rem;
+    color: var(--muted);
+    font-size: .86rem;
+  }
+  footer p { margin: 0 0 .35rem; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>
+
+<div class="wrap">
+
+  <header class="head">
+    <span class="kicker">Biodental · Informe de cambios</span>
+    <h1>Lo que ha cambiado en Kairos</h1>
+    <p class="lede">
+      Un resumen de lo nuevo y lo corregido en las últimas dos semanas, escrito para leerse
+      del tirón. Todo lo que aparece aquí ya está funcionando en la clínica.
+    </p>
+    <div class="meta">
+      <span>Actualizado <b>30 de agosto de 2026</b></span>
+      <span><b>kairosmanager.app</b></span>
+      <span>Preparado por <b>HAT3X</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <span class="state">Ya disponible</span>
+      <h2>Lo que pediste</h2>
+      <p class="sec-note">Las dos cosas que nos trasladaste, resueltas.</p>
+    </div>
+
+    <blockquote>
+      «Quiero poder dar la cita a la hora que quiera, y modificarla como quiera. Como si
+      hago una revisión de dos minutos.»
+      <cite>Nadia, Biodental</cite>
+    </blockquote>
+
+    <div class="items">
+      <div class="item">
+        <h3>Citas a cualquier hora</h3>
+        <p>
+          Antes la agenda solo ofrecía huecos de cuarto en cuarto de hora. Ahora, al crear
+          una cita, hay un enlace de <strong>poner hora y duración a mano</strong>: puedes
+          citar a las 10:07 si te viene bien.
+        </p>
+        <p>
+          La rejilla de huecos sigue estando y sigue siendo lo primero que ves, porque para
+          el día normal es más rápida. El modo manual está para cuando no encaja.
+        </p>
+        <p class="where">Agenda › Nueva cita</p>
+      </div>
+
+      <div class="item">
+        <h3>La duración la decides tú</h3>
+        <p>
+          Una revisión de dos minutos ocupa dos minutos. Antes no: aunque pusieras esa
+          duración, la agenda bloqueaba el tiempo completo del servicio —media hora— y
+          rechazaba la cita siguiente por solaparse.
+        </p>
+        <p>
+          Lo medimos contra la clínica antes y después: una cita de 2 minutos generaba un
+          bloqueo de 30. <strong>Ahora bloquea 2, y la cita de tres minutos después
+          entra.</strong> Las citas de duración normal se comportan exactamente igual que
+          siempre.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="state">Ya disponible</span>
+      <h2>Horarios: lo que se rompía y ya no</h2>
+      <p class="sec-note">
+        Tres cosas del horario que fallaban en silencio, es decir, sin avisar de nada.
+      </p>
+    </div>
+
+    <div class="items">
+      <div class="item">
+        <h3>Sara ya no da citas con la clínica cerrada</h3>
+        <p>
+          Nos avisaste de que había dado citas un lunes por la tarde teniendo puesto de 10
+          a 14. Era cierto. El fallo estaba en que, si la consulta del horario fallaba, el
+          sistema seguía adelante como si la clínica no tuviera horario configurado — y
+          entonces daba por bueno cualquier hueco del día.
+        </p>
+        <p>
+          Ahora, ante la duda, <strong>no ofrece nada</strong>. Un «no puedo comprobarlo
+          ahora» se resuelve; una cita a puerta cerrada, no.
+        </p>
+      </div>
+
+      <div class="item">
+        <h3>Abrir un día suelto sin abrir todos los martes</h3>
+        <p>
+          Si Nicolás pasa consulta un martes concreto por la tarde, ya no hace falta meter
+          «martes tarde» en el horario semanal y abrir así todos los martes del año.
+        </p>
+        <p>
+          Hay una sección de <strong>Días sueltos</strong> donde se añade un turno extra
+          para una fecha, o se cierra un día por vacaciones o festivo. El turno extra
+          <strong>se suma</strong> al horario de siempre: añadir una tarde no borra la
+          mañana.
+        </p>
+        <p class="where">Ajustes › Horarios › Días sueltos</p>
+      </div>
+
+      <div class="item">
+        <h3>El «horario especial» ahora avisa de lo que hace</h3>
+        <p>
+          Ese ajuste, en la ficha de cada profesional, <strong>sustituye el día
+          entero</strong>. Si le pones a alguien un horario especial de 17:00 a 20:00 para
+          un día, ese día deja de trabajar por la mañana.
+        </p>
+        <p>
+          Es lo que ocurrió con Nicolás, y nada lo decía. Ahora la pantalla lo advierte
+          antes de guardar y te indica dónde añadir un turno sin quitar el resto.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="state">Ya disponible</span>
+      <h2>La agenda, por dentro</h2>
+    </div>
+
+    <div class="items">
+      <div class="item">
+        <h3>La agenda entra bloqueada</h3>
+        <p>
+          En pantalla táctil, el gesto de desplazar la agenda para ver la tarde y el de
+          mover una cita son el mismo movimiento. Un roce cambiaba la hora de una paciente
+          sin que nadie se enterara.
+        </p>
+        <p>
+          Ahora la agenda entra en solo lectura y hay un botón de <strong>Editar</strong>
+          para desbloquearla. Consultar, abrir una cita o cambiar de día no exige nada.
+        </p>
+      </div>
+
+      <div class="item">
+        <h3>La agenda en el móvil, rehecha</h3>
+        <p>
+          En el teléfono, la parrilla por profesional no se leía: las citas salían como
+          manchas de color sin texto y los nombres se cortaban a media palabra. No era
+          cuestión de afinar, sino de que una rejilla de columnas no cabe en un móvil.
+        </p>
+        <p>
+          Ahora el día se ve como una <strong>lista por horas</strong>, con hora, paciente,
+          tratamiento, duración y profesional en cada línea. Desde el móvil puedes
+          consultar, crear citas y modificarlas desde su ficha.
+        </p>
+      </div>
+
+      <div class="item">
+        <h3>Lista de espera</h3>
+        <p>
+          Al cancelar una cita, Kairos propone a quién llamar: quién está esperando un
+          hueco y le encaja ese día y esa hora, con el teléfono marcable de un toque.
+        </p>
+        <p>
+          El orden lo decide la prioridad y, a igualdad, quien lleva más tiempo esperando.
+        </p>
+        <p class="where">Agenda › Lista de espera</p>
+      </div>
+
+      <div class="item">
+        <h3>Gabinetes</h3>
+        <p>
+          Hasta ahora el sillón se resolvía con un ajuste que bloqueaba la clínica entera:
+          si alguien estaba ocupando un gabinete, no se podía citar a nadie más aunque
+          hubiera otro libre.
+        </p>
+        <p>
+          Ya puedes dar de alta los gabinetes reales. La agenda deja de ofrecer una hora
+          solo cuando <strong>no queda ningún sillón libre</strong>. Mientras no crees
+          ninguno, todo funciona igual que hasta ahora.
+        </p>
+        <p class="where">Ajustes › Gabinetes</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="state">Ya disponible</span>
+      <h2>Clínica</h2>
+    </div>
+
+    <div class="items">
+      <div class="item">
+        <h3>Consentimientos firmados en tableta</h3>
+        <p>
+          El paciente firma con el dedo y Kairos genera el PDF con la firma dentro y un
+          sello que acredita <strong>sobre qué texto se firmó</strong>. Si el consentimiento
+          cambia después, el sello ya no cuadra.
+        </p>
+        <p>
+          Antes se marcaba «firmado» con una casilla, que no prueba quién firmó ni sobre qué.
+        </p>
+        <p class="where">Expediente › Consentimientos</p>
+      </div>
+
+      <div class="item">
+        <h3>Indicadores de clínica</h3>
+        <p>
+          La analítica contaba lo que cuenta un comercio: facturación, tickets, ticket
+          medio. Ahora hay cuatro cifras de clínica: <strong>aceptación de
+          presupuestos</strong>, presupuestos esperando respuesta, trabajo aceptado y sin
+          agendar, y <strong>ausencias</strong>.
+        </p>
+        <p>
+          La aceptación cuenta como aceptado lo que ya se está ejecutando o terminó, no solo
+          lo marcado como «aceptado» — si no, una clínica que termina sus tratamientos
+          saldría con una tasa ridícula.
+        </p>
+        <p class="where">Analítica</p>
+      </div>
+
+      <div class="item">
+        <h3>Trazabilidad de implantes</h3>
+        <p>
+          Si un fabricante retira un lote, escribes ese lote y salen los pacientes a los que
+          se les puso, con su teléfono marcable. Es lo que exige el Reglamento europeo de
+          productos sanitarios.
+        </p>
+        <p>
+          De momento está la búsqueda. El alta de implantes desde la ficha del paciente, con
+          lectura del código por cámara, es lo siguiente.
+        </p>
+        <p class="where">Expediente › Buscar por lote</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="state is-pending">Pendiente</span>
+      <h2>Radiografías: falta un paso tuyo</h2>
+      <p class="sec-note">
+        Está construido entero, pero no ha visto todavía una radiografía real.
+      </p>
+    </div>
+
+    <div class="items">
+      <div class="item">
+        <h3>Qué hay hecho</h3>
+        <p>
+          Kairos ya puede recoger la imagen del equipo y meterla en el expediente del
+          paciente sin pasar por carpetas. Cada clínica declara su propio equipo, así que
+          vale igual para el Owandy de periapicales que para el Gendex de la panorámica.
+        </p>
+        <p>
+          Lo que falta es probarlo contra vuestros equipos de verdad, y para eso necesitamos
+          saber qué tienen instalado.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <h3>Lo único que necesitamos de ti</h3>
+      <p>
+        Ejecutar un programa de diagnóstico en el ordenador de la clínica. Tarda unos
+        segundos, <strong>no instala nada y no toca ninguna carpeta de pacientes</strong>:
+        solo anota qué versión de Windows hay, qué controladores de imagen están instalados
+        y qué programa usáis.
+      </p>
+      <ol>
+        <li>Te pasamos el archivo <code>diagnostico-kairos.bat</code>.</li>
+        <li>Lo copias al ordenador donde está el equipo de rayos.</li>
+        <li>Doble clic. Genera un archivo de texto.</li>
+        <li>Nos lo devuelves.</li>
+      </ol>
+      <p>Con eso terminamos la parte que conecta Kairos con vuestros equipos.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Cualquier cosa que veas rara, dínosla aunque parezca menor: lo del lunes por la tarde
+      salió de un comentario tuyo, y era un fallo de verdad.
+    </p>
+    <p>HAT3X · Kairos</p>
+  </footer>
+
+</div>
+
+</body></html>

@@ -1,0 +1,127 @@
+Kairos en Biodental 
+ Biodental · Informe de cambios 
+ Lo que ha cambiado en Kairos
+ Un resumen de lo nuevo y lo corregido en las últimas dos semanas, escrito para leerse
+ del tirón. Todo lo que aparece aquí ya está funcionando en la clínica.
+ Actualizado 30 de agosto de 2026 
+ kairosmanager.app 
+ Preparado por HAT3X 
+ Ya disponible 
+ Lo que pediste
+ Las dos cosas que nos trasladaste, resueltas.
+ «Quiero poder dar la cita a la hora que quiera, y modificarla como quiera. Como si
+ hago una revisión de dos minutos.»
+ Nadia, Biodental 
+ Citas a cualquier hora
+ Antes la agenda solo ofrecía huecos de cuarto en cuarto de hora. Ahora, al crear
+ una cita, hay un enlace de poner hora y duración a mano : puedes
+ citar a las 10:07 si te viene bien.
+ La rejilla de huecos sigue estando y sigue siendo lo primero que ves, porque para
+ el día normal es más rápida. El modo manual está para cuando no encaja.
+ Agenda › Nueva cita
+ La duración la decides tú
+ Una revisión de dos minutos ocupa dos minutos. Antes no: aunque pusieras esa
+ duración, la agenda bloqueaba el tiempo completo del servicio —media hora— y
+ rechazaba la cita siguiente por solaparse.
+ Lo medimos contra la clínica antes y después: una cita de 2 minutos generaba un
+ bloqueo de 30. Ahora bloquea 2, y la cita de tres minutos después
+ entra. Las citas de duración normal se comportan exactamente igual que
+ siempre.
+ Ya disponible 
+ Horarios: lo que se rompía y ya no
+ Tres cosas del horario que fallaban en silencio, es decir, sin avisar de nada.
+ Sara ya no da citas con la clínica cerrada
+ Nos avisaste de que había dado citas un lunes por la tarde teniendo puesto de 10
+ a 14. Era cierto. El fallo estaba en que, si la consulta del horario fallaba, el
+ sistema seguía adelante como si la clínica no tuviera horario configurado — y
+ entonces daba por bueno cualquier hueco del día.
+ Ahora, ante la duda, no ofrece nada . Un «no puedo comprobarlo
+ ahora» se resuelve; una cita a puerta cerrada, no.
+ Abrir un día suelto sin abrir todos los martes
+ Si Nicolás pasa consulta un martes concreto por la tarde, ya no hace falta meter
+ «martes tarde» en el horario semanal y abrir así todos los martes del año.
+ Hay una sección de Días sueltos donde se añade un turno extra
+ para una fecha, o se cierra un día por vacaciones o festivo. El turno extra
+ se suma al horario de siempre: añadir una tarde no borra la
+ mañana.
+ Ajustes › Horarios › Días sueltos
+ El «horario especial» ahora avisa de lo que hace
+ Ese ajuste, en la ficha de cada profesional, sustituye el día
+ entero . Si le pones a alguien un horario especial de 17:00 a 20:00 para
+ un día, ese día deja de trabajar por la mañana.
+ Es lo que ocurrió con Nicolás, y nada lo decía. Ahora la pantalla lo advierte
+ antes de guardar y te indica dónde añadir un turno sin quitar el resto.
+ Ya disponible 
+ La agenda, por dentro
+ La agenda entra bloqueada
+ En pantalla táctil, el gesto de desplazar la agenda para ver la tarde y el de
+ mover una cita son el mismo movimiento. Un roce cambiaba la hora de una paciente
+ sin que nadie se enterara.
+ Ahora la agenda entra en solo lectura y hay un botón de Editar 
+ para desbloquearla. Consultar, abrir una cita o cambiar de día no exige nada.
+ La agenda en el móvil, rehecha
+ En el teléfono, la parrilla por profesional no se leía: las citas salían como
+ manchas de color sin texto y los nombres se cortaban a media palabra. No era
+ cuestión de afinar, sino de que una rejilla de columnas no cabe en un móvil.
+ Ahora el día se ve como una lista por horas , con hora, paciente,
+ tratamiento, duración y profesional en cada línea. Desde el móvil puedes
+ consultar, crear citas y modificarlas desde su ficha.
+ Lista de espera
+ Al cancelar una cita, Kairos propone a quién llamar: quién está esperando un
+ hueco y le encaja ese día y esa hora, con el teléfono marcable de un toque.
+ El orden lo decide la prioridad y, a igualdad, quien lleva más tiempo esperando.
+ Agenda › Lista de espera
+ Gabinetes
+ Hasta ahora el sillón se resolvía con un ajuste que bloqueaba la clínica entera:
+ si alguien estaba ocupando un gabinete, no se podía citar a nadie más aunque
+ hubiera otro libre.
+ Ya puedes dar de alta los gabinetes reales. La agenda deja de ofrecer una hora
+ solo cuando no queda ningún sillón libre . Mientras no crees
+ ninguno, todo funciona igual que hasta ahora.
+ Ajustes › Gabinetes
+ Ya disponible 
+ Clínica
+ Consentimientos firmados en tableta
+ El paciente firma con el dedo y Kairos genera el PDF con la firma dentro y un
+ sello que acredita sobre qué texto se firmó . Si el consentimiento
+ cambia después, el sello ya no cuadra.
+ Antes se marcaba «firmado» con una casilla, que no prueba quién firmó ni sobre qué.
+ Expediente › Consentimientos
+ Indicadores de clínica
+ La analítica contaba lo que cuenta un comercio: facturación, tickets, ticket
+ medio. Ahora hay cuatro cifras de clínica: aceptación de
+ presupuestos , presupuestos esperando respuesta, trabajo aceptado y sin
+ agendar, y ausencias .
+ La aceptación cuenta como aceptado lo que ya se está ejecutando o terminó, no solo
+ lo marcado como «aceptado» — si no, una clínica que termina sus tratamientos
+ saldría con una tasa ridícula.
+ Analítica
+ Trazabilidad de implantes
+ Si un fabricante retira un lote, escribes ese lote y salen los pacientes a los que
+ se les puso, con su teléfono marcable. Es lo que exige el Reglamento europeo de
+ productos sanitarios.
+ De momento está la búsqueda. El alta de implantes desde la ficha del paciente, con
+ lectura del código por cámara, es lo siguiente.
+ Expediente › Buscar por lote
+ Pendiente 
+ Radiografías: falta un paso tuyo
+ Está construido entero, pero no ha visto todavía una radiografía real.
+ Qué hay hecho
+ Kairos ya puede recoger la imagen del equipo y meterla en el expediente del
+ paciente sin pasar por carpetas. Cada clínica declara su propio equipo, así que
+ vale igual para el Owandy de periapicales que para el Gendex de la panorámica.
+ Lo que falta es probarlo contra vuestros equipos de verdad, y para eso necesitamos
+ saber qué tienen instalado.
+ Lo único que necesitamos de ti
+ Ejecutar un programa de diagnóstico en el ordenador de la clínica. Tarda unos
+ segundos, no instala nada y no toca ninguna carpeta de pacientes :
+ solo anota qué versión de Windows hay, qué controladores de imagen están instalados
+ y qué programa usáis.
+ Te pasamos el archivo diagnostico-kairos.bat .
+ Lo copias al ordenador donde está el equipo de rayos.
+ Doble clic. Genera un archivo de texto.
+ Nos lo devuelves.
+ Con eso terminamos la parte que conecta Kairos con vuestros equipos.
+ Cualquier cosa que veas rara, dínosla aunque parezca menor: lo del lunes por la tarde
+ salió de un comentario tuyo, y era un fallo de verdad.
+ HAT3X · Kairos

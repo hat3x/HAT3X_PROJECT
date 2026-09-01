@@ -1,0 +1,91 @@
+HAT 3 X, S.L. 
+ · 
+ Documento privado entre socios 
+ ◆ Borrador v1 — revisar con abogado 
+ Pacto de Socios
+ HAT3X, S.L. — sociedad en constitución
+ Fecha [ dd/mm/2026 ] 
+ Socios 2 
+ Capital social 3.500 € 
+ Reparto 70 / 30 
+ Reunidos
+ Socio A · Técnico
+ Jose Miguel [Apellidos] 
+ DNI [____] · Aporta los equipos informáticos (no dineraria) · Administrador Único
+ 70%
+ Socia B · Marketing y Ventas
+ [Nombre hermana] 
+ DNI [____] · Aporta 1.050 € en efectivo (dineraria)
+ 30%
+ Exponen
+ Que ambos van a constituir HAT3X, S.L. (en adelante, «la Sociedad»), con domicilio en [domicilio] , cuyo objeto es la consultoría en inteligencia artificial, el desarrollo de software y la automatización de procesos.
+ Que el capital social será de 3.500 € , dividido en 3.500 participaciones de 1 € de valor nominal, suscritas: el Socio A, 2.450 participaciones (70%) mediante aportación no dineraria de equipos informáticos valorados en 2.450 €; la Socia B, 1.050 participaciones (30%) mediante aportación dineraria de 1.050 €.
+ Que HAT3X es un proyecto ideado, iniciado y dirigido técnicamente por el Socio A , y que ambos desean regular sus relaciones como socios más allá de lo previsto en los estatutos.
+ Reconociéndose capacidad suficiente, acuerdan las siguientes cláusulas:
+ 1
+ Objeto y prevalencia
+ Este pacto regula las relaciones entre los Socios y complementa los estatutos sociales. Entre los Socios prevalecerá lo aquí acordado; frente a terceros regirán los estatutos y la ley. Ambos se obligan a votar y actuar en la Sociedad conforme a este pacto.
+ 2
+ Participaciones y capital
+ El reparto será 70% Socio A / 30% Socia B , conforme a las aportaciones descritas. Las participaciones del Socio A (nº 1 a 2.450) se desembolsan con los equipos; las de la Socia B (nº 2.451 a 3.500) con los 1.050 € en efectivo.
+ 3
+ Roles y dedicación
+ Socio A (Jose): dirección técnica, producto y desarrollo. Ejercerá como Administrador Único.
+ Socia B: dirección de marketing y ventas.
+ Ambos se comprometen a una dedicación [efectiva y continuada / a tiempo completo] a la Sociedad. El incumplimiento grave de la dedicación tendrá los efectos previstos en la cláusula 6 (vesting).
+ 4
+ Administración
+ La Sociedad se administrará por un Administrador Único: el Socio A , por tiempo indefinido, a quien corresponde la gestión ordinaria y la representación de la Sociedad, con las salvedades de la cláusula 5.
+ 5
+ Decisiones reservadas
+ No obstante el control del Socio A, las siguientes decisiones requerirán el acuerdo de ambos Socios , en protección de la Socia B:
+ Ampliaciones o reducciones de capital, o emisión de participaciones que diluyan a un Socio.
+ Entrada de nuevos socios.
+ Venta, fusión, transformación o disolución de la Sociedad.
+ Endeudamiento superior a [____] €.
+ Modificación sustancial del objeto social.
+ Fijación o cambio de la retribución de los Socios.
+ El Socio A conserva el control operativo; la Socia B queda protegida en las decisiones estructurales.
+ 6
+ Consolidación progresiva (vesting)
+ La titularidad plena de la participación de cada Socio se consolida a lo largo de 4 años , con un periodo de carencia inicial («cliff») de 12 meses : cumplido el primer año consolida el 25%, y el 75% restante mensualmente durante los 36 meses siguientes.
+ Si un Socio cesa en su dedicación a la Sociedad antes de completar el vesting (salvo baja justificada por fuerza mayor), el otro Socio —o la Sociedad— tendrá derecho a adquirir sus participaciones no consolidadas . En ningún caso un Socio perderá el valor que efectivamente aportó (dinero o bienes): las no consolidadas se adquieren por su importe desembolsado, y las ya consolidadas a valor razonable (cláusula 8). El vesting afecta a la plusvalía, no a lo aportado.
+ ◆ A instrumentar por el abogado 
+ La ley española no reconoce participaciones «no consolidadas» de forma directa. Este vesting se articulará mediante opción de compra cruzada, prestaciones accesorias o condición resolutoria , la fórmula que el abogado mercantilista considere más segura.
+ 7
+ Restricciones a la transmisión
+ Lock-up: durante [4] años ningún Socio venderá participaciones a terceros sin consentimiento del otro.
+ Adquisición preferente: el otro Socio tendrá derecho de tanteo sobre cualquier transmisión.
+ Acompañamiento (tag-along): si el Socio A vende su mayoría a un tercero, la Socia B podrá vender su parte en las mismas condiciones.
+ Arrastre (drag-along): si el Socio A recibe una oferta de buena fe por el 100% de la Sociedad, podrá exigir a la Socia B que venda su 30% en idénticas condiciones económicas.
+ 8
+ Valoración de las participaciones
+ Para recompras y salidas, el «valor razonable» se determinará por [experto independiente / múltiplo de EBITDA acordado / valor contable] . A falta de acuerdo, lo fijará un auditor designado por el Registro Mercantil.
+ 9
+ No competencia y exclusividad
+ Durante su vinculación y [1] año después, ningún Socio desarrollará, por sí o por persona interpuesta, actividad que compita con la Sociedad, ni captará a sus clientes o empleados.
+ 10
+ Propiedad intelectual
+ Todo desarrollo, código, software, diseño, marca y know-how creado por los Socios en el marco de la actividad pertenece en exclusiva a la Sociedad . La marca «HAT3X» y los desarrollos técnicos quedan en titularidad de la Sociedad, sin que ningún Socio retenga derechos personales sobre ellos.
+ 11
+ Confidencialidad
+ Los Socios guardarán secreto sobre la información de la Sociedad (clientes, código, cuentas, estrategia) durante su vinculación y tras su salida.
+ 12
+ Retribución y dividendos
+ Las retribuciones de los Socios por sus funciones se fijarán de común acuerdo (cláusula 5). Los dividendos, si se reparten, se distribuirán en proporción a la participación, tras dotar las reservas legales y las reinversiones acordadas.
+ 13
+ Conflictos y desbloqueo
+ Los Socios resolverán de buena fe cualquier discrepancia. En las materias reservadas (cláusula 5), ante un bloqueo persistente se someterán a mediación en [institución] antes de acudir a los tribunales. En lo demás, decide el Administrador Único conforme a sus facultades.
+ 14
+ Duración y supervivencia
+ El pacto estará vigente mientras ambos sean socios. Las cláusulas de confidencialidad, no competencia y propiedad intelectual sobrevivirán a la salida de cualquiera de ellos.
+ 15
+ Miscelánea
+ La nulidad de una cláusula no afectará al resto. Toda modificación deberá constar por escrito y firmada por ambos. Se rige por la legislación española , con sumisión a [los juzgados de [ciudad] / arbitraje] .
+ Firmas
+ Jose Miguel [Apellidos] 
+ Socio A · Administrador Único
+ [Nombre hermana] 
+ Socia B · Marketing y Ventas
+ Aviso. Este documento es un borrador de trabajo con fines orientativos; no constituye asesoramiento legal. Antes de firmarlo, revísalo y formalízalo con un abogado mercantilista — especialmente la cláusula 6 (vesting), que requiere instrumentación jurídica específica en España. El pacto de socios es un documento privado: no se inscribe en el Registro Mercantil y no bloquea la constitución de la sociedad, por lo que podéis firmarlo antes o poco después de la escritura.
+ HAT3X, S.L. · Pacto de socios · Borrador confidencial

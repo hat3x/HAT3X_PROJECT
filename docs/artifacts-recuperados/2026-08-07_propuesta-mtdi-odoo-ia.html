@@ -1,0 +1,393 @@
+<!doctype html><html><head><!-- frame-runtime --><base href="/_f/1786132154-de34/"><script>window.__FRAME_PREAMBLE={"v":1,"capabilities":{"artifact":"artifact.BizKCZHg.js","assets":"assets.8Gk803W0.js","comments":"comments.vw5vQdGA.js","db":"db.h-3sndFg.js","downloads":"downloads.C3GSvEDP.js","embed":"embed.CxGAyc-v.js","mcp":"mcp.Bvma3qD7.js","network":"network.B5UA9Su4.js","notifications":"notifications.ssU4jy7G.js","permissions":"permissions.BNySkLV5.js","room":"room.BMMoe2BY.js","sample":"sample.BW2Uysoh.js","self":"artifact.BizKCZHg.js","user":"user.BpKav-Rf.js"},"transforms":"_transforms.DSB5x63f.js","comments":"_comments.BcSQU-9b.js","translate":"_translate.5HCW4BJh.js"}</script><script>(function(){"use strict";var te=["light","dark","system"],re=/^[A-Za-z0-9_-]{1,64}$/,$=/^[a-zA-Z_:][a-zA-Z0-9_:.-]{0,127}$/,ne=new Set(["class","hidden","value","checked","style","title","alt","placeholder","lang","dir","role","tabindex","disabled","readonly","contenteditable","open","colspan","rowspan"]);function oe(e){const t=e.toLowerCase();return t.startsWith("data-")||t.startsWith("aria-")||ne.has(t)}var Be="http://www.w3.org/1999/xhtml",se="http://www.w3.org/2000/svg",ae=new Set(["script","style","iframe","noscript","noframes","noembed","xmp","plaintext","template","title","textarea","object","embed"]),ie=new Set(["script","style"]);function ce(e){const t=e.localName.toLowerCase();return e.namespaceURI==="http://www.w3.org/1999/xhtml"?!ae.has(t):e.namespaceURI===se?!ie.has(t):!1}function M(e,t){return e===t||(e===160||e===32)&&(t===160||t===32)}function le(e,t){const r=e.length,n=t.length;let s=0;for(;s<r&&s<n&&M(e.charCodeAt(s),t.charCodeAt(s));)s++;let o=0;for(;o<r-s&&o<n-s&&M(e.charCodeAt(r-1-o),t.charCodeAt(n-1-o));)o++;return{p:s,s:o}}function ue(e,t){const r=e.firstChild;if(e.childNodes.length!==1||r===null||r.nodeType!==Node.TEXT_NODE){e.textContent=t;return}const n=r.data,s=n.length,o=t.length,{p:i,s:c}=le(n,t);i===s&&c===0&&s===o||r.replaceData(i,s-i-c,t.slice(i,o-c));const h=r.data,p=e.ownerDocument.getSelection?.()??null,w=p!==null&&p.rangeCount>0&&(p.anchorNode===r||p.focusNode===r)?{anchor:p.anchorNode,anchorOffset:p.anchorOffset,focus:p.focusNode,focusOffset:p.focusOffset}:null;let m=-1,g=-1;for(let f=0;f<h.length&&f<t.length;f++){const v=h.charCodeAt(f),b=t.charCodeAt(f);v!==b&&M(v,b)&&(m<0&&(m=f),g=f)}const a=m>=0;if(a&&r.replaceData(m,g-m+1,t.slice(m,g+1)),a&&w!==null&&w.anchor!==null&&w.focus!==null)try{p.setBaseAndExtent(w.anchor,w.anchorOffset,w.focus,w.focusOffset)}catch{}}var fe=new Set(["html","head","body","frameset"]);function de(e){return e.namespaceURI==="http://www.w3.org/1999/xhtml"&&fe.has(e.localName)}function pe(e){if(e===null||typeof e!="object")return!1;const t=e;if(typeof t.target!="string"||!re.test(t.target)||t.text!==void 0&&typeof t.text!="string")return!1;if(t.attrsSet!==void 0){if(t.attrsSet===null||typeof t.attrsSet!="object")return!1;for(const[r,n]of Object.entries(t.attrsSet))if(!$.test(r)||typeof n!="string")return!1}if(t.attrsRemoved!==void 0){if(!Array.isArray(t.attrsRemoved))return!1;for(const r of t.attrsRemoved)if(typeof r!="string"||!$.test(r))return!1}return!0}function me(e,t){if(e===null||typeof e!="object")return!1;const{seq:r,elements:n}=e;if(typeof r!="number"||!Number.isSafeInteger(r)||!Array.isArray(n)||n.length===0||n.length>64)return!1;for(let s=0;s<n.length;s++)if(!t(n[s]))return!1;return!0}function he(e){return e===null||typeof e!="object"?!1:me(e.__frame_patch,pe)}function _e(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_init;return t!==null&&typeof t=="object"}function ve(e){return e!==null&&typeof e=="object"&&e.__frame_size_poke===!0}function ye(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_theme;if(t===null||typeof t!="object")return!1;const r=t.theme;return typeof r=="string"&&te.includes(r)}var A=/^[\w.-]+\.js$/;function we(e,t,r){return r?"inert":typeof t=="string"&&A.test(t)?e?[t]:"inert":e?"inert":"framed"}function ge(){return{post(e,t){parent.postMessage(e,t)},on(e){const t=r=>{r.source===parent&&e(r.data,r.origin,r.isTrusted)};return addEventListener("message",t),()=>removeEventListener("message",t)}}}function be(){return{post:()=>{},on:()=>()=>{}}}var j="__frame_scroll",Ee=150,Ae=310,Se=160,Te=3e4;function ke(){let e=0,t=!1,r=!1,n=!1,s=0,o=null;const i=l=>{try{sessionStorage.setItem(j,JSON.stringify({y:l}))}catch{}},c=()=>{if(clearTimeout(e),o===null)return;const l=o;o=null,i(l)},h=()=>{if(t){t=!1;return}r=!0,o=scrollY,clearTimeout(e),e=setTimeout(c,Ee)};try{addEventListener("scroll",h,{passive:!0}),addEventListener("pagehide",c)}catch{}const p=()=>{let l;try{l=sessionStorage.getItem(j)}catch{return null}if(l===null)return null;let _;try{_=JSON.parse(l)}catch{_=null}const d=_?.y;if(!(typeof d=="number"&&Number.isFinite(d)&&d>=0)){try{sessionStorage.removeItem(j)}catch{}return null}return d};let w=!1;const m=l=>{try{const _=scrollY;scrollTo({top:l,left:0,behavior:"instant"}),s=l,n=!0,clearTimeout(e),o=null,i(l);const d=scrollY;d!==_&&(t=!0),d!==l&&!w&&(w=!0,addEventListener("load",()=>{try{if(scrollY===d){const T=p();m(T!==null?T:s)}}catch{}},{once:!0}))}catch{}},g=()=>{try{return!!location.hash}catch{return!0}};let a=!1;const f=()=>{try{if(a||innerWidth>Ae||innerHeight>Se)return;a=!0;const l=Date.now(),_=()=>{try{removeEventListener("resize",_)}catch{}if(Date.now()-l>Te||r||g())return;const d=p();m(d!==null?d:s)};addEventListener("resize",_)}catch{}};let v=!1,b=!1;return{restore(){if(v||(v=!0,g()))return;const l=p();l!==null&&(m(l),f())},promoted(){if(b||(b=!0,g()))return;const l=p();l!==null?(m(l),f()):n&&m(s)}}}function Re(e,t,r,n){let s=null;try{s=window.trustedTypes?.createPolicy("frame-runtime",{createScriptURL:h=>h})??null}catch{}const o=window.Worker,i=o?.prototype,c=Object.freeze({Worker:o,workerOn:i?.addEventListener,workerPost:i?.postMessage,workerTerminate:i?.terminate,fetch:window.fetch.bind(window),preventDefault:Event.prototype.preventDefault,policy:s,origins:t});r(e).then(h=>h?.bootTopLevel?h.bootTopLevel(c,n):n.settle()).catch(()=>n.settle())}var De="modulepreload",Ie=function(e){return"/"+e},Ue={},Le=function(t,r,n){let s=Promise.resolve();function o(i){const c=new Event("vite:preloadError",{cancelable:!0});if(c.payload=i,window.dispatchEvent(c),!c.defaultPrevented)throw i}return s.then(i=>{for(const c of i||[])c.status==="rejected"&&o(c.reason);return t().catch(o)})},Oe=window===top,q=Object.getOwnPropertyDescriptor(window,"claude"),k=we(Oe,window.__FRAME_PREAMBLE?.topLevel,q?.writable===!1),N=typeof k=="object"&&k[0],y=N?be():ge();(function(){const e=Object.defineProperty,t=globalThis,r=["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel","RTCIceCandidate","RTCSessionDescription","RTCRtpSender","RTCRtpReceiver"];let n=0;for(let s=0;s<r.length;s++){const o=r[s];try{e(t,o,{value:void 0,writable:!1,configurable:!1})}catch{try{delete t[o]}catch{}try{e(t,o,{value:void 0,writable:!1,configurable:!0})}catch{}}typeof t[o]=="function"&&n++}if(n&&k==="framed")try{y.post({__frame_rtc_lockdown_failed:n},"*")}catch{}})();var Pe=1e4,Y=Object.freeze([...window.__FRAME_PREAMBLE?.origins??["https://claude.ai","https://preview.claude.ai"]]);function X(e){for(const t of Y)if(t.endsWith(":*"))try{const r=new URL(e);if(`${r.protocol}//${r.hostname}:*`===t)return!0}catch{}else if(e===t)return!0;return!1}var R=Object.freeze({...window.__FRAME_PREAMBLE?.capabilities}),B=window.__FRAME_PREAMBLE?.transforms,D=window.__FRAME_PREAMBLE?.comments,I=window.__FRAME_PREAMBLE?.translate;function S(e){return Le(()=>import("/_runtime/"+e),void 0)}function G(e,t){return{contract:e.contract,changes:new Set(e.changes??[]),flags:new Set(e.flags??[]),capabilities:e.capabilities??{},capBudgets:e.capBudgets??{},transforms:new Map,shellOrigin:t,mount:x,hooks:O,pipe:()=>({wrap:(r,n)=>(...s)=>{try{return n(...s)}catch(o){return Promise.reject(o)}}})}}var L=null,E=null;function V(e,t,r){try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!1,enumerable:!0})}catch{try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!0,enumerable:!0})}catch{}}}var U=!1,O={editBefore:null,edit:null};function Ce(e,t,r=!1){const n=[];let s;if(r)try{O.editBefore?.(e)}catch{}for(const o of e.elements){const i=document.querySelector(`[data-id="${o.target}"]`);if(!i){s=o.target;break}if([...Object.keys(o.attrsSet??{}),...o.attrsRemoved??[]].some(c=>!oe(c))){s=o.target;break}if(o.text!==void 0&&(!ce(i)||de(i))){s=o.target;break}for(const[c,h]of Object.entries(o.attrsSet??{}))if(!J(i,c)){try{i.setAttribute(c,h)}catch{}Z(i,c,h)}for(const c of o.attrsRemoved??[])J(i,c)||(i.removeAttribute(c),Z(i,c,null));typeof o.text=="string"&&ue(i,o.text),n.push(o.target)}if(r)try{O.edit?.(e.seq,n,s)}catch{}if(s!==void 0){y.post({__frame_patch_miss:{seq:e.seq}},t);return}try{document.dispatchEvent(new CustomEvent("claude:edit",{detail:{seq:e.seq,targets:n}}))}catch{}}function Z(e,t,r){if(!(e instanceof HTMLInputElement))return;const n=t.toLowerCase();n==="checked"?e.checked=r!==null:n==="value"&&e.type!=="file"&&(e.value=r??"")}function J(e,t){const r=t.toLowerCase(),n=e;return r==="data-id"||(r==="value"||r==="checked")&&(n.__artifactSecret===!0||/^(password|hidden|file)$/.test(n.type??"")||/(^|\s)(cc-|one-time-code|current-password|new-password)/i.test(`${e.getAttribute("autocomplete")??""} ${n.autocomplete??""}`))}function Q(e){const t=document.documentElement;e==="light"||e==="dark"?(t.dataset.theme=e,t.style.colorScheme=e,U=!0):U&&(delete t.dataset.theme,t.style.colorScheme="",U=!1)}var P=new Map;function Me(){let e;const t={u:new Promise(r=>{e=r}),r:r=>{t.done=!0,e(r)},done:!1,nulled:!1};return t}function F(){for(const e of P.values())e.done||(e.nulled=!0,e.r(null))}var je=Object.freeze(Object.assign(Object.create(null),{call:Function.prototype.call,apply:Function.prototype.apply,bind:Function.prototype.bind})),x=(e,t)=>{const r=P.get(e);if(!r||r.done){r?.nulled&&E&&y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:e}},E);return}const n=typeof t=="function"?Object.setPrototypeOf(t,je):Object.assign(Object.create(null),t);typeof n.then=="function"&&delete n.then,r.r(Object.freeze(n))};function ee(){const e=q?.value??{};V(window,"claude",e);for(const t of Object.keys(R)){if(e[t]!==void 0){V(e,t,e[t]);continue}P.set(t,Me())}if(e.use===void 0){const t=r=>{if(typeof r!="string"||!Object.hasOwn(R,r))return Promise.resolve(null);const n=P.get(r);return n?n.u:Promise.resolve(e[r]??null)};try{Object.defineProperty(e,"use",{value:t,writable:!0,configurable:!0,enumerable:!1})}catch{}}}if(k==="framed"){const e=B&&A.test(B)?S(B).catch(()=>{}):Promise.resolve(void 0),t=a=>{if(a.type==="auxclick"&&a.button!==1)return;const f=a.target,v=f&&f.closest?f.closest("a[href],area[href]"):null;if(!v)return;const b=v.getAttribute("href");if(!b)return;let l;try{l=new URL(b,document.baseURI)}catch{return}if((l.protocol==="http:"||l.protocol==="https:")&&l.origin!==location.origin){a.preventDefault();const _=(v.getAttribute("target")??"").toLowerCase(),d=a.type==="auxclick"||a.metaKey||a.ctrlKey||a.shiftKey||a.altKey||!["","_self","_top","_parent"].includes(_);y.post({__frame_nav:!0,url:l.href,newTab:d},"*")}};addEventListener("click",t,!0),addEventListener("auxclick",t,!0);const r={},n=a=>{a.isTrusted&&(r.pointer=!0)},s=a=>{a.isTrusted&&(r.click=!0)};addEventListener("pointermove",n,{capture:!0,passive:!0}),addEventListener("click",s,{capture:!0,passive:!0}),e.then(a=>{a?.wireNav&&(a.wireNav(),removeEventListener("click",t,!0),removeEventListener("auxclick",t,!0),removeEventListener("pointermove",n,!0),removeEventListener("click",s,!0),a.wireEngagement?.(r))});let o=null;try{o=ke()}catch{}ee();let i=null,c=null,h=0;const p=y.on((a,f)=>{X(f)&&_e(a)&&(i=a.__frame_init,E=f,p(),clearTimeout(h),c?.())});y.post({__frame_connect:!0},"*");const w=new Promise(a=>{c=a,h=setTimeout(()=>{p(),a()},Pe)}),m=document.readyState==="loading"?new Promise(a=>document.addEventListener("DOMContentLoaded",()=>a(),{once:!0})):Promise.resolve();m.then(()=>{try{o?.restore()}catch{}});const g={cb:null};y.on((a,f)=>{if(X(f)&&ve(a)){try{o?.promoted()}catch{}g.cb?.()}}),w.then(async()=>{if(!i||!E){F();return}Q(i.theme);const a=E;let f=!1,v=!1;y.on((u,z,C)=>{if(z!==a)return;ye(u)&&Q(u.__frame_theme.theme),he(u)&&Ce(u.__frame_patch,a,C);const H=u?.__fc_mode;H&&typeof H=="object"&&!f&&D&&A.test(D)&&(f=!0,S(D).then(K=>K.install?.(a,H.on===!0)).catch(()=>{}));const W=u?.__ft_cmd;W&&typeof W=="object"&&!v&&I&&A.test(I)&&(v=!0,S(I).then(K=>K.install?.(a,W)).catch(()=>{}))});const b=Object.keys(i.capabilities??{}).filter(u=>Object.hasOwn(R,u)).map(u=>[u,R[u]]).filter(u=>typeof u[1]=="string"&&A.test(u[1])),l=await Promise.allSettled(b.map(([,u])=>S(u))),_=await e,d=E;if(_?.buildBoot||y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),_?.buildBoot)try{L=_.buildBoot(i,_.TRANSFORMS??{},{shellOrigin:d,mount:x,hooks:O},u=>y.post({__frame_cap_telemetry:u},d))}catch{y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),L=G(i,d)}else L=G(i,d);const T=u=>y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:u}},d),Ne=L;l.forEach((u,z)=>{const C=b[z][0];if(u.status!=="fulfilled"){T(C);return}try{u.value?.install?.(Ne)}catch{T(C)}}),F(),await m,y.post({__frame_ready:!0},E),e.then(u=>u?.installSizeReporter?.(d,g))})}else N&&(ee(),Re(N,Y,S,{settle:F,mount:x}))})();</script><!-- /frame-runtime --><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Propuesta MTDI — Automatización Integral (Odoo + IA) · HAT3X</title>
+<style>
+  :root{
+    --bg:#FAF9F6; --panel:#FFFFFF; --ink:#201E1B; --muted:#75716A; --faint:#9A968E;
+    --line:#E7E3DB; --line-strong:#D8D3C8;
+    --accent:#235B54; --accent-soft:#E4EEEB; --accent-ink:#183E39;
+    --brass:#9C6E31; --brass-soft:#F1E7D6;
+    --good:#2E6B4F;
+    --font-display:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#16150F; --panel:#1E1C16; --ink:#F1EEE7; --muted:#A8A398; --faint:#807B70;
+      --line:#2C2A22; --line-strong:#3A372D;
+      --accent:#5FB3A6; --accent-soft:#1E2E2B; --accent-ink:#BFE6DF;
+      --brass:#D2A45E; --brass-soft:#2A2418;
+      --good:#5FB58C;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#FAF9F6; --panel:#FFFFFF; --ink:#201E1B; --muted:#75716A; --faint:#9A968E;
+    --line:#E7E3DB; --line-strong:#D8D3C8;
+    --accent:#235B54; --accent-soft:#E4EEEB; --accent-ink:#183E39;
+    --brass:#9C6E31; --brass-soft:#F1E7D6; --good:#2E6B4F;
+  }
+  :root[data-theme="dark"]{
+    --bg:#16150F; --panel:#1E1C16; --ink:#F1EEE7; --muted:#A8A398; --faint:#807B70;
+    --line:#2C2A22; --line-strong:#3A372D;
+    --accent:#5FB3A6; --accent-soft:#1E2E2B; --accent-ink:#BFE6DF;
+    --brass:#D2A45E; --brass-soft:#2A2418; --good:#5FB58C;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--font-sans);font-size:17px;line-height:1.65;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .wrap{max-width:60rem;margin:0 auto;padding:clamp(1.25rem,4vw,3.5rem) clamp(1.1rem,4vw,2.6rem)}
+  .col{max-width:44rem}
+
+  h1,h2,h3{font-family:var(--font-display);font-weight:600;text-wrap:balance;letter-spacing:-.01em;line-height:1.15;margin:0}
+  p{margin:0 0 1rem}
+  a{color:var(--accent);text-underline-offset:2px}
+  strong{font-weight:600}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+  .eyebrow{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 .55rem;font-weight:600}
+  .lead{font-size:1.16rem;color:var(--ink)}
+  .muted{color:var(--muted)}
+
+  /* ---------- masthead ---------- */
+  .mast{border-bottom:1px solid var(--line-strong);padding-bottom:1.6rem;margin-bottom:2.6rem}
+  .brandrow{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:2.2rem}
+  .brand{display:flex;align-items:center;gap:.6rem;font-family:var(--font-mono);font-weight:600;letter-spacing:.02em}
+  .brand .mark{width:26px;height:26px;border-radius:6px;background:var(--accent);color:#fff;
+    display:grid;place-items:center;font-family:var(--font-display);font-size:1rem;font-weight:700}
+  .tag{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);border:1px solid var(--line-strong);border-radius:999px;padding:.28rem .7rem}
+  .mast h1{font-size:clamp(2rem,5.4vw,3.15rem);margin:.2rem 0 .5rem}
+  .mast .sub{font-size:1.15rem;color:var(--muted);max-width:42rem}
+  .meta{display:flex;flex-wrap:wrap;gap:.5rem 1.6rem;margin-top:1.6rem;font-size:.86rem}
+  .meta div{display:flex;flex-direction:column;gap:.1rem}
+  .meta .k{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+  .meta .v{color:var(--ink)}
+
+  /* ---------- sections ---------- */
+  section{margin:3.2rem 0}
+  .shead{margin-bottom:1.3rem}
+  .shead h2{font-size:clamp(1.5rem,3.2vw,2rem)}
+
+  .callout{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);
+    border-radius:14px;padding:1.3rem 1.5rem;margin:1.5rem 0}
+  .callout .big{font-family:var(--font-display);font-size:1.3rem;color:var(--accent-ink);line-height:1.3;margin:0}
+
+  /* two-column split */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.4rem 1.5rem}
+  .card h3{font-size:1.1rem;margin-bottom:.9rem;display:flex;align-items:center;gap:.55rem}
+  .card.you{border-color:color-mix(in srgb,var(--accent) 30%,var(--line))}
+  .card.you h3{color:var(--accent)}
+  .plist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem;font-size:.95rem}
+  .plist li{padding-left:1.25rem;position:relative;color:var(--ink)}
+  .plist li::before{content:"";position:absolute;left:0;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .card.sys .plist li::before{background:var(--faint)}
+
+  /* ---------- architecture diagram ---------- */
+  .diagram{display:flex;flex-direction:column;gap:.55rem;margin-top:1.2rem}
+  .layer{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem 1.15rem}
+  .layer .lh{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;margin-bottom:.55rem}
+  .layer .ln{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+  .layer .lt{font-family:var(--font-display);font-size:1.05rem;font-weight:600}
+  .chips{display:flex;flex-wrap:wrap;gap:.4rem}
+  .chip{font-size:.8rem;background:var(--bg);border:1px solid var(--line-strong);border-radius:999px;padding:.22rem .66rem;color:var(--muted)}
+  .layer.accent{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 26%,transparent)}
+  .layer.accent .lt{color:var(--accent-ink)}
+  .layer.accent .chip{background:transparent;border-color:color-mix(in srgb,var(--accent) 30%,transparent);color:var(--accent-ink)}
+  .note-inline{font-size:.82rem;color:var(--muted);margin-top:.5rem;font-style:italic}
+  .conn{align-self:center;color:var(--faint);font-size:1rem;line-height:1}
+  .duo{display:grid;grid-template-columns:1.4fr 1fr;gap:.55rem}
+  .duo .layer{margin:0}
+  .dec{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-top:1.2rem}
+  .dec .card{padding:1rem 1.1rem}
+  .dec h4{margin:0 0 .3rem;font-size:.95rem;font-family:var(--font-sans);font-weight:600}
+  .dec .pick{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;color:var(--accent);text-transform:uppercase;font-weight:600}
+  .dec p{font-size:.85rem;color:var(--muted);margin:.35rem 0 0}
+
+  /* ---------- roadmap timeline ---------- */
+  .rail{margin-top:1rem;border-left:2px solid var(--line-strong);padding-left:1.5rem;display:flex;flex-direction:column;gap:1.15rem}
+  .step{position:relative}
+  .step::before{content:"";position:absolute;left:calc(-1.5rem - 1px);top:.35em;width:12px;height:12px;border-radius:50%;
+    background:var(--bg);border:2px solid var(--line-strong);transform:translateX(-50%)}
+  .step.key::before{background:var(--accent);border-color:var(--accent)}
+  .step .sr{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+  .step .st{font-family:var(--font-display);font-size:1.12rem;font-weight:600}
+  .step.key .st{color:var(--accent)}
+  .step p{font-size:.92rem;color:var(--muted);margin:.3rem 0 0}
+  .roi{font-family:var(--font-mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;
+    padding:.18rem .5rem;border-radius:999px;background:var(--brass-soft);color:var(--brass);white-space:nowrap}
+  .roi.fast{background:var(--accent-soft);color:var(--accent)}
+
+  /* ---------- investment ---------- */
+  .money{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin:1.2rem 0}
+  .price{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.3rem 1.45rem}
+  .price.hero{background:var(--accent);border-color:var(--accent);color:#fff}
+  .price .kk{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;opacity:.8}
+  .price .amt{font-family:var(--font-display);font-size:2.3rem;font-weight:700;line-height:1.05;margin:.35rem 0 .25rem}
+  .price.hero .amt{color:#fff}
+  .price .dd{font-size:.88rem;color:var(--muted)}
+  .price.hero .dd{color:rgba(255,255,255,.85)}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;margin:1.1rem 0}
+  table{border-collapse:collapse;width:100%;min-width:34rem;font-size:.9rem}
+  th,td{text-align:left;padding:.7rem .85rem;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);background:var(--bg)}
+  tbody tr:last-child td{border-bottom:none}
+  td.r,th.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  tr.fixed td{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  tr.fixed td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+  .pill{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;
+    padding:.12rem .45rem;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+
+  .stack3{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-top:1rem}
+  .mini{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem}
+  .mini .kk{font-family:var(--font-mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .mini .mv{font-family:var(--font-display);font-size:1.3rem;font-weight:700;margin:.25rem 0 .15rem;line-height:1.15}
+  .mini p{font-size:.8rem;color:var(--muted);margin:0}
+
+  .warnbox{border:1px solid var(--brass);background:var(--brass-soft);border-radius:12px;padding:1rem 1.2rem;font-size:.9rem;margin-top:1.2rem}
+  .warnbox b{color:var(--brass)}
+
+  /* next steps */
+  .steps3{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;counter-reset:s}
+  .steps3 .card{position:relative}
+  .steps3 .card::before{counter-increment:s;content:counter(s);font-family:var(--font-display);font-weight:700;
+    font-size:1.05rem;color:#fff;background:var(--accent);width:1.9rem;height:1.9rem;border-radius:50%;
+    display:grid;place-items:center;margin-bottom:.7rem}
+  .steps3 h3{font-size:1rem;margin-bottom:.35rem}
+  .steps3 p{font-size:.88rem;color:var(--muted);margin:0}
+
+  footer{border-top:1px solid var(--line-strong);margin-top:3.5rem;padding-top:1.4rem;font-size:.83rem;color:var(--muted)}
+  footer .fbrand{font-family:var(--font-mono);font-weight:600;color:var(--ink);letter-spacing:.02em}
+
+  /* responsive */
+  @media (max-width:720px){
+    body{font-size:16px}
+    .split,.money,.dec,.stack3,.steps3,.duo{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    a{transition:color .15s ease}
+  }
+  /* print */
+  @media print{
+    :root{--bg:#fff;--panel:#fff;--ink:#1a1a1a;--muted:#555;--line:#ddd;--line-strong:#ccc;
+      --accent:#1f4f49;--accent-soft:#eef4f2;--accent-ink:#173a35;--brass:#8a6026;--brass-soft:#f3ead9}
+    body{font-size:11pt}
+    .wrap{max-width:none;padding:0}
+    .price.hero{background:#1f4f49 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    section{margin:1.4rem 0;break-inside:avoid}
+    .card,.layer,.price,.mini,.step,.tablewrap{break-inside:avoid}
+    .tag{display:none}
+  }
+</style>
+
+<div class="wrap">
+
+  <!-- ============ MASTHEAD ============ -->
+  <header class="mast">
+    <div class="brandrow">
+      <div class="brand"><span class="mark">H</span> HAT3X</div>
+      <span class="tag">Propuesta · Confidencial</span>
+    </div>
+    <p class="eyebrow">Automatización · Odoo + IA · licencia todo incluido</p>
+    <h1>Automatización Integral de MTDI</h1>
+    <p class="sub">El sistema que le lleva la administración a tu estudio de interiorismo y reformas — para que tú te dediques a diseñar y dirigir.</p>
+    <div class="meta">
+      <div><span class="k">Para</span><span class="v">Ismael — MTDI</span></div>
+      <div><span class="k">De</span><span class="v">Jose Miguel · HAT3X</span></div>
+      <div><span class="k">Fecha</span><span class="v num">7 de agosto de 2026</span></div>
+      <div><span class="k">Vigencia</span><span class="v">30 días naturales</span></div>
+    </div>
+  </header>
+
+  <!-- ============ RESUMEN ============ -->
+  <section>
+    <div class="shead"><p class="eyebrow">En una idea</p><h2>No una IA que lo haga todo. El sistema que administra tu empresa.</h2></div>
+    <div class="col">
+      <p class="lead">Lo que planteas no es una automatización suelta: es incorporar un <strong>departamento administrativo y un control de costes</strong> —lectura de facturas, reparto por obra, cobros y pagos, conciliación del banco, gestoría, moodboards y presentaciones— <strong>sin contratar a nadie</strong> y funcionando 24/7.</p>
+      <p>El objetivo no es solo ahorrarte horas. Es que <strong>sepas la rentabilidad real de cada reforma</strong> y dejes de perder dinero en descuadres, facturas traspapeladas y tareas repetidas.</p>
+    </div>
+    <div class="callout">
+      <p class="big">Un dato se introduce <strong>una sola vez</strong> y se reutiliza en todo: presupuesto, compras, moodboard, presentación, certificación, factura, banco y gestoría.</p>
+    </div>
+  </section>
+
+  <!-- ============ EL REPARTO ============ -->
+  <section>
+    <div class="shead"><p class="eyebrow">Quién hace qué</p><h2>Tú decides. El sistema ejecuta.</h2></div>
+    <div class="split">
+      <div class="card you">
+        <h3>▲ Sigue en tus manos</h3>
+        <ul class="plist">
+          <li>Interpretar al cliente en la visita</li>
+          <li>Diseñar en 2D y decidir la distribución</li>
+          <li>Elegir los materiales finales</li>
+          <li>Aprobar precios y autorizar pedidos y pagos</li>
+          <li>Dirigir la obra y resolver imprevistos</li>
+          <li>Aprobar facturas antes de contabilizarlas</li>
+          <li>Validar cada presentación antes de enviarla</li>
+        </ul>
+      </div>
+      <div class="card sys">
+        <h3>● Lo hace el sistema</h3>
+        <ul class="plist">
+          <li>Leer, clasificar y archivar facturas</li>
+          <li>Repartir el coste por obra automáticamente</li>
+          <li>Controlar vencimientos, cobros y pagos</li>
+          <li>Conciliar el banco y detectar descuadres</li>
+          <li>Preparar el paquete trimestral de la gestoría</li>
+          <li>Montar moodboards y presentaciones</li>
+          <li>Resumir el correo y avisar de lo urgente</li>
+        </ul>
+      </div>
+    </div>
+    <p class="muted" style="font-size:.9rem;margin-top:1rem"><strong>Principio innegociable:</strong> la IA <em>propone y ordena</em>; tú <em>validas y decides</em>. Las facturas se generan como borrador — nunca hay emisión ni contabilización automática en firme.</p>
+  </section>
+
+  <!-- ============ ARQUITECTURA ============ -->
+  <section>
+    <div class="shead"><p class="eyebrow">Cómo se construye</p><h2>Arquitectura recomendada</h2></div>
+    <p class="col muted">Cuatro capas con una responsabilidad clara cada una. Odoo es la fuente de verdad; la IA, la capa que lee y propone; tú, quien valida.</p>
+
+    <div class="diagram">
+      <div class="layer">
+        <div class="lh"><span class="ln">01 · Entrada</span><span class="lt">Canales — un dato, una vez</span></div>
+        <div class="chips"><span class="chip">Correo</span><span class="chip">Web proveedor</span><span class="chip">WhatsApp</span><span class="chip">Papel / Foto</span><span class="chip">Visita móvil</span><span class="chip">Captura de producto</span></div>
+      </div>
+      <div class="conn">↓</div>
+      <div class="layer accent">
+        <div class="lh"><span class="ln">02 · Orquestación</span><span class="lt">Capa de automatización — n8n + IA</span></div>
+        <div class="chips"><span class="chip">OCR multimodal → JSON</span><span class="chip">Triaje de correo A/B/C/D</span><span class="chip">Anti-duplicados</span><span class="chip">Borradores de respuesta</span></div>
+        <p class="note-inline">Propone, nunca decide → todo pasa por tu pantalla de revisión.</p>
+      </div>
+      <div class="conn">↓</div>
+      <div class="duo">
+        <div class="layer">
+          <div class="lh"><span class="ln">03 · Núcleo</span><span class="lt">Odoo</span></div>
+          <div class="chips"><span class="chip">CRM</span><span class="chip">Compras</span><span class="chip">Facturas</span><span class="chip">Contab. analítica por obra</span><span class="chip">Conciliación</span><span class="chip">Revisión humana</span></div>
+        </div>
+        <div class="layer">
+          <div class="lh"><span class="ln">Archivo</span><span class="lt">Dropbox</span></div>
+          <div class="chips"><span class="chip">Documento maestro único</span><span class="chip">Carpeta por cliente</span></div>
+        </div>
+      </div>
+      <div class="conn">↓</div>
+      <div class="duo">
+        <div class="layer">
+          <div class="lh"><span class="ln">04 · Salidas</span><span class="lt">Fiscalidad y gestoría</span></div>
+          <div class="chips"><span class="chip">Libros trimestrales por serie (R / D)</span><span class="chip">Paquete gestoría</span><span class="chip">Resumen IVA + incidencias</span></div>
+        </div>
+        <div class="layer">
+          <div class="lh"><span class="ln">Aparte</span><span class="lt">CAD / 3D</span></div>
+          <div class="chips"><span class="chip">AutoCAD / InteriCAD (DWG)</span><span class="chip">A validar con piloto</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="card"><span class="pick">Núcleo</span><h4>Odoo, no Holded</h4><p>El reparto de una factura entre varias obras + gasto general exige la contabilidad analítica por línea de Odoo. Es su terreno.</p></div>
+      <div class="card"><span class="pick">Automatizador</span><h4>n8n</h4><p>Estándar de HAT3X, autohospedable, sin coste por operación y con lógica fina para validaciones y anti-duplicados.</p></div>
+      <div class="card"><span class="pick">OCR</span><h4>IA propia multimodal</h4><p>Absorbe correo, PDF, WhatsApp, papel y foto en un mismo esquema, con validaciones (cuadre base+IVA, NIF, duplicados) encima.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ ROADMAP ============ -->
+  <section>
+    <div class="shead"><p class="eyebrow">Cómo se despliega</p><h2>Módulos que activas a tu ritmo</h2></div>
+    <p class="col muted">La Etapa 1 marca la línea base y es la de retorno más rápido. Cada módulo siguiente lo activas cuando el anterior ya te esté dando valor — y solo entonces sube la cuota.</p>
+    <div class="rail">
+      <div class="step key">
+        <div class="sr"><span class="st">1 · Administración y facturas</span><span class="roi fast">ROI más rápido</span></div>
+        <p>Una factura se mete una vez (correo, WhatsApp o foto) y actualiza el libro de compras, el coste de la obra, el IVA, el archivo fiscal y la carpeta del cliente. Incluye conciliación bancaria y análisis diario del correo.</p>
+      </div>
+      <div class="step">
+        <div class="sr"><span class="st">2 · Clientes y estructura documental</span><span class="roi">Alto</span></div>
+        <p>Alta de cliente, código de proyecto, carpetas automáticas, RGPD, formulario de visita en móvil, fotos y notas de voz. Un alta → expediente completo creado solo.</p>
+      </div>
+      <div class="step">
+        <div class="sr"><span class="st">3 · Presupuestos y cobros</span><span class="roi">Alto</span></div>
+        <p>Base de precios, márgenes, versiones y calendario de cobro 5/35/25/20/15 con avisos y borradores de factura. Aceptado un presupuesto → facturación y avisos automáticos.</p>
+      </div>
+      <div class="step">
+        <div class="sr"><span class="st">4 · Productos, proveedores y moodboard</span><span class="roi">Medio-Alto</span></div>
+        <p>Captura de un artículo (web, PDF o foto) → ficha + Excel de compras + imagen en el moodboard + comparativo + pedido. Una selección, siete destinos.</p>
+      </div>
+      <div class="step">
+        <div class="sr"><span class="st">5 · Presentaciones automáticas</span><span class="roi">Medio</span></div>
+        <p>Plantilla PowerPoint corporativa → PPTX + PDF versionados (V01, V02, APROBADA). La presentación de cliente, montada en minutos.</p>
+      </div>
+      <div class="step">
+        <div class="sr"><span class="st">6 · Diseño 2D/3D asistido</span><span class="roi">Exploratoria</span></div>
+        <p>Plantillas DWG, bibliotecas y transición desde InteriCAD. Alcance abierto: se valida con un proyecto piloto antes de comprometer.</p>
+      </div>
+      <div class="step">
+        <div class="sr"><span class="st">+ Comunicación y redes</span><span class="roi">Add-on</span></div>
+        <p>Publicación del proyecto terminado en la web WordPress + TikTok/Instagram (Canva), siempre con tu aprobación previa.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ INVERSIÓN ============ -->
+  <section>
+    <div class="shead"><p class="eyebrow">Inversión</p><h2>Sin gran inversión inicial — y empiezas pagando menos.</h2></div>
+
+    <div class="money">
+      <div class="price">
+        <div class="kk">Alta única · puesta en marcha</div>
+        <div class="amt num">990 €</div>
+        <div class="dd">Incluye la reunión de Descubrimiento (el mapa de tu forma de trabajar) y la puesta en marcha de la Etapa 1.</div>
+      </div>
+      <div class="price hero">
+        <div class="kk">Cuota de arranque · con descuento</div>
+        <div class="amt num">350 €<span style="font-size:1rem;font-weight:600;opacity:.8">/mes</span></div>
+        <div class="dd">La cuota completa del sistema es <strong style="color:#fff">450 €/mes</strong>. Empiezas por debajo porque aún no tienes todos los módulos: <strong style="color:#fff">nunca pagas por lo que no usas.</strong></div>
+      </div>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Estado del sistema</th><th>Módulos activos</th><th class="r">Cuota</th></tr></thead>
+        <tbody>
+          <tr class="fixed"><td>Alta · puesta en marcha</td><td>Descubrimiento + Etapa 1 operativa</td><td class="r num">990 € · <span class="pill">único</span></td></tr>
+          <tr><td>Arranque · solo Administración</td><td>Etapa 1 — facturas, coste por obra, gestoría</td><td class="r num">350 €/mes <span class="pill">−100 €</span></td></tr>
+          <tr><td>+ Gestión de proyectos</td><td>+ Clientes/documentos + Presupuestos y cobros</td><td class="r num">400 €/mes <span class="pill">−50 €</span></td></tr>
+          <tr><td>Sistema completo</td><td>+ Productos/moodboard + Presentaciones</td><td class="r num">450 €/mes</td></tr>
+          <tr><td>Add-ons</td><td>Diseño CAD 2D/3D · publicación web y redes</td><td class="r num">a valorar</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="stack3">
+      <div class="mini"><div class="kk">Precio completo</div><div class="mv num">450 €/mes</div><p>Todo incluido: Odoo, IA, hosting, soporte y mejoras. Solo al tener el sistema entero.</p></div>
+      <div class="mini"><div class="kk">Arranque</div><div class="mv num">990 €</div><p>Y en marcha. Sin la gran inversión inicial de un desarrollo a medida.</p></div>
+      <div class="mini"><div class="kk">Permanencia</div><div class="mv num">12 meses</div><p>Desde el go-live. Después, mes a mes sin permanencia.</p></div>
+    </div>
+
+    <div class="warnbox">
+      <b>Dos calendarios distintos, que no se mezclan.</b> Lo de arriba es lo que <strong>HAT3X te factura a ti</strong> (alta + cuota). El calendario <strong>5 / 35 / 25 / 20 / 15</strong> es otra cosa: es el que <strong>tú facturas a tus clientes</strong> por tus reformas — y es, precisamente, una de las funciones que automatiza la Etapa 3.
+    </div>
+    <p class="muted" style="font-size:.84rem;margin-top:1rem">El descuento de arranque se reduce solo a medida que se completan los módulos, hasta la cuota completa de 450 €/mes. Importes sin IVA.</p>
+  </section>
+
+  <!-- ============ PRÓXIMOS PASOS ============ -->
+  <section>
+    <div class="shead"><p class="eyebrow">Siguiente paso</p><h2>Empezamos por el mapa</h2></div>
+    <div class="steps3">
+      <div class="card"><h3>Firma y alta</h3><p>Alta de 990 € que incluye la reunión de Descubrimiento y el mapa de tu forma de trabajar.</p></div>
+      <div class="card"><h3>Etapa 1 en marcha</h3><p>Ponemos en producción la Administración (facturas, coste por obra, gestoría) → go-live.</p></div>
+      <div class="card"><h3>Cuota y crecimiento</h3><p>Arranca la licencia (Nivel 1, 350 €/mes) y activas los siguientes módulos a tu ritmo.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <p><span class="fbrand">HAT3X</span> · Consultoría de IA — info@hat3x.com</p>
+    <p>Propuesta preparada para MTDI el 7 de agosto de 2026. No constituye contrato; el acuerdo formal se regirá por el Contrato Base firmado por ambas partes. Las cuotas de los niveles superiores se confirman al activar cada módulo.</p>
+  </footer>
+
+</div>
+
+</body></html>

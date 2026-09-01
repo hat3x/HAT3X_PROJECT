@@ -1,0 +1,194 @@
+<!doctype html><html><head><!-- frame-runtime --><base href="/_f/1786526181-093e/"><script>window.__FRAME_PREAMBLE={"v":1,"capabilities":{"artifact":"artifact.BizKCZHg.js","assets":"assets.8Gk803W0.js","comments":"comments.vw5vQdGA.js","db":"db.h-3sndFg.js","downloads":"downloads.C3GSvEDP.js","embed":"embed.CxGAyc-v.js","mcp":"mcp.Bvma3qD7.js","network":"network.B5UA9Su4.js","notifications":"notifications.ssU4jy7G.js","permissions":"permissions.BNySkLV5.js","room":"room.BMMoe2BY.js","sample":"sample.BW2Uysoh.js","self":"artifact.BizKCZHg.js","user":"user.BpKav-Rf.js"},"transforms":"_transforms.DSB5x63f.js","comments":"_comments.BcSQU-9b.js","translate":"_translate.5HCW4BJh.js"}</script><script>(function(){"use strict";var te=["light","dark","system"],re=/^[A-Za-z0-9_-]{1,64}$/,$=/^[a-zA-Z_:][a-zA-Z0-9_:.-]{0,127}$/,ne=new Set(["class","hidden","value","checked","style","title","alt","placeholder","lang","dir","role","tabindex","disabled","readonly","contenteditable","open","colspan","rowspan"]);function oe(e){const t=e.toLowerCase();return t.startsWith("data-")||t.startsWith("aria-")||ne.has(t)}var Be="http://www.w3.org/1999/xhtml",se="http://www.w3.org/2000/svg",ae=new Set(["script","style","iframe","noscript","noframes","noembed","xmp","plaintext","template","title","textarea","object","embed"]),ie=new Set(["script","style"]);function ce(e){const t=e.localName.toLowerCase();return e.namespaceURI==="http://www.w3.org/1999/xhtml"?!ae.has(t):e.namespaceURI===se?!ie.has(t):!1}function M(e,t){return e===t||(e===160||e===32)&&(t===160||t===32)}function le(e,t){const r=e.length,n=t.length;let s=0;for(;s<r&&s<n&&M(e.charCodeAt(s),t.charCodeAt(s));)s++;let o=0;for(;o<r-s&&o<n-s&&M(e.charCodeAt(r-1-o),t.charCodeAt(n-1-o));)o++;return{p:s,s:o}}function ue(e,t){const r=e.firstChild;if(e.childNodes.length!==1||r===null||r.nodeType!==Node.TEXT_NODE){e.textContent=t;return}const n=r.data,s=n.length,o=t.length,{p:i,s:c}=le(n,t);i===s&&c===0&&s===o||r.replaceData(i,s-i-c,t.slice(i,o-c));const h=r.data,p=e.ownerDocument.getSelection?.()??null,w=p!==null&&p.rangeCount>0&&(p.anchorNode===r||p.focusNode===r)?{anchor:p.anchorNode,anchorOffset:p.anchorOffset,focus:p.focusNode,focusOffset:p.focusOffset}:null;let m=-1,g=-1;for(let f=0;f<h.length&&f<t.length;f++){const v=h.charCodeAt(f),b=t.charCodeAt(f);v!==b&&M(v,b)&&(m<0&&(m=f),g=f)}const a=m>=0;if(a&&r.replaceData(m,g-m+1,t.slice(m,g+1)),a&&w!==null&&w.anchor!==null&&w.focus!==null)try{p.setBaseAndExtent(w.anchor,w.anchorOffset,w.focus,w.focusOffset)}catch{}}var fe=new Set(["html","head","body","frameset"]);function de(e){return e.namespaceURI==="http://www.w3.org/1999/xhtml"&&fe.has(e.localName)}function pe(e){if(e===null||typeof e!="object")return!1;const t=e;if(typeof t.target!="string"||!re.test(t.target)||t.text!==void 0&&typeof t.text!="string")return!1;if(t.attrsSet!==void 0){if(t.attrsSet===null||typeof t.attrsSet!="object")return!1;for(const[r,n]of Object.entries(t.attrsSet))if(!$.test(r)||typeof n!="string")return!1}if(t.attrsRemoved!==void 0){if(!Array.isArray(t.attrsRemoved))return!1;for(const r of t.attrsRemoved)if(typeof r!="string"||!$.test(r))return!1}return!0}function me(e,t){if(e===null||typeof e!="object")return!1;const{seq:r,elements:n}=e;if(typeof r!="number"||!Number.isSafeInteger(r)||!Array.isArray(n)||n.length===0||n.length>64)return!1;for(let s=0;s<n.length;s++)if(!t(n[s]))return!1;return!0}function he(e){return e===null||typeof e!="object"?!1:me(e.__frame_patch,pe)}function _e(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_init;return t!==null&&typeof t=="object"}function ve(e){return e!==null&&typeof e=="object"&&e.__frame_size_poke===!0}function ye(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_theme;if(t===null||typeof t!="object")return!1;const r=t.theme;return typeof r=="string"&&te.includes(r)}var A=/^[\w.-]+\.js$/;function we(e,t,r){return r?"inert":typeof t=="string"&&A.test(t)?e?[t]:"inert":e?"inert":"framed"}function ge(){return{post(e,t){parent.postMessage(e,t)},on(e){const t=r=>{r.source===parent&&e(r.data,r.origin,r.isTrusted)};return addEventListener("message",t),()=>removeEventListener("message",t)}}}function be(){return{post:()=>{},on:()=>()=>{}}}var j="__frame_scroll",Ee=150,Ae=310,Se=160,Te=3e4;function ke(){let e=0,t=!1,r=!1,n=!1,s=0,o=null;const i=l=>{try{sessionStorage.setItem(j,JSON.stringify({y:l}))}catch{}},c=()=>{if(clearTimeout(e),o===null)return;const l=o;o=null,i(l)},h=()=>{if(t){t=!1;return}r=!0,o=scrollY,clearTimeout(e),e=setTimeout(c,Ee)};try{addEventListener("scroll",h,{passive:!0}),addEventListener("pagehide",c)}catch{}const p=()=>{let l;try{l=sessionStorage.getItem(j)}catch{return null}if(l===null)return null;let _;try{_=JSON.parse(l)}catch{_=null}const d=_?.y;if(!(typeof d=="number"&&Number.isFinite(d)&&d>=0)){try{sessionStorage.removeItem(j)}catch{}return null}return d};let w=!1;const m=l=>{try{const _=scrollY;scrollTo({top:l,left:0,behavior:"instant"}),s=l,n=!0,clearTimeout(e),o=null,i(l);const d=scrollY;d!==_&&(t=!0),d!==l&&!w&&(w=!0,addEventListener("load",()=>{try{if(scrollY===d){const T=p();m(T!==null?T:s)}}catch{}},{once:!0}))}catch{}},g=()=>{try{return!!location.hash}catch{return!0}};let a=!1;const f=()=>{try{if(a||innerWidth>Ae||innerHeight>Se)return;a=!0;const l=Date.now(),_=()=>{try{removeEventListener("resize",_)}catch{}if(Date.now()-l>Te||r||g())return;const d=p();m(d!==null?d:s)};addEventListener("resize",_)}catch{}};let v=!1,b=!1;return{restore(){if(v||(v=!0,g()))return;const l=p();l!==null&&(m(l),f())},promoted(){if(b||(b=!0,g()))return;const l=p();l!==null?(m(l),f()):n&&m(s)}}}function Re(e,t,r,n){let s=null;try{s=window.trustedTypes?.createPolicy("frame-runtime",{createScriptURL:h=>h})??null}catch{}const o=window.Worker,i=o?.prototype,c=Object.freeze({Worker:o,workerOn:i?.addEventListener,workerPost:i?.postMessage,workerTerminate:i?.terminate,fetch:window.fetch.bind(window),preventDefault:Event.prototype.preventDefault,policy:s,origins:t});r(e).then(h=>h?.bootTopLevel?h.bootTopLevel(c,n):n.settle()).catch(()=>n.settle())}var De="modulepreload",Ie=function(e){return"/"+e},Ue={},Le=function(t,r,n){let s=Promise.resolve();function o(i){const c=new Event("vite:preloadError",{cancelable:!0});if(c.payload=i,window.dispatchEvent(c),!c.defaultPrevented)throw i}return s.then(i=>{for(const c of i||[])c.status==="rejected"&&o(c.reason);return t().catch(o)})},Oe=window===top,q=Object.getOwnPropertyDescriptor(window,"claude"),k=we(Oe,window.__FRAME_PREAMBLE?.topLevel,q?.writable===!1),N=typeof k=="object"&&k[0],y=N?be():ge();(function(){const e=Object.defineProperty,t=globalThis,r=["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel","RTCIceCandidate","RTCSessionDescription","RTCRtpSender","RTCRtpReceiver"];let n=0;for(let s=0;s<r.length;s++){const o=r[s];try{e(t,o,{value:void 0,writable:!1,configurable:!1})}catch{try{delete t[o]}catch{}try{e(t,o,{value:void 0,writable:!1,configurable:!0})}catch{}}typeof t[o]=="function"&&n++}if(n&&k==="framed")try{y.post({__frame_rtc_lockdown_failed:n},"*")}catch{}})();var Pe=1e4,Y=Object.freeze([...window.__FRAME_PREAMBLE?.origins??["https://claude.ai","https://preview.claude.ai"]]);function X(e){for(const t of Y)if(t.endsWith(":*"))try{const r=new URL(e);if(`${r.protocol}//${r.hostname}:*`===t)return!0}catch{}else if(e===t)return!0;return!1}var R=Object.freeze({...window.__FRAME_PREAMBLE?.capabilities}),B=window.__FRAME_PREAMBLE?.transforms,D=window.__FRAME_PREAMBLE?.comments,I=window.__FRAME_PREAMBLE?.translate;function S(e){return Le(()=>import("/_runtime/"+e),void 0)}function G(e,t){return{contract:e.contract,changes:new Set(e.changes??[]),flags:new Set(e.flags??[]),capabilities:e.capabilities??{},capBudgets:e.capBudgets??{},transforms:new Map,shellOrigin:t,mount:x,hooks:O,pipe:()=>({wrap:(r,n)=>(...s)=>{try{return n(...s)}catch(o){return Promise.reject(o)}}})}}var L=null,E=null;function V(e,t,r){try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!1,enumerable:!0})}catch{try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!0,enumerable:!0})}catch{}}}var U=!1,O={editBefore:null,edit:null};function Ce(e,t,r=!1){const n=[];let s;if(r)try{O.editBefore?.(e)}catch{}for(const o of e.elements){const i=document.querySelector(`[data-id="${o.target}"]`);if(!i){s=o.target;break}if([...Object.keys(o.attrsSet??{}),...o.attrsRemoved??[]].some(c=>!oe(c))){s=o.target;break}if(o.text!==void 0&&(!ce(i)||de(i))){s=o.target;break}for(const[c,h]of Object.entries(o.attrsSet??{}))if(!J(i,c)){try{i.setAttribute(c,h)}catch{}Z(i,c,h)}for(const c of o.attrsRemoved??[])J(i,c)||(i.removeAttribute(c),Z(i,c,null));typeof o.text=="string"&&ue(i,o.text),n.push(o.target)}if(r)try{O.edit?.(e.seq,n,s)}catch{}if(s!==void 0){y.post({__frame_patch_miss:{seq:e.seq}},t);return}try{document.dispatchEvent(new CustomEvent("claude:edit",{detail:{seq:e.seq,targets:n}}))}catch{}}function Z(e,t,r){if(!(e instanceof HTMLInputElement))return;const n=t.toLowerCase();n==="checked"?e.checked=r!==null:n==="value"&&e.type!=="file"&&(e.value=r??"")}function J(e,t){const r=t.toLowerCase(),n=e;return r==="data-id"||(r==="value"||r==="checked")&&(n.__artifactSecret===!0||/^(password|hidden|file)$/.test(n.type??"")||/(^|\s)(cc-|one-time-code|current-password|new-password)/i.test(`${e.getAttribute("autocomplete")??""} ${n.autocomplete??""}`))}function Q(e){const t=document.documentElement;e==="light"||e==="dark"?(t.dataset.theme=e,t.style.colorScheme=e,U=!0):U&&(delete t.dataset.theme,t.style.colorScheme="",U=!1)}var P=new Map;function Me(){let e;const t={u:new Promise(r=>{e=r}),r:r=>{t.done=!0,e(r)},done:!1,nulled:!1};return t}function F(){for(const e of P.values())e.done||(e.nulled=!0,e.r(null))}var je=Object.freeze(Object.assign(Object.create(null),{call:Function.prototype.call,apply:Function.prototype.apply,bind:Function.prototype.bind})),x=(e,t)=>{const r=P.get(e);if(!r||r.done){r?.nulled&&E&&y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:e}},E);return}const n=typeof t=="function"?Object.setPrototypeOf(t,je):Object.assign(Object.create(null),t);typeof n.then=="function"&&delete n.then,r.r(Object.freeze(n))};function ee(){const e=q?.value??{};V(window,"claude",e);for(const t of Object.keys(R)){if(e[t]!==void 0){V(e,t,e[t]);continue}P.set(t,Me())}if(e.use===void 0){const t=r=>{if(typeof r!="string"||!Object.hasOwn(R,r))return Promise.resolve(null);const n=P.get(r);return n?n.u:Promise.resolve(e[r]??null)};try{Object.defineProperty(e,"use",{value:t,writable:!0,configurable:!0,enumerable:!1})}catch{}}}if(k==="framed"){const e=B&&A.test(B)?S(B).catch(()=>{}):Promise.resolve(void 0),t=a=>{if(a.type==="auxclick"&&a.button!==1)return;const f=a.target,v=f&&f.closest?f.closest("a[href],area[href]"):null;if(!v)return;const b=v.getAttribute("href");if(!b)return;let l;try{l=new URL(b,document.baseURI)}catch{return}if((l.protocol==="http:"||l.protocol==="https:")&&l.origin!==location.origin){a.preventDefault();const _=(v.getAttribute("target")??"").toLowerCase(),d=a.type==="auxclick"||a.metaKey||a.ctrlKey||a.shiftKey||a.altKey||!["","_self","_top","_parent"].includes(_);y.post({__frame_nav:!0,url:l.href,newTab:d},"*")}};addEventListener("click",t,!0),addEventListener("auxclick",t,!0);const r={},n=a=>{a.isTrusted&&(r.pointer=!0)},s=a=>{a.isTrusted&&(r.click=!0)};addEventListener("pointermove",n,{capture:!0,passive:!0}),addEventListener("click",s,{capture:!0,passive:!0}),e.then(a=>{a?.wireNav&&(a.wireNav(),removeEventListener("click",t,!0),removeEventListener("auxclick",t,!0),removeEventListener("pointermove",n,!0),removeEventListener("click",s,!0),a.wireEngagement?.(r))});let o=null;try{o=ke()}catch{}ee();let i=null,c=null,h=0;const p=y.on((a,f)=>{X(f)&&_e(a)&&(i=a.__frame_init,E=f,p(),clearTimeout(h),c?.())});y.post({__frame_connect:!0},"*");const w=new Promise(a=>{c=a,h=setTimeout(()=>{p(),a()},Pe)}),m=document.readyState==="loading"?new Promise(a=>document.addEventListener("DOMContentLoaded",()=>a(),{once:!0})):Promise.resolve();m.then(()=>{try{o?.restore()}catch{}});const g={cb:null};y.on((a,f)=>{if(X(f)&&ve(a)){try{o?.promoted()}catch{}g.cb?.()}}),w.then(async()=>{if(!i||!E){F();return}Q(i.theme);const a=E;let f=!1,v=!1;y.on((u,z,C)=>{if(z!==a)return;ye(u)&&Q(u.__frame_theme.theme),he(u)&&Ce(u.__frame_patch,a,C);const H=u?.__fc_mode;H&&typeof H=="object"&&!f&&D&&A.test(D)&&(f=!0,S(D).then(K=>K.install?.(a,H.on===!0)).catch(()=>{}));const W=u?.__ft_cmd;W&&typeof W=="object"&&!v&&I&&A.test(I)&&(v=!0,S(I).then(K=>K.install?.(a,W)).catch(()=>{}))});const b=Object.keys(i.capabilities??{}).filter(u=>Object.hasOwn(R,u)).map(u=>[u,R[u]]).filter(u=>typeof u[1]=="string"&&A.test(u[1])),l=await Promise.allSettled(b.map(([,u])=>S(u))),_=await e,d=E;if(_?.buildBoot||y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),_?.buildBoot)try{L=_.buildBoot(i,_.TRANSFORMS??{},{shellOrigin:d,mount:x,hooks:O},u=>y.post({__frame_cap_telemetry:u},d))}catch{y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),L=G(i,d)}else L=G(i,d);const T=u=>y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:u}},d),Ne=L;l.forEach((u,z)=>{const C=b[z][0];if(u.status!=="fulfilled"){T(C);return}try{u.value?.install?.(Ne)}catch{T(C)}}),F(),await m,y.post({__frame_ready:!0},E),e.then(u=>u?.installSizeReporter?.(d,g))})}else N&&(ee(),Re(N,Y,S,{settle:F,mount:x}))})();</script><!-- /frame-runtime --><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<style>
+  :root {
+    --paper: #eef1f5; --surface: #ffffff; --surface-2: #f6f8fb; --ink: #161a21;
+    --ink-soft: #4c5462; --ink-faint: #79808d; --line: #e2e6ec; --line-strong: #ccd2db;
+    --accent: #1f3a5f; --accent-2: #2f6fbf; --accent-wash: #eaf1fa;
+    --caution-bg: #fbf4e6; --caution-line: #e6c988; --caution-ink: #79571a;
+    --seal-bg: #f0e7f2; --seal-line: #cbb0d2; --seal-ink: #6b3f78;
+    --font-serif: Georgia, "Iowan Old Style", Charter, "Times New Roman", serif;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0c0f14; --surface: #14181f; --surface-2: #1a1f28; --ink: #e7eaf0;
+      --ink-soft: #aab2c0; --ink-faint: #7c8494; --line: #262c36; --line-strong: #333b47;
+      --accent: #8fb2e0; --accent-2: #79aef0; --accent-wash: #172433;
+      --caution-bg: #2a2416; --caution-line: #5c4a24; --caution-ink: #e0c583;
+      --seal-bg: #241a29; --seal-line: #45324c; --seal-ink: #cba9d4;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #eef1f5; --surface: #ffffff; --surface-2: #f6f8fb; --ink: #161a21;
+    --ink-soft: #4c5462; --ink-faint: #79808d; --line: #e2e6ec; --line-strong: #ccd2db;
+    --accent: #1f3a5f; --accent-2: #2f6fbf; --accent-wash: #eaf1fa;
+    --caution-bg: #fbf4e6; --caution-line: #e6c988; --caution-ink: #79571a;
+    --seal-bg: #f0e7f2; --seal-line: #cbb0d2; --seal-ink: #6b3f78;
+  }
+  :root[data-theme="dark"] {
+    --paper: #0c0f14; --surface: #14181f; --surface-2: #1a1f28; --ink: #e7eaf0;
+    --ink-soft: #aab2c0; --ink-faint: #7c8494; --line: #262c36; --line-strong: #333b47;
+    --accent: #8fb2e0; --accent-2: #79aef0; --accent-wash: #172433;
+    --caution-bg: #2a2416; --caution-line: #5c4a24; --caution-ink: #e0c583;
+    --seal-bg: #241a29; --seal-line: #45324c; --seal-ink: #cba9d4;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-sans); line-height: 1.65; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 32px 20px 72px; }
+  .doc { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(20,28,45,.06); overflow: hidden; }
+
+  header.head { padding: 40px 48px 34px; border-bottom: 2px solid var(--accent); background-color: var(--surface); }
+  .eyebrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-family: var(--font-mono); font-size: .7rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 20px; }
+  .wordmark { font-weight: 700; color: var(--ink-soft); letter-spacing: .18em; }
+  .wordmark b { color: var(--accent-2); font-weight: 700; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--seal-bg); border: 1px solid var(--seal-line); color: var(--seal-ink); font-size: .66rem; letter-spacing: .12em; }
+  h1.title { font-family: var(--font-serif); font-weight: 700; font-size: clamp(1.9rem, 4.6vw, 2.6rem); line-height: 1.06; letter-spacing: -.01em; text-wrap: balance; margin: 0 0 8px; }
+  .subtitle { font-family: var(--font-serif); font-style: italic; font-size: 1.12rem; color: var(--ink-soft); margin: 0; }
+
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+  .meta div { background: var(--surface); padding: 14px 22px; }
+  .meta div:first-child { padding-left: 48px; }
+  .meta dt { font-family: var(--font-mono); font-size: .64rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 3px; }
+  .meta dd { margin: 0; font-size: .92rem; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .body { padding: 8px 48px 40px; }
+
+  h2.sec { font-family: var(--font-mono); font-size: .72rem; letter-spacing: .18em; text-transform: uppercase; color: var(--accent-2); margin: 38px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  p { margin: 0 0 12px; }
+  .body strong { color: var(--ink); }
+
+  .bien-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 4px 0 4px; }
+  .bien-head h3 { font-family: var(--font-serif); font-size: 1.2rem; font-weight: 700; margin: 0; }
+  .bien-head .bval { font-family: var(--font-serif); font-size: 1.35rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .desc { font-size: .9rem; color: var(--ink-soft); margin: 0 0 14px; }
+
+  .tscroll { overflow-x: auto; }
+  table.vtable { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.vtable th { text-align: left; font-family: var(--font-mono); font-size: .62rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; padding: 0 0 8px; border-bottom: 1px solid var(--line-strong); }
+  table.vtable th.amt, table.vtable td.amt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.vtable td { padding: 8px 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); }
+  table.vtable td.cmp { color: var(--ink); }
+  table.vtable tr.total td { border-bottom: none; border-top: 2px solid var(--accent); padding-top: 11px; font-weight: 700; color: var(--ink); font-size: .96rem; }
+
+  .grandtotal { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 26px 0 4px; padding: 18px 22px; background: var(--accent-wash); border: 1px solid var(--line-strong); border-radius: 4px; }
+  .grandtotal .lbl { font-family: var(--font-mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-2); }
+  .grandtotal .amt { font-family: var(--font-serif); font-size: 1.9rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  .ph { font-family: var(--font-mono); font-size: .82em; background: var(--accent-wash); color: var(--accent-2); border-bottom: 1px dashed var(--accent-2); padding: 0 5px; border-radius: 2px; white-space: nowrap; }
+
+  .decl { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 18px 20px; margin: 8px 0 0; font-size: .95rem; }
+  .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 34px; }
+  @media (max-width: 620px){ .sign { grid-template-columns: 1fr; gap: 26px; } }
+  .sigline { border-top: 1.5px solid var(--line-strong); padding-top: 8px; }
+  .sigline .nm { font-family: var(--font-serif); font-weight: 700; }
+  .sigline .rl { font-size: .82rem; color: var(--ink-faint); }
+
+  .note { background: var(--caution-bg); border: 1px solid var(--caution-line); border-radius: 4px; padding: 13px 16px; margin: 16px 0 2px; font-size: .86rem; color: var(--caution-ink); }
+  .note .lbl { font-family: var(--font-mono); font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 4px; }
+
+  .disclaimer { margin: 34px 48px 40px; padding: 16px 18px; background: var(--surface-2); border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: 4px; font-size: .82rem; color: var(--ink-soft); }
+  .disclaimer b { color: var(--ink); }
+  .foot { text-align: center; font-family: var(--font-mono); font-size: .68rem; letter-spacing: .1em; color: var(--ink-faint); margin-top: 26px; }
+  .foot .wordmark { color: var(--ink-faint); }
+</style>
+
+<div class="wrap">
+  <article class="doc">
+    <header class="head">
+      <div class="eyebrow">
+        <span class="wordmark">HAT<b>3</b>X, S.L.</span>
+        <span>·</span>
+        <span>Aportación no dineraria</span>
+        <span class="badge">◆ Informe de valoración</span>
+      </div>
+      <h1 class="title">Informe de Valoración de Equipos Informáticos</h1>
+      <p class="subtitle">Aportación no dineraria a HAT3X, S.L. — sociedad en constitución</p>
+    </header>
+
+    <dl class="meta">
+      <div><dt>Fecha de referencia</dt><dd>Agosto 2026</dd></div>
+      <div><dt>Bienes valorados</dt><dd>2</dd></div>
+      <div><dt>Valor total</dt><dd>2.450 €</dd></div>
+      <div><dt>Método</dt><dd>Mercado 2ª mano</dd></div>
+    </dl>
+
+    <div class="body">
+      <h2 class="sec">Objeto y metodología</h2>
+      <p>El presente informe valora los equipos informáticos que <strong>D. Jose Miguel <span class="ph">[Apellidos]</span></strong> (DNI <span class="ph">[____]</span>) aporta como <strong>aportación no dineraria</strong> al capital social de HAT3X, S.L. en constitución.</p>
+      <p>La valoración se realiza a <strong>valor de mercado de segunda mano</strong> a fecha de agosto de 2026, tomando como referencia los precios de venta de equipos y componentes equivalentes en el mercado español de ocasión, y considerando el estado de conservación y la antigüedad de cada bien. Se adopta un criterio <strong>conservador</strong>: el valor asignado se sitúa en la franja media-baja del rango de mercado observado.</p>
+      <div class="note">
+        <span class="lbl">◆ Base legal (S.L.)</span>
+        En la sociedad de responsabilidad limitada no se exige informe de experto independiente para las aportaciones no dinerarias (a diferencia de la S.A.). El valor se declara por el socio aportante bajo su responsabilidad, respondiendo de su realidad y valoración conforme a los <strong>arts. 73 a 76 de la Ley de Sociedades de Capital</strong>.
+      </div>
+
+      <h2 class="sec">Bien 1 — Ordenador de sobremesa</h2>
+      <div class="bien-head">
+        <h3>Equipo de sobremesa ensamblado</h3>
+        <div class="bval">1.800 €</div>
+      </div>
+      <p class="desc">Ordenador de sobremesa a medida. N.º de serie de la placa base: <span class="ph">[____]</span>. Desglose de la valoración por componentes:</p>
+      <div class="tscroll">
+        <table class="vtable">
+          <thead>
+            <tr><th>Componente</th><th class="amt">Valor 2ª mano</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="cmp">Tarjeta gráfica AMD Radeon RX 7900 XT (referencia AMD, 20 GB)</td><td class="amt">550 €</td></tr>
+            <tr><td class="cmp">Procesador AMD Ryzen 9 5950X (16 núcleos)</td><td class="amt">270 €</td></tr>
+            <tr><td class="cmp">SSD Samsung 990 Pro 2 TB NVMe M.2</td><td class="amt">260 €</td></tr>
+            <tr><td class="cmp">SSD WD_Black SN7100 2 TB NVMe M.2</td><td class="amt">215 €</td></tr>
+            <tr><td class="cmp">Memoria RAM 32 GB Corsair Vengeance LPX DDR4-3200 (2×16 GB)</td><td class="amt">160 €</td></tr>
+            <tr><td class="cmp">Refrigeración líquida Corsair Nautilus 360 RS LCD</td><td class="amt">110 €</td></tr>
+            <tr><td class="cmp">Placa base MSI MPG B550 Gaming Plus</td><td class="amt">80 €</td></tr>
+            <tr><td class="cmp">Fuente de alimentación Gigabyte 750 W Gold full modular</td><td class="amt">60 €</td></tr>
+            <tr><td class="cmp">Caja NZXT H7 Flow</td><td class="amt">65 €</td></tr>
+            <tr><td class="cmp">Ventilación NZXT F360 RGB Core</td><td class="amt">30 €</td></tr>
+            <tr class="total"><td>Total Bien 1</td><td class="amt">1.800 €</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 class="sec">Bien 2 — Ordenador portátil</h2>
+      <div class="bien-head">
+        <h3>Dell Alienware m15 R6</h3>
+        <div class="bval">650 €</div>
+      </div>
+      <p class="desc">Ordenador portátil marca Dell, modelo Alienware m15 R6. Procesador Intel Core i7-11800H; tarjeta gráfica NVIDIA GeForce RTX 3060; 16 GB de RAM; 1 TB de almacenamiento SSD. N.º de serie (Dell Service Tag): <span class="ph">[____]</span>.</p>
+      <p class="desc">Valoración a mercado de segunda mano considerando su antigüedad (equipo de 2021) y la depreciación propia de los portátiles gaming: <strong>650 €</strong>.</p>
+
+      <div class="grandtotal">
+        <span class="lbl">Valor total de la aportación no dineraria</span>
+        <span class="amt">2.450 €</span>
+      </div>
+
+      <h2 class="sec">Declaración del socio aportante</h2>
+      <div class="decl">
+        D. Jose Miguel <span class="ph">[Apellidos]</span>, con DNI <span class="ph">[____]</span>, <strong>declara</strong> que los bienes descritos son de su exclusiva propiedad, se encuentran libres de cargas y gravámenes, y que la valoración aquí recogida —<strong>DOS MIL CUATROCIENTOS CINCUENTA EUROS (2.450 €)</strong>— responde a su valor real de mercado, asumiendo la responsabilidad prevista en los arts. 73 a 76 de la Ley de Sociedades de Capital.
+      </div>
+      <div class="sign">
+        <div class="sigline">
+          <div class="nm">Jose Miguel <span class="ph">[Apellidos]</span></div>
+          <div class="rl">Socio aportante · <span class="ph">[lugar]</span>, <span class="ph">[fecha]</span></div>
+        </div>
+        <div class="sigline">
+          <div class="nm">Firma</div>
+          <div class="rl">&nbsp;</div>
+        </div>
+      </div>
+
+      <h2 class="sec">Anexos justificativos</h2>
+      <p class="desc">Se acompañan como respaldo de la valoración:</p>
+      <p class="desc">• Facturas de compra de los equipos y componentes (si se dispone de ellas).<br>• Capturas de precios de mercado de componentes equivalentes a fecha del informe.</p>
+    </div>
+
+    <div class="disclaimer">
+      <b>Naturaleza del documento.</b> Este es un <b>informe de valoración emitido por el socio aportante</b> con justificación de mercado, conforme al régimen de aportaciones no dinerarias de la S.L. <b>No constituye una tasación oficial</b> de un tasador o experto independiente —no exigida legalmente en la S.L.— ni asesoramiento jurídico o fiscal. Debe revisarse con la gestoría o el notario antes de su incorporación a la escritura de constitución.
+    </div>
+  </article>
+
+  <div class="foot"><span class="wordmark">HAT3X, S.L.</span> · Informe de valoración · Aportación no dineraria</div>
+</div>
+
+</body></html>

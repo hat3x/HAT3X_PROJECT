@@ -1,0 +1,239 @@
+Kairos frente al mercado dental 
+ Análisis de producto · Kairos
+ Qué le falta a Kairos para competir en odontología
+ Kairos tiene ya el núcleo clínico que el mercado da por sentado: odontograma por
+ superficies, periodontograma por sitio, planes de tratamiento ligados a hallazgos y a
+ citas. Lo que le falta no es clínica: es puente con el hardware, cumplimiento normativo
+ y el circuito del dinero.
+ Fecha 27 agosto 2026 
+ Base código de salon-os · 65 migraciones 
+ Contraste Gesden · Clinic Cloud · Dentalink · DriCloud · Open Dental · Dentrix · CareStack 
+ Lo que ya está construido
+ Inventario real, leído del esquema y de las rutas del panel — no de la documentación
+ comercial. Esta es la línea de salida, y está más alta de lo que parece desde fuera.
+ Odontograma 
+ Hallazgos por diente FDI y superficie (mesial, distal, vestibular, palatino o lingual, incisal u oclusal), con evolución por fecha. 
+ Periodontograma 
+ Exploración por diente y por sitio, con histórico y resumen. 
+ Planes de tratamiento 
+ Fases, ítems por diente y superficie, precio, descuento, IVA, estado por ítem, cita ligada y hallazgo de origen. 
+ Historia clínica 
+ Expediente, notas de evolución y traza de cambios. 
+ Imágenes 
+ Periapical, aleta de mordida, panorámica, CBCT, cefalométrica, foto intraoral y STL, con metadatos DICOM. 
+ Consentimientos 
+ Plantilla versionada, estado, revocación y PDF asociado. 
+ Ortodoncia 
+ Visitas, plan de pagos con cuotas y pedidos de laboratorio. 
+ Mutuas 
+ Aseguradora, póliza del paciente y tarifa por servicio. 
+ Almacén 
+ Movimientos con lote y caducidad, y material consumido por servicio. 
+ Agenda 
+ Horario de clínica intersectado con el del profesional, excepciones y bloqueo por fases del tratamiento. 
+ Caja y facturación 
+ TPV, facturas, arqueo de turno y fichaje del personal. 
+ Captación 
+ Reserva online, recordatorios por WhatsApp y SMS, recall a seis meses y recepcionista de voz. 
+ Las carencias
+ Agrupadas por lo que cuesta no tenerlas, no por área funcional. El primer bloque cierra
+ ventas o expone legalmente; el segundo decide si la clínica lo usa todo el día o vuelve
+ a la hoja de cálculo; el tercero es donde podéis ganar en vez de empatar.
+ Bloqueante 
+ Sin esto, no entráis
+ Te tumban la demo o te dejan expuesto ante una inspección. 
+ Captura de radiología
+ Hoy patient_images guarda ficheros que alguien ha subido a mano. No hay
+ puente con el sensor intraoral, el ortopantomógrafo ni el escáner: ni TWAIN, ni
+ worklist DICOM, ni los SDK de Carestream, Vatech, Planmeca o Dentsply Sirona.
+ Es el gesto que un dentista repite treinta veces al día: pincha en el diente,
+ dispara y la radiografía aparece en la ficha. Si no lo tenéis, la clínica deja
+ abierto el software del rayo en paralelo y Kairos pasa a ser la segunda pantalla.
+ Las comparativas españolas marcan radiografía digital en todas las
+ soluciones que analizan: es la casilla que nadie perdona.
+ Coste de no tenerlo: pierdes la demo en el minuto tres, con el módulo clínico ya construido.
+ Firma del consentimiento
+ consents.signed_by_patient es un campo de texto donde se teclea el
+ nombre del paciente. Eso no es una firma: es una anotación. Y el consentimiento
+ informado es justo el documento que acaba en un juzgado cuando algo sale mal.
+ El estándar de mercado es firma biométrica en tableta —trazo y presión capturados— o
+ firma electrónica con sello de tiempo, ligada al texto exacto de la plantilla. La
+ buena noticia: ya guardáis body con el texto firmado y
+ template_version , que es la parte difícil de hacer bien. Falta la firma.
+ Coste de no tenerlo: el consentimiento no prueba nada, y la clínica sigue imprimiendo en papel.
+ Trazabilidad de implantes y esterilización
+ No existe. El Reglamento (UE) 2017/745 exige identificador único UDI y seguimiento
+ individual de cada producto sanitario implantable, registrado en EUDAMED; la
+ normativa española de esterilización, vigente desde 2021, exige trazabilidad
+ completa del material.
+ Falta poder decir «este implante, con este UDI y este lote, se colocó a esta persona
+ en el 46 el día X», y falta el registro de ciclos de autoclave ligado al paciente
+ tratado. stock_movement ya lleva lote y caducidad: tenéis media pieza.
+ No está el enlace al acto clínico.
+ Coste de no tenerlo: ninguna clínica que ponga implantes puede usaros como sistema único.
+ Receta electrónica privada
+ prescription emite un documento propio. El Sistema Español de Receta
+ Electrónica Privada que regulan los Consejos Generales de Médicos, Farmacéuticos,
+ Dentistas y Podólogos exige software homologado para que la farmacia
+ dispense, y para que la receta tenga trazabilidad y unicidad frente a falsificación.
+ Sin esa homologación, vuestras recetas son papel con membrete.
+ Coste de no tenerlo: el dentista prescribe fuera de Kairos, y con él se va el registro.
+ Verifactu
+ Se retiró del código el 24 de julio de 2026
+ ( 20260724120000_remove_verifactu.sql ). El aplazamiento del Real
+ Decreto-ley 15/2025 os da aire —1 de enero de 2027 para sociedades, 1 de julio de
+ 2027 para autónomos y profesionales— pero es una fecha con nombre y apellidos.
+ Las clínicas dentales aparecen señaladas de forma explícita en las guías del
+ regulador porque emiten factura simplificada en volumen. Retirarlo fue defendible;
+ olvidarlo, no.
+ Coste de no tenerlo: hoy ninguno. En enero de 2027, vuestro módulo de facturación deja de ser vendible.
+ Operativo 
+ Sin esto, no lo usan todo el día
+ Entran, pero acaban gestionando la clínica en una hoja aparte. 
+ Circuito de mutuas
+ Tenéis insurer_service_price : la tarifa. Falta todo lo demás, que es
+ donde está el trabajo real — autorización previa (Adeslas las da con noventa días de
+ validez), acto ligado a esa autorización, remesa a la compañía, conciliación del
+ cobro, copago del paciente y el informe de actos aprobados que nadie ha facturado.
+ Adeslas, Sanitas, DKV, Asisa y Mapfre exigen a sus clínicas de cuadro facturación
+ electrónica y autorizaciones digitales. Para una clínica de cuadro esto no es un
+ módulo: es la mitad de sus ingresos.
+ Flujo del día y gabinetes
+ Hay panel del día, pero los estados de la cita son
+ pending · confirmed · completed · cancelled · no_show . No existe «ha
+ llegado» ni «está en el gabinete», así que la recepción no sabe quién espera ni desde
+ cuándo.
+ Tampoco existe el gabinete como recurso reservable. En Biodental está resuelto con
+ single_resource: true , que bloquea el hueco para toda la clínica: sirve
+ para una consulta de un sillón y se rompe en cuanto haya dos ocupados a la vez.
+ Lista de espera
+ No hay nada. Cuando cae una cita de las nueve de la mañana, nadie sabe a quién
+ llamar y ese hueco se pierde. Es la carencia con el retorno más directo y de las más
+ baratas de construir: ya tenéis los pacientes, sus teléfonos, el recall y el canal de
+ WhatsApp montado.
+ Laboratorio
+ lab_order es el nombre del laboratorio en texto libre, tres fechas y una
+ nota. Falta catálogo de laboratorios, coste del trabajo, aviso cuando se pasa la
+ fecha de entrega y —lo que hoy define el flujo digital— el caso enlazado: el STL que
+ sale de un iTero, un TRIOS o un Medit.
+ Indicadores de clínica
+ La analítica actual es de comercio: facturación, tickets, ticket medio, nuevos frente
+ a recurrentes, métodos de pago. Un director de clínica dental mira otras cosas: tasa
+ de aceptación de presupuestos, producción por sillón y por profesional, tratamientos
+ propuestos que nadie ha agendado, ausencias y eficacia real del recall.
+ Tenéis los datos — treatment_plan.status ya distingue propuesto de
+ aceptado— y no los estáis contando.
+ Diferenciador 
+ Aquí podéis ganar, no solo empatar
+ Nadie os compra por esto todavía; con esto os eligen a vosotros. 
+ La recepcionista, como producto
+ Sara es la pieza que Gesden, Clinic Cloud y Dentalink no tienen y que no van a
+ construir pronto: una recepcionista de voz que coge el teléfono, consulta la agenda
+ real y da la cita. Las comparativas españolas solo marcan «asistente con IA» en dos
+ de las siete soluciones que analizan, y se refieren a un chat de texto.
+ Es vuestra cabeza de puente. El resto de este informe es alcanzar al mercado; esto es
+ adelantarlo. Merece ser el titular de la venta, no un complemento en los ajustes.
+ IA sobre la radiografía
+ Pearl, Overjet, Diagnocat y Allisone detectan caries y pérdida ósea sobre la
+ radiografía y —esto es lo importante— convierten el hallazgo en algo que el paciente
+ entiende mirando la pantalla. Los propios fabricantes venden como resultado principal
+ la aceptación del tratamiento , no el diagnóstico.
+ No hay que construirlo: se integra. Pero requiere primero la captura de radiología
+ del bloque bloqueante, así que va detrás por dependencia, no por importancia.
+ Presupuesto que se vende solo
+ El odontograma es la mejor herramienta comercial de una clínica y hoy no sale del
+ software. Falta el presupuesto que el paciente recibe, entiende, firma y paga desde
+ el móvil, con financiación integrada —Cofidis, Sequra, Aplazame, Pepper— que es lo
+ que convierte un plan de cuatro mil euros en un plan aceptado.
+ Ya tenéis cuentas de paciente y reserva online. Falta que el paciente vea su plan, no
+ solo su cita.
+ Dónde estáis frente al mercado
+ Sobre las funciones que las guías españolas usan para ordenar el sector. «Gestión dental
+ española» agrupa el comportamiento típico de Gesden, Clinic Cloud, Dentalink, DriCloud y
+ XDentalCloud.
+ Función
+ Kairos
+ Gestión dental española
+ Suites internacionales
+ Odontograma por superficies
+ Sí
+ Sí
+ Sí
+ Periodontograma por sitio
+ Sí
+ Desigual
+ Sí
+ Planes y presupuestos
+ Sí
+ Sí
+ Sí
+ Captura desde el equipo de rayos
+ No
+ Sí
+ Sí
+ Firma biométrica del consentimiento
+ No
+ Sí
+ Sí
+ Receta electrónica homologada
+ No
+ Algunas
+ No aplica
+ Trazabilidad de implantes y esterilización
+ No
+ Algunas
+ Sí
+ Circuito completo de mutuas
+ Solo tarifas
+ Sí
+ Sí
+ Gabinete como recurso
+ No
+ Sí
+ Sí
+ Lista de espera
+ No
+ Sí
+ Sí
+ Indicadores propios de clínica
+ No
+ Sí
+ Sí
+ Laboratorio con caso digital
+ Solo fechas
+ Desigual
+ Sí
+ Recordatorios y reserva online
+ Sí
+ Sí
+ Sí
+ Recepcionista de voz con agenda real
+ Sí
+ No
+ Emergente
+ Verifactu
+ Retirado
+ En curso
+ No aplica
+ Agosto de 2026. «Desigual» significa presente en parte de las soluciones del grupo.
+ Por dónde empezaría
+ Captura de radiología. Es el único punto que invalida todo lo demás. Con el módulo clínico ya construido, no tenerlo es perder demos que teníais ganadas.
+ Firma biométrica del consentimiento. Semanas de trabajo, no meses: el texto versionado y el estado ya están. Cierra la exposición legal más barata de cerrar.
+ Lista de espera y estado de llegada. Lo más barato del informe y lo que la clínica nota el primer día. Reutiliza pacientes, teléfonos y WhatsApp, que ya tenéis.
+ Trazabilidad de implante y esterilización. Abre las clínicas de implantología, que son las que más facturan y las que más pagan por software.
+ Circuito de mutuas. El más caro de los cinco, pero es la mitad de la facturación de cualquier clínica de cuadro.
+ Verifactu no entra en esta lista por fecha, no por importancia: hay que tenerlo planificado
+ para el último trimestre de 2026 y entregado antes de enero de 2027. Y la IA sobre
+ radiografía va justo después de la captura: es la mejor palanca comercial del informe, pero
+ depende de ella.
+ Fuentes
+ Inventario de Kairos: esquema y panel de clients/projects/salon-os , 65 migraciones, lectura directa del código.
+ Mejor Software Dental 2025-2026, análisis comparativo — matriz de funciones del sector español.
+ Los 6 mejores software para clínica dental, guía 2026 y Comparativa de software de gestión para clínicas dentales 2026 .
+ Best Dental Practice Management Software 2026 y Dentrix Alternatives 2026 — Open Dental, Curve, CareStack y Dentrix Ascend.
+ Consejo General de Dentistas, Receta Electrónica Privada y homologación del software SREP .
+ Seguridad y trazabilidad de los implantes: MDR 2017/745, UDI y EUDAMED y normativa de esterilización en clínicas dentales .
+ Obligaciones VeriFactu 2026-2027 y aplazamiento por el Real Decreto-ley 15/2025 .
+ Flujos de mutuas y financiación en software dental y volumen documental y conciliación con Sanitas, DKV, Adeslas y Asisa .
+ Diagnocat, Pearl y Overjet comparados y Overjet frente a Pearl .
+ Integración de escáneres intraorales — flujo STL con iTero, TRIOS y Medit.

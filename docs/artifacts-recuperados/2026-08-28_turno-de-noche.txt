@@ -1,0 +1,120 @@
+Turno de noche 
+ Kairos · odontología · 27–28 agosto 2026
+ Turno de noche
+ Lo construido mientras no estabas, lo que decidí solo, y las cosas que necesito de ti para
+ seguir. Nada se ha desplegado y nada se ha commiteado.
+ 2128 tests en verde 
+ +125 tests nuevos 
+ 3 migraciones aplicadas 
+ 1 fallo encontrado 
+ Dónde está cada fase
+ Del roadmap de trece fases se ha trabajado en tres. Ninguna se dio por buena sin tests, y
+ todo lo que toca la base de datos está aplicado y verificado contra producción.
+ Terminada 
+ A2 · Firma del consentimiento
+ Antes, firmar era teclear el nombre del paciente en un campo de texto. Eso es una
+ anotación, no una firma, y el consentimiento informado es justo el documento que acaba en
+ un juzgado. Ahora hay trazo real, sello criptográfico del texto firmado y un PDF que
+ permite comprobarlo sin abrir la aplicación.
+ ✓ Lienzo de captura con Pointer Events: lápiz, dedo y ratón, con presión 
+ ✓ Sello SHA-256 del contenido, calculado en el servidor con el texto leído de la base 
+ ✓ PDF archivado con el trazo, la versión de plantilla y el sello dentro 
+ ✓ Firma inmutable en base de datos: ni el sello ni el trazo se pueden reescribir 
+ · Falta decidir cómo se etiquetan en pantalla los 62 consentimientos antiguos 
+ Casi 
+ A1a · Captura de radiología
+ La fase más larga del roadmap, y la que replanteamos ayer cuando dijiste que cada clínica
+ debía poder elegir su equipo. Tenías razón: no hay ninguna marca cableada en el código.
+ Hay cuatro adaptadores y cada clínica configura los suyos.
+ ✓ Protocolo navegador↔agente, con lista de orígenes y token de emparejamiento 
+ ✓ Tabla salon_imaging_device y pantalla Ajustes → Equipos de imagen 
+ ✓ Agente local: servidor, configuración y captura por carpeta vigilada 
+ ✓ Cliente del navegador, con los errores traducidos a algo accionable 
+ · Falta dónde guarda el panel el token, el botón en la ficha, y probarlo con un equipo real 
+ A medias 
+ B3 · Lista de espera
+ Cuando cancelan la cita de las nueve, hoy nadie sabe a quién llamar. Ya existen la tabla,
+ el emparejamiento y la pantalla donde ver quién espera y su teléfono, marcable de un
+ toque.
+ ✓ Motor de emparejamiento: servicio, profesional, días y franja, con prioridad y antigüedad 
+ ✓ Tabla, validación, acciones y pantalla de lista de espera 
+ · Falta engancharlo a la cancelación de una cita y el aviso por WhatsApp 
+ Lo que decidí sin preguntarte
+ Esta es la parte que conviene que revises. Son decisiones que cambian el producto, no
+ detalles de implementación, y las tomé para no quedarme parado.
+ El sello se calcula en el servidor, nunca en el navegador
+ Quien firma controla su navegador. Un sello calculado allí permitiría sellar un texto
+ distinto del que hay guardado, y entonces no probaría nada. Hay un test que falla si
+ alguien invierte esto.
+ Primero se archiva, después se marca como firmado
+ Si falla el guardado del trazo o del PDF, el consentimiento se queda sin firmar. Uno
+ marcado como firmado cuyo documento se perdió es peor que uno sin firmar: aparenta
+ prueba donde no la hay.
+ Los 62 consentimientos antiguos se quedan como están
+ No se pueden arreglar hacia atrás: nadie puede volver a recoger un trazo que nunca se
+ capturó, y rellenarlos sería fabricar una prueba. La restricción nueva obliga de aquí
+ en adelante y deja en paz lo ya escrito.
+ El agente local no guarda credenciales
+ Dispara, devuelve los bytes al navegador, y es el navegador —ya autenticado— quien sube
+ la imagen. Si el ordenador de una clínica se ve comprometido, allí no hay ninguna llave
+ que robar. Lo contrario obligaría a repartir credenciales por todos los puestos de
+ todas las clínicas.
+ Las rutas de las carpetas viven en el agente, no viajan
+ El navegador manda un identificador de equipo y nunca una carpeta. Así el agente no
+ puede convertirse en un lector de ficheros a la carta para quien logre hablar con su
+ puerto.
+ La lista de espera no es solo dental
+ Un hueco perdido lo es igual en una peluquería, y la tabla no tiene nada dental.
+ Limitarla a odontología habría sido regalarle la función al resto de sectores por
+ descuido. Y la puede usar el personal de mostrador: exigir dueña o encargado obligaría
+ a molestarte cada vez que alguien dice «avísame si sale algo».
+ Elegí pdf-lib para el PDF
+ Te lo propuse y dijiste que tirara. Sin binarios nativos, funciona en el runtime de
+ Vercel y dibuja el trazo directamente desde el mismo path que se archiva como SVG.
+ Lo que necesito de ti
+ Nada bloquea, pero hay algo sin probar contra la realidad
+ Las tres migraciones están aplicadas y verificadas, así que el código y la base están
+ alineados y ya se puede desplegar. Lo único sin contrastar es el agente: no ha visto
+ todavía una radiografía de verdad.
+ Dónde guarda el panel el token del agente
+ Es la última milla de A1a. La opción sencilla es la configuración del salón, sin
+ migración; la estricta, una tabla propia. El token protege del resto de webs, no del
+ personal de la clínica, así que la sencilla probablemente basta — pero prefiero que lo
+ decidas tú.
+ Cómo etiquetamos los consentimientos antiguos
+ Propongo «firmado sin trazo (anterior a la firma manuscrita)». Es la verdad, y es más
+ útil que aparentar que son equivalentes a los nuevos.
+ Y cuando puedas, qué equipo de rayos tiene Biodental
+ Ya no bloquea nada —la carpeta vigilada funciona con cualquier aparato— pero hace falta
+ para cerrar los adaptadores TWAIN y DICOM, que son los que necesitan un equipo real
+ delante.
+ Un fallo que apareció al final
+ Escribí los tests de las dos pantallas nuevas al terminarlas, y pasaron a la primera. Eso
+ no demuestra nada —un test escrito después de que el código funcione no ha probado nunca
+ que sepa fallar—, así que rompí el filtro a propósito para comprobar que lo detectaba. Sí
+ lo detectó. Y por el camino, uno de ellos encontró algo de verdad.
+ Corregido 
+ El error del formulario se pintaba detrás del diálogo
+ En Ajustes → Equipos de imagen , si guardabas una carpeta vigilada sin indicar la
+ ruta, el mensaje aparecía en la página de debajo, tapado por el modal. Desde el otro lado
+ de la pantalla, pulsabas «Guardar» y no pasaba nada, sin ninguna pista de por qué.
+ Tampoco lo leería un lector de pantalla, porque el modal oculta el resto de la página del
+ árbol de accesibilidad.
+ Ahora el error del formulario se pinta dentro del diálogo, y el de la lista —un borrado
+ que falla— se queda fuera, que es donde tiene sentido.
+ Dos cosas que me encontré por el camino
+ Ninguna es urgente, pero las dos te ahorrarán un rato cuando toquen.
+ Ojo 
+ El token de Supabase estaba en un sitio raro
+ Estaba en el .env de denueveanueve , no en el de salon-os. Ya lo
+ rotaste y el viejo está muerto, pero en ese fichero sigue el valor caducado: conviene
+ limpiarlo para que nadie pierda el rato con él.
+ Ojo 
+ npm run lint no está configurado
+ Abre el asistente interactivo de ESLint en vez de analizar. No afecta a la puerta de
+ calidad del repo, que es typecheck más Vitest, pero si acaba en un CI se quedará colgado
+ esperando una respuesta que nadie va a dar.
+ Todo el trabajo está sin commitear, en la rama hat3x/HAT3X-038 : 11 ficheros
+ modificados y 30 nuevos, incluido el paquete del agente. Cuando quieras lo separo en
+ commits con sentido — uno por fase, más el arreglo del horario de Biodental, que sigue ahí
+ desde antes de ayer.

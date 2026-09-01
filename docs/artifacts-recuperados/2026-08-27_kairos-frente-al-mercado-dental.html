@@ -1,0 +1,757 @@
+<!doctype html><html><head><!-- frame-runtime --><base href="/_f/1787862379-8e2f/"><script>window.__FRAME_PREAMBLE={"v":1,"capabilities":{"artifact":"artifact.BizKCZHg.js","assets":"assets.8Gk803W0.js","comments":"comments.vw5vQdGA.js","db":"db.h-3sndFg.js","downloads":"downloads.C3GSvEDP.js","embed":"embed.CxGAyc-v.js","mcp":"mcp.Bvma3qD7.js","network":"network.B5UA9Su4.js","notifications":"notifications.ssU4jy7G.js","permissions":"permissions.BNySkLV5.js","room":"room.BMMoe2BY.js","sample":"sample.BW2Uysoh.js","self":"artifact.BizKCZHg.js","user":"user.BpKav-Rf.js"},"transforms":"_transforms.DSB5x63f.js","comments":"_comments.BcSQU-9b.js","translate":"_translate.5HCW4BJh.js"}</script><script>(function(){"use strict";var te=["light","dark","system"],re=/^[A-Za-z0-9_-]{1,64}$/,$=/^[a-zA-Z_:][a-zA-Z0-9_:.-]{0,127}$/,ne=new Set(["class","hidden","value","checked","style","title","alt","placeholder","lang","dir","role","tabindex","disabled","readonly","contenteditable","open","colspan","rowspan"]);function oe(e){const t=e.toLowerCase();return t.startsWith("data-")||t.startsWith("aria-")||ne.has(t)}var Be="http://www.w3.org/1999/xhtml",se="http://www.w3.org/2000/svg",ae=new Set(["script","style","iframe","noscript","noframes","noembed","xmp","plaintext","template","title","textarea","object","embed"]),ie=new Set(["script","style"]);function ce(e){const t=e.localName.toLowerCase();return e.namespaceURI==="http://www.w3.org/1999/xhtml"?!ae.has(t):e.namespaceURI===se?!ie.has(t):!1}function M(e,t){return e===t||(e===160||e===32)&&(t===160||t===32)}function le(e,t){const r=e.length,n=t.length;let s=0;for(;s<r&&s<n&&M(e.charCodeAt(s),t.charCodeAt(s));)s++;let o=0;for(;o<r-s&&o<n-s&&M(e.charCodeAt(r-1-o),t.charCodeAt(n-1-o));)o++;return{p:s,s:o}}function ue(e,t){const r=e.firstChild;if(e.childNodes.length!==1||r===null||r.nodeType!==Node.TEXT_NODE){e.textContent=t;return}const n=r.data,s=n.length,o=t.length,{p:i,s:c}=le(n,t);i===s&&c===0&&s===o||r.replaceData(i,s-i-c,t.slice(i,o-c));const h=r.data,p=e.ownerDocument.getSelection?.()??null,w=p!==null&&p.rangeCount>0&&(p.anchorNode===r||p.focusNode===r)?{anchor:p.anchorNode,anchorOffset:p.anchorOffset,focus:p.focusNode,focusOffset:p.focusOffset}:null;let m=-1,g=-1;for(let f=0;f<h.length&&f<t.length;f++){const v=h.charCodeAt(f),b=t.charCodeAt(f);v!==b&&M(v,b)&&(m<0&&(m=f),g=f)}const a=m>=0;if(a&&r.replaceData(m,g-m+1,t.slice(m,g+1)),a&&w!==null&&w.anchor!==null&&w.focus!==null)try{p.setBaseAndExtent(w.anchor,w.anchorOffset,w.focus,w.focusOffset)}catch{}}var fe=new Set(["html","head","body","frameset"]);function de(e){return e.namespaceURI==="http://www.w3.org/1999/xhtml"&&fe.has(e.localName)}function pe(e){if(e===null||typeof e!="object")return!1;const t=e;if(typeof t.target!="string"||!re.test(t.target)||t.text!==void 0&&typeof t.text!="string")return!1;if(t.attrsSet!==void 0){if(t.attrsSet===null||typeof t.attrsSet!="object")return!1;for(const[r,n]of Object.entries(t.attrsSet))if(!$.test(r)||typeof n!="string")return!1}if(t.attrsRemoved!==void 0){if(!Array.isArray(t.attrsRemoved))return!1;for(const r of t.attrsRemoved)if(typeof r!="string"||!$.test(r))return!1}return!0}function me(e,t){if(e===null||typeof e!="object")return!1;const{seq:r,elements:n}=e;if(typeof r!="number"||!Number.isSafeInteger(r)||!Array.isArray(n)||n.length===0||n.length>64)return!1;for(let s=0;s<n.length;s++)if(!t(n[s]))return!1;return!0}function he(e){return e===null||typeof e!="object"?!1:me(e.__frame_patch,pe)}function _e(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_init;return t!==null&&typeof t=="object"}function ve(e){return e!==null&&typeof e=="object"&&e.__frame_size_poke===!0}function ye(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_theme;if(t===null||typeof t!="object")return!1;const r=t.theme;return typeof r=="string"&&te.includes(r)}var A=/^[\w.-]+\.js$/;function we(e,t,r){return r?"inert":typeof t=="string"&&A.test(t)?e?[t]:"inert":e?"inert":"framed"}function ge(){return{post(e,t){parent.postMessage(e,t)},on(e){const t=r=>{r.source===parent&&e(r.data,r.origin,r.isTrusted)};return addEventListener("message",t),()=>removeEventListener("message",t)}}}function be(){return{post:()=>{},on:()=>()=>{}}}var j="__frame_scroll",Ee=150,Ae=310,Se=160,Te=3e4;function ke(){let e=0,t=!1,r=!1,n=!1,s=0,o=null;const i=l=>{try{sessionStorage.setItem(j,JSON.stringify({y:l}))}catch{}},c=()=>{if(clearTimeout(e),o===null)return;const l=o;o=null,i(l)},h=()=>{if(t){t=!1;return}r=!0,o=scrollY,clearTimeout(e),e=setTimeout(c,Ee)};try{addEventListener("scroll",h,{passive:!0}),addEventListener("pagehide",c)}catch{}const p=()=>{let l;try{l=sessionStorage.getItem(j)}catch{return null}if(l===null)return null;let _;try{_=JSON.parse(l)}catch{_=null}const d=_?.y;if(!(typeof d=="number"&&Number.isFinite(d)&&d>=0)){try{sessionStorage.removeItem(j)}catch{}return null}return d};let w=!1;const m=l=>{try{const _=scrollY;scrollTo({top:l,left:0,behavior:"instant"}),s=l,n=!0,clearTimeout(e),o=null,i(l);const d=scrollY;d!==_&&(t=!0),d!==l&&!w&&(w=!0,addEventListener("load",()=>{try{if(scrollY===d){const T=p();m(T!==null?T:s)}}catch{}},{once:!0}))}catch{}},g=()=>{try{return!!location.hash}catch{return!0}};let a=!1;const f=()=>{try{if(a||innerWidth>Ae||innerHeight>Se)return;a=!0;const l=Date.now(),_=()=>{try{removeEventListener("resize",_)}catch{}if(Date.now()-l>Te||r||g())return;const d=p();m(d!==null?d:s)};addEventListener("resize",_)}catch{}};let v=!1,b=!1;return{restore(){if(v||(v=!0,g()))return;const l=p();l!==null&&(m(l),f())},promoted(){if(b||(b=!0,g()))return;const l=p();l!==null?(m(l),f()):n&&m(s)}}}function Re(e,t,r,n){let s=null;try{s=window.trustedTypes?.createPolicy("frame-runtime",{createScriptURL:h=>h})??null}catch{}const o=window.Worker,i=o?.prototype,c=Object.freeze({Worker:o,workerOn:i?.addEventListener,workerPost:i?.postMessage,workerTerminate:i?.terminate,fetch:window.fetch.bind(window),preventDefault:Event.prototype.preventDefault,policy:s,origins:t});r(e).then(h=>h?.bootTopLevel?h.bootTopLevel(c,n):n.settle()).catch(()=>n.settle())}var De="modulepreload",Ie=function(e){return"/"+e},Ue={},Le=function(t,r,n){let s=Promise.resolve();function o(i){const c=new Event("vite:preloadError",{cancelable:!0});if(c.payload=i,window.dispatchEvent(c),!c.defaultPrevented)throw i}return s.then(i=>{for(const c of i||[])c.status==="rejected"&&o(c.reason);return t().catch(o)})},Oe=window===top,q=Object.getOwnPropertyDescriptor(window,"claude"),k=we(Oe,window.__FRAME_PREAMBLE?.topLevel,q?.writable===!1),N=typeof k=="object"&&k[0],y=N?be():ge();(function(){const e=Object.defineProperty,t=globalThis,r=["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel","RTCIceCandidate","RTCSessionDescription","RTCRtpSender","RTCRtpReceiver"];let n=0;for(let s=0;s<r.length;s++){const o=r[s];try{e(t,o,{value:void 0,writable:!1,configurable:!1})}catch{try{delete t[o]}catch{}try{e(t,o,{value:void 0,writable:!1,configurable:!0})}catch{}}typeof t[o]=="function"&&n++}if(n&&k==="framed")try{y.post({__frame_rtc_lockdown_failed:n},"*")}catch{}})();var Pe=1e4,Y=Object.freeze([...window.__FRAME_PREAMBLE?.origins??["https://claude.ai","https://preview.claude.ai"]]);function X(e){for(const t of Y)if(t.endsWith(":*"))try{const r=new URL(e);if(`${r.protocol}//${r.hostname}:*`===t)return!0}catch{}else if(e===t)return!0;return!1}var R=Object.freeze({...window.__FRAME_PREAMBLE?.capabilities}),B=window.__FRAME_PREAMBLE?.transforms,D=window.__FRAME_PREAMBLE?.comments,I=window.__FRAME_PREAMBLE?.translate;function S(e){return Le(()=>import("/_runtime/"+e),void 0)}function G(e,t){return{contract:e.contract,changes:new Set(e.changes??[]),flags:new Set(e.flags??[]),capabilities:e.capabilities??{},capBudgets:e.capBudgets??{},transforms:new Map,shellOrigin:t,mount:x,hooks:O,pipe:()=>({wrap:(r,n)=>(...s)=>{try{return n(...s)}catch(o){return Promise.reject(o)}}})}}var L=null,E=null;function V(e,t,r){try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!1,enumerable:!0})}catch{try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!0,enumerable:!0})}catch{}}}var U=!1,O={editBefore:null,edit:null};function Ce(e,t,r=!1){const n=[];let s;if(r)try{O.editBefore?.(e)}catch{}for(const o of e.elements){const i=document.querySelector(`[data-id="${o.target}"]`);if(!i){s=o.target;break}if([...Object.keys(o.attrsSet??{}),...o.attrsRemoved??[]].some(c=>!oe(c))){s=o.target;break}if(o.text!==void 0&&(!ce(i)||de(i))){s=o.target;break}for(const[c,h]of Object.entries(o.attrsSet??{}))if(!J(i,c)){try{i.setAttribute(c,h)}catch{}Z(i,c,h)}for(const c of o.attrsRemoved??[])J(i,c)||(i.removeAttribute(c),Z(i,c,null));typeof o.text=="string"&&ue(i,o.text),n.push(o.target)}if(r)try{O.edit?.(e.seq,n,s)}catch{}if(s!==void 0){y.post({__frame_patch_miss:{seq:e.seq}},t);return}try{document.dispatchEvent(new CustomEvent("claude:edit",{detail:{seq:e.seq,targets:n}}))}catch{}}function Z(e,t,r){if(!(e instanceof HTMLInputElement))return;const n=t.toLowerCase();n==="checked"?e.checked=r!==null:n==="value"&&e.type!=="file"&&(e.value=r??"")}function J(e,t){const r=t.toLowerCase(),n=e;return r==="data-id"||(r==="value"||r==="checked")&&(n.__artifactSecret===!0||/^(password|hidden|file)$/.test(n.type??"")||/(^|\s)(cc-|one-time-code|current-password|new-password)/i.test(`${e.getAttribute("autocomplete")??""} ${n.autocomplete??""}`))}function Q(e){const t=document.documentElement;e==="light"||e==="dark"?(t.dataset.theme=e,t.style.colorScheme=e,U=!0):U&&(delete t.dataset.theme,t.style.colorScheme="",U=!1)}var P=new Map;function Me(){let e;const t={u:new Promise(r=>{e=r}),r:r=>{t.done=!0,e(r)},done:!1,nulled:!1};return t}function F(){for(const e of P.values())e.done||(e.nulled=!0,e.r(null))}var je=Object.freeze(Object.assign(Object.create(null),{call:Function.prototype.call,apply:Function.prototype.apply,bind:Function.prototype.bind})),x=(e,t)=>{const r=P.get(e);if(!r||r.done){r?.nulled&&E&&y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:e}},E);return}const n=typeof t=="function"?Object.setPrototypeOf(t,je):Object.assign(Object.create(null),t);typeof n.then=="function"&&delete n.then,r.r(Object.freeze(n))};function ee(){const e=q?.value??{};V(window,"claude",e);for(const t of Object.keys(R)){if(e[t]!==void 0){V(e,t,e[t]);continue}P.set(t,Me())}if(e.use===void 0){const t=r=>{if(typeof r!="string"||!Object.hasOwn(R,r))return Promise.resolve(null);const n=P.get(r);return n?n.u:Promise.resolve(e[r]??null)};try{Object.defineProperty(e,"use",{value:t,writable:!0,configurable:!0,enumerable:!1})}catch{}}}if(k==="framed"){const e=B&&A.test(B)?S(B).catch(()=>{}):Promise.resolve(void 0),t=a=>{if(a.type==="auxclick"&&a.button!==1)return;const f=a.target,v=f&&f.closest?f.closest("a[href],area[href]"):null;if(!v)return;const b=v.getAttribute("href");if(!b)return;let l;try{l=new URL(b,document.baseURI)}catch{return}if((l.protocol==="http:"||l.protocol==="https:")&&l.origin!==location.origin){a.preventDefault();const _=(v.getAttribute("target")??"").toLowerCase(),d=a.type==="auxclick"||a.metaKey||a.ctrlKey||a.shiftKey||a.altKey||!["","_self","_top","_parent"].includes(_);y.post({__frame_nav:!0,url:l.href,newTab:d},"*")}};addEventListener("click",t,!0),addEventListener("auxclick",t,!0);const r={},n=a=>{a.isTrusted&&(r.pointer=!0)},s=a=>{a.isTrusted&&(r.click=!0)};addEventListener("pointermove",n,{capture:!0,passive:!0}),addEventListener("click",s,{capture:!0,passive:!0}),e.then(a=>{a?.wireNav&&(a.wireNav(),removeEventListener("click",t,!0),removeEventListener("auxclick",t,!0),removeEventListener("pointermove",n,!0),removeEventListener("click",s,!0),a.wireEngagement?.(r))});let o=null;try{o=ke()}catch{}ee();let i=null,c=null,h=0;const p=y.on((a,f)=>{X(f)&&_e(a)&&(i=a.__frame_init,E=f,p(),clearTimeout(h),c?.())});y.post({__frame_connect:!0},"*");const w=new Promise(a=>{c=a,h=setTimeout(()=>{p(),a()},Pe)}),m=document.readyState==="loading"?new Promise(a=>document.addEventListener("DOMContentLoaded",()=>a(),{once:!0})):Promise.resolve();m.then(()=>{try{o?.restore()}catch{}});const g={cb:null};y.on((a,f)=>{if(X(f)&&ve(a)){try{o?.promoted()}catch{}g.cb?.()}}),w.then(async()=>{if(!i||!E){F();return}Q(i.theme);const a=E;let f=!1,v=!1;y.on((u,z,C)=>{if(z!==a)return;ye(u)&&Q(u.__frame_theme.theme),he(u)&&Ce(u.__frame_patch,a,C);const H=u?.__fc_mode;H&&typeof H=="object"&&!f&&D&&A.test(D)&&(f=!0,S(D).then(K=>K.install?.(a,H.on===!0)).catch(()=>{}));const W=u?.__ft_cmd;W&&typeof W=="object"&&!v&&I&&A.test(I)&&(v=!0,S(I).then(K=>K.install?.(a,W)).catch(()=>{}))});const b=Object.keys(i.capabilities??{}).filter(u=>Object.hasOwn(R,u)).map(u=>[u,R[u]]).filter(u=>typeof u[1]=="string"&&A.test(u[1])),l=await Promise.allSettled(b.map(([,u])=>S(u))),_=await e,d=E;if(_?.buildBoot||y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),_?.buildBoot)try{L=_.buildBoot(i,_.TRANSFORMS??{},{shellOrigin:d,mount:x,hooks:O},u=>y.post({__frame_cap_telemetry:u},d))}catch{y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),L=G(i,d)}else L=G(i,d);const T=u=>y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:u}},d),Ne=L;l.forEach((u,z)=>{const C=b[z][0];if(u.status!=="fulfilled"){T(C);return}try{u.value?.install?.(Ne)}catch{T(C)}}),F(),await m,y.post({__frame_ready:!0},E),e.then(u=>u?.installSizeReporter?.(d,g))})}else N&&(ee(),Re(N,Y,S,{settle:F,mount:x}))})();</script><!-- /frame-runtime --><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Kairos frente al mercado dental</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     Paleta: radiografía dental. Blanco esmalte con sesgo cian,
+     sombras frías, acento acero-clínico. El rojo es el mismo que
+     un odontograma usa para patología: aquí marca lo bloqueante.
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --paper:      #F4F7F7;
+    --surface:    #FFFFFF;
+    --surface-2:  #EAF0F0;
+    --ink:        #111A1D;
+    --ink-2:      #46585D;
+    --ink-3:      #74878C;
+    --rule:       #D3DEDF;
+    --rule-soft:  #E3EBEB;
+    --accent:     #0E6E70;
+    --critical:   #A32B21;
+    --warning:    #8A5A00;
+    --good:       #2A6650;
+    --critical-bg:#F7E7E5;
+    --warning-bg: #F7EEDC;
+    --good-bg:    #E2EFE9;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0D1416;
+      --surface:    #141D20;
+      --surface-2:  #1B262A;
+      --ink:        #E8F0F0;
+      --ink-2:      #A7B9BC;
+      --ink-3:      #7B8D91;
+      --rule:       #27353A;
+      --rule-soft:  #1E2B2F;
+      --accent:     #58B5B2;
+      --critical:   #E98980;
+      --warning:    #D9A445;
+      --good:       #6FBF9C;
+      --critical-bg:#2C1A18;
+      --warning-bg: #2B2313;
+      --good-bg:    #14261F;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #0D1416;
+    --surface:    #141D20;
+    --surface-2:  #1B262A;
+    --ink:        #E8F0F0;
+    --ink-2:      #A7B9BC;
+    --ink-3:      #7B8D91;
+    --rule:       #27353A;
+    --rule-soft:  #1E2B2F;
+    --accent:     #58B5B2;
+    --critical:   #E98980;
+    --warning:    #D9A445;
+    --good:       #6FBF9C;
+    --critical-bg:#2C1A18;
+    --warning-bg: #2B2313;
+    --good-bg:    #14261F;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  /* ── Cabecera ─────────────────────────────────────────────── */
+  header.masthead {
+    border-bottom: 1px solid var(--rule);
+    padding: 72px 0 40px;
+    margin-bottom: 56px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 20px;
+  }
+
+  h1 {
+    font-family: Newsreader, Georgia, "Times New Roman", serif;
+    font-weight: 500;
+    font-size: clamp(2.5rem, 5.4vw, 3.9rem);
+    line-height: 1.06;
+    letter-spacing: -.021em;
+    text-wrap: balance;
+    margin: 0 0 24px;
+    color: var(--ink);
+  }
+
+  .standfirst {
+    font-size: 1.16rem;
+    line-height: 1.58;
+    color: var(--ink-2);
+    margin: 0;
+    max-width: 62ch;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin-top: 32px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+  .meta b { color: var(--ink-2); font-weight: 500; }
+
+  /* ── Secciones ────────────────────────────────────────────── */
+  section { margin-bottom: 72px; }
+
+  h2 {
+    font-family: Newsreader, Georgia, serif;
+    font-weight: 500;
+    font-size: clamp(1.75rem, 3.2vw, 2.3rem);
+    line-height: 1.16;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin: 0 0 8px;
+  }
+
+  .section-note {
+    color: var(--ink-2);
+    margin: 0 0 32px;
+    max-width: 62ch;
+  }
+
+  p { margin: 0 0 16px; }
+  p:last-child { margin-bottom: 0; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .87em;
+  }
+  code {
+    background: var(--surface-2);
+    padding: .1em .38em;
+    border-radius: 2px;
+    color: var(--ink-2);
+  }
+
+  /* ── Lo que ya hay ────────────────────────────────────────── */
+  .have {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+    gap: 1px;
+    background: var(--rule-soft);
+    border: 1px solid var(--rule-soft);
+    margin: 0;
+  }
+  .have > div {
+    background: var(--surface);
+    padding: 16px 18px;
+  }
+  .have dt {
+    font-weight: 600;
+    font-size: .93rem;
+    margin-bottom: 3px;
+  }
+  .have dd {
+    margin: 0;
+    font-size: .87rem;
+    color: var(--ink-3);
+    line-height: 1.45;
+  }
+
+  /* ── Tiers ────────────────────────────────────────────────── */
+  .tier { margin-bottom: 56px; }
+
+  .tier-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 4px;
+  }
+  .tier-head h3 {
+    font-family: Newsreader, Georgia, serif;
+    font-size: 1.5rem;
+    font-weight: 500;
+    margin: 0;
+    color: var(--ink);
+  }
+  .tier-head .why {
+    font-size: .9rem;
+    color: var(--ink-2);
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .chip.crit { background: var(--critical-bg); color: var(--critical); }
+  .chip.warn { background: var(--warning-bg);  color: var(--warning); }
+  .chip.good { background: var(--good-bg);     color: var(--good); }
+
+  .gap {
+    border-bottom: 1px solid var(--rule-soft);
+    padding: 26px 0;
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    gap: 8px 36px;
+    align-items: start;
+  }
+  .gap:last-child { border-bottom: 0; }
+
+  .gap-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-top: 3px;
+    line-height: 1.5;
+  }
+  .gap-body p { font-size: .97rem; }
+
+  .verdict {
+    margin-top: 12px;
+    padding: 11px 14px;
+    background: var(--surface);
+    border-left: 2px solid var(--accent);
+    font-size: .9rem;
+    color: var(--ink-2);
+  }
+  .verdict b { color: var(--ink); font-weight: 600; }
+
+  /* ── Tabla ────────────────────────────────────────────────── */
+  .scroller {
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 720px;
+    font-size: .9rem;
+  }
+  th, td {
+    padding: 11px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  tbody th {
+    font-weight: 500;
+    color: var(--ink);
+    font-size: .92rem;
+  }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+  td.mark { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .yes  { color: var(--good); font-weight: 600; }
+  .part { color: var(--warning); font-weight: 600; }
+  .no   { color: var(--critical); font-weight: 600; }
+  .table-note {
+    padding: 14px 2px 0;
+    font-size: .82rem;
+    color: var(--ink-3);
+    margin: 0;
+  }
+
+  /* ── Cierre ───────────────────────────────────────────────── */
+  .closing {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    padding: 34px 36px;
+  }
+  .closing h2 { margin-bottom: 18px; }
+  .closing ol {
+    margin: 0;
+    padding-left: 1.3em;
+    display: grid;
+    gap: 12px;
+  }
+  .closing li { padding-left: 4px; }
+  .closing li b { font-weight: 600; }
+  .closing .coda {
+    margin-top: 22px;
+    color: var(--ink-2);
+    font-size: .95rem;
+  }
+
+  .sources {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    font-size: .84rem;
+    color: var(--ink-3);
+  }
+  .sources h4 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 12px;
+    font-weight: 500;
+  }
+  .sources ul { margin: 0; padding-left: 1.1em; display: grid; gap: 5px; }
+
+  @media (max-width: 720px) {
+    .wrap { padding: 0 20px 72px; }
+    header.masthead { padding-top: 48px; }
+    .gap { grid-template-columns: 1fr; gap: 10px; }
+    .gap-label { padding-top: 0; }
+    .closing { padding: 26px 22px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Análisis de producto · Kairos</p>
+    <h1>Qué le falta a Kairos para competir en odontología</h1>
+    <p class="standfirst">
+      Kairos tiene ya el núcleo clínico que el mercado da por sentado: odontograma por
+      superficies, periodontograma por sitio, planes de tratamiento ligados a hallazgos y a
+      citas. Lo que le falta no es clínica: es puente con el hardware, cumplimiento normativo
+      y el circuito del dinero.
+    </p>
+    <div class="meta">
+      <span><b>Fecha</b> 27 agosto 2026</span>
+      <span><b>Base</b> código de salon-os · 65 migraciones</span>
+      <span><b>Contraste</b> Gesden · Clinic Cloud · Dentalink · DriCloud · Open Dental · Dentrix · CareStack</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Lo que ya está construido</h2>
+    <p class="section-note">
+      Inventario real, leído del esquema y de las rutas del panel — no de la documentación
+      comercial. Esta es la línea de salida, y está más alta de lo que parece desde fuera.
+    </p>
+    <dl class="have">
+      <div>
+        <dt>Odontograma</dt>
+        <dd>Hallazgos por diente FDI y superficie (mesial, distal, vestibular, palatino o lingual, incisal u oclusal), con evolución por fecha.</dd>
+      </div>
+      <div>
+        <dt>Periodontograma</dt>
+        <dd>Exploración por diente y por sitio, con histórico y resumen.</dd>
+      </div>
+      <div>
+        <dt>Planes de tratamiento</dt>
+        <dd>Fases, ítems por diente y superficie, precio, descuento, IVA, estado por ítem, cita ligada y hallazgo de origen.</dd>
+      </div>
+      <div>
+        <dt>Historia clínica</dt>
+        <dd>Expediente, notas de evolución y traza de cambios.</dd>
+      </div>
+      <div>
+        <dt>Imágenes</dt>
+        <dd>Periapical, aleta de mordida, panorámica, CBCT, cefalométrica, foto intraoral y STL, con metadatos DICOM.</dd>
+      </div>
+      <div>
+        <dt>Consentimientos</dt>
+        <dd>Plantilla versionada, estado, revocación y PDF asociado.</dd>
+      </div>
+      <div>
+        <dt>Ortodoncia</dt>
+        <dd>Visitas, plan de pagos con cuotas y pedidos de laboratorio.</dd>
+      </div>
+      <div>
+        <dt>Mutuas</dt>
+        <dd>Aseguradora, póliza del paciente y tarifa por servicio.</dd>
+      </div>
+      <div>
+        <dt>Almacén</dt>
+        <dd>Movimientos con lote y caducidad, y material consumido por servicio.</dd>
+      </div>
+      <div>
+        <dt>Agenda</dt>
+        <dd>Horario de clínica intersectado con el del profesional, excepciones y bloqueo por fases del tratamiento.</dd>
+      </div>
+      <div>
+        <dt>Caja y facturación</dt>
+        <dd>TPV, facturas, arqueo de turno y fichaje del personal.</dd>
+      </div>
+      <div>
+        <dt>Captación</dt>
+        <dd>Reserva online, recordatorios por WhatsApp y SMS, recall a seis meses y recepcionista de voz.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Las carencias</h2>
+    <p class="section-note">
+      Agrupadas por lo que cuesta no tenerlas, no por área funcional. El primer bloque cierra
+      ventas o expone legalmente; el segundo decide si la clínica lo usa todo el día o vuelve
+      a la hoja de cálculo; el tercero es donde podéis ganar en vez de empatar.
+    </p>
+
+    <div class="tier">
+      <div class="tier-head">
+        <span class="chip crit">Bloqueante</span>
+        <h3>Sin esto, no entráis</h3>
+        <span class="why">Te tumban la demo o te dejan expuesto ante una inspección.</span>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Captura de radiología</div>
+        <div class="gap-body">
+          <p>
+            Hoy <code>patient_images</code> guarda ficheros que alguien ha subido a mano. No hay
+            puente con el sensor intraoral, el ortopantomógrafo ni el escáner: ni TWAIN, ni
+            worklist DICOM, ni los SDK de Carestream, Vatech, Planmeca o Dentsply Sirona.
+          </p>
+          <p>
+            Es el gesto que un dentista repite treinta veces al día: pincha en el diente,
+            dispara y la radiografía aparece en la ficha. Si no lo tenéis, la clínica deja
+            abierto el software del rayo en paralelo y Kairos pasa a ser la segunda pantalla.
+            Las comparativas españolas marcan radiografía digital en <em>todas</em> las
+            soluciones que analizan: es la casilla que nadie perdona.
+          </p>
+          <div class="verdict"><b>Coste de no tenerlo:</b> pierdes la demo en el minuto tres, con el módulo clínico ya construido.</div>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Firma del consentimiento</div>
+        <div class="gap-body">
+          <p>
+            <code>consents.signed_by_patient</code> es un campo de texto donde se teclea el
+            nombre del paciente. Eso no es una firma: es una anotación. Y el consentimiento
+            informado es justo el documento que acaba en un juzgado cuando algo sale mal.
+          </p>
+          <p>
+            El estándar de mercado es firma biométrica en tableta —trazo y presión capturados— o
+            firma electrónica con sello de tiempo, ligada al texto exacto de la plantilla. La
+            buena noticia: ya guardáis <code>body</code> con el texto firmado y
+            <code>template_version</code>, que es la parte difícil de hacer bien. Falta la firma.
+          </p>
+          <div class="verdict"><b>Coste de no tenerlo:</b> el consentimiento no prueba nada, y la clínica sigue imprimiendo en papel.</div>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Trazabilidad de implantes y esterilización</div>
+        <div class="gap-body">
+          <p>
+            No existe. El Reglamento (UE) 2017/745 exige identificador único UDI y seguimiento
+            individual de cada producto sanitario implantable, registrado en EUDAMED; la
+            normativa española de esterilización, vigente desde 2021, exige trazabilidad
+            completa del material.
+          </p>
+          <p>
+            Falta poder decir «este implante, con este UDI y este lote, se colocó a esta persona
+            en el 46 el día X», y falta el registro de ciclos de autoclave ligado al paciente
+            tratado. <code>stock_movement</code> ya lleva lote y caducidad: tenéis media pieza.
+            No está el enlace al acto clínico.
+          </p>
+          <div class="verdict"><b>Coste de no tenerlo:</b> ninguna clínica que ponga implantes puede usaros como sistema único.</div>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Receta electrónica privada</div>
+        <div class="gap-body">
+          <p>
+            <code>prescription</code> emite un documento propio. El Sistema Español de Receta
+            Electrónica Privada que regulan los Consejos Generales de Médicos, Farmacéuticos,
+            Dentistas y Podólogos exige software <em>homologado</em> para que la farmacia
+            dispense, y para que la receta tenga trazabilidad y unicidad frente a falsificación.
+          </p>
+          <p>Sin esa homologación, vuestras recetas son papel con membrete.</p>
+          <div class="verdict"><b>Coste de no tenerlo:</b> el dentista prescribe fuera de Kairos, y con él se va el registro.</div>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Verifactu</div>
+        <div class="gap-body">
+          <p>
+            Se retiró del código el 24 de julio de 2026
+            (<code>20260724120000_remove_verifactu.sql</code>). El aplazamiento del Real
+            Decreto-ley 15/2025 os da aire —1 de enero de 2027 para sociedades, 1 de julio de
+            2027 para autónomos y profesionales— pero es una fecha con nombre y apellidos.
+          </p>
+          <p>
+            Las clínicas dentales aparecen señaladas de forma explícita en las guías del
+            regulador porque emiten factura simplificada en volumen. Retirarlo fue defendible;
+            olvidarlo, no.
+          </p>
+          <div class="verdict"><b>Coste de no tenerlo:</b> hoy ninguno. En enero de 2027, vuestro módulo de facturación deja de ser vendible.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-head">
+        <span class="chip warn">Operativo</span>
+        <h3>Sin esto, no lo usan todo el día</h3>
+        <span class="why">Entran, pero acaban gestionando la clínica en una hoja aparte.</span>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Circuito de mutuas</div>
+        <div class="gap-body">
+          <p>
+            Tenéis <code>insurer_service_price</code>: la tarifa. Falta todo lo demás, que es
+            donde está el trabajo real — autorización previa (Adeslas las da con noventa días de
+            validez), acto ligado a esa autorización, remesa a la compañía, conciliación del
+            cobro, copago del paciente y el informe de actos aprobados que nadie ha facturado.
+          </p>
+          <p>
+            Adeslas, Sanitas, DKV, Asisa y Mapfre exigen a sus clínicas de cuadro facturación
+            electrónica y autorizaciones digitales. Para una clínica de cuadro esto no es un
+            módulo: es la mitad de sus ingresos.
+          </p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Flujo del día y gabinetes</div>
+        <div class="gap-body">
+          <p>
+            Hay panel del día, pero los estados de la cita son
+            <code>pending · confirmed · completed · cancelled · no_show</code>. No existe «ha
+            llegado» ni «está en el gabinete», así que la recepción no sabe quién espera ni desde
+            cuándo.
+          </p>
+          <p>
+            Tampoco existe el gabinete como recurso reservable. En Biodental está resuelto con
+            <code>single_resource: true</code>, que bloquea el hueco para toda la clínica: sirve
+            para una consulta de un sillón y se rompe en cuanto haya dos ocupados a la vez.
+          </p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Lista de espera</div>
+        <div class="gap-body">
+          <p>
+            No hay nada. Cuando cae una cita de las nueve de la mañana, nadie sabe a quién
+            llamar y ese hueco se pierde. Es la carencia con el retorno más directo y de las más
+            baratas de construir: ya tenéis los pacientes, sus teléfonos, el recall y el canal de
+            WhatsApp montado.
+          </p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Laboratorio</div>
+        <div class="gap-body">
+          <p>
+            <code>lab_order</code> es el nombre del laboratorio en texto libre, tres fechas y una
+            nota. Falta catálogo de laboratorios, coste del trabajo, aviso cuando se pasa la
+            fecha de entrega y —lo que hoy define el flujo digital— el caso enlazado: el STL que
+            sale de un iTero, un TRIOS o un Medit.
+          </p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Indicadores de clínica</div>
+        <div class="gap-body">
+          <p>
+            La analítica actual es de comercio: facturación, tickets, ticket medio, nuevos frente
+            a recurrentes, métodos de pago. Un director de clínica dental mira otras cosas: tasa
+            de aceptación de presupuestos, producción por sillón y por profesional, tratamientos
+            propuestos que nadie ha agendado, ausencias y eficacia real del recall.
+          </p>
+          <p>
+            Tenéis los datos —<code>treatment_plan.status</code> ya distingue propuesto de
+            aceptado— y no los estáis contando.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tier">
+      <div class="tier-head">
+        <span class="chip good">Diferenciador</span>
+        <h3>Aquí podéis ganar, no solo empatar</h3>
+        <span class="why">Nadie os compra por esto todavía; con esto os eligen a vosotros.</span>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">La recepcionista, como producto</div>
+        <div class="gap-body">
+          <p>
+            Sara es la pieza que Gesden, Clinic Cloud y Dentalink no tienen y que no van a
+            construir pronto: una recepcionista de voz que coge el teléfono, consulta la agenda
+            real y da la cita. Las comparativas españolas solo marcan «asistente con IA» en dos
+            de las siete soluciones que analizan, y se refieren a un chat de texto.
+          </p>
+          <p>
+            Es vuestra cabeza de puente. El resto de este informe es alcanzar al mercado; esto es
+            adelantarlo. Merece ser el titular de la venta, no un complemento en los ajustes.
+          </p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">IA sobre la radiografía</div>
+        <div class="gap-body">
+          <p>
+            Pearl, Overjet, Diagnocat y Allisone detectan caries y pérdida ósea sobre la
+            radiografía y —esto es lo importante— convierten el hallazgo en algo que el paciente
+            entiende mirando la pantalla. Los propios fabricantes venden como resultado principal
+            la <em>aceptación del tratamiento</em>, no el diagnóstico.
+          </p>
+          <p>
+            No hay que construirlo: se integra. Pero requiere primero la captura de radiología
+            del bloque bloqueante, así que va detrás por dependencia, no por importancia.
+          </p>
+        </div>
+      </div>
+
+      <div class="gap">
+        <div class="gap-label">Presupuesto que se vende solo</div>
+        <div class="gap-body">
+          <p>
+            El odontograma es la mejor herramienta comercial de una clínica y hoy no sale del
+            software. Falta el presupuesto que el paciente recibe, entiende, firma y paga desde
+            el móvil, con financiación integrada —Cofidis, Sequra, Aplazame, Pepper— que es lo
+            que convierte un plan de cuatro mil euros en un plan aceptado.
+          </p>
+          <p>
+            Ya tenéis cuentas de paciente y reserva online. Falta que el paciente vea su plan, no
+            solo su cita.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Dónde estáis frente al mercado</h2>
+    <p class="section-note">
+      Sobre las funciones que las guías españolas usan para ordenar el sector. «Gestión dental
+      española» agrupa el comportamiento típico de Gesden, Clinic Cloud, Dentalink, DriCloud y
+      XDentalCloud.
+    </p>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Función</th>
+            <th scope="col">Kairos</th>
+            <th scope="col">Gestión dental española</th>
+            <th scope="col">Suites internacionales</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Odontograma por superficies</th><td class="mark yes">Sí</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Periodontograma por sitio</th><td class="mark yes">Sí</td><td class="mark part">Desigual</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Planes y presupuestos</th><td class="mark yes">Sí</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Captura desde el equipo de rayos</th><td class="mark no">No</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Firma biométrica del consentimiento</th><td class="mark no">No</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Receta electrónica homologada</th><td class="mark no">No</td><td class="mark part">Algunas</td><td class="mark part">No aplica</td></tr>
+          <tr><th scope="row">Trazabilidad de implantes y esterilización</th><td class="mark no">No</td><td class="mark part">Algunas</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Circuito completo de mutuas</th><td class="mark part">Solo tarifas</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Gabinete como recurso</th><td class="mark no">No</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Lista de espera</th><td class="mark no">No</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Indicadores propios de clínica</th><td class="mark no">No</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Laboratorio con caso digital</th><td class="mark part">Solo fechas</td><td class="mark part">Desigual</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Recordatorios y reserva online</th><td class="mark yes">Sí</td><td class="mark yes">Sí</td><td class="mark yes">Sí</td></tr>
+          <tr><th scope="row">Recepcionista de voz con agenda real</th><td class="mark yes">Sí</td><td class="mark no">No</td><td class="mark part">Emergente</td></tr>
+          <tr><th scope="row">Verifactu</th><td class="mark no">Retirado</td><td class="mark part">En curso</td><td class="mark part">No aplica</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">Agosto de 2026. «Desigual» significa presente en parte de las soluciones del grupo.</p>
+  </section>
+
+  <section class="closing">
+    <h2>Por dónde empezaría</h2>
+    <ol>
+      <li><b>Captura de radiología.</b> Es el único punto que invalida todo lo demás. Con el módulo clínico ya construido, no tenerlo es perder demos que teníais ganadas.</li>
+      <li><b>Firma biométrica del consentimiento.</b> Semanas de trabajo, no meses: el texto versionado y el estado ya están. Cierra la exposición legal más barata de cerrar.</li>
+      <li><b>Lista de espera y estado de llegada.</b> Lo más barato del informe y lo que la clínica nota el primer día. Reutiliza pacientes, teléfonos y WhatsApp, que ya tenéis.</li>
+      <li><b>Trazabilidad de implante y esterilización.</b> Abre las clínicas de implantología, que son las que más facturan y las que más pagan por software.</li>
+      <li><b>Circuito de mutuas.</b> El más caro de los cinco, pero es la mitad de la facturación de cualquier clínica de cuadro.</li>
+    </ol>
+    <p class="coda">
+      Verifactu no entra en esta lista por fecha, no por importancia: hay que tenerlo planificado
+      para el último trimestre de 2026 y entregado antes de enero de 2027. Y la IA sobre
+      radiografía va justo después de la captura: es la mejor palanca comercial del informe, pero
+      depende de ella.
+    </p>
+  </section>
+
+  <div class="sources">
+    <h4>Fuentes</h4>
+    <ul>
+      <li>Inventario de Kairos: esquema y panel de <span class="mono">clients/projects/salon-os</span>, 65 migraciones, lectura directa del código.</li>
+      <li><a href="https://gestiondental.org/software-dental/">Mejor Software Dental 2025-2026, análisis comparativo</a> — matriz de funciones del sector español.</li>
+      <li><a href="https://www.softwaredoit.es/software-medico/software-clinica-dental.html">Los 6 mejores software para clínica dental, guía 2026</a> y <a href="https://echale.es/blog/comparativa-software-gestion-para-clinicas-dentales/">Comparativa de software de gestión para clínicas dentales 2026</a>.</li>
+      <li><a href="https://dentalpracticeinsider.org/dental-practice-management-software/">Best Dental Practice Management Software 2026</a> y <a href="https://www.getdentra.com/resources/guides/dentrix-alternatives">Dentrix Alternatives 2026</a> — Open Dental, Curve, CareStack y Dentrix Ascend.</li>
+      <li><a href="https://consejodentistas.es/dentistas/recursos/receta-medica-privada/receta-electronica/">Consejo General de Dentistas, Receta Electrónica Privada</a> y <a href="https://legalauditors.es/la-homologacion-de-software-de-receta-medica-privada-electronica-el-sello-que-diferencia-a-las-clinicas-y-desarrolladores-que-hacen-las-cosas-bien/">homologación del software SREP</a>.</li>
+      <li><a href="https://es.allisone.ai/blog/nouvelle-norme-securite-tracabilite-implants">Seguridad y trazabilidad de los implantes: MDR 2017/745, UDI y EUDAMED</a> y <a href="https://pryon.es/normativa-esterilizacion-clinicas-dentales-espana/">normativa de esterilización en clínicas dentales</a>.</li>
+      <li><a href="https://www.reixmor.com/obligaciones-verifactu-2027/">Obligaciones VeriFactu 2026-2027</a> y <a href="https://palenciaasesores.es/verifactu-aplazamiento-2027/">aplazamiento por el Real Decreto-ley 15/2025</a>.</li>
+      <li><a href="https://www.codx.digital/es/software-gestion/clinicas-dentales">Flujos de mutuas y financiación en software dental</a> y <a href="https://www.lido.app/es/ocr-clinicas-dentales">volumen documental y conciliación con Sanitas, DKV, Adeslas y Asisa</a>.</li>
+      <li><a href="https://dentistdecoded.com/articles/diagnocat-vs-pearl-ai-vs-overjet/">Diagnocat, Pearl y Overjet comparados</a> y <a href="https://www.overjet.com/blog/overjet-vs-pearl-dental-ai-software">Overjet frente a Pearl</a>.</li>
+      <li><a href="https://doyourlab.com/blog/en/intraoral-scanner-integration-dental-lab/">Integración de escáneres intraorales</a> — flujo STL con iTero, TRIOS y Medit.</li>
+    </ul>
+  </div>
+
+</div>
+
+</body></html>

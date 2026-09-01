@@ -1,0 +1,557 @@
+<!doctype html><html><head><!-- frame-runtime --><base href="/_f/1787887988-bfbc/"><script>window.__FRAME_PREAMBLE={"v":1,"capabilities":{"artifact":"artifact.BizKCZHg.js","assets":"assets.8Gk803W0.js","comments":"comments.vw5vQdGA.js","db":"db.h-3sndFg.js","downloads":"downloads.C3GSvEDP.js","embed":"embed.CxGAyc-v.js","mcp":"mcp.Bvma3qD7.js","network":"network.B5UA9Su4.js","notifications":"notifications.ssU4jy7G.js","permissions":"permissions.BNySkLV5.js","room":"room.BMMoe2BY.js","sample":"sample.BW2Uysoh.js","self":"artifact.BizKCZHg.js","user":"user.BpKav-Rf.js"},"transforms":"_transforms.DSB5x63f.js","comments":"_comments.BcSQU-9b.js","translate":"_translate.5HCW4BJh.js"}</script><script>(function(){"use strict";var te=["light","dark","system"],re=/^[A-Za-z0-9_-]{1,64}$/,$=/^[a-zA-Z_:][a-zA-Z0-9_:.-]{0,127}$/,ne=new Set(["class","hidden","value","checked","style","title","alt","placeholder","lang","dir","role","tabindex","disabled","readonly","contenteditable","open","colspan","rowspan"]);function oe(e){const t=e.toLowerCase();return t.startsWith("data-")||t.startsWith("aria-")||ne.has(t)}var Be="http://www.w3.org/1999/xhtml",se="http://www.w3.org/2000/svg",ae=new Set(["script","style","iframe","noscript","noframes","noembed","xmp","plaintext","template","title","textarea","object","embed"]),ie=new Set(["script","style"]);function ce(e){const t=e.localName.toLowerCase();return e.namespaceURI==="http://www.w3.org/1999/xhtml"?!ae.has(t):e.namespaceURI===se?!ie.has(t):!1}function M(e,t){return e===t||(e===160||e===32)&&(t===160||t===32)}function le(e,t){const r=e.length,n=t.length;let s=0;for(;s<r&&s<n&&M(e.charCodeAt(s),t.charCodeAt(s));)s++;let o=0;for(;o<r-s&&o<n-s&&M(e.charCodeAt(r-1-o),t.charCodeAt(n-1-o));)o++;return{p:s,s:o}}function ue(e,t){const r=e.firstChild;if(e.childNodes.length!==1||r===null||r.nodeType!==Node.TEXT_NODE){e.textContent=t;return}const n=r.data,s=n.length,o=t.length,{p:i,s:c}=le(n,t);i===s&&c===0&&s===o||r.replaceData(i,s-i-c,t.slice(i,o-c));const h=r.data,p=e.ownerDocument.getSelection?.()??null,w=p!==null&&p.rangeCount>0&&(p.anchorNode===r||p.focusNode===r)?{anchor:p.anchorNode,anchorOffset:p.anchorOffset,focus:p.focusNode,focusOffset:p.focusOffset}:null;let m=-1,g=-1;for(let f=0;f<h.length&&f<t.length;f++){const v=h.charCodeAt(f),b=t.charCodeAt(f);v!==b&&M(v,b)&&(m<0&&(m=f),g=f)}const a=m>=0;if(a&&r.replaceData(m,g-m+1,t.slice(m,g+1)),a&&w!==null&&w.anchor!==null&&w.focus!==null)try{p.setBaseAndExtent(w.anchor,w.anchorOffset,w.focus,w.focusOffset)}catch{}}var fe=new Set(["html","head","body","frameset"]);function de(e){return e.namespaceURI==="http://www.w3.org/1999/xhtml"&&fe.has(e.localName)}function pe(e){if(e===null||typeof e!="object")return!1;const t=e;if(typeof t.target!="string"||!re.test(t.target)||t.text!==void 0&&typeof t.text!="string")return!1;if(t.attrsSet!==void 0){if(t.attrsSet===null||typeof t.attrsSet!="object")return!1;for(const[r,n]of Object.entries(t.attrsSet))if(!$.test(r)||typeof n!="string")return!1}if(t.attrsRemoved!==void 0){if(!Array.isArray(t.attrsRemoved))return!1;for(const r of t.attrsRemoved)if(typeof r!="string"||!$.test(r))return!1}return!0}function me(e,t){if(e===null||typeof e!="object")return!1;const{seq:r,elements:n}=e;if(typeof r!="number"||!Number.isSafeInteger(r)||!Array.isArray(n)||n.length===0||n.length>64)return!1;for(let s=0;s<n.length;s++)if(!t(n[s]))return!1;return!0}function he(e){return e===null||typeof e!="object"?!1:me(e.__frame_patch,pe)}function _e(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_init;return t!==null&&typeof t=="object"}function ve(e){return e!==null&&typeof e=="object"&&e.__frame_size_poke===!0}function ye(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_theme;if(t===null||typeof t!="object")return!1;const r=t.theme;return typeof r=="string"&&te.includes(r)}var A=/^[\w.-]+\.js$/;function we(e,t,r){return r?"inert":typeof t=="string"&&A.test(t)?e?[t]:"inert":e?"inert":"framed"}function ge(){return{post(e,t){parent.postMessage(e,t)},on(e){const t=r=>{r.source===parent&&e(r.data,r.origin,r.isTrusted)};return addEventListener("message",t),()=>removeEventListener("message",t)}}}function be(){return{post:()=>{},on:()=>()=>{}}}var j="__frame_scroll",Ee=150,Ae=310,Se=160,Te=3e4;function ke(){let e=0,t=!1,r=!1,n=!1,s=0,o=null;const i=l=>{try{sessionStorage.setItem(j,JSON.stringify({y:l}))}catch{}},c=()=>{if(clearTimeout(e),o===null)return;const l=o;o=null,i(l)},h=()=>{if(t){t=!1;return}r=!0,o=scrollY,clearTimeout(e),e=setTimeout(c,Ee)};try{addEventListener("scroll",h,{passive:!0}),addEventListener("pagehide",c)}catch{}const p=()=>{let l;try{l=sessionStorage.getItem(j)}catch{return null}if(l===null)return null;let _;try{_=JSON.parse(l)}catch{_=null}const d=_?.y;if(!(typeof d=="number"&&Number.isFinite(d)&&d>=0)){try{sessionStorage.removeItem(j)}catch{}return null}return d};let w=!1;const m=l=>{try{const _=scrollY;scrollTo({top:l,left:0,behavior:"instant"}),s=l,n=!0,clearTimeout(e),o=null,i(l);const d=scrollY;d!==_&&(t=!0),d!==l&&!w&&(w=!0,addEventListener("load",()=>{try{if(scrollY===d){const T=p();m(T!==null?T:s)}}catch{}},{once:!0}))}catch{}},g=()=>{try{return!!location.hash}catch{return!0}};let a=!1;const f=()=>{try{if(a||innerWidth>Ae||innerHeight>Se)return;a=!0;const l=Date.now(),_=()=>{try{removeEventListener("resize",_)}catch{}if(Date.now()-l>Te||r||g())return;const d=p();m(d!==null?d:s)};addEventListener("resize",_)}catch{}};let v=!1,b=!1;return{restore(){if(v||(v=!0,g()))return;const l=p();l!==null&&(m(l),f())},promoted(){if(b||(b=!0,g()))return;const l=p();l!==null?(m(l),f()):n&&m(s)}}}function Re(e,t,r,n){let s=null;try{s=window.trustedTypes?.createPolicy("frame-runtime",{createScriptURL:h=>h})??null}catch{}const o=window.Worker,i=o?.prototype,c=Object.freeze({Worker:o,workerOn:i?.addEventListener,workerPost:i?.postMessage,workerTerminate:i?.terminate,fetch:window.fetch.bind(window),preventDefault:Event.prototype.preventDefault,policy:s,origins:t});r(e).then(h=>h?.bootTopLevel?h.bootTopLevel(c,n):n.settle()).catch(()=>n.settle())}var De="modulepreload",Ie=function(e){return"/"+e},Ue={},Le=function(t,r,n){let s=Promise.resolve();function o(i){const c=new Event("vite:preloadError",{cancelable:!0});if(c.payload=i,window.dispatchEvent(c),!c.defaultPrevented)throw i}return s.then(i=>{for(const c of i||[])c.status==="rejected"&&o(c.reason);return t().catch(o)})},Oe=window===top,q=Object.getOwnPropertyDescriptor(window,"claude"),k=we(Oe,window.__FRAME_PREAMBLE?.topLevel,q?.writable===!1),N=typeof k=="object"&&k[0],y=N?be():ge();(function(){const e=Object.defineProperty,t=globalThis,r=["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel","RTCIceCandidate","RTCSessionDescription","RTCRtpSender","RTCRtpReceiver"];let n=0;for(let s=0;s<r.length;s++){const o=r[s];try{e(t,o,{value:void 0,writable:!1,configurable:!1})}catch{try{delete t[o]}catch{}try{e(t,o,{value:void 0,writable:!1,configurable:!0})}catch{}}typeof t[o]=="function"&&n++}if(n&&k==="framed")try{y.post({__frame_rtc_lockdown_failed:n},"*")}catch{}})();var Pe=1e4,Y=Object.freeze([...window.__FRAME_PREAMBLE?.origins??["https://claude.ai","https://preview.claude.ai"]]);function X(e){for(const t of Y)if(t.endsWith(":*"))try{const r=new URL(e);if(`${r.protocol}//${r.hostname}:*`===t)return!0}catch{}else if(e===t)return!0;return!1}var R=Object.freeze({...window.__FRAME_PREAMBLE?.capabilities}),B=window.__FRAME_PREAMBLE?.transforms,D=window.__FRAME_PREAMBLE?.comments,I=window.__FRAME_PREAMBLE?.translate;function S(e){return Le(()=>import("/_runtime/"+e),void 0)}function G(e,t){return{contract:e.contract,changes:new Set(e.changes??[]),flags:new Set(e.flags??[]),capabilities:e.capabilities??{},capBudgets:e.capBudgets??{},transforms:new Map,shellOrigin:t,mount:x,hooks:O,pipe:()=>({wrap:(r,n)=>(...s)=>{try{return n(...s)}catch(o){return Promise.reject(o)}}})}}var L=null,E=null;function V(e,t,r){try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!1,enumerable:!0})}catch{try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!0,enumerable:!0})}catch{}}}var U=!1,O={editBefore:null,edit:null};function Ce(e,t,r=!1){const n=[];let s;if(r)try{O.editBefore?.(e)}catch{}for(const o of e.elements){const i=document.querySelector(`[data-id="${o.target}"]`);if(!i){s=o.target;break}if([...Object.keys(o.attrsSet??{}),...o.attrsRemoved??[]].some(c=>!oe(c))){s=o.target;break}if(o.text!==void 0&&(!ce(i)||de(i))){s=o.target;break}for(const[c,h]of Object.entries(o.attrsSet??{}))if(!J(i,c)){try{i.setAttribute(c,h)}catch{}Z(i,c,h)}for(const c of o.attrsRemoved??[])J(i,c)||(i.removeAttribute(c),Z(i,c,null));typeof o.text=="string"&&ue(i,o.text),n.push(o.target)}if(r)try{O.edit?.(e.seq,n,s)}catch{}if(s!==void 0){y.post({__frame_patch_miss:{seq:e.seq}},t);return}try{document.dispatchEvent(new CustomEvent("claude:edit",{detail:{seq:e.seq,targets:n}}))}catch{}}function Z(e,t,r){if(!(e instanceof HTMLInputElement))return;const n=t.toLowerCase();n==="checked"?e.checked=r!==null:n==="value"&&e.type!=="file"&&(e.value=r??"")}function J(e,t){const r=t.toLowerCase(),n=e;return r==="data-id"||(r==="value"||r==="checked")&&(n.__artifactSecret===!0||/^(password|hidden|file)$/.test(n.type??"")||/(^|\s)(cc-|one-time-code|current-password|new-password)/i.test(`${e.getAttribute("autocomplete")??""} ${n.autocomplete??""}`))}function Q(e){const t=document.documentElement;e==="light"||e==="dark"?(t.dataset.theme=e,t.style.colorScheme=e,U=!0):U&&(delete t.dataset.theme,t.style.colorScheme="",U=!1)}var P=new Map;function Me(){let e;const t={u:new Promise(r=>{e=r}),r:r=>{t.done=!0,e(r)},done:!1,nulled:!1};return t}function F(){for(const e of P.values())e.done||(e.nulled=!0,e.r(null))}var je=Object.freeze(Object.assign(Object.create(null),{call:Function.prototype.call,apply:Function.prototype.apply,bind:Function.prototype.bind})),x=(e,t)=>{const r=P.get(e);if(!r||r.done){r?.nulled&&E&&y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:e}},E);return}const n=typeof t=="function"?Object.setPrototypeOf(t,je):Object.assign(Object.create(null),t);typeof n.then=="function"&&delete n.then,r.r(Object.freeze(n))};function ee(){const e=q?.value??{};V(window,"claude",e);for(const t of Object.keys(R)){if(e[t]!==void 0){V(e,t,e[t]);continue}P.set(t,Me())}if(e.use===void 0){const t=r=>{if(typeof r!="string"||!Object.hasOwn(R,r))return Promise.resolve(null);const n=P.get(r);return n?n.u:Promise.resolve(e[r]??null)};try{Object.defineProperty(e,"use",{value:t,writable:!0,configurable:!0,enumerable:!1})}catch{}}}if(k==="framed"){const e=B&&A.test(B)?S(B).catch(()=>{}):Promise.resolve(void 0),t=a=>{if(a.type==="auxclick"&&a.button!==1)return;const f=a.target,v=f&&f.closest?f.closest("a[href],area[href]"):null;if(!v)return;const b=v.getAttribute("href");if(!b)return;let l;try{l=new URL(b,document.baseURI)}catch{return}if((l.protocol==="http:"||l.protocol==="https:")&&l.origin!==location.origin){a.preventDefault();const _=(v.getAttribute("target")??"").toLowerCase(),d=a.type==="auxclick"||a.metaKey||a.ctrlKey||a.shiftKey||a.altKey||!["","_self","_top","_parent"].includes(_);y.post({__frame_nav:!0,url:l.href,newTab:d},"*")}};addEventListener("click",t,!0),addEventListener("auxclick",t,!0);const r={},n=a=>{a.isTrusted&&(r.pointer=!0)},s=a=>{a.isTrusted&&(r.click=!0)};addEventListener("pointermove",n,{capture:!0,passive:!0}),addEventListener("click",s,{capture:!0,passive:!0}),e.then(a=>{a?.wireNav&&(a.wireNav(),removeEventListener("click",t,!0),removeEventListener("auxclick",t,!0),removeEventListener("pointermove",n,!0),removeEventListener("click",s,!0),a.wireEngagement?.(r))});let o=null;try{o=ke()}catch{}ee();let i=null,c=null,h=0;const p=y.on((a,f)=>{X(f)&&_e(a)&&(i=a.__frame_init,E=f,p(),clearTimeout(h),c?.())});y.post({__frame_connect:!0},"*");const w=new Promise(a=>{c=a,h=setTimeout(()=>{p(),a()},Pe)}),m=document.readyState==="loading"?new Promise(a=>document.addEventListener("DOMContentLoaded",()=>a(),{once:!0})):Promise.resolve();m.then(()=>{try{o?.restore()}catch{}});const g={cb:null};y.on((a,f)=>{if(X(f)&&ve(a)){try{o?.promoted()}catch{}g.cb?.()}}),w.then(async()=>{if(!i||!E){F();return}Q(i.theme);const a=E;let f=!1,v=!1;y.on((u,z,C)=>{if(z!==a)return;ye(u)&&Q(u.__frame_theme.theme),he(u)&&Ce(u.__frame_patch,a,C);const H=u?.__fc_mode;H&&typeof H=="object"&&!f&&D&&A.test(D)&&(f=!0,S(D).then(K=>K.install?.(a,H.on===!0)).catch(()=>{}));const W=u?.__ft_cmd;W&&typeof W=="object"&&!v&&I&&A.test(I)&&(v=!0,S(I).then(K=>K.install?.(a,W)).catch(()=>{}))});const b=Object.keys(i.capabilities??{}).filter(u=>Object.hasOwn(R,u)).map(u=>[u,R[u]]).filter(u=>typeof u[1]=="string"&&A.test(u[1])),l=await Promise.allSettled(b.map(([,u])=>S(u))),_=await e,d=E;if(_?.buildBoot||y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),_?.buildBoot)try{L=_.buildBoot(i,_.TRANSFORMS??{},{shellOrigin:d,mount:x,hooks:O},u=>y.post({__frame_cap_telemetry:u},d))}catch{y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),L=G(i,d)}else L=G(i,d);const T=u=>y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:u}},d),Ne=L;l.forEach((u,z)=>{const C=b[z][0];if(u.status!=="fulfilled"){T(C);return}try{u.value?.install?.(Ne)}catch{T(C)}}),F(),await m,y.post({__frame_ready:!0},E),e.then(u=>u?.installSizeReporter?.(d,g))})}else N&&(ee(),Re(N,Y,S,{settle:F,mount:x}))})();</script><!-- /frame-runtime --><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Turno de noche</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     Cuaderno de guardia. Papel gris cálido, tinta índigo, y el
+     ámbar reservado para lo que queda pendiente de una persona.
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --paper:     #F2F1EE;
+    --surface:   #FBFAF8;
+    --surface-2: #E8E6E1;
+    --ink:       #1A1A20;
+    --ink-2:     #55535E;
+    --ink-3:     #86838F;
+    --rule:      #D6D3CD;
+    --rule-soft: #E4E1DB;
+    --accent:    #34397A;
+    --done:      #2F6249;
+    --done-bg:   #E4EDE7;
+    --wait:      #8A5A12;
+    --wait-bg:   #F5EBD9;
+    --stop:      #973024;
+    --stop-bg:   #F6E4E1;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #131317;
+      --surface:   #1B1B21;
+      --surface-2: #24242C;
+      --ink:       #ECEBEF;
+      --ink-2:     #ADAAB8;
+      --ink-3:     #7E7B88;
+      --rule:      #33323C;
+      --rule-soft: #26262E;
+      --accent:    #9AA2F0;
+      --done:      #78C6A0;
+      --done-bg:   #15271F;
+      --wait:      #DCA94E;
+      --wait-bg:   #2A2113;
+      --stop:      #E8938A;
+      --stop-bg:   #2B1917;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:     #131317;
+    --surface:   #1B1B21;
+    --surface-2: #24242C;
+    --ink:       #ECEBEF;
+    --ink-2:     #ADAAB8;
+    --ink-3:     #7E7B88;
+    --rule:      #33323C;
+    --rule-soft: #26262E;
+    --accent:    #9AA2F0;
+    --done:      #78C6A0;
+    --done-bg:   #15271F;
+    --wait:      #DCA94E;
+    --wait-bg:   #2A2113;
+    --stop:      #E8938A;
+    --stop-bg:   #2B1917;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.66;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 26px 96px; }
+
+  /* ── Cabecera ───────────────────────────────────────────── */
+  header.top {
+    padding: 68px 0 34px;
+    border-bottom: 3px double var(--rule);
+    margin-bottom: 48px;
+  }
+
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+
+  h1 {
+    font-family: "Familjen Grotesk", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    line-height: 1.02;
+    letter-spacing: -.028em;
+    text-wrap: balance;
+    margin: 0 0 20px;
+  }
+
+  .lede {
+    font-size: 1.14rem;
+    color: var(--ink-2);
+    max-width: 60ch;
+    margin: 0;
+  }
+
+  /* ── Marcador de cifras ─────────────────────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px;
+    background: var(--rule-soft);
+    border: 1px solid var(--rule-soft);
+    margin-top: 34px;
+  }
+  .stats > div { background: var(--surface); padding: 15px 18px; }
+  .stats .n {
+    font-family: "Familjen Grotesk", sans-serif;
+    font-size: 1.7rem;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+    display: block;
+    line-height: 1.15;
+  }
+  .stats .k {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* ── Secciones ──────────────────────────────────────────── */
+  section { margin-bottom: 62px; }
+
+  h2 {
+    font-family: "Familjen Grotesk", sans-serif;
+    font-weight: 600;
+    font-size: clamp(1.6rem, 3.2vw, 2.1rem);
+    letter-spacing: -.02em;
+    line-height: 1.14;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+
+  .note { color: var(--ink-2); margin: 0 0 28px; max-width: 62ch; }
+
+  p { margin: 0 0 15px; }
+  p:last-child { margin-bottom: 0; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: .84em;
+    background: var(--surface-2);
+    padding: .12em .4em;
+    border-radius: 2px;
+    color: var(--ink-2);
+  }
+
+  /* ── Fases ──────────────────────────────────────────────── */
+  .fase {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    padding: 24px 26px;
+    margin-bottom: 18px;
+  }
+  .fase-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .fase-head h3 {
+    font-family: "Familjen Grotesk", sans-serif;
+    font-size: 1.22rem;
+    font-weight: 600;
+    letter-spacing: -.012em;
+    margin: 0;
+  }
+  .fase p { font-size: .99rem; }
+
+  .chip {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .chip.done { background: var(--done-bg); color: var(--done); }
+  .chip.wait { background: var(--wait-bg); color: var(--wait); }
+  .chip.stop { background: var(--stop-bg); color: var(--stop); }
+
+  ul.piezas {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 7px;
+    font-size: .93rem;
+  }
+  ul.piezas li {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 8px;
+    align-items: start;
+    color: var(--ink-2);
+  }
+  ul.piezas .mark { font-family: "JetBrains Mono", monospace; font-size: 13px; }
+  ul.piezas .ok { color: var(--done); }
+  ul.piezas .pend { color: var(--wait); }
+
+  /* ── Decisiones ─────────────────────────────────────────── */
+  .decision {
+    border-top: 1px solid var(--rule-soft);
+    padding: 22px 0;
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    gap: 6px 34px;
+    align-items: start;
+  }
+  .decision:last-child { border-bottom: 1px solid var(--rule-soft); }
+  .decision-q {
+    font-family: "Familjen Grotesk", sans-serif;
+    font-weight: 600;
+    font-size: .98rem;
+    padding-top: 2px;
+  }
+  .decision-a { font-size: .98rem; }
+  .decision-a p { margin-bottom: 10px; }
+
+  /* ── Pendiente de ti ────────────────────────────────────── */
+  .pedidos { display: grid; gap: 14px; }
+  .pedido {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 18px 22px;
+  }
+  .pedido.urgente { border-left-color: var(--stop); }
+  .pedido h3 {
+    font-family: "Familjen Grotesk", sans-serif;
+    font-size: 1.02rem;
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  .pedido p { font-size: .96rem; margin: 0; color: var(--ink-2); }
+
+  .cierre {
+    margin-top: 56px;
+    padding-top: 22px;
+    border-top: 3px double var(--rule);
+    font-size: .95rem;
+    color: var(--ink-2);
+  }
+
+  @media (max-width: 700px) {
+    .wrap { padding: 0 18px 72px; }
+    header.top { padding-top: 44px; }
+    .decision { grid-template-columns: 1fr; gap: 8px; }
+    .fase { padding: 20px 18px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <p class="eyebrow">Kairos · odontología · 27–28 agosto 2026</p>
+    <h1>Turno de noche</h1>
+    <p class="lede">
+      Lo construido mientras no estabas, lo que decidí solo, y las cosas que necesito de ti para
+      seguir. Nada se ha desplegado y nada se ha commiteado.
+    </p>
+
+    <div class="stats">
+      <div><span class="n">2128</span><span class="k">tests en verde</span></div>
+      <div><span class="n">+125</span><span class="k">tests nuevos</span></div>
+      <div><span class="n">3</span><span class="k">migraciones aplicadas</span></div>
+      <div><span class="n">1</span><span class="k">fallo encontrado</span></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>Dónde está cada fase</h2>
+    <p class="note">
+      Del roadmap de trece fases se ha trabajado en tres. Ninguna se dio por buena sin tests, y
+      todo lo que toca la base de datos está aplicado y verificado contra producción.
+    </p>
+
+    <div class="fase">
+      <div class="fase-head">
+        <span class="chip done">Terminada</span>
+        <h3>A2 · Firma del consentimiento</h3>
+      </div>
+      <p>
+        Antes, firmar era teclear el nombre del paciente en un campo de texto. Eso es una
+        anotación, no una firma, y el consentimiento informado es justo el documento que acaba en
+        un juzgado. Ahora hay trazo real, sello criptográfico del texto firmado y un PDF que
+        permite comprobarlo sin abrir la aplicación.
+      </p>
+      <ul class="piezas">
+        <li><span class="mark ok">✓</span><span>Lienzo de captura con Pointer Events: lápiz, dedo y ratón, con presión</span></li>
+        <li><span class="mark ok">✓</span><span>Sello SHA-256 del contenido, calculado en el servidor con el texto leído de la base</span></li>
+        <li><span class="mark ok">✓</span><span>PDF archivado con el trazo, la versión de plantilla y el sello dentro</span></li>
+        <li><span class="mark ok">✓</span><span>Firma inmutable en base de datos: ni el sello ni el trazo se pueden reescribir</span></li>
+        <li><span class="mark pend">·</span><span>Falta decidir cómo se etiquetan en pantalla los 62 consentimientos antiguos</span></li>
+      </ul>
+    </div>
+
+    <div class="fase">
+      <div class="fase-head">
+        <span class="chip wait">Casi</span>
+        <h3>A1a · Captura de radiología</h3>
+      </div>
+      <p>
+        La fase más larga del roadmap, y la que replanteamos ayer cuando dijiste que cada clínica
+        debía poder elegir su equipo. Tenías razón: no hay ninguna marca cableada en el código.
+        Hay cuatro adaptadores y cada clínica configura los suyos.
+      </p>
+      <ul class="piezas">
+        <li><span class="mark ok">✓</span><span>Protocolo navegador↔agente, con lista de orígenes y token de emparejamiento</span></li>
+        <li><span class="mark ok">✓</span><span>Tabla <code>salon_imaging_device</code> y pantalla <em>Ajustes → Equipos de imagen</em></span></li>
+        <li><span class="mark ok">✓</span><span>Agente local: servidor, configuración y captura por carpeta vigilada</span></li>
+        <li><span class="mark ok">✓</span><span>Cliente del navegador, con los errores traducidos a algo accionable</span></li>
+        <li><span class="mark pend">·</span><span>Falta dónde guarda el panel el token, el botón en la ficha, y probarlo con un equipo real</span></li>
+      </ul>
+    </div>
+
+    <div class="fase">
+      <div class="fase-head">
+        <span class="chip wait">A medias</span>
+        <h3>B3 · Lista de espera</h3>
+      </div>
+      <p>
+        Cuando cancelan la cita de las nueve, hoy nadie sabe a quién llamar. Ya existen la tabla,
+        el emparejamiento y la pantalla donde ver quién espera y su teléfono, marcable de un
+        toque.
+      </p>
+      <ul class="piezas">
+        <li><span class="mark ok">✓</span><span>Motor de emparejamiento: servicio, profesional, días y franja, con prioridad y antigüedad</span></li>
+        <li><span class="mark ok">✓</span><span>Tabla, validación, acciones y pantalla de lista de espera</span></li>
+        <li><span class="mark pend">·</span><span>Falta engancharlo a la cancelación de una cita y el aviso por WhatsApp</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Lo que decidí sin preguntarte</h2>
+    <p class="note">
+      Esta es la parte que conviene que revises. Son decisiones que cambian el producto, no
+      detalles de implementación, y las tomé para no quedarme parado.
+    </p>
+
+    <div class="decision">
+      <div class="decision-q">El sello se calcula en el servidor, nunca en el navegador</div>
+      <div class="decision-a">
+        <p>
+          Quien firma controla su navegador. Un sello calculado allí permitiría sellar un texto
+          distinto del que hay guardado, y entonces no probaría nada. Hay un test que falla si
+          alguien invierte esto.
+        </p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-q">Primero se archiva, después se marca como firmado</div>
+      <div class="decision-a">
+        <p>
+          Si falla el guardado del trazo o del PDF, el consentimiento se queda sin firmar. Uno
+          marcado como firmado cuyo documento se perdió es peor que uno sin firmar: aparenta
+          prueba donde no la hay.
+        </p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-q">Los 62 consentimientos antiguos se quedan como están</div>
+      <div class="decision-a">
+        <p>
+          No se pueden arreglar hacia atrás: nadie puede volver a recoger un trazo que nunca se
+          capturó, y rellenarlos sería fabricar una prueba. La restricción nueva obliga de aquí
+          en adelante y deja en paz lo ya escrito.
+        </p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-q">El agente local no guarda credenciales</div>
+      <div class="decision-a">
+        <p>
+          Dispara, devuelve los bytes al navegador, y es el navegador —ya autenticado— quien sube
+          la imagen. Si el ordenador de una clínica se ve comprometido, allí no hay ninguna llave
+          que robar. Lo contrario obligaría a repartir credenciales por todos los puestos de
+          todas las clínicas.
+        </p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-q">Las rutas de las carpetas viven en el agente, no viajan</div>
+      <div class="decision-a">
+        <p>
+          El navegador manda un identificador de equipo y nunca una carpeta. Así el agente no
+          puede convertirse en un lector de ficheros a la carta para quien logre hablar con su
+          puerto.
+        </p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-q">La lista de espera no es solo dental</div>
+      <div class="decision-a">
+        <p>
+          Un hueco perdido lo es igual en una peluquería, y la tabla no tiene nada dental.
+          Limitarla a odontología habría sido regalarle la función al resto de sectores por
+          descuido. Y la puede usar el personal de mostrador: exigir dueña o encargado obligaría
+          a molestarte cada vez que alguien dice «avísame si sale algo».
+        </p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-q">Elegí <code>pdf-lib</code> para el PDF</div>
+      <div class="decision-a">
+        <p>
+          Te lo propuse y dijiste que tirara. Sin binarios nativos, funciona en el runtime de
+          Vercel y dibuja el trazo directamente desde el mismo path que se archiva como SVG.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Lo que necesito de ti</h2>
+    <div class="pedidos">
+      <div class="pedido urgente">
+        <h3>Nada bloquea, pero hay algo sin probar contra la realidad</h3>
+        <p>
+          Las tres migraciones están aplicadas y verificadas, así que el código y la base están
+          alineados y ya se puede desplegar. Lo único sin contrastar es el agente: no ha visto
+          todavía una radiografía de verdad.
+        </p>
+      </div>
+      <div class="pedido">
+        <h3>Dónde guarda el panel el token del agente</h3>
+        <p>
+          Es la última milla de A1a. La opción sencilla es la configuración del salón, sin
+          migración; la estricta, una tabla propia. El token protege del resto de webs, no del
+          personal de la clínica, así que la sencilla probablemente basta — pero prefiero que lo
+          decidas tú.
+        </p>
+      </div>
+      <div class="pedido">
+        <h3>Cómo etiquetamos los consentimientos antiguos</h3>
+        <p>
+          Propongo «firmado sin trazo (anterior a la firma manuscrita)». Es la verdad, y es más
+          útil que aparentar que son equivalentes a los nuevos.
+        </p>
+      </div>
+      <div class="pedido">
+        <h3>Y cuando puedas, qué equipo de rayos tiene Biodental</h3>
+        <p>
+          Ya no bloquea nada —la carpeta vigilada funciona con cualquier aparato— pero hace falta
+          para cerrar los adaptadores TWAIN y DICOM, que son los que necesitan un equipo real
+          delante.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Un fallo que apareció al final</h2>
+    <p class="note">
+      Escribí los tests de las dos pantallas nuevas al terminarlas, y pasaron a la primera. Eso
+      no demuestra nada —un test escrito después de que el código funcione no ha probado nunca
+      que sepa fallar—, así que rompí el filtro a propósito para comprobar que lo detectaba. Sí
+      lo detectó. Y por el camino, uno de ellos encontró algo de verdad.
+    </p>
+
+    <div class="fase">
+      <div class="fase-head">
+        <span class="chip stop">Corregido</span>
+        <h3>El error del formulario se pintaba detrás del diálogo</h3>
+      </div>
+      <p>
+        En <em>Ajustes → Equipos de imagen</em>, si guardabas una carpeta vigilada sin indicar la
+        ruta, el mensaje aparecía en la página de debajo, tapado por el modal. Desde el otro lado
+        de la pantalla, pulsabas «Guardar» y no pasaba nada, sin ninguna pista de por qué.
+        Tampoco lo leería un lector de pantalla, porque el modal oculta el resto de la página del
+        árbol de accesibilidad.
+      </p>
+      <p>
+        Ahora el error del formulario se pinta dentro del diálogo, y el de la lista —un borrado
+        que falla— se queda fuera, que es donde tiene sentido.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Dos cosas que me encontré por el camino</h2>
+    <p class="note">Ninguna es urgente, pero las dos te ahorrarán un rato cuando toquen.</p>
+
+    <div class="fase">
+      <div class="fase-head">
+        <span class="chip stop">Ojo</span>
+        <h3>El token de Supabase estaba en un sitio raro</h3>
+      </div>
+      <p>
+        Estaba en el <code>.env</code> de <em>denueveanueve</em>, no en el de salon-os. Ya lo
+        rotaste y el viejo está muerto, pero en ese fichero sigue el valor caducado: conviene
+        limpiarlo para que nadie pierda el rato con él.
+      </p>
+    </div>
+
+    <div class="fase">
+      <div class="fase-head">
+        <span class="chip stop">Ojo</span>
+        <h3><code>npm run lint</code> no está configurado</h3>
+      </div>
+      <p>
+        Abre el asistente interactivo de ESLint en vez de analizar. No afecta a la puerta de
+        calidad del repo, que es typecheck más Vitest, pero si acaba en un CI se quedará colgado
+        esperando una respuesta que nadie va a dar.
+      </p>
+    </div>
+  </section>
+
+  <div class="cierre">
+    <p>
+      Todo el trabajo está sin commitear, en la rama <code>hat3x/HAT3X-038</code>: 11 ficheros
+      modificados y 30 nuevos, incluido el paquete del agente. Cuando quieras lo separo en
+      commits con sentido — uno por fase, más el arreglo del horario de Biodental, que sigue ahí
+      desde antes de ayer.
+    </p>
+  </div>
+
+</div>
+
+</body></html>

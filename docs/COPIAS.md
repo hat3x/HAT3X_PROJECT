@@ -21,7 +21,7 @@ Los cuatro últimos viven anidados dentro de `clients/projects/`. Ver
 ```sh
 git clone https://github.com/hat3x/HAT3X_PROJECT.git
 cd HAT3X_PROJECT
-scripts\secretos.bat restaurar     # o ./scripts/secretos.sh restaurar
+scripts\entorno.bat restaurar      # o ./scripts/entorno.sh restaurar
 npm install                        # en cada app que vayas a tocar
 ```
 
@@ -33,7 +33,7 @@ Los cuatro proyectos de cliente con repositorio propio se clonan aparte — ver
 | Qué | Por qué | Cómo recuperarlo |
 |---|---|---|
 | `node_modules/`, `dist/`, `.next/` | Se regeneran | `npm install` |
-| Los `.env` | Nunca en claro en el repositorio | `secretos.bat restaurar` |
+| Los `.env` y tus sesiones de Claude | Van cifrados, nunca en claro | `entorno.bat restaurar` |
 
 Todo lo demás sí viene en el clone: las specs de `.superpowers/sdd/`, las
 capturas, y la piel personal de kaizen con su arte. Este repositorio es la copia
@@ -66,42 +66,42 @@ GitHub — y no: `commit` escribe en local, `push` es un paso aparte.
 No se perdió nada: el disco se recuperó y todo está subido. Pero el hook existe
 para que la próxima vez no dependa de acordarse.
 
-## Secretos
+## El espacio de trabajo: `.env` y sesiones
 
-Los `.env` **no** se suben en claro, ni siquiera a un repositorio privado: la
-visibilidad de un repo se cambia con un clic, y en estos ficheros hay siete
-claves `service_role` (saltan el RLS), las de facturación de OpenAI, Anthropic,
-ElevenLabs, Retell y Twilio, y la `DATABASE_URL`.
+Este repositorio es tu Drive, así que también viaja lo que no es código. Pero
+**cifrado**, porque las transcripciones de las sesiones llevan credenciales en
+claro (una de ellas guardaba un token de Supabase cinco veces).
 
-Van cifrados, en un único fichero `secretos.enc` que sí está versionado:
+`entorno.enc` es un único fichero versionado que contiene:
 
-Desde Git Bash:
-
-```sh
-./scripts/secretos.sh guardar     # empaqueta los .env y los cifra
-./scripts/secretos.sh restaurar   # los devuelve a su sitio
-./scripts/secretos.sh listar      # ve qué hay dentro, sin escribir nada
-```
-
-Desde `cmd` o PowerShell, lo mismo con el envoltorio:
+- los 18 `.env` del proyecto
+- las transcripciones de todas tus sesiones de Claude Code
+- las notas de memoria del proyecto
+- `settings.json` e `history.jsonl`
 
 ```
-scripts\secretos.bat guardar
-scripts\secretos.bat restaurar
-scripts\secretos.bat listar
+scripts\entorno.bat guardar      # empaqueta y cifra
+scripts\entorno.bat restaurar    # lo devuelve todo a su sitio
+scripts\entorno.bat listar       # ve qué hay dentro, sin escribir nada
 ```
 
-En una máquina nueva: clonas, ejecutas `restaurar`, escribes la contraseña y ya
-tienes los 18 `.env` en su carpeta. No hace falta instalar nada — OpenSSL viene
-con Git para Windows.
+Desde Git Bash, lo mismo con `./scripts/entorno.sh`.
 
-**Cuando cambies una clave, vuelve a ejecutar `guardar` y commitea** el
-`secretos.enc` nuevo. Si no, la copia se queda vieja.
+**Si el proyecto acaba en otra ruta, las sesiones se remapean solas.** Claude
+Code nombra la carpeta de sesiones según la ruta del proyecto; el script guarda
+la ruta de origen y, al restaurar en un sitio distinto, renombra la carpeta para
+que `/resume` las siga encontrando. Probado.
 
-La contraseña no está en ningún sitio del repositorio, a propósito. Guárdala en
-tu gestor de contraseñas: es lo único que no puede vivir solo en este disco.
+No incluye `~/.claude/.credentials.json` (tu sesión de Claude: se rehace con
+login) ni los plugins, que se reinstalan solos.
+
+**Cuando cambies una clave o quieras conservar las sesiones del día, vuelve a
+ejecutar `guardar` y commitea.** Si no, la copia se queda vieja.
+
+La contraseña no está en el repositorio, a propósito. Guárdala en tu gestor: es
+lo único que no puede vivir solo en un disco.
 
 ### Si se escapa un secreto
 
 **Revocarlo es lo único que arregla el problema.** Borrarlo del fichero no
-sirve: sigue en el historial de git, y quien lo haya copiado ya lo tiene.
+sirve: sigue en el historial de git.

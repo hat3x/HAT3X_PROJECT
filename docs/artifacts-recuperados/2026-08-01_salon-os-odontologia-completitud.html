@@ -1,0 +1,276 @@
+<!doctype html><html><head><!-- frame-runtime --><base href="/_f/1785602891-a771/"><script>window.__FRAME_PREAMBLE={"v":1,"capabilities":{"artifact":"artifact.BizKCZHg.js","assets":"assets.8Gk803W0.js","comments":"comments.vw5vQdGA.js","db":"db.h-3sndFg.js","downloads":"downloads.C3GSvEDP.js","embed":"embed.CxGAyc-v.js","mcp":"mcp.Bvma3qD7.js","network":"network.B5UA9Su4.js","notifications":"notifications.ssU4jy7G.js","permissions":"permissions.BNySkLV5.js","room":"room.BMMoe2BY.js","sample":"sample.BW2Uysoh.js","self":"artifact.BizKCZHg.js","user":"user.BpKav-Rf.js"},"transforms":"_transforms.DSB5x63f.js","comments":"_comments.BcSQU-9b.js","translate":"_translate.5HCW4BJh.js"}</script><script>(function(){"use strict";var te=["light","dark","system"],re=/^[A-Za-z0-9_-]{1,64}$/,$=/^[a-zA-Z_:][a-zA-Z0-9_:.-]{0,127}$/,ne=new Set(["class","hidden","value","checked","style","title","alt","placeholder","lang","dir","role","tabindex","disabled","readonly","contenteditable","open","colspan","rowspan"]);function oe(e){const t=e.toLowerCase();return t.startsWith("data-")||t.startsWith("aria-")||ne.has(t)}var Be="http://www.w3.org/1999/xhtml",se="http://www.w3.org/2000/svg",ae=new Set(["script","style","iframe","noscript","noframes","noembed","xmp","plaintext","template","title","textarea","object","embed"]),ie=new Set(["script","style"]);function ce(e){const t=e.localName.toLowerCase();return e.namespaceURI==="http://www.w3.org/1999/xhtml"?!ae.has(t):e.namespaceURI===se?!ie.has(t):!1}function M(e,t){return e===t||(e===160||e===32)&&(t===160||t===32)}function le(e,t){const r=e.length,n=t.length;let s=0;for(;s<r&&s<n&&M(e.charCodeAt(s),t.charCodeAt(s));)s++;let o=0;for(;o<r-s&&o<n-s&&M(e.charCodeAt(r-1-o),t.charCodeAt(n-1-o));)o++;return{p:s,s:o}}function ue(e,t){const r=e.firstChild;if(e.childNodes.length!==1||r===null||r.nodeType!==Node.TEXT_NODE){e.textContent=t;return}const n=r.data,s=n.length,o=t.length,{p:i,s:c}=le(n,t);i===s&&c===0&&s===o||r.replaceData(i,s-i-c,t.slice(i,o-c));const h=r.data,p=e.ownerDocument.getSelection?.()??null,w=p!==null&&p.rangeCount>0&&(p.anchorNode===r||p.focusNode===r)?{anchor:p.anchorNode,anchorOffset:p.anchorOffset,focus:p.focusNode,focusOffset:p.focusOffset}:null;let m=-1,g=-1;for(let f=0;f<h.length&&f<t.length;f++){const v=h.charCodeAt(f),b=t.charCodeAt(f);v!==b&&M(v,b)&&(m<0&&(m=f),g=f)}const a=m>=0;if(a&&r.replaceData(m,g-m+1,t.slice(m,g+1)),a&&w!==null&&w.anchor!==null&&w.focus!==null)try{p.setBaseAndExtent(w.anchor,w.anchorOffset,w.focus,w.focusOffset)}catch{}}var fe=new Set(["html","head","body","frameset"]);function de(e){return e.namespaceURI==="http://www.w3.org/1999/xhtml"&&fe.has(e.localName)}function pe(e){if(e===null||typeof e!="object")return!1;const t=e;if(typeof t.target!="string"||!re.test(t.target)||t.text!==void 0&&typeof t.text!="string")return!1;if(t.attrsSet!==void 0){if(t.attrsSet===null||typeof t.attrsSet!="object")return!1;for(const[r,n]of Object.entries(t.attrsSet))if(!$.test(r)||typeof n!="string")return!1}if(t.attrsRemoved!==void 0){if(!Array.isArray(t.attrsRemoved))return!1;for(const r of t.attrsRemoved)if(typeof r!="string"||!$.test(r))return!1}return!0}function me(e,t){if(e===null||typeof e!="object")return!1;const{seq:r,elements:n}=e;if(typeof r!="number"||!Number.isSafeInteger(r)||!Array.isArray(n)||n.length===0||n.length>64)return!1;for(let s=0;s<n.length;s++)if(!t(n[s]))return!1;return!0}function he(e){return e===null||typeof e!="object"?!1:me(e.__frame_patch,pe)}function _e(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_init;return t!==null&&typeof t=="object"}function ve(e){return e!==null&&typeof e=="object"&&e.__frame_size_poke===!0}function ye(e){if(e===null||typeof e!="object")return!1;const t=e.__frame_theme;if(t===null||typeof t!="object")return!1;const r=t.theme;return typeof r=="string"&&te.includes(r)}var A=/^[\w.-]+\.js$/;function we(e,t,r){return r?"inert":typeof t=="string"&&A.test(t)?e?[t]:"inert":e?"inert":"framed"}function ge(){return{post(e,t){parent.postMessage(e,t)},on(e){const t=r=>{r.source===parent&&e(r.data,r.origin,r.isTrusted)};return addEventListener("message",t),()=>removeEventListener("message",t)}}}function be(){return{post:()=>{},on:()=>()=>{}}}var j="__frame_scroll",Ee=150,Ae=310,Se=160,Te=3e4;function ke(){let e=0,t=!1,r=!1,n=!1,s=0,o=null;const i=l=>{try{sessionStorage.setItem(j,JSON.stringify({y:l}))}catch{}},c=()=>{if(clearTimeout(e),o===null)return;const l=o;o=null,i(l)},h=()=>{if(t){t=!1;return}r=!0,o=scrollY,clearTimeout(e),e=setTimeout(c,Ee)};try{addEventListener("scroll",h,{passive:!0}),addEventListener("pagehide",c)}catch{}const p=()=>{let l;try{l=sessionStorage.getItem(j)}catch{return null}if(l===null)return null;let _;try{_=JSON.parse(l)}catch{_=null}const d=_?.y;if(!(typeof d=="number"&&Number.isFinite(d)&&d>=0)){try{sessionStorage.removeItem(j)}catch{}return null}return d};let w=!1;const m=l=>{try{const _=scrollY;scrollTo({top:l,left:0,behavior:"instant"}),s=l,n=!0,clearTimeout(e),o=null,i(l);const d=scrollY;d!==_&&(t=!0),d!==l&&!w&&(w=!0,addEventListener("load",()=>{try{if(scrollY===d){const T=p();m(T!==null?T:s)}}catch{}},{once:!0}))}catch{}},g=()=>{try{return!!location.hash}catch{return!0}};let a=!1;const f=()=>{try{if(a||innerWidth>Ae||innerHeight>Se)return;a=!0;const l=Date.now(),_=()=>{try{removeEventListener("resize",_)}catch{}if(Date.now()-l>Te||r||g())return;const d=p();m(d!==null?d:s)};addEventListener("resize",_)}catch{}};let v=!1,b=!1;return{restore(){if(v||(v=!0,g()))return;const l=p();l!==null&&(m(l),f())},promoted(){if(b||(b=!0,g()))return;const l=p();l!==null?(m(l),f()):n&&m(s)}}}function Re(e,t,r,n){let s=null;try{s=window.trustedTypes?.createPolicy("frame-runtime",{createScriptURL:h=>h})??null}catch{}const o=window.Worker,i=o?.prototype,c=Object.freeze({Worker:o,workerOn:i?.addEventListener,workerPost:i?.postMessage,workerTerminate:i?.terminate,fetch:window.fetch.bind(window),preventDefault:Event.prototype.preventDefault,policy:s,origins:t});r(e).then(h=>h?.bootTopLevel?h.bootTopLevel(c,n):n.settle()).catch(()=>n.settle())}var De="modulepreload",Ie=function(e){return"/"+e},Ue={},Le=function(t,r,n){let s=Promise.resolve();function o(i){const c=new Event("vite:preloadError",{cancelable:!0});if(c.payload=i,window.dispatchEvent(c),!c.defaultPrevented)throw i}return s.then(i=>{for(const c of i||[])c.status==="rejected"&&o(c.reason);return t().catch(o)})},Oe=window===top,q=Object.getOwnPropertyDescriptor(window,"claude"),k=we(Oe,window.__FRAME_PREAMBLE?.topLevel,q?.writable===!1),N=typeof k=="object"&&k[0],y=N?be():ge();(function(){const e=Object.defineProperty,t=globalThis,r=["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel","RTCIceCandidate","RTCSessionDescription","RTCRtpSender","RTCRtpReceiver"];let n=0;for(let s=0;s<r.length;s++){const o=r[s];try{e(t,o,{value:void 0,writable:!1,configurable:!1})}catch{try{delete t[o]}catch{}try{e(t,o,{value:void 0,writable:!1,configurable:!0})}catch{}}typeof t[o]=="function"&&n++}if(n&&k==="framed")try{y.post({__frame_rtc_lockdown_failed:n},"*")}catch{}})();var Pe=1e4,Y=Object.freeze([...window.__FRAME_PREAMBLE?.origins??["https://claude.ai","https://preview.claude.ai"]]);function X(e){for(const t of Y)if(t.endsWith(":*"))try{const r=new URL(e);if(`${r.protocol}//${r.hostname}:*`===t)return!0}catch{}else if(e===t)return!0;return!1}var R=Object.freeze({...window.__FRAME_PREAMBLE?.capabilities}),B=window.__FRAME_PREAMBLE?.transforms,D=window.__FRAME_PREAMBLE?.comments,I=window.__FRAME_PREAMBLE?.translate;function S(e){return Le(()=>import("/_runtime/"+e),void 0)}function G(e,t){return{contract:e.contract,changes:new Set(e.changes??[]),flags:new Set(e.flags??[]),capabilities:e.capabilities??{},capBudgets:e.capBudgets??{},transforms:new Map,shellOrigin:t,mount:x,hooks:O,pipe:()=>({wrap:(r,n)=>(...s)=>{try{return n(...s)}catch(o){return Promise.reject(o)}}})}}var L=null,E=null;function V(e,t,r){try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!1,enumerable:!0})}catch{try{Object.defineProperty(e,t,{value:r,writable:!1,configurable:!0,enumerable:!0})}catch{}}}var U=!1,O={editBefore:null,edit:null};function Ce(e,t,r=!1){const n=[];let s;if(r)try{O.editBefore?.(e)}catch{}for(const o of e.elements){const i=document.querySelector(`[data-id="${o.target}"]`);if(!i){s=o.target;break}if([...Object.keys(o.attrsSet??{}),...o.attrsRemoved??[]].some(c=>!oe(c))){s=o.target;break}if(o.text!==void 0&&(!ce(i)||de(i))){s=o.target;break}for(const[c,h]of Object.entries(o.attrsSet??{}))if(!J(i,c)){try{i.setAttribute(c,h)}catch{}Z(i,c,h)}for(const c of o.attrsRemoved??[])J(i,c)||(i.removeAttribute(c),Z(i,c,null));typeof o.text=="string"&&ue(i,o.text),n.push(o.target)}if(r)try{O.edit?.(e.seq,n,s)}catch{}if(s!==void 0){y.post({__frame_patch_miss:{seq:e.seq}},t);return}try{document.dispatchEvent(new CustomEvent("claude:edit",{detail:{seq:e.seq,targets:n}}))}catch{}}function Z(e,t,r){if(!(e instanceof HTMLInputElement))return;const n=t.toLowerCase();n==="checked"?e.checked=r!==null:n==="value"&&e.type!=="file"&&(e.value=r??"")}function J(e,t){const r=t.toLowerCase(),n=e;return r==="data-id"||(r==="value"||r==="checked")&&(n.__artifactSecret===!0||/^(password|hidden|file)$/.test(n.type??"")||/(^|\s)(cc-|one-time-code|current-password|new-password)/i.test(`${e.getAttribute("autocomplete")??""} ${n.autocomplete??""}`))}function Q(e){const t=document.documentElement;e==="light"||e==="dark"?(t.dataset.theme=e,t.style.colorScheme=e,U=!0):U&&(delete t.dataset.theme,t.style.colorScheme="",U=!1)}var P=new Map;function Me(){let e;const t={u:new Promise(r=>{e=r}),r:r=>{t.done=!0,e(r)},done:!1,nulled:!1};return t}function F(){for(const e of P.values())e.done||(e.nulled=!0,e.r(null))}var je=Object.freeze(Object.assign(Object.create(null),{call:Function.prototype.call,apply:Function.prototype.apply,bind:Function.prototype.bind})),x=(e,t)=>{const r=P.get(e);if(!r||r.done){r?.nulled&&E&&y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:e}},E);return}const n=typeof t=="function"?Object.setPrototypeOf(t,je):Object.assign(Object.create(null),t);typeof n.then=="function"&&delete n.then,r.r(Object.freeze(n))};function ee(){const e=q?.value??{};V(window,"claude",e);for(const t of Object.keys(R)){if(e[t]!==void 0){V(e,t,e[t]);continue}P.set(t,Me())}if(e.use===void 0){const t=r=>{if(typeof r!="string"||!Object.hasOwn(R,r))return Promise.resolve(null);const n=P.get(r);return n?n.u:Promise.resolve(e[r]??null)};try{Object.defineProperty(e,"use",{value:t,writable:!0,configurable:!0,enumerable:!1})}catch{}}}if(k==="framed"){const e=B&&A.test(B)?S(B).catch(()=>{}):Promise.resolve(void 0),t=a=>{if(a.type==="auxclick"&&a.button!==1)return;const f=a.target,v=f&&f.closest?f.closest("a[href],area[href]"):null;if(!v)return;const b=v.getAttribute("href");if(!b)return;let l;try{l=new URL(b,document.baseURI)}catch{return}if((l.protocol==="http:"||l.protocol==="https:")&&l.origin!==location.origin){a.preventDefault();const _=(v.getAttribute("target")??"").toLowerCase(),d=a.type==="auxclick"||a.metaKey||a.ctrlKey||a.shiftKey||a.altKey||!["","_self","_top","_parent"].includes(_);y.post({__frame_nav:!0,url:l.href,newTab:d},"*")}};addEventListener("click",t,!0),addEventListener("auxclick",t,!0);const r={},n=a=>{a.isTrusted&&(r.pointer=!0)},s=a=>{a.isTrusted&&(r.click=!0)};addEventListener("pointermove",n,{capture:!0,passive:!0}),addEventListener("click",s,{capture:!0,passive:!0}),e.then(a=>{a?.wireNav&&(a.wireNav(),removeEventListener("click",t,!0),removeEventListener("auxclick",t,!0),removeEventListener("pointermove",n,!0),removeEventListener("click",s,!0),a.wireEngagement?.(r))});let o=null;try{o=ke()}catch{}ee();let i=null,c=null,h=0;const p=y.on((a,f)=>{X(f)&&_e(a)&&(i=a.__frame_init,E=f,p(),clearTimeout(h),c?.())});y.post({__frame_connect:!0},"*");const w=new Promise(a=>{c=a,h=setTimeout(()=>{p(),a()},Pe)}),m=document.readyState==="loading"?new Promise(a=>document.addEventListener("DOMContentLoaded",()=>a(),{once:!0})):Promise.resolve();m.then(()=>{try{o?.restore()}catch{}});const g={cb:null};y.on((a,f)=>{if(X(f)&&ve(a)){try{o?.promoted()}catch{}g.cb?.()}}),w.then(async()=>{if(!i||!E){F();return}Q(i.theme);const a=E;let f=!1,v=!1;y.on((u,z,C)=>{if(z!==a)return;ye(u)&&Q(u.__frame_theme.theme),he(u)&&Ce(u.__frame_patch,a,C);const H=u?.__fc_mode;H&&typeof H=="object"&&!f&&D&&A.test(D)&&(f=!0,S(D).then(K=>K.install?.(a,H.on===!0)).catch(()=>{}));const W=u?.__ft_cmd;W&&typeof W=="object"&&!v&&I&&A.test(I)&&(v=!0,S(I).then(K=>K.install?.(a,W)).catch(()=>{}))});const b=Object.keys(i.capabilities??{}).filter(u=>Object.hasOwn(R,u)).map(u=>[u,R[u]]).filter(u=>typeof u[1]=="string"&&A.test(u[1])),l=await Promise.allSettled(b.map(([,u])=>S(u))),_=await e,d=E;if(_?.buildBoot||y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),_?.buildBoot)try{L=_.buildBoot(i,_.TRANSFORMS??{},{shellOrigin:d,mount:x,hooks:O},u=>y.post({__frame_cap_telemetry:u},d))}catch{y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:"_transforms"}},d),L=G(i,d)}else L=G(i,d);const T=u=>y.post({__frame_cap_telemetry:{kind:"cap-load-error",cap:u}},d),Ne=L;l.forEach((u,z)=>{const C=b[z][0];if(u.status!=="fulfilled"){T(C);return}try{u.value?.install?.(Ne)}catch{T(C)}}),F(),await m,y.post({__frame_ready:!0},E),e.then(u=>u?.installSizeReporter?.(d,g))})}else N&&(ee(),Re(N,Y,S,{settle:F,mount:x}))})();</script><!-- /frame-runtime --><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<title>Salón OS · Odontología — Análisis de completitud</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f6f8f7; --surface: #ffffff; --surface-2: #f0f4f3;
+    --ink: #101815; --ink-soft: #4a5a55; --ink-faint: #7b8a85;
+    --border: #e0e7e5; --border-strong: #cdd8d5;
+    --accent: #0f766e; --accent-soft: #0f766e18;
+    --have: #15803d; --have-bg: #15803d14;
+    --partial: #b45309; --partial-bg: #b4530914;
+    --missing: #be123c; --missing-bg: #be123c12;
+    --p-alta: #be123c; --p-media: #b45309; --p-baja: #64748b;
+    --shadow: 0 1px 2px rgba(16,24,21,.04), 0 8px 24px -16px rgba(16,24,21,.18);
+    --radius: 14px;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1211; --surface: #101c19; --surface-2: #16241f;
+      --ink: #e9f1ee; --ink-soft: #9db3ac; --ink-faint: #6e847d;
+      --border: #21302c; --border-strong: #2c3d38;
+      --accent: #2dd4bf; --accent-soft: #2dd4bf1f;
+      --have: #4ade80; --have-bg: #4ade8016;
+      --partial: #fbbf24; --partial-bg: #fbbf2416;
+      --missing: #fb7185; --missing-bg: #fb718514;
+      --p-alta: #fb7185; --p-media: #fbbf24; --p-baja: #94a3b8;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -18px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f6f8f7; --surface: #ffffff; --surface-2: #f0f4f3;
+    --ink: #101815; --ink-soft: #4a5a55; --ink-faint: #7b8a85;
+    --border: #e0e7e5; --border-strong: #cdd8d5;
+    --accent: #0f766e; --accent-soft: #0f766e18;
+    --have: #15803d; --have-bg: #15803d14;
+    --partial: #b45309; --partial-bg: #b4530914;
+    --missing: #be123c; --missing-bg: #be123c12;
+    --p-alta: #be123c; --p-media: #b45309; --p-baja: #64748b;
+    --shadow: 0 1px 2px rgba(16,24,21,.04), 0 8px 24px -16px rgba(16,24,21,.18);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1211; --surface: #101c19; --surface-2: #16241f;
+    --ink: #e9f1ee; --ink-soft: #9db3ac; --ink-faint: #6e847d;
+    --border: #21302c; --border-strong: #2c3d38;
+    --accent: #2dd4bf; --accent-soft: #2dd4bf1f;
+    --have: #4ade80; --have-bg: #4ade8016;
+    --partial: #fbbf24; --partial-bg: #fbbf2416;
+    --missing: #fb7185; --missing-bg: #fb718514;
+    --p-alta: #fb7185; --p-media: #fbbf24; --p-baja: #94a3b8;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.55;
+    font-size: 15px; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 40px 22px 80px; }
+
+  .eyebrow {
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 650;
+  }
+  h1 {
+    font-size: clamp(26px, 4.5vw, 38px); line-height: 1.08; margin: 10px 0 0;
+    letter-spacing: -.02em; text-wrap: balance; font-weight: 700;
+  }
+  .lede { color: var(--ink-soft); max-width: 62ch; margin: 14px 0 0; font-size: 16px; }
+  .meta { margin-top: 16px; font-size: 12.5px; color: var(--ink-faint); font-family: var(--mono); }
+
+  .board {
+    margin-top: 34px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 18px 16px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+  }
+  .stat::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--c); }
+  .stat.have { --c: var(--have); } .stat.partial { --c: var(--partial); } .stat.missing { --c: var(--missing); }
+  .stat .n { font-family: var(--mono); font-size: 34px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--c); }
+  .stat .k { margin-top: 8px; font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+  .stat .d { margin-top: 3px; font-size: 12.5px; color: var(--ink-faint); }
+
+  .barwrap { margin-top: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
+  .barwrap .top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+  .barwrap .lbl { font-size: 12.5px; text-transform: uppercase; letter-spacing:.06em; color: var(--ink-soft); font-weight:600; }
+  .barwrap .pct { font-family: var(--mono); font-weight:600; font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .bar { margin-top: 10px; height: 10px; border-radius: 999px; background: var(--surface-2); display:flex; overflow:hidden; border:1px solid var(--border); }
+  .bar span { height:100%; }
+  .bar .s-have { background: var(--have); } .bar .s-partial { background: var(--partial); } .bar .s-missing { background: var(--missing); opacity:.35; }
+
+  section { margin-top: 40px; }
+  .cat-head { display:flex; align-items:baseline; gap:12px; border-bottom: 2px solid var(--border-strong); padding-bottom: 8px; }
+  .cat-head h2 { font-size: 19px; margin:0; letter-spacing:-.01em; font-weight:680; }
+  .cat-head .tally { margin-left:auto; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+
+  ul.rows { list-style:none; margin: 8px 0 0; padding:0; }
+  li.row {
+    display:grid; grid-template-columns: 1fr auto auto; align-items:center; gap: 14px;
+    padding: 13px 4px; border-bottom: 1px solid var(--border);
+  }
+  li.row:last-child { border-bottom: none; }
+  .feat .name { font-weight: 600; font-size: 14.5px; }
+  .feat .desc { color: var(--ink-soft); font-size: 13px; margin-top: 2px; max-width: 60ch; }
+
+  .pill { font-size: 11.5px; font-weight: 650; letter-spacing:.03em; padding: 4px 10px; border-radius: 999px; white-space: nowrap; border:1px solid transparent; }
+  .pill.have { color: var(--have); background: var(--have-bg); border-color: var(--have); }
+  .pill.partial { color: var(--partial); background: var(--partial-bg); border-color: var(--partial); }
+  .pill.missing { color: var(--missing); background: var(--missing-bg); border-color: var(--missing); }
+
+  .prio { font-size: 11px; font-weight: 650; letter-spacing:.08em; text-transform:uppercase; font-family: var(--mono); white-space:nowrap; }
+  .prio.alta { color: var(--p-alta); } .prio.media { color: var(--p-media); } .prio.baja { color: var(--p-baja); }
+  .prio .dot { display:inline-block; width:6px; height:6px; border-radius:999px; background: currentColor; margin-right:5px; vertical-align: middle; }
+
+  .road { margin-top: 42px; background: var(--surface); border:1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow:hidden; }
+  .road .rh { padding: 18px 22px 14px; border-bottom:1px solid var(--border); }
+  .road .rh h2 { margin:0; font-size:18px; letter-spacing:-.01em; }
+  .road .rh p { margin: 6px 0 0; color: var(--ink-soft); font-size: 13.5px; }
+  ol.steps { list-style:none; counter-reset: s; margin:0; padding: 6px 0; }
+  ol.steps li { counter-increment: s; display:grid; grid-template-columns: 34px 1fr auto; gap: 14px; align-items:center; padding: 12px 22px; border-bottom:1px solid var(--border); }
+  ol.steps li:last-child { border-bottom:none; }
+  ol.steps .num { font-family: var(--mono); font-weight:600; font-size:14px; color: var(--accent); }
+  ol.steps .what .t { font-weight:650; font-size:14.5px; }
+  ol.steps .what .y { color: var(--ink-soft); font-size:12.5px; margin-top:1px; }
+  ol.steps .eff { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); text-align:right; }
+
+  .note { margin-top: 30px; font-size: 12.5px; color: var(--ink-faint); border-left: 2px solid var(--border-strong); padding: 2px 0 2px 14px; }
+  .legend { margin-top: 14px; display:flex; flex-wrap:wrap; gap: 8px 16px; font-size: 12px; color: var(--ink-soft); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend i { width:9px; height:9px; border-radius:3px; display:inline-block; }
+
+  @media (max-width: 620px) {
+    .board { grid-template-columns: 1fr; }
+    li.row { grid-template-columns: 1fr auto; }
+    li.row .prio { grid-column: 1 / -1; }
+    ol.steps li { grid-template-columns: 28px 1fr; }
+    ol.steps .eff { grid-column: 2; text-align:left; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .bar span { transition: width .6s ease; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Salón OS · Vertical Odontología</div>
+    <h1>Qué tiene y qué le falta para ser el software dental más completo</h1>
+    <p class="lede">Mapa de todo lo que ofrece una herramienta de gestión de clínica dental de referencia, contrastado con lo que Salón OS ya hace hoy. Sirve para decidir juntos qué construir a continuación.</p>
+    <div class="meta">Preparado para HAT3X · Base: tenant Biodental migrado (1.155 pacientes · 5.252 hallazgos · 1.996 presupuestos)</div>
+  </header>
+
+  <div class="board">
+    <div class="stat have"><div class="n">19</div><div class="k">Ya lo tiene</div><div class="d">núcleo clínico sólido</div></div>
+    <div class="stat partial"><div class="n">13</div><div class="k">Parcial</div><div class="d">existe, falta pulir/ampliar</div></div>
+    <div class="stat missing"><div class="n">15</div><div class="k">Falta</div><div class="d">oportunidades de diferenciación</div></div>
+  </div>
+
+  <div class="barwrap">
+    <div class="top"><span class="lbl">Completitud estimada frente a un PMS dental líder</span><span class="pct">~56%</span></div>
+    <div class="bar" role="img" aria-label="19 completas, 13 parciales, 15 pendientes de 47 capacidades">
+      <span class="s-have" style="width:40%"></span>
+      <span class="s-partial" style="width:14%"></span>
+      <span class="s-missing" style="width:46%"></span>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--have)"></i> Tiene · cuenta completa</span>
+      <span><i style="background:var(--partial)"></i> Parcial · media cuenta</span>
+      <span><i style="background:var(--missing);opacity:.4"></i> Falta</span>
+    </div>
+  </div>
+
+  <section>
+    <div class="cat-head"><h2>Clínico</h2><span class="tally">8 tiene · 3 parcial · 3 falta</span></div>
+    <ul class="rows">
+      <li class="row"><div class="feat"><div class="name">Ficha e historia clínica</div><div class="desc">Datos, alergias, medicación, contraindicaciones, alertas médicas.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Odontograma avanzado</div><div class="desc">FDI/ISO, hallazgos por diente y superficie, colores, evolutivo "boca en fecha X".</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Periodontograma</div><div class="desc">Sondaje 6 sitios, CAL, índices %BoP/PD, estadificación.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Planes de tratamiento y presupuestos</div><div class="desc">Fases, líneas, máquina de estados, enlace al odontograma.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Consentimientos informados</div><div class="desc">Plantillas por tratamiento, firma, inmutable, RGPD.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Imágenes y radiografías</div><div class="desc">Almacenamiento privado por paciente con URLs firmadas.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Odontopediatría</div><div class="desc">Dentición temporal en el odontograma.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Estadificación periodontal</div><div class="desc">Estadio automático a partir del CAL.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Notas de evolución (SOAP)</div><div class="desc">Existe base de notas de visita; falta UI clínica rica y plantillas.</div></div><span class="pill partial">Parcial</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Seguimiento de ortodoncia</div><div class="desc">Guarda imágenes; falta línea temporal de evolución y cefalometría.</div></div><span class="pill partial">Parcial</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Plantillas clínicas</div><div class="desc">Consentimientos sí; faltan plantillas de tratamiento y de notas reutilizables.</div></div><span class="pill partial">Parcial</span><span class="prio baja"><span class="dot"></span>Baja</span></li>
+      <li class="row"><div class="feat"><div class="name">Recetas / prescripciones</div><div class="desc">Emisión de receta privada, historial de prescripciones por paciente.</div></div><span class="pill missing">Falta</span><span class="prio alta"><span class="dot"></span>Alta</span></li>
+      <li class="row"><div class="feat"><div class="name">Órdenes de laboratorio</div><div class="desc">Encargos de prótesis, estado y comunicación con el laboratorio.</div></div><span class="pill missing">Falta</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Visor DICOM / escáner intraoral</div><div class="desc">Guarda archivos; falta visor de radiografía/CBCT y STL integrado.</div></div><span class="pill missing">Falta</span><span class="prio media"><span class="dot"></span>Media</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="cat-head"><h2>Agenda y operativa</h2><span class="tally">4 tiene · 2 parcial · 2 falta</span></div>
+    <ul class="rows">
+      <li class="row"><div class="feat"><div class="name">Agenda de citas</div><div class="desc">Reservas, duración por fases (tiempo libre durante exposición), multi-profesional.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Recepcionista IA de voz</div><div class="desc">"Sara" atiende llamadas, agenda, deriva ortodoncia (add-on Retell + n8n).</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Recordatorios WhatsApp/SMS</div><div class="desc">Confirmaciones y avisos automáticos de cita.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Multi-sede</div><div class="desc">Varias clínicas aisladas por tenant, sedes por salón.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Reserva online (paciente)</div><div class="desc">Existe API pública de reserva; falta el widget web pulido embebible.</div></div><span class="pill partial">Parcial</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Gestión de gabinetes/sillones</div><div class="desc">Agenda por profesional; falta el recurso "box/sillón" como dimensión.</div></div><span class="pill partial">Parcial</span><span class="prio baja"><span class="dot"></span>Baja</span></li>
+      <li class="row"><div class="feat"><div class="name">Recordatorios de revisión (recall)</div><div class="desc">Campañas de higiene/revisión periódica automáticas — clave para retención.</div></div><span class="pill missing">Falta</span><span class="prio alta"><span class="dot"></span>Alta</span></li>
+      <li class="row"><div class="feat"><div class="name">Ausencias y lista de espera</div><div class="desc">Control de no-shows y reasignación automática de huecos liberados.</div></div><span class="pill missing">Falta</span><span class="prio media"><span class="dot"></span>Media</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="cat-head"><h2>Facturación y económico</h2><span class="tally">2 tiene · 2 parcial · 5 falta</span></div>
+    <ul class="rows">
+      <li class="row"><div class="feat"><div class="name">TPV, cobros y tickets</div><div class="desc">Caja, cobros, arqueo, tickets.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Facturación</div><div class="desc">Libro de facturas y emisión (Verifactu retirado temporalmente).</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Presupuesto → factura</div><div class="desc">Planes con importes sí; falta la traza directa presupuesto-factura en el TPV.</div></div><span class="pill partial">Parcial</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Bonos / membresías / cuotas</div><div class="desc">Hay fidelización; faltan cuotas de mantenimiento dental y bonos.</div></div><span class="pill partial">Parcial</span><span class="prio baja"><span class="dot"></span>Baja</span></li>
+      <li class="row"><div class="feat"><div class="name">Verifactu / Facturae</div><div class="desc">Reimplementar cuando la ley lo exija (retirado a propósito).</div></div><span class="pill missing">Falta</span><span class="prio alta"><span class="dot"></span>Alta</span></li>
+      <li class="row"><div class="feat"><div class="name">Mutuas y seguros</div><div class="desc">Compañías, autorizaciones, baremos y facturación a aseguradora.</div></div><span class="pill missing">Falta</span><span class="prio alta"><span class="dot"></span>Alta</span></li>
+      <li class="row"><div class="feat"><div class="name">Financiación / planes de pago</div><div class="desc">Fraccionar tratamientos en cuotas con seguimiento de cobros.</div></div><span class="pill missing">Falta</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Comisiones por profesional</div><div class="desc">Liquidación de honorarios por doctor sobre lo realizado/cobrado.</div></div><span class="pill missing">Falta</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Exportación contable</div><div class="desc">Asientos y export a gestoría/contabilidad.</div></div><span class="pill missing">Falta</span><span class="prio baja"><span class="dot"></span>Baja</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="cat-head"><h2>Inventario y compras</h2><span class="tally">1 tiene · 0 parcial · 3 falta</span></div>
+    <ul class="rows">
+      <li class="row"><div class="feat"><div class="name">Catálogo de productos</div><div class="desc">Existe la sección de productos.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Control de stock de material</div><div class="desc">Conteo, mínimos, alertas de reposición, caducidades. <strong>Solicitado por ti.</strong></div></div><span class="pill missing">Falta</span><span class="prio alta"><span class="dot"></span>Alta</span></li>
+      <li class="row"><div class="feat"><div class="name">Proveedores y pedidos</div><div class="desc">Compras, entradas de mercancía, coste por material.</div></div><span class="pill missing">Falta</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Trazabilidad de lotes</div><div class="desc">Lote y caducidad ligados al paciente (implantes, biomateriales) — exigible legalmente.</div></div><span class="pill missing">Falta</span><span class="prio media"><span class="dot"></span>Media</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="cat-head"><h2>Comunicación y paciente</h2><span class="tally">1 tiene · 2 parcial · 2 falta</span></div>
+    <ul class="rows">
+      <li class="row"><div class="feat"><div class="name">Apps de cliente y de personal</div><div class="desc">PWA de paciente (fidelización) y de staff.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Portal del paciente</div><div class="desc">Ver su plan, firmar consentimientos online, descargar documentos y radiografías.</div></div><span class="pill partial">Parcial</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Firma en tableta</div><div class="desc">Consentimientos sí; falta captura de firma manuscrita en tablet en consulta.</div></div><span class="pill partial">Parcial</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Marketing / CRM</div><div class="desc">Oportunidades, campañas, seguimiento de leads y reactivación de pacientes.</div></div><span class="pill missing">Falta</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Encuestas de satisfacción</div><div class="desc">NPS/reseñas tras la visita, reputación online.</div></div><span class="pill missing">Falta</span><span class="prio baja"><span class="dot"></span>Baja</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="cat-head"><h2>Gestión, BI y cumplimiento</h2><span class="tally">3 tiene · 4 parcial · 0 falta</span></div>
+    <ul class="rows">
+      <li class="row"><div class="feat"><div class="name">Panel y KPIs</div><div class="desc">Resumen del día, citas, ocupación, altas.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Personal y roles</div><div class="desc">Owner / manager / staff con permisos y RLS.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Copias de seguridad</div><div class="desc">Respaldo gestionado (Supabase) y aislamiento por tenant.</div></div><span class="pill have">Tiene</span><span class="prio baja"><span class="dot"></span>—</span></li>
+      <li class="row"><div class="feat"><div class="name">Analítica avanzada</div><div class="desc">Producción por doctor, tasa de aceptación de presupuestos, ratio de ausencias.</div></div><span class="pill partial">Parcial</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Control horario / turnos</div><div class="desc">Horarios sí; falta fichaje y turnos del equipo.</div></div><span class="pill partial">Parcial</span><span class="prio baja"><span class="dot"></span>Baja</span></li>
+      <li class="row"><div class="feat"><div class="name">Herramientas LOPD/RGPD</div><div class="desc">RLS y borrado sí; faltan export de datos del paciente y derecho de supresión guiado.</div></div><span class="pill partial">Parcial</span><span class="prio media"><span class="dot"></span>Media</span></li>
+      <li class="row"><div class="feat"><div class="name">Auditoría / trazabilidad</div><div class="desc">Inmutabilidad en firmas; falta log de auditoría transversal consultable.</div></div><span class="pill partial">Parcial</span><span class="prio baja"><span class="dot"></span>Baja</span></li>
+    </ul>
+  </section>
+
+  <div class="road">
+    <div class="rh">
+      <h2>Recomendación — por dónde empezar</h2>
+      <p>Ordenado por impacto para una clínica como Biodental frente al esfuerzo de construirlo. Las cuatro primeras diferencian mucho y cuestan poco aprovechando lo que ya hay.</p>
+    </div>
+    <ol class="steps">
+      <li><span class="num">01</span><div class="what"><div class="t">Control de stock de material</div><div class="y">Lo pediste; reutiliza "Productos". Mínimos, caducidad, lotes.</div></div><span class="eff">esfuerzo medio</span></li>
+      <li><span class="num">02</span><div class="what"><div class="t">Recordatorios de revisión (recall)</div><div class="y">Retención pura; se apoya en WhatsApp y en Sara, ya existentes.</div></div><span class="eff">esfuerzo bajo</span></li>
+      <li><span class="num">03</span><div class="what"><div class="t">Recetas / prescripciones</div><div class="y">Módulo clínico esencial que hoy falta por completo.</div></div><span class="eff">esfuerzo medio</span></li>
+      <li><span class="num">04</span><div class="what"><div class="t">Mutuas y seguros</div><div class="y">Muchas clínicas trabajan con aseguradoras; hoy es un "no" comercial.</div></div><span class="eff">esfuerzo medio-alto</span></li>
+      <li><span class="num">05</span><div class="what"><div class="t">Presupuesto → factura + comisiones</div><div class="y">Cierra el círculo económico; datos ya migrados de Biodental.</div></div><span class="eff">esfuerzo medio</span></li>
+      <li><span class="num">06</span><div class="what"><div class="t">Portal del paciente</div><div class="y">Ver plan, firmar y descargar radiografías online.</div></div><span class="eff">esfuerzo medio</span></li>
+      <li><span class="num">07</span><div class="what"><div class="t">Verifactu / Facturae</div><div class="y">Reactivar cuando la normativa obligue.</div></div><span class="eff">esfuerzo medio</span></li>
+    </ol>
+  </div>
+
+  <p class="note">Los porcentajes son una estimación de trabajo, no una nota. Salón OS ya tiene un núcleo clínico (odontograma, periodontograma, planes, expediente) que muchos PMS del mercado no igualan; las carencias se concentran en <strong>económico avanzado</strong>, <strong>inventario</strong> y <strong>automatización de comunicación</strong>. Ninguna capacidad pendiente es bloqueante para operar.</p>
+</div>
+
+</body></html>

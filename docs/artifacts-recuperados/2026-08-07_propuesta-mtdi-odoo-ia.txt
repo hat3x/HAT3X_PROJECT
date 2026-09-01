@@ -1,0 +1,123 @@
+Propuesta MTDI — Automatización Integral (Odoo + IA) · HAT3X 
+ H HAT3X
+ Propuesta · Confidencial 
+ Automatización · Odoo + IA · licencia todo incluido
+ Automatización Integral de MTDI
+ El sistema que le lleva la administración a tu estudio de interiorismo y reformas — para que tú te dediques a diseñar y dirigir.
+ Para Ismael — MTDI 
+ De Jose Miguel · HAT3X 
+ Fecha 7 de agosto de 2026 
+ Vigencia 30 días naturales 
+ En una idea
+ No una IA que lo haga todo. El sistema que administra tu empresa.
+ Lo que planteas no es una automatización suelta: es incorporar un departamento administrativo y un control de costes —lectura de facturas, reparto por obra, cobros y pagos, conciliación del banco, gestoría, moodboards y presentaciones— sin contratar a nadie y funcionando 24/7.
+ El objetivo no es solo ahorrarte horas. Es que sepas la rentabilidad real de cada reforma y dejes de perder dinero en descuadres, facturas traspapeladas y tareas repetidas.
+ Un dato se introduce una sola vez y se reutiliza en todo: presupuesto, compras, moodboard, presentación, certificación, factura, banco y gestoría.
+ Quién hace qué
+ Tú decides. El sistema ejecuta.
+ ▲ Sigue en tus manos
+ Interpretar al cliente en la visita
+ Diseñar en 2D y decidir la distribución
+ Elegir los materiales finales
+ Aprobar precios y autorizar pedidos y pagos
+ Dirigir la obra y resolver imprevistos
+ Aprobar facturas antes de contabilizarlas
+ Validar cada presentación antes de enviarla
+ ● Lo hace el sistema
+ Leer, clasificar y archivar facturas
+ Repartir el coste por obra automáticamente
+ Controlar vencimientos, cobros y pagos
+ Conciliar el banco y detectar descuadres
+ Preparar el paquete trimestral de la gestoría
+ Montar moodboards y presentaciones
+ Resumir el correo y avisar de lo urgente
+ Principio innegociable: la IA propone y ordena ; tú validas y decides . Las facturas se generan como borrador — nunca hay emisión ni contabilización automática en firme.
+ Cómo se construye
+ Arquitectura recomendada
+ Cuatro capas con una responsabilidad clara cada una. Odoo es la fuente de verdad; la IA, la capa que lee y propone; tú, quien valida.
+ 01 · Entrada Canales — un dato, una vez 
+ Correo Web proveedor WhatsApp Papel / Foto Visita móvil Captura de producto 
+ ↓
+ 02 · Orquestación Capa de automatización — n8n + IA 
+ OCR multimodal → JSON Triaje de correo A/B/C/D Anti-duplicados Borradores de respuesta 
+ Propone, nunca decide → todo pasa por tu pantalla de revisión.
+ ↓
+ 03 · Núcleo Odoo 
+ CRM Compras Facturas Contab. analítica por obra Conciliación Revisión humana 
+ Archivo Dropbox 
+ Documento maestro único Carpeta por cliente 
+ ↓
+ 04 · Salidas Fiscalidad y gestoría 
+ Libros trimestrales por serie (R / D) Paquete gestoría Resumen IVA + incidencias 
+ Aparte CAD / 3D 
+ AutoCAD / InteriCAD (DWG) A validar con piloto 
+ Núcleo Odoo, no Holded
+ El reparto de una factura entre varias obras + gasto general exige la contabilidad analítica por línea de Odoo. Es su terreno.
+ Automatizador n8n
+ Estándar de HAT3X, autohospedable, sin coste por operación y con lógica fina para validaciones y anti-duplicados.
+ OCR IA propia multimodal
+ Absorbe correo, PDF, WhatsApp, papel y foto en un mismo esquema, con validaciones (cuadre base+IVA, NIF, duplicados) encima.
+ Cómo se despliega
+ Módulos que activas a tu ritmo
+ La Etapa 1 marca la línea base y es la de retorno más rápido. Cada módulo siguiente lo activas cuando el anterior ya te esté dando valor — y solo entonces sube la cuota.
+ 1 · Administración y facturas ROI más rápido 
+ Una factura se mete una vez (correo, WhatsApp o foto) y actualiza el libro de compras, el coste de la obra, el IVA, el archivo fiscal y la carpeta del cliente. Incluye conciliación bancaria y análisis diario del correo.
+ 2 · Clientes y estructura documental Alto 
+ Alta de cliente, código de proyecto, carpetas automáticas, RGPD, formulario de visita en móvil, fotos y notas de voz. Un alta → expediente completo creado solo.
+ 3 · Presupuestos y cobros Alto 
+ Base de precios, márgenes, versiones y calendario de cobro 5/35/25/20/15 con avisos y borradores de factura. Aceptado un presupuesto → facturación y avisos automáticos.
+ 4 · Productos, proveedores y moodboard Medio-Alto 
+ Captura de un artículo (web, PDF o foto) → ficha + Excel de compras + imagen en el moodboard + comparativo + pedido. Una selección, siete destinos.
+ 5 · Presentaciones automáticas Medio 
+ Plantilla PowerPoint corporativa → PPTX + PDF versionados (V01, V02, APROBADA). La presentación de cliente, montada en minutos.
+ 6 · Diseño 2D/3D asistido Exploratoria 
+ Plantillas DWG, bibliotecas y transición desde InteriCAD. Alcance abierto: se valida con un proyecto piloto antes de comprometer.
+ + Comunicación y redes Add-on 
+ Publicación del proyecto terminado en la web WordPress + TikTok/Instagram (Canva), siempre con tu aprobación previa.
+ Inversión
+ Sin gran inversión inicial — y empiezas pagando menos.
+ Alta única · puesta en marcha
+ 990 €
+ Incluye la reunión de Descubrimiento (el mapa de tu forma de trabajar) y la puesta en marcha de la Etapa 1.
+ Cuota de arranque · con descuento
+ 350 € /mes 
+ La cuota completa del sistema es 450 €/mes . Empiezas por debajo porque aún no tienes todos los módulos: nunca pagas por lo que no usas. 
+ Estado del sistema
+ Módulos activos
+ Cuota
+ Alta · puesta en marcha
+ Descubrimiento + Etapa 1 operativa
+ 990 € · único 
+ Arranque · solo Administración
+ Etapa 1 — facturas, coste por obra, gestoría
+ 350 €/mes −100 € 
+ + Gestión de proyectos
+ + Clientes/documentos + Presupuestos y cobros
+ 400 €/mes −50 € 
+ Sistema completo
+ + Productos/moodboard + Presentaciones
+ 450 €/mes
+ Add-ons
+ Diseño CAD 2D/3D · publicación web y redes
+ a valorar
+ Precio completo
+ 450 €/mes
+ Todo incluido: Odoo, IA, hosting, soporte y mejoras. Solo al tener el sistema entero.
+ Arranque
+ 990 €
+ Y en marcha. Sin la gran inversión inicial de un desarrollo a medida.
+ Permanencia
+ 12 meses
+ Desde el go-live. Después, mes a mes sin permanencia.
+ Dos calendarios distintos, que no se mezclan. Lo de arriba es lo que HAT3X te factura a ti (alta + cuota). El calendario 5 / 35 / 25 / 20 / 15 es otra cosa: es el que tú facturas a tus clientes por tus reformas — y es, precisamente, una de las funciones que automatiza la Etapa 3.
+ El descuento de arranque se reduce solo a medida que se completan los módulos, hasta la cuota completa de 450 €/mes. Importes sin IVA.
+ Siguiente paso
+ Empezamos por el mapa
+ Firma y alta
+ Alta de 990 € que incluye la reunión de Descubrimiento y el mapa de tu forma de trabajar.
+ Etapa 1 en marcha
+ Ponemos en producción la Administración (facturas, coste por obra, gestoría) → go-live.
+ Cuota y crecimiento
+ Arranca la licencia (Nivel 1, 350 €/mes) y activas los siguientes módulos a tu ritmo.
+ HAT3X · Consultoría de IA — info@hat3x.com
+ Propuesta preparada para MTDI el 7 de agosto de 2026. No constituye contrato; el acuerdo formal se regirá por el Contrato Base firmado por ambas partes. Las cuotas de los niveles superiores se confirman al activar cada módulo.

@@ -1,0 +1,139 @@
+Kairos — Identidad de marca 
+ καιρός — el momento oportuno
+ Ka ı ros
+ Cada cliente, en su momento.
+ Agenda, fichas, cobros y fidelización, en una sola herramienta — para clínicas, salones y cualquier negocio de cita previa.
+ 01 El concepto 
+ Un nombre sobre el tiempo, no sobre el sector.
+ Los griegos separaban chronos —el tiempo que pasa— de
+ kairós : el instante oportuno. En su raíz clásica, kairós es la abertura 
+ —el hueco por el que pasa la lanzadera en el telar, la muesca por la que ha de pasar la flecha—:
+ el momento-ventana que hay que atravesar.
+ Es exactamente lo que gestiona la herramienta: la cita correcta, con la persona correcta,
+ en el momento justo. Por eso vale igual para una clínica, un salón o cualquier negocio que
+ venga después. La marca no habla de un gremio; habla de lo que todos comparten:
+ el control del tiempo y de cada cliente. 
+ Qué NO es
+ Ni rosa de estética ni azul clínico. No es el accesorio de un oficio.
+ Qué SÍ es
+ Una plataforma seria de gestión. Sobria, precisa y premium: tinta y porcelana como base;
+ el latón como firma — el momento dorado —, siempre con mesura.
+ 02 El símbolo 
+ La abertura.
+ Un anillo —el círculo del tiempo— con una abertura precisa , y
+ un punto de latón en esa ventana: el instante exacto que hay que atravesar.
+ Sin agujas ni relojes: abstracto, propio y conceptualmente fiel a la etimología.
+ Solo dos elementos, así que aguanta hasta 16 px sin emborronarse. Funciona en positivo,
+ en negativo sobre tinta y a una sola tinta de latón.
+ Principal 
+ Negativo 
+ Favicon 16px 
+ 03 Logotipo 
+ Una marca maestra, siempre limpia.
+ El logotipo es siempre Kairos , sin sub-rótulos de sector. El
+ oficio no vive en el logo: vive en el vocabulario configurable de la app y en
+ el nombre del propio negocio.
+ Un gesto propio la ata al símbolo: el punto de la «i» es el punto de latón 
+ de la abertura.
+ Clínica → «Pacientes» 
+ Salón → «Clientes» 
+ Tenant → «Biodental» 
+ Ka ı ros 
+ Ka ı ros 
+ 04 Paleta 
+ Tinta, porcelana y latón — en cálido.
+ Tinta
+ #1A1815
+ Texto, botón primario, marca
+ Porcelana
+ #F4F1EA
+ Fondo base
+ Latón
+ #B4884D
+ Firma: el tiempo
+ Latón texto
+ #7E5C23
+ Horas, acento legible
+ Grafito
+ #55514A
+ Texto secundario
+ Éxito
+ #34775C
+ Confirmado, enviado
+ Aviso
+ #8E6420
+ Pendiente, en pausa
+ Alerta
+ #B14E3B
+ Cancelado, error
+ Regla del latón = el tiempo. El oro solo aparece en el símbolo, en las horas, en el
+ estado «ahora» y cuando algo ocurre en su momento (reserva confirmada, recordatorio enviado, la
+ IA coge la llamada). El aviso (#8E6420) es un ámbar distinto, más apagado y verdoso: nunca
+ se confunde con la firma. Todos los pares de texto cumplen WCAG AA en claro y oscuro. 
+ 05 Tipografía 
+ Una grotesca de oficio y una serif con filo.
+ Interfaz + logotipo
+ Söhne
+ Grotesca neutra-cálida, la referencia del SaaS premium. Peso 500–600 para el logotipo, nunca bold.
+ En el board: system-ui / Segoe UI (emulación CSP).
+ Display + griego καιρός
+ Tiempos Headline
+ Serif editorial y seria; empareja de forma nativa. Verificar cobertura de griego al licenciar.
+ En el board: Cambria (dibuja mejor el griego en Windows).
+ Logotipo Ka ı ros 
+ Display · 39 Cada cliente, en su momento 
+ Griego · serif καιρός 
+ Titular · 25 Agenda de hoy 
+ Cuerpo · 16 Reserva, ficha, cobro y fidelización en un solo sitio. 0123456789 
+ Etiqueta · 12 Recepcionista IA 
+ 06 Tono de voz 
+ Habla como un buen recepcionista: claro y sin postureo.
+ Kairos es una herramienta profesional; su voz también. Precisa, tranquila y del
+ lado de quien la usa.
+ Sobrio, no frío. Serio y de confianza, pero cercano. Sin tecnicismos ni cursilería. 
+ Preciso. Cada botón dice qué hace y qué pasará. «Enviar recordatorio» → «Enviado». 
+ El control es del negocio. La herramienta acompaña; el profesional decide. Nada a sus espaldas. 
+ El idioma del oficio. «Pacientes» en la clínica, «clientes» en el salón. La misma marca, cada vocabulario. 
+ 07 En producto 
+ Cómo se ve, de verdad.
+ Acceso, chrome de la app y la verificación de la
+ recepcionista IA. El latón aparece solo donde hay tiempo o señal.
+ Acceso · paso 1 de 2
+ Ka ı ros 
+ Paso 1 de 2
+ Accede a tu negocio
+ Introduce el identificador de tu negocio.
+ Identificador del negocio biodental
+ Continuar 
+ Chrome de la app · sector clínica
+ Ka ı ros 
+ Agenda
+ Pacientes
+ Odontograma
+ Presupuestos
+ TPV
+ Complementos
+ Agenda · hoy
+ 09:30 Limpieza · Nadia Ros 
+ 10:15 Endodoncia · Nicolás Zunino 
+ 08:45 Revisión · Kristel Completada 
+ Reserva confirmada 
+ Recordatorio enviado 
+ Complementos · recepcionista verificada
+ Contratado 
+ Recepcionista IA
+ Atención telefónica automatizada, día y noche.
+ Nombre verificado: Sara 
+ Así se presentará al contestar el teléfono.
+ Estados de fallo (diseñados, no solo el camino feliz)
+ Configuración incompleta 
+ Recepcionista IA
+ Falta conectar el número de teléfono.
+ Número no conectado — la recepcionista no puede recibir llamadas todavía. 
+ Ciclo de un botón de acción
+ Enviar recordatorio → 
+ Enviando… → 
+ Enviado → 
+ Reenviar recordatorio 
+ Kairos · sistema de identidad de marca — propuesta v2 · HAT3X
+ Dirección creativa · dirección de arte · UX · accesibilidad WCAG AA
