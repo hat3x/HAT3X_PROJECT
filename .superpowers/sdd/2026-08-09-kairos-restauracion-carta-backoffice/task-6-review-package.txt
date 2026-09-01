@@ -1,0 +1,957 @@
+=== COMMITS (28eef16..df322aa) ===
+df322aa feat(restauracion): server actions y validaciones de carta
+
+=== DIFF --stat ===
+ src/app/(dashboard)/carta/actions.ts               | 356 +++++++++++++++++++++
+ src/hooks/use-menu.ts                              | 217 ++++++++++++-
+ src/lib/validations/menu.ts                        |  80 +++++
+ src/tests/helpers/supabase-mock.ts                 |  80 +++++
+ .../integration/restauracion-carta-actions.test.ts |  46 +++
+ src/tests/integration/tenant-isolation.test.ts     |  78 +----
+ 6 files changed, 779 insertions(+), 78 deletions(-)
+
+=== DIFF -U10 ===
+diff --git a/src/app/(dashboard)/carta/actions.ts b/src/app/(dashboard)/carta/actions.ts
+new file mode 100644
+index 0000000..9e6239f
+--- /dev/null
++++ b/src/app/(dashboard)/carta/actions.ts
+@@ -0,0 +1,356 @@
++"use server";
++import { revalidatePath } from "next/cache";
++
++import { canManageSettings, getActiveMembership, getActiveSalonId } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++import {
++  categorySchema,
++  comboPiecesSchema,
++  menuProductSchema,
++  modifierGroupIdsSchema,
++  saveModifierGroupSchema,
++  stationSchema,
++  type CategoryInput,
++  type ComboPieceInput,
++  type MenuProductInput,
++  type SaveModifierGroupInput,
++  type StationInput,
++} from "@/lib/validations/menu";
++import type { MenuCategory, ModifierGroup, Product, Station } from "@/types/database";
++
++/**
++ * Server actions de la carta (restauración): categorías, estaciones,
++ * productos, grupos de modificadores (con sus opciones), asignación de
++ * grupos a producto y piezas de combo.
++ *
++ * Todas siguen el mismo patrón de confianza en servidor: `safeParse` de Zod
++ * ANTES de tocar la base de datos, gate de rol vía {@link assertManager} (que
++ * también resuelve el salón activo), y escritura SIEMPRE acotada por
++ * `salon_id` (defensa en profundidad además de RLS). Cada mutación revalida
++ * `/carta` para refrescar los Server Components que lean el catálogo.
++ */
++export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
++
++/**
++ * Resuelve el salón activo SI el usuario tiene rol de gestión (owner/manager).
++ * Devuelve `null` cuando no hay permiso (rol insuficiente) o no hay salón
++ * asignado; en ambos casos la action responde con el mismo mensaje de
++ * "sin permiso" — no se distingue el motivo al cliente.
++ */
++async function assertManager(): Promise<string | null> {
++  const membership = await getActiveMembership();
++  if (!canManageSettings(membership?.role)) return null;
++  return getActiveSalonId();
++}
++
++function firstIssue(error: import("zod").ZodError): string {
++  return error.issues[0]?.message ?? "Datos inválidos";
++}
++
++const NO_PERMISSION = "No tienes permiso para gestionar la carta";
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Categorías
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createCategory(input: CategoryInput): Promise<ActionResult<MenuCategory>> {
++  const parsed = categorySchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("menu_categories")
++    .insert({ salon_id: salonId, name: parsed.data.name, sort_order: parsed.data.sortOrder })
++    .select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data };
++}
++
++export async function updateCategory(
++  id: string,
++  input: CategoryInput,
++): Promise<ActionResult<MenuCategory>> {
++  const parsed = categorySchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("menu_categories")
++    .update({ name: parsed.data.name, sort_order: parsed.data.sortOrder })
++    .eq("id", id).eq("salon_id", salonId)
++    .select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data };
++}
++
++export async function deleteCategory(id: string): Promise<ActionResult<null>> {
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error } = await supabase
++    .from("menu_categories")
++    .delete()
++    .eq("id", id).eq("salon_id", salonId);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data: null };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Estaciones (misma forma que categorías: nombre + orden)
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createStation(input: StationInput): Promise<ActionResult<Station>> {
++  const parsed = stationSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("stations")
++    .insert({ salon_id: salonId, name: parsed.data.name, sort_order: parsed.data.sortOrder })
++    .select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data };
++}
++
++export async function updateStation(
++  id: string,
++  input: StationInput,
++): Promise<ActionResult<Station>> {
++  const parsed = stationSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("stations")
++    .update({ name: parsed.data.name, sort_order: parsed.data.sortOrder })
++    .eq("id", id).eq("salon_id", salonId)
++    .select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data };
++}
++
++export async function deleteStation(id: string): Promise<ActionResult<null>> {
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error } = await supabase
++    .from("stations")
++    .delete()
++    .eq("id", id).eq("salon_id", salonId);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data: null };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Productos de carta
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createMenuProduct(input: MenuProductInput): Promise<ActionResult<Product>> {
++  const parsed = menuProductSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("products")
++    .insert({
++      salon_id: salonId, name: parsed.data.name, price_cents: parsed.data.priceCents,
++      vat_rate: parsed.data.vatRate, category_id: parsed.data.categoryId,
++      station_id: parsed.data.stationId, allergens: parsed.data.allergens,
++      is_combo: parsed.data.isCombo, image_url: parsed.data.imageUrl,
++    })
++    .select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data };
++}
++
++export async function updateMenuProduct(
++  id: string,
++  input: MenuProductInput,
++): Promise<ActionResult<Product>> {
++  const parsed = menuProductSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("products")
++    .update({
++      name: parsed.data.name, price_cents: parsed.data.priceCents,
++      vat_rate: parsed.data.vatRate, category_id: parsed.data.categoryId,
++      station_id: parsed.data.stationId, allergens: parsed.data.allergens,
++      is_combo: parsed.data.isCombo, image_url: parsed.data.imageUrl,
++    })
++    .eq("id", id).eq("salon_id", salonId)
++    .select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data };
++}
++
++export async function deleteMenuProduct(id: string): Promise<ActionResult<null>> {
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error } = await supabase
++    .from("products")
++    .delete()
++    .eq("id", id).eq("salon_id", salonId);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/carta");
++  return { ok: true, data: null };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Grupos de modificadores: guarda el grupo (inserta si `id` es null, si no
++// actualiza) y SIEMPRE reemplaza sus opciones (`modifiers`): borra las
++// existentes del grupo y reinserta las del payload. Ver decisión de diseño
++// en `saveModifierGroupSchema` (validations/menu.ts).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function saveModifierGroup(
++  input: SaveModifierGroupInput,
++): Promise<ActionResult<ModifierGroup>> {
++  const parsed = saveModifierGroupSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const groupPayload = {
++    salon_id: salonId,
++    name: parsed.data.name,
++    min_select: parsed.data.minSelect,
++    max_select: parsed.data.maxSelect,
++    required: parsed.data.required,
++  };
++  const groupId = parsed.data.id;
++
++  const { data: group, error: groupError } =
++    groupId === null
++      ? await supabase.from("modifier_groups").insert(groupPayload).select("*").single()
++      : await supabase
++          .from("modifier_groups")
++          .update(groupPayload)
++          .eq("id", groupId).eq("salon_id", salonId)
++          .select("*").single();
++  if (groupError !== null) return { ok: false, error: groupError.message };
++
++  const { error: deleteError } = await supabase
++    .from("modifiers")
++    .delete()
++    .eq("group_id", group.id).eq("salon_id", salonId);
++  if (deleteError !== null) return { ok: false, error: deleteError.message };
++
++  if (parsed.data.modifiers.length > 0) {
++    const { error: insertError } = await supabase.from("modifiers").insert(
++      parsed.data.modifiers.map((m) => ({
++        salon_id: salonId,
++        group_id: group.id,
++        name: m.name,
++        price_delta_cents: m.priceDeltaCents,
++      })),
++    );
++    if (insertError !== null) return { ok: false, error: insertError.message };
++  }
++
++  revalidatePath("/carta");
++  return { ok: true, data: group };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Asignación de grupos de modificadores a un producto: reemplaza por
++// completo las filas de `product_modifier_groups` del producto (borra e
++// inserta), acotado por `salon_id`.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function setProductModifierGroups(
++  productId: string,
++  groupIds: string[],
++): Promise<ActionResult<null>> {
++  const parsed = modifierGroupIdsSchema.safeParse(groupIds);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error: deleteError } = await supabase
++    .from("product_modifier_groups")
++    .delete()
++    .eq("product_id", productId).eq("salon_id", salonId);
++  if (deleteError !== null) return { ok: false, error: deleteError.message };
++
++  if (parsed.data.length > 0) {
++    const { error: insertError } = await supabase.from("product_modifier_groups").insert(
++      parsed.data.map((groupId, index) => ({
++        salon_id: salonId,
++        product_id: productId,
++        group_id: groupId,
++        sort_order: index,
++      })),
++    );
++    if (insertError !== null) return { ok: false, error: insertError.message };
++  }
++
++  revalidatePath("/carta");
++  return { ok: true, data: null };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Piezas de un combo: reemplaza por completo `combo_components` del combo
++// (borra e inserta), acotado por `salon_id`.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function saveCombo(
++  comboProductId: string,
++  pieces: ComboPieceInput[],
++): Promise<ActionResult<null>> {
++  const parsed = comboPiecesSchema.safeParse(pieces);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error: deleteError } = await supabase
++    .from("combo_components")
++    .delete()
++    .eq("combo_product_id", comboProductId).eq("salon_id", salonId);
++  if (deleteError !== null) return { ok: false, error: deleteError.message };
++
++  if (parsed.data.length > 0) {
++    const { error: insertError } = await supabase.from("combo_components").insert(
++      parsed.data.map((piece, index) => ({
++        salon_id: salonId,
++        combo_product_id: comboProductId,
++        component_product_id: piece.componentProductId,
++        qty: piece.qty,
++        station_id_override: piece.stationIdOverride,
++        sort_order: index,
++      })),
++    );
++    if (insertError !== null) return { ok: false, error: insertError.message };
++  }
++
++  revalidatePath("/carta");
++  return { ok: true, data: null };
++}
+diff --git a/src/hooks/use-menu.ts b/src/hooks/use-menu.ts
+index 468823c..40309c3 100644
+--- a/src/hooks/use-menu.ts
++++ b/src/hooks/use-menu.ts
+@@ -1,13 +1,228 @@
+ "use client";
+-import { useQuery } from "@tanstack/react-query";
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++
++import {
++  createCategory,
++  createStation,
++  deleteCategory,
++  deleteMenuProduct,
++  deleteStation,
++  saveCombo,
++  saveModifierGroup,
++  setProductModifierGroups,
++  updateCategory,
++  updateMenuProduct,
++  updateStation,
++  createMenuProduct as createMenuProductAction,
++} from "@/app/(dashboard)/carta/actions";
+ import { fetchMenuCategories, fetchMenuProducts, fetchStations, menuKeys } from "@/lib/queries/menu";
++import type {
++  CategoryInput,
++  ComboPieceInput,
++  MenuProductInput,
++  SaveModifierGroupInput,
++  StationInput,
++} from "@/lib/validations/menu";
++import type { MenuCategory, ModifierGroup, Product, Station } from "@/types/database";
+ 
+ export function useMenuCategories(salonId: string) {
+   return useQuery({ queryKey: menuKeys.categories(salonId), queryFn: () => fetchMenuCategories(salonId) });
+ }
+ export function useStations(salonId: string) {
+   return useQuery({ queryKey: menuKeys.stations(salonId), queryFn: () => fetchStations(salonId) });
+ }
+ export function useMenuProducts(salonId: string) {
+   return useQuery({ queryKey: menuKeys.products(salonId), queryFn: () => fetchMenuProducts(salonId) });
+ }
++
++/** Invalida todas las queries de carta del salón (categorías, estaciones, productos, grupos). */
++function useInvalidateMenu(salonId: string) {
++  const queryClient = useQueryClient();
++  return () => queryClient.invalidateQueries({ queryKey: menuKeys.all(salonId) });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Categorías
++// ─────────────────────────────────────────────────────────────────────────────
++
++export function useCreateCategory(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async (input: CategoryInput): Promise<MenuCategory> => {
++      const result = await createCategory(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useUpdateCategory(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async ({
++      id,
++      input,
++    }: {
++      id: string;
++      input: CategoryInput;
++    }): Promise<MenuCategory> => {
++      const result = await updateCategory(id, input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useDeleteCategory(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async (id: string): Promise<null> => {
++      const result = await deleteCategory(id);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Estaciones
++// ─────────────────────────────────────────────────────────────────────────────
++
++export function useCreateStation(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async (input: StationInput): Promise<Station> => {
++      const result = await createStation(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useUpdateStation(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async ({
++      id,
++      input,
++    }: {
++      id: string;
++      input: StationInput;
++    }): Promise<Station> => {
++      const result = await updateStation(id, input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useDeleteStation(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async (id: string): Promise<null> => {
++      const result = await deleteStation(id);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Productos de carta
++// ─────────────────────────────────────────────────────────────────────────────
++
++/** Crea o actualiza un producto de carta según se pase `id` o no. */
++export function useSaveMenuProduct(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async ({
++      id,
++      input,
++    }: {
++      id?: string;
++      input: MenuProductInput;
++    }): Promise<Product> => {
++      const result =
++        id === undefined
++          ? await createMenuProductAction(input)
++          : await updateMenuProduct(id, input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useDeleteMenuProduct(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async (id: string): Promise<null> => {
++      const result = await deleteMenuProduct(id);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Grupos de modificadores y su asignación a producto
++// ─────────────────────────────────────────────────────────────────────────────
++
++export function useSaveModifierGroup(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async (input: SaveModifierGroupInput): Promise<ModifierGroup> => {
++      const result = await saveModifierGroup(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useSetProductModifierGroups(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async ({
++      productId,
++      groupIds,
++    }: {
++      productId: string;
++      groupIds: string[];
++    }): Promise<null> => {
++      const result = await setProductModifierGroups(productId, groupIds);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Combos
++// ─────────────────────────────────────────────────────────────────────────────
++
++export function useSaveCombo(salonId: string) {
++  const invalidate = useInvalidateMenu(salonId);
++  return useMutation({
++    mutationFn: async ({
++      comboProductId,
++      pieces,
++    }: {
++      comboProductId: string;
++      pieces: ComboPieceInput[];
++    }): Promise<null> => {
++      const result = await saveCombo(comboProductId, pieces);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
+diff --git a/src/lib/validations/menu.ts b/src/lib/validations/menu.ts
+new file mode 100644
+index 0000000..2dac28f
+--- /dev/null
++++ b/src/lib/validations/menu.ts
+@@ -0,0 +1,80 @@
++import { z } from "zod";
++
++const ALLERGENS = [
++  "gluten","crustaceos","huevos","pescado","cacahuetes","soja","lacteos",
++  "frutos_cascara","apio","mostaza","sesamo","sulfitos","altramuces","moluscos",
++] as const;
++
++export const categorySchema = z.object({
++  name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
++  sortOrder: z.number().int().min(0).default(0),
++});
++export type CategoryInput = z.infer<typeof categorySchema>;
++
++export const stationSchema = categorySchema; // misma forma
++export type StationInput = z.infer<typeof stationSchema>;
++
++export const menuProductSchema = z.object({
++  name: z.string().trim().min(1).max(200),
++  priceCents: z.number().int().min(0, "El precio no puede ser negativo"),
++  vatRate: z.number().min(0).max(100).default(10),
++  categoryId: z.string().uuid().nullable(),
++  stationId: z.string().uuid().nullable(),
++  allergens: z.array(z.enum(ALLERGENS)).default([]),
++  isCombo: z.boolean().default(false),
++  imageUrl: z.string().url().nullable().default(null),
++});
++export type MenuProductInput = z.infer<typeof menuProductSchema>;
++
++export const modifierGroupSchema = z.object({
++  name: z.string().trim().min(1).max(120),
++  minSelect: z.number().int().min(0).default(0),
++  maxSelect: z.number().int().min(1).default(1),
++  required: z.boolean().default(false),
++  modifiers: z.array(z.object({
++    name: z.string().trim().min(1).max(120),
++    priceDeltaCents: z.number().int().default(0),
++  })).default([]),
++}).refine((g) => g.minSelect <= g.maxSelect, { message: "min no puede superar a max", path: ["minSelect"] });
++export type ModifierGroupInput = z.infer<typeof modifierGroupSchema>;
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Esquemas adicionales (no dados verbatim en el brief) requeridos por las
++// server actions `saveModifierGroup`, `setProductModifierGroups` y `saveCombo`
++// del Produces del Task 6. Documentados en el informe de la tarea.
++// ─────────────────────────────────────────────────────────────────────────────
++
++/**
++ * Entrada de `saveModifierGroup`: misma forma que `modifierGroupSchema` más un
++ * `id` opcional que decide inserción (id `null`) vs actualización (id con
++ * valor) del grupo. `modifierGroupSchema` se deja verbatim/reusable (p. ej.
++ * para tipar valores por defecto de un formulario de alta); esta variante es
++ * la que valida el payload real de la Server Action, que necesita distinguir
++ * "guardar nuevo" de "guardar existente" en una sola función de guardado.
++ */
++export const saveModifierGroupSchema = z.object({
++  id: z.string().uuid().nullable().default(null),
++  name: z.string().trim().min(1).max(120),
++  minSelect: z.number().int().min(0).default(0),
++  maxSelect: z.number().int().min(1).default(1),
++  required: z.boolean().default(false),
++  modifiers: z.array(z.object({
++    name: z.string().trim().min(1).max(120),
++    priceDeltaCents: z.number().int().default(0),
++  })).default([]),
++}).refine((g) => g.minSelect <= g.maxSelect, { message: "min no puede superar a max", path: ["minSelect"] });
++export type SaveModifierGroupInput = z.infer<typeof saveModifierGroupSchema>;
++
++/** Entrada de `setProductModifierGroups`: ids de grupo a asignar al producto. */
++export const modifierGroupIdsSchema = z.array(z.string().uuid());
++
++/** Una pieza de combo para `saveCombo` (fila destino de `combo_components`). */
++export const comboPieceSchema = z.object({
++  componentProductId: z.string().uuid(),
++  qty: z.number().int().min(1).default(1),
++  stationIdOverride: z.string().uuid().nullable().default(null),
++});
++export type ComboPieceInput = z.infer<typeof comboPieceSchema>;
++
++/** Entrada de `saveCombo`: lista completa de piezas del combo. */
++export const comboPiecesSchema = z.array(comboPieceSchema);
+diff --git a/src/tests/helpers/supabase-mock.ts b/src/tests/helpers/supabase-mock.ts
+new file mode 100644
+index 0000000..b0bfa2e
+--- /dev/null
++++ b/src/tests/helpers/supabase-mock.ts
+@@ -0,0 +1,80 @@
++/**
++ * Doble configurable de Supabase para tests de integración de Server Actions.
++ *
++ * Extraído de `tests/integration/tenant-isolation.test.ts` (Task 6 del plan de
++ * restauración) para poder reutilizarlo en `restauracion-carta-actions.test.ts`
++ * sin duplicar el builder. Comportamiento sin cambios respecto al original.
++ *
++ * `tables` fija el resultado de las lecturas por tabla; `onWrite` fabrica el
++ * resultado de insert/update/delete. Cada `.from()` crea un builder propio con
++ * su estado de escritura, de modo que una misma tabla puede leerse y escribirse
++ * en el mismo flujo sin interferencias.
++ */
++export interface TableResult {
++  data?: unknown;
++  error?: { message: string; code?: string } | null;
++}
++
++export interface MockConfig {
++  tables?: Record<string, TableResult>;
++  onWrite?: (
++    op: "insert" | "update" | "delete",
++    table: string,
++    payload: unknown,
++  ) => TableResult;
++}
++
++export function makeSupabaseMock(config: MockConfig) {
++  function builder(table: string) {
++    let pending: { op: "insert" | "update" | "delete"; payload: unknown } | null =
++      null;
++
++    function readResult(): { data: unknown; error: unknown } {
++      const t = config.tables?.[table] ?? { data: [], error: null };
++      return { data: t.data ?? [], error: t.error ?? null };
++    }
++
++    function resolveList(): { data: unknown; error: unknown } {
++      if (pending) {
++        const r = config.onWrite?.(pending.op, table, pending.payload) ?? {};
++        return { data: r.data ?? null, error: r.error ?? null };
++      }
++      return readResult();
++    }
++
++    function resolveSingle(): { data: unknown; error: unknown } {
++      const { data, error } = resolveList();
++      return {
++        data: Array.isArray(data) ? (data[0] ?? null) : data,
++        error,
++      };
++    }
++
++    const b = {
++      select: () => b,
++      eq: () => b,
++      in: () => b,
++      order: () => b,
++      limit: () => b,
++      insert: (payload: unknown) => {
++        pending = { op: "insert", payload };
++        return b;
++      },
++      update: (payload: unknown) => {
++        pending = { op: "update", payload };
++        return b;
++      },
++      delete: () => {
++        pending = { op: "delete", payload: null };
++        return b;
++      },
++      maybeSingle: () => Promise.resolve(resolveSingle()),
++      single: () => Promise.resolve(resolveSingle()),
++      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
++        onFulfilled(resolveList()),
++    };
++    return b;
++  }
++
++  return { from: (table: string) => builder(table) };
++}
+diff --git a/src/tests/integration/restauracion-carta-actions.test.ts b/src/tests/integration/restauracion-carta-actions.test.ts
+new file mode 100644
+index 0000000..558805e
+--- /dev/null
++++ b/src/tests/integration/restauracion-carta-actions.test.ts
+@@ -0,0 +1,46 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++const holder = vi.hoisted(() => ({ supabase: null as unknown, membership: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({
++  getActiveSalonId: () => Promise.resolve("SALON"),
++  getActiveMembership: () => Promise.resolve(holder.membership),
++  canManageSettings: (r: string | null | undefined) => r === "owner" || r === "manager",
++}));
++
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++import { createCategory, createMenuProduct } from "@/app/(dashboard)/carta/actions";
++
++beforeEach(() => { holder.membership = { salonId: "SALON", role: "owner" }; holder.supabase = null; });
++
++describe("carta actions", () => {
++  it("owner crea categoría", async () => {
++    holder.supabase = makeSupabaseMock({
++      onWrite: (op: string, table: string) =>
++        op === "insert" && table === "menu_categories"
++          ? { data: [{ id: "C1", salon_id: "SALON", name: "Bebidas", sort_order: 0, active: true }] }
++          : {},
++    });
++    const r = await createCategory({ name: "Bebidas", sortOrder: 0 });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.id).toBe("C1");
++  });
++
++  it("staff NO puede crear categoría (gate de rol)", async () => {
++    holder.membership = { salonId: "SALON", role: "staff" };
++    holder.supabase = makeSupabaseMock({});
++    const r = await createCategory({ name: "Bebidas", sortOrder: 0 });
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toContain("permiso");
++  });
++
++  it("rechaza precio negativo en producto (Zod)", async () => {
++    holder.supabase = makeSupabaseMock({});
++    const r = await createMenuProduct({
++      name: "Café", priceCents: -1, vatRate: 10, categoryId: null, stationId: null,
++      allergens: [], isCombo: false, imageUrl: null,
++    });
++    expect(r.ok).toBe(false);
++  });
++});
+diff --git a/src/tests/integration/tenant-isolation.test.ts b/src/tests/integration/tenant-isolation.test.ts
+index 2ba11e3..5604bbe 100644
+--- a/src/tests/integration/tenant-isolation.test.ts
++++ b/src/tests/integration/tenant-isolation.test.ts
+@@ -31,20 +31,21 @@ const holder = vi.hoisted(() => ({
+ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+ 
+ vi.mock("@/lib/supabase/server", () => ({
+   createClient: () => holder.supabase,
+ }));
+ 
+ vi.mock("@/lib/salon", () => ({
+   getActiveMembership: () => Promise.resolve(holder.membership),
+ }));
+ 
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
+ import {
+   createProfessional,
+   updateProfessional,
+ } from "@/app/(dashboard)/ajustes/personal/actions";
+ import { saveWeeklySchedule } from "@/app/(dashboard)/ajustes/horarios/actions";
+ import type { ProfessionalInput } from "@/lib/validations/professional";
+ import type { WeeklyScheduleInput } from "@/lib/validations/schedule";
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+ // Constantes de escenario (UUIDs sintéticos, no datos reales).
+@@ -52,97 +53,20 @@ import type { WeeklyScheduleInput } from "@/lib/validations/schedule";
+ const SALON_ID = "salon-activo";
+ const LOCATION_ID = "22222222-2222-2222-2222-222222222222";
+ const SERVICE_ID = "33333333-3333-3333-3333-333333333333";
+ const PRO_ID = "11111111-1111-1111-1111-111111111111";
+ 
+ /** Pertenencia por defecto: propietario del salón activo. */
+ function ownerMembership() {
+   return { salonId: SALON_ID, role: "owner" as const };
+ }
+ 
+-// ─────────────────────────────────────────────────────────────────────────────
+-// Doble configurable de Supabase.
+-//
+-// `tables` fija el resultado de las lecturas por tabla; `onWrite` fabrica el
+-// resultado de insert/update/delete. Cada `.from()` crea un builder propio con
+-// su estado de escritura, de modo que una misma tabla puede leerse y escribirse
+-// en el mismo flujo sin interferencias.
+-// ─────────────────────────────────────────────────────────────────────────────
+-interface TableResult {
+-  data?: unknown;
+-  error?: { message: string; code?: string } | null;
+-}
+-
+-interface MockConfig {
+-  tables?: Record<string, TableResult>;
+-  onWrite?: (
+-    op: "insert" | "update" | "delete",
+-    table: string,
+-    payload: unknown,
+-  ) => TableResult;
+-}
+-
+-function makeSupabaseMock(config: MockConfig) {
+-  function builder(table: string) {
+-    let pending: { op: "insert" | "update" | "delete"; payload: unknown } | null =
+-      null;
+-
+-    function readResult(): { data: unknown; error: unknown } {
+-      const t = config.tables?.[table] ?? { data: [], error: null };
+-      return { data: t.data ?? [], error: t.error ?? null };
+-    }
+-
+-    function resolveList(): { data: unknown; error: unknown } {
+-      if (pending) {
+-        const r = config.onWrite?.(pending.op, table, pending.payload) ?? {};
+-        return { data: r.data ?? null, error: r.error ?? null };
+-      }
+-      return readResult();
+-    }
+-
+-    function resolveSingle(): { data: unknown; error: unknown } {
+-      const { data, error } = resolveList();
+-      return {
+-        data: Array.isArray(data) ? (data[0] ?? null) : data,
+-        error,
+-      };
+-    }
+-
+-    const b = {
+-      select: () => b,
+-      eq: () => b,
+-      in: () => b,
+-      order: () => b,
+-      limit: () => b,
+-      insert: (payload: unknown) => {
+-        pending = { op: "insert", payload };
+-        return b;
+-      },
+-      update: (payload: unknown) => {
+-        pending = { op: "update", payload };
+-        return b;
+-      },
+-      delete: () => {
+-        pending = { op: "delete", payload: null };
+-        return b;
+-      },
+-      maybeSingle: () => Promise.resolve(resolveSingle()),
+-      single: () => Promise.resolve(resolveSingle()),
+-      then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+-        onFulfilled(resolveList()),
+-    };
+-    return b;
+-  }
+-
+-  return { from: (table: string) => builder(table) };
+-}
+-
+ /** Entrada válida de profesional; cada test ajusta lo necesario. */
+ function professionalInput(
+   overrides: Partial<ProfessionalInput> = {},
+ ): ProfessionalInput {
+   return {
+     full_name: "Ana López",
+     location_id: LOCATION_ID,
+     color: "#6366f1",
+     service_ids: [],
+     active: true,

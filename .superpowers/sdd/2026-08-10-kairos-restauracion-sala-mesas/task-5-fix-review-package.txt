@@ -1,0 +1,91 @@
+=== FIX COMMIT 3eac19b..28a65fb ===
+28a65fb fix(restauracion): condiciona la compensación de openTable + alinea defaults de mesa
+
+=== DIFF -U10 ===
+diff --git a/src/app/(dashboard)/sala/actions.ts b/src/app/(dashboard)/sala/actions.ts
+index 27ebb95..6eef53b 100644
+--- a/src/app/(dashboard)/sala/actions.ts
++++ b/src/app/(dashboard)/sala/actions.ts
+@@ -97,29 +97,38 @@ export async function openTable(input: OpenTableInput): Promise<ActionResult<Ord
+       salon_id: salonId,
+       channel: "mesa",
+       dining_table_id: parsed.data.tableId,
+       covers: parsed.data.covers,
+       label: table.name,
+       status: "abierta",
+     })
+     .select("*")
+     .single();
+   if (orderError !== null) {
+-    // Compensación: la mesa no debe quedar `ocupada` sin cuenta. Se ignora el
+-    // resultado de esta segunda escritura (best-effort, igual que el
+-    // `rollback()` de `settleOrder`) — propagar el error ORIGINAL del insert
+-    // es más útil al llamador que uno secundario de la reversión.
++    // Compensación: la mesa no debe quedar `ocupada` sin cuenta. CONDICIONADA
++    // por `status = "ocupada"` (fix de revisión, Important) — igual criterio
++    // de concurrencia que el resto de UPDATEs del fichero: sin esta guarda,
++    // si entre el fallo del insert y este UPDATE otra petición ya movió la
++    // mesa a un estado distinto (p.ej. `cuenta_pedida` vía `setTableStatus`,
++    // improbable pero no imposible con reintentos concurrentes), esta
++    // reversión la pisaría a `libre` sin condición, perdiendo esa transición
++    // legítima. Solo revierte si la mesa sigue en el estado que ESTA llamada
++    // acaba de dejar. Se ignora el resultado de esta segunda escritura
++    // (best-effort, igual que el `rollback()` de `settleOrder`) — propagar el
++    // error ORIGINAL del insert es más útil al llamador que uno secundario de
++    // la reversión.
+     await supabase
+       .from("dining_tables")
+       .update({ status: "libre" })
+       .eq("id", parsed.data.tableId)
+-      .eq("salon_id", salonId);
++      .eq("salon_id", salonId)
++      .eq("status", "ocupada");
+     return { ok: false, error: orderError.message };
+   }
+   revalidatePath("/sala");
+   return { ok: true, data: order };
+ }
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+ // setTableStatus: transición de estado de UNA mesa (p.ej. `ocupada` →
+ // `cuenta_pedida` → `por_limpiar` → `libre`), operativa (cualquier miembro).
+ //
+diff --git a/src/lib/validations/table.ts b/src/lib/validations/table.ts
+index 50f5656..c77c96b 100644
+--- a/src/lib/validations/table.ts
++++ b/src/lib/validations/table.ts
+@@ -44,25 +44,32 @@ export type SaveTablePositionInput = z.infer<typeof saveTablePositionSchema>;
+ export const zoneSchema = z.object({
+   name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
+   sortOrder: z.number().int().min(0).default(0),
+ });
+ export type ZoneInput = z.infer<typeof zoneSchema>;
+ 
+ /**
+  * `capacityMin`/`capacityMax` reutilizan `validCapacity` (lib/restauracion/tables.ts,
+  * Task 3) en vez de repetir la regla a mano — misma fuente única de verdad
+  * que ya usa la UI del plano para pintar el rango de comensales de una mesa.
++ *
++ * Defaults alineados con la columna (migración
++ * `20260810130000_restauracion_sala.sql`, fix de revisión Minor):
++ * `capacity_min integer not null default 1`, `capacity_max integer not null
++ * default 4`, `shape public.table_shape not null default 'square'` — un
++ * payload que omite estos campos debe producir la misma fila que un INSERT
++ * sin ellos directamente en SQL.
+  */
+ export const tableSchema = z
+   .object({
+     name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
+     zoneId: z.string().uuid(),
+-    capacityMin: z.number().int().min(1).default(2),
++    capacityMin: z.number().int().min(1).default(1),
+     capacityMax: z.number().int().min(1).default(4),
+-    shape: tableShapeEnum.default("round"),
++    shape: tableShapeEnum.default("square"),
+     sortOrder: z.number().int().min(0).default(0),
+   })
+   .refine((t) => validCapacity(t.capacityMin, t.capacityMax), {
+     message: "La capacidad máxima no puede ser menor que la mínima",
+     path: ["capacityMax"],
+   });
+ export type TableInput = z.infer<typeof tableSchema>;

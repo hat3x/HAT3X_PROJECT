@@ -1,0 +1,142 @@
+=== COMMITS (71bfd9b..52b86aa) ===
+52b86aa fix(restauracion): precio editable con coma (inputMode decimal en vez de type=number)
+
+=== DIFF --stat ===
+ src/app/(dashboard)/carta/menu-item-form.tsx      |  3 ---
+ src/app/(dashboard)/carta/modifier-group-form.tsx |  2 --
+ src/tests/unit/menu-item-form.test.tsx            | 32 ++++++++++++++++++++++-
+ 3 files changed, 31 insertions(+), 6 deletions(-)
+
+=== DIFF -U12 ===
+diff --git a/src/app/(dashboard)/carta/menu-item-form.tsx b/src/app/(dashboard)/carta/menu-item-form.tsx
+index f4e7e2d..40dfa91 100644
+--- a/src/app/(dashboard)/carta/menu-item-form.tsx
++++ b/src/app/(dashboard)/carta/menu-item-form.tsx
+@@ -149,28 +149,25 @@ export function MenuItemForm({
+             id="menu-item-name"
+             required
+             value={name}
+             onChange={(e) => setName(e.target.value)}
+             placeholder="Caña"
+             maxLength={200}
+           />
+         </div>
+         <div className="grid gap-2">
+           <Label htmlFor="menu-item-price">Precio (€) *</Label>
+           <Input
+             id="menu-item-price"
+-            type="number"
+             inputMode="decimal"
+-            step="0.01"
+-            min="0"
+             required
+             value={price}
+             onChange={(e) => setPrice(e.target.value)}
+             placeholder="1,80"
+           />
+         </div>
+       </div>
+ 
+       <div className="grid gap-4 sm:grid-cols-3">
+         <div className="grid gap-2">
+           <Label htmlFor="menu-item-vat">IVA</Label>
+           <Select value={vatRate} onValueChange={(value) => setVatRate(value)}>
+diff --git a/src/app/(dashboard)/carta/modifier-group-form.tsx b/src/app/(dashboard)/carta/modifier-group-form.tsx
+index 8437225..4fabcf1 100644
+--- a/src/app/(dashboard)/carta/modifier-group-form.tsx
++++ b/src/app/(dashboard)/carta/modifier-group-form.tsx
+@@ -184,27 +184,25 @@ export function ModifierGroupForm({
+         ) : (
+           <ul className="grid gap-2">
+             {options.map((option, index) => (
+               <li key={index} className="flex items-center gap-2">
+                 <Input
+                   aria-label={`Nombre de la opción ${index + 1}`}
+                   value={option.name}
+                   onChange={(e) => updateOption(index, { name: e.target.value })}
+                   placeholder="Poco hecho"
+                   className="flex-1"
+                 />
+                 <Input
+-                  type="number"
+                   inputMode="decimal"
+-                  step="0.01"
+                   aria-label={`Suplemento de la opción ${index + 1} en euros`}
+                   value={option.priceDeltaEuros}
+                   onChange={(e) => updateOption(index, { priceDeltaEuros: e.target.value })}
+                   placeholder="0,00"
+                   className="w-24"
+                 />
+                 <Button
+                   type="button"
+                   variant="ghost"
+                   size="icon"
+                   aria-label={`Quitar la opción ${index + 1}`}
+                   onClick={() => removeOption(index)}
+diff --git a/src/tests/unit/menu-item-form.test.tsx b/src/tests/unit/menu-item-form.test.tsx
+index 28447c5..e4d464c 100644
+--- a/src/tests/unit/menu-item-form.test.tsx
++++ b/src/tests/unit/menu-item-form.test.tsx
+@@ -1,31 +1,61 @@
+ import { createElement } from "react";
+ import { cleanup, render, screen } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ 
++import type { Product } from "@/types/database";
++
+ const m = vi.hoisted(() => ({
+   save: { mutate: vi.fn(), isPending: false, isError: false, error: null as Error | null },
+   categories: { data: [{ id: "C1", name: "Bebidas" }], isPending: false },
+   stations: { data: [{ id: "S1", name: "Barra" }], isPending: false },
+ }));
+ vi.mock("@/hooks/use-menu", () => ({
+   useSaveMenuProduct: () => m.save,
+   useMenuCategories: () => m.categories,
+   useStations: () => m.stations,
+ }));
+ import { MenuItemForm } from "@/app/(dashboard)/carta/menu-item-form";
+ 
+ beforeEach(() => { m.save.mutate = vi.fn(); });
+ afterEach(() => cleanup());
+ 
++/** Producto de edición: priceCents 180 → debe precargarse como "1,80" (no vacío). */
++const EDITING_PRODUCT: Product = {
++  id: "P1",
++  salon_id: "SALON",
++  name: "Caña",
++  description: null,
++  price_cents: 180,
++  currency: "EUR",
++  vat_rate: 10,
++  stock: null,
++  min_stock: 0,
++  unit: "unidad",
++  active: true,
++  created_at: "2026-01-01T00:00:00.000Z",
++  updated_at: "2026-01-01T00:00:00.000Z",
++  category_id: null,
++  station_id: null,
++  is_combo: false,
++  image_url: null,
++  allergens: [],
++  available_channels: [],
++};
++
+ describe("MenuItemForm", () => {
+   it("no envía si el nombre está vacío y sí envía un producto válido", async () => {
+     const user = userEvent.setup();
+     render(createElement(MenuItemForm, { salonId: "SALON" }));
+     await user.type(screen.getByRole("textbox", { name: /nombre/i }), "Caña");
+-    await user.type(screen.getByRole("spinbutton", { name: /precio/i }), "1.80");
++    await user.type(screen.getByRole("textbox", { name: /precio/i }), "1.80");
+     await user.click(screen.getByRole("button", { name: /guardar/i }));
+     expect(m.save.mutate).toHaveBeenCalledTimes(1);
+     expect(m.save.mutate.mock.calls[0]![0]).toMatchObject({ name: "Caña", priceCents: 180 });
+   });
++
++  it("al editar, precarga el precio con coma decimal (no lo deja vacío)", () => {
++    render(createElement(MenuItemForm, { salonId: "SALON", product: EDITING_PRODUCT }));
++    expect(screen.getByRole("textbox", { name: /precio/i })).toHaveValue("1,80");
++  });
+ });

@@ -1,0 +1,435 @@
+=== COMMITS (38b00d2..4958acb) ===
+4958acb fix(restauracion): KDS refresca al instante + groupByStation puro + tipar status
+
+=== DIFF --stat ===
+ src/app/(dashboard)/cocina/cocina-view.tsx       | 26 ++++--------------
+ src/app/(dashboard)/cocina/order-ticket-card.tsx | 22 +++++++++++----
+ src/lib/restauracion/kds.ts                      | 34 +++++++++++++++++++++++-
+ src/tests/unit/order-ticket-card.test.tsx        | 25 ++++++++++++++++-
+ src/tests/unit/restauracion-kds.test.ts          | 23 +++++++++++++++-
+ 5 files changed, 101 insertions(+), 29 deletions(-)
+
+=== DIFF -U12 ===
+diff --git a/src/app/(dashboard)/cocina/cocina-view.tsx b/src/app/(dashboard)/cocina/cocina-view.tsx
+index fec665b..19e20c2 100644
+--- a/src/app/(dashboard)/cocina/cocina-view.tsx
++++ b/src/app/(dashboard)/cocina/cocina-view.tsx
+@@ -1,28 +1,25 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+ import { Loader2, WifiOff } from "lucide-react";
+ 
+ import { StationColumn } from "@/app/(dashboard)/cocina/station-column";
+ import { useKdsItems, useKdsRealtime } from "@/hooks/use-kds";
+-import { groupKdsItemsByOrder, type KdsItem } from "@/lib/restauracion/kds";
++import { groupKdsItemsByOrder, groupKdsItemsByStation } from "@/lib/restauracion/kds";
+ 
+ interface CocinaViewProps {
+   salonId: string;
+ }
+ 
+-/** Estación sentinela para líneas sin `stationId` asignado en la carta. */
+-const UNASSIGNED_STATION = "Sin estación";
+-
+ /**
+  * Indicador "En directo" del estado de `useKdsRealtime` — mismo patrón
+  * visual que `RealtimeIndicator` de `day-panel-view.tsx` (punto pulsante en
+  * verde/conectado, icono de sin-conexión en error, spinner conectando),
+  * adaptado al copy de cocina.
+  */
+ function LiveIndicator({
+   status,
+ }: {
+   status: "connecting" | "connected" | "error";
+ }): React.ReactElement {
+   const base =
+@@ -49,83 +46,70 @@ function LiveIndicator({
+         Sin conexión en tiempo real
+       </span>
+     );
+   }
+   return (
+     <span className={`${base} border-border bg-muted text-muted-foreground`}>
+       <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+       Conectando…
+     </span>
+   );
+ }
+ 
+-/** Agrupa las líneas activas del KDS por nombre de estación. */
+-function groupByStation(items: readonly KdsItem[]): Map<string, KdsItem[]> {
+-  const byStation = new Map<string, KdsItem[]>();
+-  for (const item of items) {
+-    const key = item.stationName ?? UNASSIGNED_STATION;
+-    const list = byStation.get(key) ?? [];
+-    list.push(item);
+-    byStation.set(key, list);
+-  }
+-  return byStation;
+-}
+-
+ /**
+  * Pantalla de cocina (KDS, Task 4): columnas por estación con las comandas
+  * activas en tiempo real. `useKdsRealtime` invalida la query del KDS en
+  * cualquier cambio de `order_items`; `useKdsItems` la vuelve a pedir. El
+  * cronómetro de cada línea se refresca cada 30s con un `setInterval` que
+  * solo fuerza un re-render (`now` en estado) — la lógica pura de minutos
+  * transcurridos vive en `elapsedMinutes` (lib/restauracion/kds.ts) y NUNCA
+  * llama a `Date.now()` directamente.
+  */
+ export function CocinaView({ salonId }: CocinaViewProps): React.ReactElement {
+   const realtimeStatus = useKdsRealtime(salonId);
+   const itemsQuery = useKdsItems(salonId);
+ 
+   const [now, setNow] = useState(() => new Date());
+   useEffect(() => {
+     const id = setInterval(() => setNow(new Date()), 30000);
+     return () => clearInterval(id);
+   }, []);
+ 
+   const items = itemsQuery.data ?? [];
+-  const byStation = groupByStation(items);
+-  const stationNames = [...byStation.keys()].sort((a, b) => a.localeCompare(b, "es"));
++  const stationGroups = groupKdsItemsByStation(items);
+ 
+   return (
+     <main className="container py-6 lg:py-8">
+       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+         <div className="space-y-1">
+           <h1 className="text-3xl font-bold tracking-tight">Cocina</h1>
+           <p className="text-sm text-muted-foreground">Comandas activas agrupadas por estación.</p>
+         </div>
+         <LiveIndicator status={realtimeStatus} />
+       </div>
+ 
+       {itemsQuery.isPending ? (
+         <p className="text-sm text-muted-foreground">Cargando comandas…</p>
+       ) : itemsQuery.isError ? (
+         <p className="text-sm text-destructive">
+           No se pudieron cargar las comandas: {(itemsQuery.error as Error).message}
+         </p>
+-      ) : stationNames.length === 0 ? (
++      ) : stationGroups.length === 0 ? (
+         <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
+           <p className="text-sm text-muted-foreground">No hay comandas activas.</p>
+         </div>
+       ) : (
+         <div className="flex animate-fade-up gap-5 overflow-x-auto pb-2">
+-          {stationNames.map((stationName) => (
++          {stationGroups.map(({ stationName, items: stationItems }) => (
+             <StationColumn
+               key={stationName}
+               salonId={salonId}
+               stationName={stationName}
+-              groups={groupKdsItemsByOrder(byStation.get(stationName) ?? [])}
++              groups={groupKdsItemsByOrder(stationItems)}
+               now={now}
+             />
+           ))}
+         </div>
+       )}
+     </main>
+   );
+ }
+diff --git a/src/app/(dashboard)/cocina/order-ticket-card.tsx b/src/app/(dashboard)/cocina/order-ticket-card.tsx
+index 0c887ce..323a259 100644
+--- a/src/app/(dashboard)/cocina/order-ticket-card.tsx
++++ b/src/app/(dashboard)/cocina/order-ticket-card.tsx
+@@ -1,19 +1,21 @@
+ "use client";
+ 
++import { useQueryClient } from "@tanstack/react-query";
+ import { Timer } from "lucide-react";
+ 
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent, CardHeader } from "@/components/ui/card";
+ import { useSetOrderItemStatus } from "@/hooks/use-orders";
++import { kdsKeys } from "@/lib/queries/kds";
+ import { elapsedMinutes, type KdsItem, type KdsOrderGroup } from "@/lib/restauracion/kds";
+ import { cn } from "@/lib/utils";
+ import type { OrderItemStatus } from "@/types/database";
+ 
+ interface OrderTicketCardProps {
+   salonId: string;
+   group: KdsOrderGroup;
+   /** Reloj compartido de la vista (Task 4): refrescado cada 30s por
+    * `CocinaView`, NUNCA `Date.now()` calculado aquí — mantiene el
+    * cronómetro puro y testable con un `now` fijo. */
+   now: Date;
+ }
+@@ -27,34 +29,44 @@ interface OrderTicketCardProps {
+ function timerTone(minutes: number): string {
+   if (minutes > 10) return "border-destructive/25 bg-destructive/10 text-destructive";
+   if (minutes >= 5) return "border-warning/25 bg-warning/10 text-warning";
+   return "border-success/25 bg-success/10 text-success";
+ }
+ 
+ /**
+  * Tarjeta de comanda del KDS: una por pedido dentro de una columna de
+  * estación (`StationColumn`). Cada línea puede avanzar de estado con un
+  * botón — **Entregar** (enviado/preparando → listo) o **Entregado**
+  * (listo → entregado) — llamando a `useSetOrderItemStatus`, cuya mutation
+  * server-side condiciona el UPDATE por `status = from` (ver
+- * `mostrador/actions.ts`). Si el servidor rechaza por CONFLICTO (otro
+- * miembro del equipo ya cambió el estado de esa línea), no hace falta
+- * manejarlo aquí explícitamente: `useKdsRealtime` invalida la query del KDS
+- * en cualquier cambio de `order_items` y la lista se refresca sola.
++ * `mostrador/actions.ts`). Esa mutation (Plan B) invalida `orderKeys`, NO
++ * `kdsKeys` — no tiene forma de saber que esta pantalla existe — así que al
++ * éxito invalidamos `kdsKeys.all(salonId)` explícitamente aquí para que la
++ * tarjeta se actualice AL INSTANTE, sin depender del roundtrip de
++ * `useKdsRealtime` (que sigue activo como respaldo: si el evento Realtime
++ * llega igualmente, la invalidación es idempotente). Si el servidor rechaza
++ * por CONFLICTO (otro miembro del equipo ya cambió el estado de esa línea),
++ * no hace falta manejarlo aquí explícitamente: cualquiera de las dos vías
++ * (invalidación directa o Realtime) refresca la lista y la tarjeta se
++ * actualiza sola.
+  */
+ export function OrderTicketCard({ salonId, group, now }: OrderTicketCardProps): React.ReactElement {
+   const setStatus = useSetOrderItemStatus(salonId);
++  const queryClient = useQueryClient();
+ 
+   function advance(item: KdsItem, to: OrderItemStatus): void {
+-    setStatus.mutate({ itemId: item.id, from: item.status as OrderItemStatus, to });
++    setStatus.mutate(
++      { itemId: item.id, from: item.status, to },
++      { onSuccess: () => queryClient.invalidateQueries({ queryKey: kdsKeys.all(salonId) }) },
++    );
+   }
+ 
+   return (
+     <Card className="border-border/70">
+       <CardHeader className="flex flex-row items-baseline gap-2 space-y-0 p-4 pb-2">
+         <span className="text-2xl font-bold leading-none tabular-nums">#{group.orderNumber}</span>
+         {group.orderLabel !== null && group.orderLabel.trim() !== "" ? (
+           <span className="truncate text-sm font-medium text-muted-foreground">{group.orderLabel}</span>
+         ) : null}
+       </CardHeader>
+       <CardContent className="flex flex-col gap-2.5 p-4 pt-0">
+         {group.items.map((item) => {
+diff --git a/src/lib/restauracion/kds.ts b/src/lib/restauracion/kds.ts
+index 91dbfda..a3951f1 100644
+--- a/src/lib/restauracion/kds.ts
++++ b/src/lib/restauracion/kds.ts
+@@ -1,22 +1,24 @@
++import type { OrderItemStatus } from "@/types/database";
++
+ export interface KdsItem {
+   id: string;
+   orderId: string;
+   orderNumber: number;
+   orderLabel: string | null;
+   stationId: string | null;
+   stationName: string | null;
+   productName: string;
+   qty: number;
+-  status: string;
++  status: OrderItemStatus;
+   modifiers: string[];
+   createdAt: string;
+ }
+ 
+ export interface KdsOrderGroup {
+   orderId: string;
+   orderNumber: number;
+   orderLabel: string | null;
+   createdAt: string;
+   items: KdsItem[];
+ }
+ 
+@@ -27,16 +29,46 @@ export function groupKdsItemsByOrder(items: readonly KdsItem[]): KdsOrderGroup[]
+     if (existing === undefined) {
+       byOrder.set(it.orderId, {
+         orderId: it.orderId, orderNumber: it.orderNumber, orderLabel: it.orderLabel,
+         createdAt: it.createdAt, items: [it],
+       });
+     } else {
+       existing.items.push(it);
+     }
+   }
+   return [...byOrder.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+ }
+ 
++/** Estación sentinela para líneas sin `stationId` asignado en la carta (o
++ * cuyo join no resolvió nombre): agrupa ahí en vez de perderlas
++ * silenciosamente de la vista de cocina. */
++export const UNASSIGNED_STATION = "Sin estación";
++
++export interface KdsStationGroup {
++  stationName: string;
++  items: KdsItem[];
++}
++
++/**
++ * Agrupa las líneas activas del KDS por nombre de estación (`stationName`),
++ * usando `UNASSIGNED_STATION` cuando la línea no tiene estación asociada.
++ * Ordena las estaciones alfabéticamente (locale "es") para un orden estable
++ * entre renders. Lógica pura subida desde `cocina-view.tsx` (Task 4 fix) para
++ * poder testearla sin montar componentes.
++ */
++export function groupKdsItemsByStation(items: readonly KdsItem[]): KdsStationGroup[] {
++  const byStation = new Map<string, KdsItem[]>();
++  for (const item of items) {
++    const key = item.stationName ?? UNASSIGNED_STATION;
++    const list = byStation.get(key) ?? [];
++    list.push(item);
++    byStation.set(key, list);
++  }
++  return [...byStation.entries()]
++    .map(([stationName, stationItems]) => ({ stationName, items: stationItems }))
++    .sort((a, b) => a.stationName.localeCompare(b.stationName, "es"));
++}
++
+ export function elapsedMinutes(createdAtIso: string, now: Date): number {
+   const ms = now.getTime() - new Date(createdAtIso).getTime();
+   return Math.max(0, Math.floor(ms / 60000));
+ }
+diff --git a/src/tests/unit/order-ticket-card.test.tsx b/src/tests/unit/order-ticket-card.test.tsx
+index d144e46..a3d80f7 100644
+--- a/src/tests/unit/order-ticket-card.test.tsx
++++ b/src/tests/unit/order-ticket-card.test.tsx
+@@ -1,36 +1,46 @@
+ import { createElement } from "react";
+ import { cleanup, render, screen } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ 
++import { kdsKeys } from "@/lib/queries/kds";
+ import type { KdsOrderGroup } from "@/lib/restauracion/kds";
+ 
+ /**
+  * Mock de `@/hooks/use-orders` (patrón `order-panel.test.tsx` / `menu-item-form.test.tsx`,
+  * vi.hoisted + createElement + getByRole): `OrderTicketCard` llama a
+  * `useSetOrderItemStatus` directamente, así que el test no necesita
+- * `QueryClientProvider`.
++ * `QueryClientProvider`. Mockeamos también `useQueryClient` de
++ * `@tanstack/react-query` (fix del refresco instantáneo del KDS): el
++ * componente lo llama para invalidar `kdsKeys.all(salonId)` en el
++ * `onSuccess` de la mutation — sin este mock, `useQueryClient` real lanzaría
++ * "No QueryClient set" al no haber `QueryClientProvider` en el árbol.
+  */
+ const m = vi.hoisted(() => ({
+   setOrderItemStatus: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++  queryClient: { invalidateQueries: vi.fn() },
+ }));
+ vi.mock("@/hooks/use-orders", () => ({
+   useSetOrderItemStatus: () => m.setOrderItemStatus,
+ }));
++vi.mock("@tanstack/react-query", () => ({
++  useQueryClient: () => m.queryClient,
++}));
+ 
+ import { OrderTicketCard } from "@/app/(dashboard)/cocina/order-ticket-card";
+ 
+ beforeEach(() => {
+   m.setOrderItemStatus.mutate = vi.fn();
++  m.queryClient.invalidateQueries = vi.fn();
+ });
+ afterEach(() => cleanup());
+ 
+ const NOW = new Date("2026-08-09T12:10:00.000Z");
+ 
+ /** Un pedido (#42, mesa "Mesa 3") con una única línea en el estado dado. */
+ function groupWith(status: "enviado" | "listo"): KdsOrderGroup {
+   return {
+     orderId: "order-1",
+     orderNumber: 42,
+     orderLabel: "Mesa 3",
+     createdAt: "2026-08-09T12:00:00.000Z",
+@@ -59,28 +69,41 @@ describe("OrderTicketCard", () => {
+ 
+     expect(screen.getByText("#42")).toBeInTheDocument();
+     expect(screen.getByText(/hamburguesa/i)).toBeInTheDocument();
+ 
+     await user.click(screen.getByRole("button", { name: /entregar/i }));
+ 
+     expect(m.setOrderItemStatus.mutate).toHaveBeenCalledTimes(1);
+     expect(m.setOrderItemStatus.mutate.mock.calls[0]![0]).toMatchObject({
+       itemId: "item-1",
+       from: "enviado",
+       to: "listo",
+     });
++
++    // Fix "el KDS no se refresca al Entregar/Entregado": el segundo argumento
++    // de `mutate` es un `onSuccess` que invalida `kdsKeys.all(salonId)` para
++    // refrescar la pantalla al instante (sin depender del roundtrip de
++    // Realtime). Invocamos aquí el callback capturado, como haría react-query
++    // real al resolver la mutation.
++    const options = m.setOrderItemStatus.mutate.mock.calls[0]![1] as { onSuccess: () => void };
++    options.onSuccess();
++    expect(m.queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: kdsKeys.all("SALON") });
+   });
+ 
+   it("un ítem 'listo' muestra Entregado y al pulsarlo pide pasar a 'entregado'", async () => {
+     const user = userEvent.setup();
+     render(createElement(OrderTicketCard, { salonId: "SALON", group: groupWith("listo"), now: NOW }));
+ 
+     await user.click(screen.getByRole("button", { name: /entregado/i }));
+ 
+     expect(m.setOrderItemStatus.mutate).toHaveBeenCalledTimes(1);
+     expect(m.setOrderItemStatus.mutate.mock.calls[0]![0]).toMatchObject({
+       itemId: "item-1",
+       from: "listo",
+       to: "entregado",
+     });
++
++    const options = m.setOrderItemStatus.mutate.mock.calls[0]![1] as { onSuccess: () => void };
++    options.onSuccess();
++    expect(m.queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: kdsKeys.all("SALON") });
+   });
+ });
+diff --git a/src/tests/unit/restauracion-kds.test.ts b/src/tests/unit/restauracion-kds.test.ts
+index a8790e9..3b65a55 100644
+--- a/src/tests/unit/restauracion-kds.test.ts
++++ b/src/tests/unit/restauracion-kds.test.ts
+@@ -1,14 +1,14 @@
+ import { describe, it, expect } from "vitest";
+-import { elapsedMinutes, groupKdsItemsByOrder, type KdsItem } from "@/lib/restauracion/kds";
++import { elapsedMinutes, groupKdsItemsByOrder, groupKdsItemsByStation, type KdsItem } from "@/lib/restauracion/kds";
+ 
+ function item(over: Partial<KdsItem>): KdsItem {
+   return {
+     id: "i", orderId: "o", orderNumber: 1, orderLabel: null, stationId: "s", stationName: "Cocina",
+     productName: "X", qty: 1, status: "enviado", modifiers: [], createdAt: "2026-08-10T12:00:00Z", ...over,
+   };
+ }
+ 
+ describe("groupKdsItemsByOrder", () => {
+   it("agrupa por pedido y ordena los grupos por createdAt ascendente", () => {
+     const groups = groupKdsItemsByOrder([
+       item({ id: "a", orderId: "o2", orderNumber: 2, createdAt: "2026-08-10T12:05:00Z" }),
+@@ -17,12 +17,33 @@ describe("groupKdsItemsByOrder", () => {
+     ]);
+     expect(groups.map((g) => g.orderId)).toEqual(["o1", "o2"]);
+     expect(groups[0]!.items.map((i) => i.id)).toEqual(["b", "c"]);
+   });
+ });
+ 
+ describe("elapsedMinutes", () => {
+   it("cuenta minutos enteros transcurridos, nunca negativo", () => {
+     expect(elapsedMinutes("2026-08-10T12:00:00Z", new Date("2026-08-10T12:07:30Z"))).toBe(7);
+     expect(elapsedMinutes("2026-08-10T12:00:00Z", new Date("2026-08-10T11:59:00Z"))).toBe(0);
+   });
+ });
++
++describe("groupKdsItemsByStation", () => {
++  it("agrupa por nombre de estación y ordena los grupos alfabéticamente", () => {
++    const groups = groupKdsItemsByStation([
++      item({ id: "a", stationName: "Barra" }),
++      item({ id: "b", stationName: "Cocina" }),
++      item({ id: "c", stationName: "Cocina" }),
++    ]);
++    expect(groups.map((g) => g.stationName)).toEqual(["Barra", "Cocina"]);
++    expect(groups.find((g) => g.stationName === "Cocina")!.items.map((i) => i.id)).toEqual(["b", "c"]);
++  });
++
++  it("mete las líneas sin stationName en 'Sin estación'", () => {
++    const groups = groupKdsItemsByStation([
++      item({ id: "a", stationName: null }),
++      item({ id: "b", stationName: "Cocina" }),
++    ]);
++    expect(groups.map((g) => g.stationName)).toEqual(["Cocina", "Sin estación"]);
++    expect(groups.find((g) => g.stationName === "Sin estación")!.items.map((i) => i.id)).toEqual(["a"]);
++  });
++});

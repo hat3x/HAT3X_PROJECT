@@ -1,0 +1,3341 @@
+=== TODOS LOS COMMITS DEL PLANO DE SALA 9e02d3f..ff881e1 ===
+ff881e1 feat(restauracion): nav Sala + retirar Caja de vender (se vende en Mostrador/Sala)
+fea00ce fix(restauracion): cierra flujo Añadir mesa->mostrador + pointercancel + onError arrastre
+a4a23cf feat(restauracion): plano de sala arrastrable (/sala) en tiempo real
+008d8b3 fix(restauracion): ruta de recuperación a libre + error no silencioso post-cobro
+cad72a3 feat(restauracion): panel de mesa (comanda + tiempo + total + acciones)
+28a65fb fix(restauracion): condiciona la compensación de openTable + alinea defaults de mesa
+3eac19b feat(restauracion): server actions de sala (abrir mesa, estado, layout)
+24bc11d feat(restauracion): queries y hooks de sala (lectura + Realtime)
+8c39204 feat(restauracion): lógica pura de sala (transiciones + validaciones de mesa)
+d4aabff feat(restauracion): dining_tables + orders en la publicación Realtime (plano)
+eccf976 feat(restauracion): sala — zonas, mesas y enlace de la cuenta con la mesa
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/mostrador-view.tsx   |  41 ++-
+ src/app/(dashboard)/mostrador/page.tsx             |  17 +-
+ src/app/(dashboard)/sala/actions.ts                | 316 ++++++++++++++++++
+ src/app/(dashboard)/sala/floor-editor.tsx          | 235 +++++++++++++
+ src/app/(dashboard)/sala/layout.tsx                |  17 +
+ src/app/(dashboard)/sala/page.tsx                  |  47 +++
+ src/app/(dashboard)/sala/sala-view.tsx             | 363 +++++++++++++++++++++
+ src/app/(dashboard)/sala/table-node.tsx            | 149 +++++++++
+ src/app/(dashboard)/sala/table-panel.tsx           | 325 ++++++++++++++++++
+ src/components/dashboard-nav-items.ts              |  46 ++-
+ src/hooks/use-tables.ts                            | 244 ++++++++++++++
+ src/lib/queries/tables.ts                          |  40 +++
+ src/lib/restauracion/tables.ts                     |  29 ++
+ src/lib/validations/table.ts                       |  75 +++++
+ .../integration/restauracion-sala-actions.test.ts  | 125 +++++++
+ src/tests/unit/dashboard-nav-items.test.ts         |  17 +
+ src/tests/unit/mostrador-view.test.tsx             | 131 ++++++++
+ src/tests/unit/realtime-dining-sql.test.ts         |  16 +
+ src/tests/unit/restauracion-sala-sql.test.ts       |  36 ++
+ src/tests/unit/restauracion-tables.test.ts         |  36 ++
+ src/tests/unit/table-keys.test.ts                  |  10 +
+ src/tests/unit/table-node.test.tsx                 | 112 +++++++
+ src/tests/unit/table-panel.test.tsx                | 206 ++++++++++++
+ src/types/database.ts                              | 148 +++++++++
+ .../20260810130000_restauracion_sala.sql           | 108 ++++++
+ .../migrations/20260810140000_realtime_dining.sql  |  17 +
+ 26 files changed, 2889 insertions(+), 17 deletions(-)
+diff --git a/src/app/(dashboard)/mostrador/mostrador-view.tsx b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+index 56976d1..8744025 100644
+--- a/src/app/(dashboard)/mostrador/mostrador-view.tsx
++++ b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+@@ -9,21 +9,27 @@ import { ProductGrid } from "@/app/(dashboard)/mostrador/product-grid";
+ import {
+   useAllProductModifierGroups,
+   useMenuProducts,
+   useModifierGroups,
+   useStations,
+ } from "@/hooks/use-menu";
+-import { useOrderItems } from "@/hooks/use-orders";
++import { useOpenOrders, useOrderItems } from "@/hooks/use-orders";
+ import { useSalePaymentMethods } from "@/hooks/use-tpv";
+ import { buildOrderItemDrafts, type MenuSelection } from "@/lib/restauracion/order";
+ import type { Order, OrderItem, Product } from "@/types/database";
+ 
+ interface MostradorViewProps {
+   salonId: string;
+   /** Nombre comercial del salón; cabecera del ticket impreso. */
+   salonName: string;
++  /** Id de la cuenta con la que arrancar el mostrador ya seleccionada, tal
++   * como llega desde `/sala` (fix revisión Task 7, Important: "Añadir" en el
++   * panel de una mesa navega a `/mostrador?order=<id>`, `page.tsx` lee ese
++   * parámetro y lo pasa aquí). Mismo patrón que `initialAppointmentId` en
++   * `tpv-view.tsx`. */
++  initialOrderId?: string;
+ }
+ 
+ /** `order_items.modifiers_snapshot` es `Json` en la BD; en la práctica siempre
+  * tiene esta forma (la escribe `addOrderItems`, ver `mostrador/actions.ts`). */
+ function asModifiersSnapshot(value: unknown): Array<{ name: string; priceDeltaCents: number }> {
+   return Array.isArray(value) ? (value as Array<{ name: string; priceDeltaCents: number }>) : [];
+@@ -39,20 +45,26 @@ function isActiveOrderItem(row: OrderItem): boolean {
+  * Pantalla de mostrador (restauración): rejilla de carta a la izquierda,
+  * panel de pedido a la derecha, con la barra de cuentas abiertas arriba.
+  * Mantiene en estado LOCAL las líneas del pedido en curso (drafts con
+  * `crypto.randomUUID()`, patrón de `tpv-view.tsx`); es `OrderPanel` quien
+  * decide CUÁNDO persistirlas (Mandar/Cobrar). Al reabrir una cuenta desde
+  * `OpenOrdersBar`, las líneas ya persistidas se cargan una única vez con
+- * `useOrderItems`.
++ * `useOrderItems`. `initialOrderId` (opcional) reanuda una cuenta abierta
++ * automáticamente al montar — llegada desde `/sala` vía `?order=<id>`.
+  */
+-export function MostradorView({ salonId, salonName }: MostradorViewProps): React.ReactElement {
++export function MostradorView({
++  salonId,
++  salonName,
++  initialOrderId,
++}: MostradorViewProps): React.ReactElement {
+   const products = useMenuProducts(salonId);
+   const stations = useStations(salonId);
+   const modifierGroups = useModifierGroups(salonId);
+   const productModifierGroups = useAllProductModifierGroups(salonId);
+   const paymentMethods = useSalePaymentMethods(salonId);
++  const openOrders = useOpenOrders(salonId);
+ 
+   const [order, setOrder] = useState<Order | null>(null);
+   const [items, setItems] = useState<OrderPanelItem[]>([]);
+   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
+ 
+@@ -93,12 +105,35 @@ export function MostradorView({ salonId, salonName }: MostradorViewProps): React
+       name: productsById.get(row.product_id)?.name ?? "Producto",
+     }));
+     setItems(loaded);
+     setPendingIds(new Set());
+   }, [order, orderItemsQuery.data, productsById]);
+ 
++  // "Añadir" desde el panel de una mesa en /sala abre /mostrador?order=<id>
++  // (fix revisión Task 7, Important): en cuanto las cuentas abiertas cargan,
++  // retomamos ESA cuenta una sola vez — mismo patrón `initialAppointmentId` /
++  // `startedFromParamRef` de `tpv-view.tsx`, y reutiliza `handleSelectOrder`
++  // (el MISMO handler que usa `OpenOrdersBar` al reanudar una cuenta) en vez
++  // de duplicar su lógica de limpieza síncrona. Así los productos que se
++  // añadan van al MISMO pedido, que ya lleva `dining_table_id`, en vez de
++  // crear uno nuevo desconectado de la mesa. Si no se encuentra (p.ej. ya se
++  // cobró entre que se abrió el enlace y cargó el mostrador), no hace nada:
++  // cae al mostrador en blanco de siempre.
++  const startedFromOrderParamRef = useRef(false);
++  useEffect(() => {
++    if (startedFromOrderParamRef.current || initialOrderId === undefined) return;
++    const match = openOrders.data?.find((o) => o.id === initialOrderId);
++    if (match !== undefined) {
++      startedFromOrderParamRef.current = true;
++      handleSelectOrder(match);
++    }
++    // handleSelectOrder es una declaración hoisted y estable; no va en deps
++    // (mismo criterio que `startFromAppointment` en `tpv-view.tsx`).
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [initialOrderId, openOrders.data]);
++
+   function addSelection(selection: MenuSelection): void {
+     const drafts = buildOrderItemDrafts(selection, () => crypto.randomUUID());
+     const withNames: OrderPanelItem[] = drafts.map((draft) => ({
+       ...draft,
+       name: productsById.get(draft.productId)?.name ?? selection.name,
+     }));
+diff --git a/src/app/(dashboard)/mostrador/page.tsx b/src/app/(dashboard)/mostrador/page.tsx
+index 4aceabc..d50009b 100644
+--- a/src/app/(dashboard)/mostrador/page.tsx
++++ b/src/app/(dashboard)/mostrador/page.tsx
+@@ -6,13 +6,17 @@ import { getActiveSalon } from "@/lib/salon";
+ import { createClient } from "@/lib/supabase/server";
+ 
+ export const metadata: Metadata = {
+   title: "Mostrador",
+ };
+ 
+-export default async function MostradorPage(): Promise<React.ReactElement> {
++export default async function MostradorPage({
++  searchParams,
++}: {
++  searchParams: { order?: string };
++}): Promise<React.ReactElement> {
+   const supabase = createClient();
+   const {
+     data: { user },
+   } = await supabase.auth.getUser();
+ 
+   if (user === null) {
+@@ -29,8 +33,17 @@ export default async function MostradorPage(): Promise<React.ReactElement> {
+           Tu usuario no está asociado a ningún salón todavía.
+         </p>
+       </main>
+     );
+   }
+ 
+-  return <MostradorView salonId={salon.id} salonName={salon.name} />;
++  return (
++    <MostradorView
++      salonId={salon.id}
++      salonName={salon.name}
++      // Cuenta a reanudar desde /sala ("Añadir" del panel de una mesa abre
++      // /mostrador?order=<id>, fix revisión Task 7, Important) — mismo
++      // patrón que `initialAppointmentId` en `tpv/page.tsx`.
++      initialOrderId={typeof searchParams.order === "string" ? searchParams.order : undefined}
++    />
++  );
+ }
+diff --git a/src/app/(dashboard)/sala/actions.ts b/src/app/(dashboard)/sala/actions.ts
+new file mode 100644
+index 0000000..6eef53b
+--- /dev/null
++++ b/src/app/(dashboard)/sala/actions.ts
+@@ -0,0 +1,316 @@
++"use server";
++import { randomUUID } from "node:crypto";
++
++import { revalidatePath } from "next/cache";
++
++import { canTransition, clampPosition } from "@/lib/restauracion/tables";
++import { canManageSettings, getActiveMembership, getActiveSalonId } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++import {
++  openTableSchema,
++  saveTablePositionSchema,
++  setTableStatusSchema,
++  tableSchema,
++  zoneSchema,
++  type OpenTableInput,
++  type SaveTablePositionInput,
++  type SetTableStatusInput,
++  type TableInput,
++  type ZoneInput,
++} from "@/lib/validations/table";
++import type { DiningTable, DiningZone, Order } from "@/types/database";
++
++/**
++ * Server actions de sala (restauración, Task 5): apertura/estado/posición de
++ * mesa y CRUD de zonas/mesas del plano.
++ *
++ * Dos niveles de gate, igual criterio que `carta/actions.ts` (gestión) vs
++ * `mostrador/actions.ts` (operativa): `openTable`/`setTableStatus` son
++ * OPERATIVAS (cualquier miembro del salón — tomar/soltar una mesa es trabajo
++ * de sala del día a día, no configuración); `saveTablePosition` y el CRUD de
++ * zonas/mesas son GESTIÓN (editar el layout o el catálogo de mesas exige
++ * owner/manager, vía {@link assertManager}).
++ */
++export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
++
++/**
++ * Resuelve el salón activo SI el usuario tiene rol de gestión (owner/manager).
++ * Devuelve `null` cuando no hay permiso (rol insuficiente) o no hay salón
++ * asignado; en ambos casos la action responde con el mismo mensaje de
++ * "sin permiso" — no se distingue el motivo al cliente. Idéntico a
++ * `carta/actions.ts#assertManager`.
++ */
++async function assertManager(): Promise<string | null> {
++  const membership = await getActiveMembership();
++  if (!canManageSettings(membership?.role)) return null;
++  return getActiveSalonId();
++}
++
++function firstIssue(error: import("zod").ZodError): string {
++  return error.issues[0]?.message ?? "Datos inválidos";
++}
++
++const NO_PERMISSION = "No tienes permiso para gestionar la sala";
++const NO_SALON = "No tienes un salón asignado";
++
++// ─────────────────────────────────────────────────────────────────────────────
++// openTable: abre una mesa libre y crea su cuenta (orders, channel='mesa').
++//
++// Orden EXACTO por seguridad de concurrencia (dos camareros tocando la misma
++// mesa a la vez): (1) UPDATE CONDICIONADO `status='ocupada' WHERE ...
++// status='libre'` — si otro ya la abrió, el UPDATE afecta 0 filas y esa ES la
++// señal de conflicto, sin necesidad de un SELECT previo (misma técnica que
++// `setOrderItemStatus`/`setTableStatus`). Solo si afecta 1 fila se sigue.
++// (2) INSERT de `orders` con el `id` generado EN EL SERVIDOR (a diferencia de
++// `createOrder`/mostrador, que lo acepta del cliente para offline-first: abrir
++// mesa es una acción síncrona de sala, no necesita idempotencia offline) y
++// `label` = nombre de la mesa (tomado del propio `.select()` del paso 1, sin
++// una consulta aparte). (3) Si el INSERT falla, se COMPENSA revirtiendo la
++// mesa a `libre` (rollback manual — igual patrón que `settleOrder`/
++// `mostrador/actions.ts`: sin transacción multi-sentencia desde el cliente de
++// Supabase, un fallo a mitad de flujo se deshace a mano) y se propaga el
++// error; la mesa NO debe quedar `ocupada` sin una cuenta asociada.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function openTable(input: OpenTableInput): Promise<ActionResult<Order>> {
++  const parsed = openTableSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: NO_SALON };
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .update({ status: "ocupada" })
++    .eq("id", parsed.data.tableId)
++    .eq("salon_id", salonId)
++    .eq("status", "libre")
++    .select("*");
++  if (error !== null) return { ok: false, error: error.message };
++  const [table] = (data ?? []) as DiningTable[];
++  if (table === undefined) return { ok: false, error: "La mesa no está libre" };
++
++  const { data: order, error: orderError } = await supabase
++    .from("orders")
++    .insert({
++      id: randomUUID(),
++      salon_id: salonId,
++      channel: "mesa",
++      dining_table_id: parsed.data.tableId,
++      covers: parsed.data.covers,
++      label: table.name,
++      status: "abierta",
++    })
++    .select("*")
++    .single();
++  if (orderError !== null) {
++    // Compensación: la mesa no debe quedar `ocupada` sin cuenta. CONDICIONADA
++    // por `status = "ocupada"` (fix de revisión, Important) — igual criterio
++    // de concurrencia que el resto de UPDATEs del fichero: sin esta guarda,
++    // si entre el fallo del insert y este UPDATE otra petición ya movió la
++    // mesa a un estado distinto (p.ej. `cuenta_pedida` vía `setTableStatus`,
++    // improbable pero no imposible con reintentos concurrentes), esta
++    // reversión la pisaría a `libre` sin condición, perdiendo esa transición
++    // legítima. Solo revierte si la mesa sigue en el estado que ESTA llamada
++    // acaba de dejar. Se ignora el resultado de esta segunda escritura
++    // (best-effort, igual que el `rollback()` de `settleOrder`) — propagar el
++    // error ORIGINAL del insert es más útil al llamador que uno secundario de
++    // la reversión.
++    await supabase
++      .from("dining_tables")
++      .update({ status: "libre" })
++      .eq("id", parsed.data.tableId)
++      .eq("salon_id", salonId)
++      .eq("status", "ocupada");
++    return { ok: false, error: orderError.message };
++  }
++  revalidatePath("/sala");
++  return { ok: true, data: order };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// setTableStatus: transición de estado de UNA mesa (p.ej. `ocupada` →
++// `cuenta_pedida` → `por_limpiar` → `libre`), operativa (cualquier miembro).
++//
++// `canTransition` (lib/restauracion/tables.ts, Task 3) se comprueba ANTES de
++// tocar la base — un salto no permitido (p.ej. `libre` → `por_limpiar`) ni
++// siquiera intenta el UPDATE. Igual que `openTable`, el UPDATE va CONDICIONADO
++// por `status = from`: si otra pantalla ya movió la mesa, afecta 0 filas ⇒
++// CONFLICTO (misma técnica que `setOrderItemStatus`, mostrador/actions.ts).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function setTableStatus(input: SetTableStatusInput): Promise<ActionResult<DiningTable>> {
++  const parsed = setTableStatusSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  if (!canTransition(parsed.data.from, parsed.data.to)) {
++    return { ok: false, error: "Transición no válida" };
++  }
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: NO_SALON };
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .update({ status: parsed.data.to })
++    .eq("id", parsed.data.tableId)
++    .eq("salon_id", salonId)
++    .eq("status", parsed.data.from)
++    .select("*");
++  if (error !== null) return { ok: false, error: error.message };
++  const [updated] = (data ?? []) as DiningTable[];
++  if (updated === undefined) return { ok: false, error: "CONFLICTO: el estado de la mesa ya cambió" };
++  revalidatePath("/sala");
++  return { ok: true, data: updated };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// saveTablePosition: gestión (editar el layout del plano exige owner/manager).
++// `clampPosition` (lib/restauracion/tables.ts) acota a [0,100] en servidor —
++// no basta con que el editor visual del plano ya limite el arrastre en
++// cliente, un payload manual fuera de rango no debe poder desplazar la mesa
++// fuera del plano.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function saveTablePosition(
++  input: SaveTablePositionInput,
++): Promise<ActionResult<DiningTable>> {
++  const parsed = saveTablePositionSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .update({ pos_x: clampPosition(parsed.data.posX), pos_y: clampPosition(parsed.data.posY) })
++    .eq("id", parsed.data.tableId)
++    .eq("salon_id", salonId)
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Zonas del plano de sala — gestión, mismo patrón EXACTO que
++// `carta/actions.ts#createCategory/updateCategory/deleteCategory` (misma
++// forma `{salon_id, name, sort_order}`).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createZone(input: ZoneInput): Promise<ActionResult<DiningZone>> {
++  const parsed = zoneSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_zones")
++    .insert({ salon_id: salonId, name: parsed.data.name, sort_order: parsed.data.sortOrder })
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++export async function updateZone(id: string, input: ZoneInput): Promise<ActionResult<DiningZone>> {
++  const parsed = zoneSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_zones")
++    .update({ name: parsed.data.name, sort_order: parsed.data.sortOrder })
++    .eq("id", id)
++    .eq("salon_id", salonId)
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++export async function deleteZone(id: string): Promise<ActionResult<null>> {
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error } = await supabase.from("dining_zones").delete().eq("id", id).eq("salon_id", salonId);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data: null };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Mesas del plano de sala — gestión, mismo patrón que las zonas de arriba.
++// El FK compuesto `dining_tables_zone_fkey` (zone_id, salon_id) ya garantiza
++// en la base que no se puede crear/editar una mesa apuntando a una zona de
++// otro salón — no hace falta una guarda de pertenencia aparte (paridad con el
++// razonamiento de `carta/actions.ts` sobre sus propios FKs compuestos).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createTable(input: TableInput): Promise<ActionResult<DiningTable>> {
++  const parsed = tableSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .insert({
++      salon_id: salonId,
++      zone_id: parsed.data.zoneId,
++      name: parsed.data.name,
++      capacity_min: parsed.data.capacityMin,
++      capacity_max: parsed.data.capacityMax,
++      shape: parsed.data.shape,
++      sort_order: parsed.data.sortOrder,
++    })
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++export async function updateTable(id: string, input: TableInput): Promise<ActionResult<DiningTable>> {
++  const parsed = tableSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .update({
++      zone_id: parsed.data.zoneId,
++      name: parsed.data.name,
++      capacity_min: parsed.data.capacityMin,
++      capacity_max: parsed.data.capacityMax,
++      shape: parsed.data.shape,
++      sort_order: parsed.data.sortOrder,
++    })
++    .eq("id", id)
++    .eq("salon_id", salonId)
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++export async function deleteTable(id: string): Promise<ActionResult<null>> {
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error } = await supabase.from("dining_tables").delete().eq("id", id).eq("salon_id", salonId);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data: null };
++}
+diff --git a/src/app/(dashboard)/sala/floor-editor.tsx b/src/app/(dashboard)/sala/floor-editor.tsx
+new file mode 100644
+index 0000000..fdf276a
+--- /dev/null
++++ b/src/app/(dashboard)/sala/floor-editor.tsx
+@@ -0,0 +1,235 @@
++"use client";
++
++import { useState } from "react";
++import { Pencil, Plus } from "lucide-react";
++
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { useCreateTable, useCreateZone } from "@/hooks/use-tables";
++import type { DiningZone } from "@/types/database";
++
++interface FloorEditorProps {
++  salonId: string;
++  zones: DiningZone[];
++  /** Zona activa en el lienzo — sugerida por defecto al crear una mesa nueva. */
++  activeZoneId: string | null;
++  editMode: boolean;
++  onToggleEditMode: () => void;
++}
++
++/**
++ * Controles del modo edición del plano de sala (Task 7): el toggle de
++ * edición SIEMPRE está visible (`sala-view.tsx` solo monta este componente
++ * si `canManageSettings(role)`, así que aquí no hace falta repetir el gate);
++ * "Nueva zona"/"Nueva mesa" solo aparecen CON el modo edición activo, mismo
++ * patrón alta-en-diálogo que `carta-view.tsx` (`CategoriesSection`/
++ * `StationsSection`): botón que abre un `Dialog`, formulario mínimo, mutación
++ * de `use-tables.ts` (Task 5) y cierre al éxito.
++ *
++ * El arrastre de mesas (`TableNode`/`onDragEnd` → `useSaveTablePosition`) vive
++ * en `sala-view.tsx`, no aquí — este fichero solo cubre alta de zona/mesa y el
++ * propio toggle.
++ */
++export function FloorEditor({
++  salonId,
++  zones,
++  activeZoneId,
++  editMode,
++  onToggleEditMode,
++}: FloorEditorProps): React.ReactElement {
++  const createZone = useCreateZone(salonId);
++  const createTable = useCreateTable(salonId);
++
++  const [zoneDialogOpen, setZoneDialogOpen] = useState(false);
++  const [zoneName, setZoneName] = useState("");
++
++  const [tableDialogOpen, setTableDialogOpen] = useState(false);
++  const [tableName, setTableName] = useState("");
++  const [tableZoneId, setTableZoneId] = useState<string | null>(null);
++
++  function openZoneDialog(): void {
++    createZone.reset();
++    setZoneName("");
++    setZoneDialogOpen(true);
++  }
++
++  function openTableDialog(): void {
++    createTable.reset();
++    setTableName("");
++    setTableZoneId(activeZoneId ?? zones[0]?.id ?? null);
++    setTableDialogOpen(true);
++  }
++
++  function handleCreateZone(): void {
++    const name = zoneName.trim();
++    if (name === "") return;
++    createZone.mutate(
++      { name, sortOrder: zones.length },
++      { onSuccess: () => setZoneDialogOpen(false) },
++    );
++  }
++
++  function handleCreateTable(): void {
++    const name = tableName.trim();
++    if (name === "" || tableZoneId === null) return;
++    createTable.mutate(
++      {
++        name,
++        zoneId: tableZoneId,
++        capacityMin: 1,
++        capacityMax: 4,
++        shape: "square",
++        sortOrder: 0,
++      },
++      { onSuccess: () => setTableDialogOpen(false) },
++    );
++  }
++
++  return (
++    <div className="flex flex-wrap items-center gap-2">
++      <Button
++        type="button"
++        variant={editMode ? "default" : "outline"}
++        size="sm"
++        onClick={onToggleEditMode}
++      >
++        <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
++        {editMode ? "Salir de edición" : "Modo edición"}
++      </Button>
++
++      {editMode ? (
++        <>
++          <Dialog open={zoneDialogOpen} onOpenChange={setZoneDialogOpen}>
++            <Button type="button" variant="outline" size="sm" onClick={openZoneDialog}>
++              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++              Nueva zona
++            </Button>
++            <DialogContent>
++              <DialogHeader>
++                <DialogTitle>Nueva zona</DialogTitle>
++                <DialogDescription>Añade una zona al plano de sala.</DialogDescription>
++              </DialogHeader>
++              <div className="space-y-2">
++                <Label htmlFor="sala-zone-name">Nombre</Label>
++                <Input
++                  id="sala-zone-name"
++                  value={zoneName}
++                  onChange={(e) => setZoneName(e.target.value)}
++                  placeholder="Terraza"
++                />
++              </div>
++              {createZone.error instanceof Error ? (
++                <p role="alert" className="text-sm text-destructive">
++                  {createZone.error.message}
++                </p>
++              ) : null}
++              <DialogFooter>
++                <Button
++                  type="button"
++                  variant="outline"
++                  onClick={() => setZoneDialogOpen(false)}
++                  disabled={createZone.isPending}
++                >
++                  Cancelar
++                </Button>
++                <Button
++                  type="button"
++                  onClick={handleCreateZone}
++                  disabled={createZone.isPending || zoneName.trim() === ""}
++                >
++                  {createZone.isPending ? "Creando…" : "Crear zona"}
++                </Button>
++              </DialogFooter>
++            </DialogContent>
++          </Dialog>
++
++          <Dialog open={tableDialogOpen} onOpenChange={setTableDialogOpen}>
++            <Button
++              type="button"
++              variant="outline"
++              size="sm"
++              onClick={openTableDialog}
++              disabled={zones.length === 0}
++            >
++              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++              Nueva mesa
++            </Button>
++            <DialogContent>
++              <DialogHeader>
++                <DialogTitle>Nueva mesa</DialogTitle>
++                <DialogDescription>Añade una mesa a la zona seleccionada.</DialogDescription>
++              </DialogHeader>
++              <div className="space-y-3">
++                <div className="space-y-2">
++                  <Label htmlFor="sala-table-name">Nombre</Label>
++                  <Input
++                    id="sala-table-name"
++                    value={tableName}
++                    onChange={(e) => setTableName(e.target.value)}
++                    placeholder="Mesa 5"
++                  />
++                </div>
++                <div className="space-y-2">
++                  <Label htmlFor="sala-table-zone">Zona</Label>
++                  <Select
++                    value={tableZoneId ?? undefined}
++                    onValueChange={(value) => setTableZoneId(value)}
++                  >
++                    <SelectTrigger id="sala-table-zone">
++                      <SelectValue placeholder="Elige una zona" />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {zones.map((zone) => (
++                        <SelectItem key={zone.id} value={zone.id}>
++                          {zone.name}
++                        </SelectItem>
++                      ))}
++                    </SelectContent>
++                  </Select>
++                </div>
++              </div>
++              {createTable.error instanceof Error ? (
++                <p role="alert" className="text-sm text-destructive">
++                  {createTable.error.message}
++                </p>
++              ) : null}
++              <DialogFooter>
++                <Button
++                  type="button"
++                  variant="outline"
++                  onClick={() => setTableDialogOpen(false)}
++                  disabled={createTable.isPending}
++                >
++                  Cancelar
++                </Button>
++                <Button
++                  type="button"
++                  onClick={handleCreateTable}
++                  disabled={createTable.isPending || tableName.trim() === "" || tableZoneId === null}
++                >
++                  {createTable.isPending ? "Creando…" : "Crear mesa"}
++                </Button>
++              </DialogFooter>
++            </DialogContent>
++          </Dialog>
++        </>
++      ) : null}
++    </div>
++  );
++}
+diff --git a/src/app/(dashboard)/sala/layout.tsx b/src/app/(dashboard)/sala/layout.tsx
+new file mode 100644
+index 0000000..2402144
+--- /dev/null
++++ b/src/app/(dashboard)/sala/layout.tsx
+@@ -0,0 +1,17 @@
++import { SectorGate } from "@/components/guards/sector-gate";
++
++/**
++ * Layout de `/sala` (Task 7): SOLO gate de sector, patrón `carta/layout.tsx`
++ * pero SIN gate de rol — a diferencia de la carta (configuración, solo
++ * owner/manager), la sala es operativa de staff del día a día (abrir mesas,
++ * ver comandas, cobrar). El modo edición del plano (arrastrar mesas, crear
++ * zonas/mesas) SÍ exige `canManageSettings`, pero eso se decide dentro de
++ * `sala-view.tsx` con el `role` resuelto por `page.tsx`, no aquí.
++ */
++export default async function SalaLayout({
++  children,
++}: {
++  children: React.ReactNode;
++}): Promise<React.ReactElement> {
++  return <SectorGate required="restauracion">{children}</SectorGate>;
++}
+diff --git a/src/app/(dashboard)/sala/page.tsx b/src/app/(dashboard)/sala/page.tsx
+new file mode 100644
+index 0000000..85f6858
+--- /dev/null
++++ b/src/app/(dashboard)/sala/page.tsx
+@@ -0,0 +1,47 @@
++import type { Metadata } from "next";
++import { redirect } from "next/navigation";
++
++import { SalaView } from "@/app/(dashboard)/sala/sala-view";
++import { getActiveMembership, getActiveSalon } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++
++export const metadata: Metadata = {
++  title: "Sala",
++};
++
++/**
++ * `page.tsx` de `/sala` (Task 7): resuelve `salonId` y `role` en servidor —
++ * mismo patrón que `mostrador/page.tsx` (comprobar sesión, resolver salón
++ * activo, delegar el resto a la vista cliente). `role` se pasa a `SalaView`
++ * para decidir si se muestra el modo edición del plano (solo owner/manager,
++ * vía `canManageSettings` — Task 7 la comprueba en cliente para la UI Y el
++ * servidor la vuelve a comprobar en `saveTablePosition`/`createZone`/
++ * `createTable`, `sala/actions.ts`, Task 5: la UI oculta, el servidor rechaza).
++ */
++export default async function SalaPage(): Promise<React.ReactElement> {
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  if (user === null) {
++    redirect("/login");
++  }
++
++  const salon = await getActiveSalon();
++
++  if (salon === null) {
++    return (
++      <main className="container py-10">
++        <h1 className="text-3xl font-bold tracking-tight">Sala</h1>
++        <p className="mt-2 text-muted-foreground">
++          Tu usuario no está asociado a ningún salón todavía.
++        </p>
++      </main>
++    );
++  }
++
++  const membership = await getActiveMembership();
++
++  return <SalaView salonId={salon.id} role={membership?.role ?? null} />;
++}
+diff --git a/src/app/(dashboard)/sala/sala-view.tsx b/src/app/(dashboard)/sala/sala-view.tsx
+new file mode 100644
+index 0000000..7c23312
+--- /dev/null
++++ b/src/app/(dashboard)/sala/sala-view.tsx
+@@ -0,0 +1,363 @@
++"use client";
++
++import { useEffect, useMemo, useState } from "react";
++import { useRouter } from "next/navigation";
++import { AlertCircle, Loader2, WifiOff } from "lucide-react";
++
++import { FloorEditor } from "@/app/(dashboard)/sala/floor-editor";
++import { TableNode } from "@/app/(dashboard)/sala/table-node";
++import { TablePanel } from "@/app/(dashboard)/sala/table-panel";
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import { useMenuProducts } from "@/hooks/use-menu";
++import {
++  useOpenTable,
++  useSaveTablePosition,
++  useTableOrders,
++  useTables,
++  useTablesRealtime,
++  useZones,
++} from "@/hooks/use-tables";
++import { useSalePaymentMethods } from "@/hooks/use-tpv";
++import { canManageSettings } from "@/lib/salon";
++import { tableTone } from "@/lib/restauracion/tables";
++import type { DiningTable, MemberRole } from "@/types/database";
++
++interface SalaViewProps {
++  salonId: string;
++  /** `null` si el usuario no tiene una pertenencia resuelta (no debería
++   * ocurrir tras `SectorGate`, pero se trata como "sin permiso de gestión"). */
++  role: MemberRole | null;
++}
++
++/**
++ * Indicador "En directo" del estado de `useTablesRealtime` — mismo patrón
++ * visual que `LiveIndicator` de `cocina-view.tsx` (punto pulsante en
++ * verde/conectado, icono de sin-conexión en error, spinner conectando),
++ * adaptado al copy de sala.
++ */
++function LiveIndicator({
++  status,
++}: {
++  status: "connecting" | "connected" | "error";
++}): React.ReactElement {
++  const base =
++    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-150 ease-apple-out";
++
++  if (status === "connected") {
++    return (
++      <span
++        className={`${base} border-success/25 bg-success/10 text-success`}
++        title="Los cambios se reflejan al instante"
++      >
++        <span className="relative flex h-1.5 w-1.5">
++          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/70" />
++          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
++        </span>
++        En directo
++      </span>
++    );
++  }
++  if (status === "error") {
++    return (
++      <span className={`${base} border-destructive/25 bg-destructive/10 text-destructive`}>
++        <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
++        Sin conexión en tiempo real
++      </span>
++    );
++  }
++  return (
++    <span className={`${base} border-border bg-muted text-muted-foreground`}>
++      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++      Conectando…
++    </span>
++  );
++}
++
++/** Diálogo "Abrir mesa": pide el número de comensales antes de crear la cuenta. */
++function OpenTableDialog({
++  table,
++  pending,
++  error,
++  onClose,
++  onConfirm,
++}: {
++  table: DiningTable | null;
++  pending: boolean;
++  error: string | null;
++  onClose: () => void;
++  onConfirm: (covers: number) => void;
++}): React.ReactElement {
++  const [covers, setCovers] = useState(2);
++
++  // Reinicia el número de comensales cada vez que se abre para OTRA mesa.
++  useEffect(() => {
++    setCovers(2);
++  }, [table?.id]);
++
++  return (
++    <Dialog
++      open={table !== null}
++      onOpenChange={(open) => {
++        if (!open) onClose();
++      }}
++    >
++      <DialogContent>
++        <DialogHeader>
++          <DialogTitle>Abrir {table?.name}</DialogTitle>
++          <DialogDescription>Indica cuántos comensales van a sentarse.</DialogDescription>
++        </DialogHeader>
++        <div className="space-y-2">
++          <Label htmlFor="sala-open-covers">Comensales</Label>
++          <Input
++            id="sala-open-covers"
++            type="number"
++            inputMode="numeric"
++            min={1}
++            max={99}
++            value={covers}
++            onChange={(e) => setCovers(Number(e.target.value))}
++          />
++        </div>
++        {error !== null ? (
++          <p role="alert" className="text-sm text-destructive">
++            {error}
++          </p>
++        ) : null}
++        <DialogFooter>
++          <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
++            Cancelar
++          </Button>
++          <Button
++            type="button"
++            onClick={() => onConfirm(covers)}
++            disabled={pending || !Number.isInteger(covers) || covers < 1}
++          >
++            {pending ? "Abriendo…" : "Abrir mesa"}
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
++
++/**
++ * Plano de sala (Task 7): lienzo con las mesas de la zona activa en tiempo
++ * real, abrir mesa (libre → diálogo de comensales → `useOpenTable`), panel de
++ * mesa (ocupada/cuenta_pedida/por_limpiar → `TablePanel`, Task 6) y modo
++ * edición (solo `canManageSettings(role)`: arrastrar mesas + alta de
++ * zona/mesa vía `FloorEditor`).
++ *
++ * Cronómetro `now` — mismo patrón que `CocinaView`: `useState(() => new
++ * Date())` + `setInterval(30s)`, NUNCA `Date.now()` fuera de este efecto;
++ * se pasa a `TablePanel` para su propio cronómetro de tiempo sentados.
++ *
++ * Dos cableados cross-task heredados de la Task 6 (ver brief de Task 7):
++ * `productNames` (mapa `product_id → nombre`, resuelto aquí con
++ * `useMenuProducts` — mismo hook que usa el mostrador) y `paymentMethods`
++ * (`useSalePaymentMethods`, también compartido con el mostrador), ambos
++ * reenviados a `TablePanel`.
++ */
++export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
++  const router = useRouter();
++  const canEdit = canManageSettings(role);
++
++  const realtimeStatus = useTablesRealtime(salonId);
++  const zonesQuery = useZones(salonId);
++  const tablesQuery = useTables(salonId);
++  const ordersQuery = useTableOrders(salonId);
++  const productsQuery = useMenuProducts(salonId);
++  const paymentMethodsQuery = useSalePaymentMethods(salonId);
++
++  const openTableMutation = useOpenTable(salonId);
++  const savePosition = useSaveTablePosition(salonId);
++
++  const [now, setNow] = useState(() => new Date());
++  useEffect(() => {
++    const id = setInterval(() => setNow(new Date()), 30000);
++    return () => clearInterval(id);
++  }, []);
++
++  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
++  const [editMode, setEditMode] = useState(false);
++  const [openDialogTable, setOpenDialogTable] = useState<DiningTable | null>(null);
++  const [openError, setOpenError] = useState<string | null>(null);
++  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
++  const [dragError, setDragError] = useState<string | null>(null);
++
++  const zones = zonesQuery.data ?? [];
++  const tables = tablesQuery.data ?? [];
++  const orders = ordersQuery.data ?? [];
++
++  const ordersByTable = useMemo(() => {
++    const map = new Map<string, (typeof orders)[number]>();
++    for (const order of orders) {
++      if (order.dining_table_id !== null) map.set(order.dining_table_id, order);
++    }
++    return map;
++  }, [orders]);
++
++  const productNames = useMemo(() => {
++    const map: Record<string, string> = {};
++    for (const product of productsQuery.data ?? []) map[product.id] = product.name;
++    return map;
++  }, [productsQuery.data]);
++
++  const currentZoneId = activeZoneId ?? zones[0]?.id ?? null;
++  const visibleTables = tables.filter((t) => t.zone_id === currentZoneId);
++
++  const selectedTable = tables.find((t) => t.id === selectedTableId) ?? null;
++  const selectedOrder = selectedTable !== null ? ordersByTable.get(selectedTable.id) ?? null : null;
++
++  function toggleEditMode(): void {
++    setEditMode((prev) => !prev);
++  }
++
++  function handleTableSelect(table: DiningTable): void {
++    if (editMode) return;
++    if (table.status === "libre") {
++      setOpenError(null);
++      setOpenDialogTable(table);
++      return;
++    }
++    setSelectedTableId(table.id);
++  }
++
++  function handleConfirmOpen(covers: number): void {
++    if (openDialogTable === null) return;
++    setOpenError(null);
++    openTableMutation.mutate(
++      { tableId: openDialogTable.id, covers },
++      {
++        onSuccess: () => {
++          setSelectedTableId(openDialogTable.id);
++          setOpenDialogTable(null);
++        },
++        onError: (e) => setOpenError(e instanceof Error ? e.message : "No se pudo abrir la mesa"),
++      },
++    );
++  }
++
++  function handleDragEnd(table: DiningTable, pos: { posX: number; posY: number }): void {
++    setDragError(null);
++    savePosition.mutate(
++      { tableId: table.id, posX: pos.posX, posY: pos.posY },
++      {
++        onError: (e) => setDragError(e instanceof Error ? e.message : "No se pudo mover la mesa"),
++      },
++    );
++  }
++
++  return (
++    <main className="container py-6 lg:py-8">
++      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
++        <div className="space-y-1">
++          <h1 className="text-3xl font-bold tracking-tight">Sala</h1>
++          <p className="text-sm text-muted-foreground">
++            Plano de mesas: toca una mesa libre para abrirla o una ocupada para ver su cuenta.
++          </p>
++        </div>
++        <LiveIndicator status={realtimeStatus} />
++      </div>
++
++      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
++        <div className="flex flex-wrap gap-2">
++          {zones.map((zone) => (
++            <Button
++              key={zone.id}
++              type="button"
++              size="sm"
++              variant={zone.id === currentZoneId ? "default" : "outline"}
++              onClick={() => setActiveZoneId(zone.id)}
++            >
++              {zone.name}
++            </Button>
++          ))}
++        </div>
++
++        {canEdit ? (
++          <FloorEditor
++            salonId={salonId}
++            zones={zones}
++            activeZoneId={currentZoneId}
++            editMode={editMode}
++            onToggleEditMode={toggleEditMode}
++          />
++        ) : null}
++      </div>
++
++      {dragError !== null ? (
++        <p
++          role="alert"
++          className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++        >
++          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
++          {dragError}
++        </p>
++      ) : null}
++
++      <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
++        <div className="relative min-h-[34rem] w-full overflow-hidden rounded-2xl border border-dashed border-border bg-muted/20">
++          {tablesQuery.isPending || zonesQuery.isPending ? (
++            <p className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
++              Cargando plano…
++            </p>
++          ) : zones.length === 0 ? (
++            <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
++              Todavía no hay zonas en el plano.
++              {canEdit ? " Crea una desde el modo edición." : ""}
++            </p>
++          ) : visibleTables.length === 0 ? (
++            <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
++              No hay mesas en esta zona.
++              {canEdit ? " Crea una desde el modo edición." : ""}
++            </p>
++          ) : (
++            visibleTables.map((table) => (
++              <TableNode
++                key={table.id}
++                table={table}
++                tone={tableTone(table.status)}
++                editable={editMode}
++                onSelect={() => handleTableSelect(table)}
++                onDragEnd={editMode ? (pos) => handleDragEnd(table, pos) : undefined}
++              />
++            ))
++          )}
++        </div>
++
++        {selectedTable !== null ? (
++          <TablePanel
++            table={selectedTable}
++            order={selectedOrder}
++            salonId={salonId}
++            now={now}
++            productNames={productNames}
++            paymentMethods={paymentMethodsQuery.data ?? []}
++            onClose={() => setSelectedTableId(null)}
++            onAdd={() => {
++              if (selectedOrder !== null) router.push(`/mostrador?order=${selectedOrder.id}`);
++            }}
++          />
++        ) : null}
++      </div>
++
++      <OpenTableDialog
++        table={openDialogTable}
++        pending={openTableMutation.isPending}
++        error={openError}
++        onClose={() => setOpenDialogTable(null)}
++        onConfirm={handleConfirmOpen}
++      />
++    </main>
++  );
++}
+diff --git a/src/app/(dashboard)/sala/table-node.tsx b/src/app/(dashboard)/sala/table-node.tsx
+new file mode 100644
+index 0000000..5d83906
+--- /dev/null
++++ b/src/app/(dashboard)/sala/table-node.tsx
+@@ -0,0 +1,149 @@
++"use client";
++
++import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
++
++import { clampPosition } from "@/lib/restauracion/tables";
++import { cn } from "@/lib/utils";
++import type { DiningTable } from "@/types/database";
++
++export type TableTone = "free" | "busy" | "bill" | "cleaning";
++
++const TONE_CLASSES: Record<TableTone, string> = {
++  free: "border-success/40 bg-success/10 text-success",
++  busy: "border-primary/40 bg-primary/10 text-primary",
++  bill: "border-warning/40 bg-warning/10 text-warning",
++  cleaning: "border-muted-foreground/30 bg-muted text-muted-foreground",
++};
++
++interface TableNodeProps {
++  table: DiningTable;
++  tone: TableTone;
++  /** Modo edición del plano (Task 7): habilita el arrastre y desactiva la
++   * selección por click (en edición, tocar una mesa no debe abrir su panel). */
++  editable: boolean;
++  onSelect: () => void;
++  /** Llamado al soltar tras arrastrar, con la nueva posición en % [0,100]
++   * ya acotada (`clampPosition`). Solo se dispara en modo edición. */
++  onDragEnd?: (pos: { posX: number; posY: number }) => void;
++}
++
++/**
++ * Nodo de mesa del plano de sala (Task 7): pinta el nombre y el rango de
++ * comensales de la mesa, coloreado según `tone` (derivado de `tableTone`,
++ * `@/lib/restauracion/tables`, Task 3). Se posiciona en `%` de `pos_x`/`pos_y`
++ * dentro del lienzo `position:relative` del padre (`sala-view.tsx`) — el
++ * PROPIO nodo calcula su `left`/`top`, así el padre solo necesita listar las
++ * mesas de la zona activa.
++ *
++ * Arrastre: eventos de puntero nativos (`onPointerDown/Move/Up`, sin
++ * librería) SOLO cuando `editable`. Mientras se arrastra, la posición visual
++ * sigue al puntero en estado local (`dragPos`) calculada contra el
++ * `getBoundingClientRect()` del contenedor padre; al soltar, `onDragEnd`
++ * entrega la posición final acotada y el padre decide cuándo persistirla
++ * (`useSaveTablePosition`) — este componente NUNCA llama a la mutación
++ * directamente, mismo reparto de responsabilidades que `TablePanel`.
++ */
++export function TableNode({
++  table,
++  tone,
++  editable,
++  onSelect,
++  onDragEnd,
++}: TableNodeProps): React.ReactElement {
++  const ref = useRef<HTMLButtonElement>(null);
++  const draggingRef = useRef(false);
++  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
++
++  function handlePointerDown(event: ReactPointerEvent<HTMLButtonElement>): void {
++    if (!editable) return;
++    draggingRef.current = true;
++    // jsdom (entorno de test) no implementa la captura de puntero — se
++    // comprueba el método antes de llamarlo para no romper `table-node.test.tsx`
++    // (mismo motivo por el que `image-gallery.tsx` evita el `Select` de Radix
++    // en su filtro: `hasPointerCapture`/`setPointerCapture` no existen en jsdom).
++    if (typeof ref.current?.setPointerCapture === "function") {
++      ref.current.setPointerCapture(event.pointerId);
++    }
++  }
++
++  function handlePointerMove(event: ReactPointerEvent<HTMLButtonElement>): void {
++    if (!editable || !draggingRef.current) return;
++    const canvas = ref.current?.parentElement;
++    if (canvas === null || canvas === undefined) return;
++    const rect = canvas.getBoundingClientRect();
++    if (rect.width === 0 || rect.height === 0) return;
++    setDragPos({
++      x: clampPosition(((event.clientX - rect.left) / rect.width) * 100),
++      y: clampPosition(((event.clientY - rect.top) / rect.height) * 100),
++    });
++  }
++
++  function handlePointerUp(event: ReactPointerEvent<HTMLButtonElement>): void {
++    if (!editable || !draggingRef.current) return;
++    draggingRef.current = false;
++    if (typeof ref.current?.releasePointerCapture === "function") {
++      ref.current.releasePointerCapture(event.pointerId);
++    }
++    if (dragPos !== null) {
++      onDragEnd?.({ posX: dragPos.x, posY: dragPos.y });
++    }
++    setDragPos(null);
++  }
++
++  /**
++   * Un gesto de arrastre puede CANCELARSE sin soltar (p.ej. el navegador lo
++   * interrumpe por un gesto del sistema, o el elemento pierde el puntero) —
++   * `pointercancel` en vez de `pointerup`. Fix revisión Task 7 (Minor): sin
++   * este handler, `draggingRef` se quedaba en `true` y el nodo seguía
++   * "arrastrando" en el siguiente `pointermove`, aunque el usuario ya no
++   * tuviera el dedo/puntero sobre él. NO llama a `onDragEnd` — el gesto no
++   * terminó con normalidad, así que no hay una posición final que persistir.
++   */
++  function handlePointerCancel(event: ReactPointerEvent<HTMLButtonElement>): void {
++    if (!draggingRef.current) return;
++    draggingRef.current = false;
++    if (typeof ref.current?.releasePointerCapture === "function") {
++      try {
++        ref.current.releasePointerCapture(event.pointerId);
++      } catch {
++        // El navegador puede haber soltado la captura ANTES de disparar
++        // `pointercancel` (motivo típico de la propia cancelación) —
++        // liberar una captura ya perdida no es un error real aquí.
++      }
++    }
++    setDragPos(null);
++  }
++
++  function handleClick(): void {
++    if (editable) return;
++    onSelect();
++  }
++
++  const posX = dragPos?.x ?? table.pos_x;
++  const posY = dragPos?.y ?? table.pos_y;
++
++  return (
++    <button
++      ref={ref}
++      type="button"
++      data-tone={tone}
++      aria-label={table.name}
++      className={cn(
++        "absolute flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 touch-none flex-col items-center justify-center gap-0.5 rounded-2xl border-2 text-sm font-semibold shadow-sm transition-colors duration-150 ease-apple-out",
++        editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
++        TONE_CLASSES[tone],
++      )}
++      style={{ left: `${posX}%`, top: `${posY}%` }}
++      onClick={handleClick}
++      onPointerDown={handlePointerDown}
++      onPointerMove={handlePointerMove}
++      onPointerUp={handlePointerUp}
++      onPointerCancel={handlePointerCancel}
++    >
++      <span className="max-w-[4.25rem] truncate px-1">{table.name}</span>
++      <span className="text-xs font-normal opacity-80">
++        {table.capacity_min}-{table.capacity_max}
++      </span>
++    </button>
++  );
++}
+diff --git a/src/app/(dashboard)/sala/table-panel.tsx b/src/app/(dashboard)/sala/table-panel.tsx
+new file mode 100644
+index 0000000..8141a15
+--- /dev/null
++++ b/src/app/(dashboard)/sala/table-panel.tsx
+@@ -0,0 +1,325 @@
++"use client";
++
++import { useState } from "react";
++import { AlertCircle, Clock, CreditCard, Plus, Receipt, Sparkles, UtensilsCrossed, X } from "lucide-react";
++
++import { PaymentSheet } from "@/app/(dashboard)/mostrador/payment-sheet";
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import { Card, CardContent } from "@/components/ui/card";
++import { useOrderItems, useSettleOrder } from "@/hooks/use-orders";
++import { useSetTableStatus } from "@/hooks/use-tables";
++import { formatMoney } from "@/lib/format";
++import { elapsedMinutes } from "@/lib/restauracion/kds";
++import { settleTotals, type SettleLineInput } from "@/lib/restauracion/order";
++import { canTransition } from "@/lib/restauracion/tables";
++import type { SettleTenderInput } from "@/lib/validations/order";
++import type { DiningTable, Order, PosPaymentMethodRow, TableStatus } from "@/types/database";
++
++const STATUS_LABELS: Record<TableStatus, string> = {
++  libre: "Libre",
++  ocupada: "Ocupada",
++  cuenta_pedida: "Cuenta pedida",
++  por_limpiar: "Por limpiar",
++};
++
++/**
++ * Etiqueta de línea de comanda: `useOrderItems` (`@/hooks/use-orders`) lee
++ * `order_items` en crudo (solo `product_id`, sin el nombre resuelto que sí
++ * lleva `OrderPanelItem` en el mostrador — ahí el nombre se conoce en
++ * cliente porque la línea nace de la carta ya cargada). Sin un join al
++ * catálogo, se usa el mismo fallback que ya adopta el KDS cuando no puede
++ * resolver el nombre (`fetchKdsItems`, `@/lib/queries/kds.ts`:
++ * `row.products?.name ?? "Producto"`).
++ *
++ * Task 7 (cableado cross-task #1): el padre (`sala-view.tsx`) SÍ conoce el
++ * catálogo (carga `useMenuProducts`, igual que el mostrador) y puede pasar
++ * `productNames` con el nombre real; este fallback solo entra en juego si
++ * `productNames` se omite (compatibilidad con el test existente) o no
++ * contiene ese `product_id`.
++ */
++const LINE_FALLBACK_NAME = "Producto";
++
++interface TablePanelProps {
++  table: DiningTable;
++  order: Order | null;
++  salonId: string;
++  now: Date;
++  onClose: () => void;
++  onAdd: () => void;
++  /** Mapa `product_id → nombre`, para etiquetar las líneas de la comanda con
++   * el nombre real del producto (Task 7, cableado cross-task #1). OPCIONAL:
++   * si se omite (p.ej. el test existente de este componente no lo pasa),
++   * cada línea cae al mismo fallback `LINE_FALLBACK_NAME` de siempre. */
++  productNames?: Record<string, string>;
++  /** Métodos de pago del salón, reenviados a `PaymentSheet` (Task 7, cableado
++   * cross-task #2). OPCIONAL: si se omite, `PaymentSheet` recibe `[]` — mismo
++   * comportamiento que antes de este cableado. */
++  paymentMethods?: PosPaymentMethodRow[];
++}
++
++/**
++ * Panel de mesa (Task 6): al tocar una mesa ocupada, muestra su comanda, el
++ * tiempo sentados, el total, los comensales y las acciones — reusa
++ * `useOrderItems`/`useSettleOrder` (comanda + cobro) y `useSetTableStatus`
++ * (Task 5, transición de estado) en vez de reimplementar nada. Sigue el
++ * patrón visual de `mostrador/order-panel.tsx`: el propio panel orquesta las
++ * mutaciones, el padre (`sala-view.tsx`, tarea futura) solo pasa `table`/
++ * `order` y reacciona a `onClose`/`onAdd`.
++ */
++export function TablePanel({
++  table,
++  order,
++  salonId,
++  now,
++  onClose,
++  onAdd,
++  productNames,
++  paymentMethods,
++}: TablePanelProps): React.ReactElement {
++  const [paying, setPaying] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  const { data: rawItems } = useOrderItems(salonId, order?.id ?? null);
++  const setTableStatus = useSetTableStatus(salonId);
++  const settleOrder = useSettleOrder(salonId);
++
++  // Líneas activas: excluye tanto la fila de auditoría de una anulación
++  // (`void_of_item_id !== null`) como el original ya marcado `anulado` — el
++  // MISMO criterio que `settleOrder` aplica en servidor
++  // (`mostrador/actions.ts`, §"Líneas a cobrar: NO anuladas") para que el
++  // total mostrado aquí cuadre con lo que de verdad se cobraría.
++  const activeItems = (rawItems ?? []).filter(
++    (it) => it.void_of_item_id === null && it.status !== "anulado",
++  );
++  const lines: SettleLineInput[] = activeItems.map((it) => ({
++    description: LINE_FALLBACK_NAME,
++    qty: it.qty,
++    unitPriceCents: it.unit_price_cents,
++    vatRate: it.vat_rate,
++  }));
++  const totals = settleTotals(lines);
++
++  const minutes = order !== null ? elapsedMinutes(order.created_at, now) : null;
++  const busy = setTableStatus.isPending || settleOrder.isPending;
++
++  function changeStatus(to: TableStatus): void {
++    setError(null);
++    setTableStatus.mutate(
++      { tableId: table.id, from: table.status, to },
++      { onError: (e) => setError(e instanceof Error ? e.message : "No se pudo actualizar la mesa") },
++    );
++  }
++
++  function handleConfirmPayment(tenders: SettleTenderInput[]): void {
++    if (order === null) return;
++    setError(null);
++    settleOrder.mutate(
++      { orderId: order.id, tenders, sendPending: true },
++      {
++        onSuccess: () => {
++          setPaying(false);
++          // Orquestación pedida por el brief: al cobrar con éxito, la mesa
++          // pasa a `por_limpiar` (nunca directamente a `libre` — hace falta
++          // que alguien confirme que la mesa quedó recogida). Reusa
++          // `changeStatus` (con su propio `onError`) en vez de un
++          // `.mutate()` crudo: si ESTA transición falla (p.ej. conflicto de
++          // concurrencia entre terminales — 0 filas afectadas), el fallo
++          // debe surfacear igual que cualquier otro cambio de estado, no
++          // tragarse en silencio (fix revisión Task 6, Important: la mesa
++          // se quedaba atascada en `ocupada`/`cuenta_pedida` sin aviso).
++          changeStatus("por_limpiar");
++        },
++        onError: (e) => setError(e instanceof Error ? e.message : "No se pudo cobrar el pedido"),
++      },
++    );
++  }
++
++  return (
++    <Card className="flex flex-col overflow-hidden lg:sticky lg:top-6 lg:h-fit lg:max-h-[calc(100vh-3rem)]">
++      <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-muted/30 px-5 py-4">
++        <div className="flex items-center gap-2.5">
++          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
++            <UtensilsCrossed className="h-[1.15rem] w-[1.15rem]" />
++          </span>
++          <div className="leading-tight">
++            <p className="text-sm font-semibold text-foreground">{table.name}</p>
++            <p className="text-xs text-muted-foreground">{STATUS_LABELS[table.status]}</p>
++          </div>
++        </div>
++        <div className="flex items-center gap-2">
++          {order !== null ? (
++            <Badge variant="secondary" className="tabular-nums">
++              {order.covers ?? "—"} comensales
++            </Badge>
++          ) : null}
++          <Button variant="ghost" size="icon" aria-label="Cerrar panel de mesa" onClick={onClose}>
++            <X className="h-4 w-4" />
++          </Button>
++        </div>
++      </div>
++
++      {order === null ? (
++        <CardContent className="flex flex-1 flex-col items-center justify-center gap-3 p-10 text-center">
++          <p className="max-w-[16rem] text-sm text-muted-foreground">
++            Esta mesa no tiene una cuenta abierta.
++          </p>
++
++          {error !== null ? (
++            <p
++              role="alert"
++              className="flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++            >
++              <AlertCircle className="h-4 w-4 shrink-0" />
++              {error}
++            </p>
++          ) : null}
++
++          {/* Ruta de recuperación/limpieza (fix revisión Task 6, Important):
++              tras cobrar, `order` pasa a `null` (deja de estar `abierta`) pero
++              la mesa queda en `por_limpiar` — sin esto, "Limpiar" era
++              inalcanzable justo cuando más se necesita. `canTransition`
++              (`@/lib/restauracion/tables`, Task 3) decide qué botón aplica en
++              vez de listar los estados a mano aquí. Si `table.status ===
++              "libre"` ninguna de las dos condiciones aplica y no se muestra
++              ningún botón. */}
++          {canTransition(table.status, "libre") ? (
++            <Button
++              className="h-12 rounded-xl text-sm font-semibold"
++              disabled={busy}
++              onClick={() => changeStatus("libre")}
++            >
++              <Sparkles className="mr-2 h-4 w-4" />
++              Limpiar
++            </Button>
++          ) : null}
++          {canTransition(table.status, "por_limpiar") ? (
++            <Button
++              variant="outline"
++              className="h-12 rounded-xl text-sm font-semibold"
++              disabled={busy}
++              onClick={() => changeStatus("por_limpiar")}
++            >
++              <Sparkles className="mr-2 h-4 w-4" />
++              Marcar para limpiar
++            </Button>
++          ) : null}
++        </CardContent>
++      ) : (
++        <>
++          {minutes !== null ? (
++            <div className="flex items-center gap-1.5 border-b border-border/70 px-5 py-2.5 text-xs text-muted-foreground">
++              <Clock className="h-3.5 w-3.5" />
++              Hace {minutes} min
++            </div>
++          ) : null}
++
++          <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
++            {activeItems.length === 0 ? (
++              <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card/40 px-4 py-8 text-center">
++                <p className="max-w-[16rem] text-sm text-muted-foreground">
++                  Todavía no hay líneas en la comanda.
++                </p>
++              </div>
++            ) : (
++              <ul className="flex flex-col gap-2">
++                {activeItems.map((item) => (
++                  <li
++                    key={item.id}
++                    className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card p-3 text-sm shadow-xs"
++                  >
++                    <span className="min-w-0 flex-1">
++                      <span className="font-medium tabular-nums text-foreground">{item.qty}×</span>{" "}
++                      <span className="text-foreground">
++                        {productNames?.[item.product_id] ?? LINE_FALLBACK_NAME}
++                      </span>
++                    </span>
++                    <span className="shrink-0 font-semibold tabular-nums text-foreground">
++                      {formatMoney(item.unit_price_cents * item.qty)}
++                    </span>
++                  </li>
++                ))}
++              </ul>
++            )}
++          </CardContent>
++
++          <div className="border-t border-border/70 bg-muted/30 p-5">
++            <div className="flex items-baseline justify-between">
++              <span className="text-base font-semibold">Total</span>
++              <span className="text-2xl font-bold tabular-nums tracking-tight">
++                {formatMoney(totals.totalCents)}
++              </span>
++            </div>
++
++            {error !== null ? (
++              <p
++                role="alert"
++                className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++              >
++                <AlertCircle className="h-4 w-4 shrink-0" />
++                {error}
++              </p>
++            ) : null}
++
++            <div className="mt-4 flex flex-wrap gap-2.5">
++              <Button
++                variant="outline"
++                className="h-12 flex-1 rounded-xl text-sm font-semibold"
++                onClick={onAdd}
++              >
++                <Plus className="mr-2 h-4 w-4" />
++                Añadir
++              </Button>
++              {table.status === "ocupada" ? (
++                <Button
++                  variant="outline"
++                  className="h-12 flex-1 rounded-xl text-sm font-semibold"
++                  disabled={busy}
++                  onClick={() => changeStatus("cuenta_pedida")}
++                >
++                  <Receipt className="mr-2 h-4 w-4" />
++                  Pedir cuenta
++                </Button>
++              ) : null}
++              {table.status !== "por_limpiar" ? (
++                <Button
++                  className="h-12 flex-1 rounded-xl text-sm font-semibold"
++                  disabled={busy || activeItems.length === 0}
++                  onClick={() => setPaying(true)}
++                >
++                  <CreditCard className="mr-2 h-4 w-4" />
++                  Cobrar
++                </Button>
++              ) : null}
++              {table.status === "por_limpiar" ? (
++                <Button
++                  className="h-12 flex-1 rounded-xl text-sm font-semibold"
++                  disabled={busy}
++                  onClick={() => changeStatus("libre")}
++                >
++                  <Sparkles className="mr-2 h-4 w-4" />
++                  Limpiar
++                </Button>
++              ) : null}
++            </div>
++          </div>
++
++          {paying ? (
++            <PaymentSheet
++              open={paying}
++              onOpenChange={(open) => {
++                setPaying(open);
++                if (!open) settleOrder.reset();
++              }}
++              totalCents={totals.totalCents}
++              paymentMethods={paymentMethods ?? []}
++              pending={settleOrder.isPending}
++              error={error}
++              onConfirm={handleConfirmPayment}
++            />
++          ) : null}
++        </>
++      )}
++    </Card>
++  );
++}
+diff --git a/src/components/dashboard-nav-items.ts b/src/components/dashboard-nav-items.ts
+index 09ba4e3..fb99041 100644
+--- a/src/components/dashboard-nav-items.ts
++++ b/src/components/dashboard-nav-items.ts
+@@ -10,12 +10,13 @@
+  * que ya ocultan los KPIs y gráficas de ingresos sin `pos`). La analítica de gestión
+  * (citas, clientes, ocupación) NO depende de `pos` y permanece visible. Es gating de
+  * PRESENTACIÓN: el gate de datos vive en el servidor de cada dominio.
+  */
+ import {
+   Activity,
++  Armchair,
+   BarChart3,
+   BellRing,
+   CalendarClock,
+   CalendarDays,
+   ChefHat,
+   ClipboardList,
+@@ -179,12 +180,25 @@ export const MOSTRADOR_ITEM: NavItem = {
+ export const COCINA_ITEM: NavItem = {
+   href: "/cocina",
+   label: "Cocina",
+   icon: ChefHat,
+ };
+ 
++/**
++ * Sala (plano de mesas: comensales, comanda, cobro). Solo visible para el
++ * sector restauración, y para TODOS los miembros (incluido staff): igual que
++ * Mostrador y Cocina, es operativa de venta del día a día, no gestión. En
++ * restauración se vende en Mostrador/Sala, por lo que "Caja" (`/tpv`) se
++ * retira del menú para este sector.
++ */
++export const SALA_ITEM: NavItem = {
++  href: "/sala",
++  label: "Sala",
++  icon: Armchair,
++};
++
+ /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
+ export interface NavGating {
+   /** El usuario puede ver materia de gestión (owner/manager). */
+   showSettings: boolean;
+   /** El salón tiene el add-on `pos` (TPV) contratado y activo. */
+   hasPos: boolean;
+@@ -208,18 +222,24 @@ export interface NavGating {
+  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
+  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
+  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
+  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
+  * (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
+  * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
+- * staff incluido) — es operativa de venta del día a día, como la Caja. Justo
+- * detrás, Cocina (KDS: comandas por estación en tiempo real) también SIEMPRE
+- * (todos los miembros, staff incluido) — misma naturaleza operativa que
+- * Mostrador. Por último, Carta (gestión de la carta: categorías/estaciones/
+- * productos/combos) solo si `showSettings` (owner/manager); sin gestión no se
+- * añade (staff no ve Carta, pero sí Mostrador y Cocina).
++ * staff incluido) — es operativa de venta del día a día, como la Caja lo es
++ * para el resto de sectores. Justo detrás, Sala (plano de mesas: comensales,
++ * comanda, cobro) también SIEMPRE (todos los miembros, staff incluido) —
++ * misma naturaleza operativa que Mostrador. Justo detrás, Cocina (KDS:
++ * comandas por estación en tiempo real) también SIEMPRE (todos los miembros,
++ * staff incluido) — misma naturaleza operativa que Mostrador y Sala. Por
++ * último, Carta (gestión de la carta: categorías/estaciones/productos/combos)
++ * solo si `showSettings` (owner/manager); sin gestión no se añade (staff no
++ * ve Carta, pero sí Mostrador, Sala y Cocina). En restauración se vende en
++ * Mostrador/Sala, así que "Caja" (`/tpv`, pantalla de vender) se RETIRA del
++ * menú para este sector; "Arqueo" (`/arqueo`, abrir/cerrar turno + cierre Z)
++ * se mantiene, solo para owner/manager, igual que en el resto de sectores.
+  */
+ export function buildDashboardNavItems({
+   showSettings,
+   hasPos,
+   sector = "peluqueria",
+ }: NavGating): NavItem[] {
+@@ -269,18 +289,20 @@ export function buildDashboardNavItems({
+       EXPEDIENTE_ITEM,
+       ...withSectorLabels.slice(insertAt),
+     ];
+   }
+ 
+   if (sector === "restauracion") {
+-    // "Mostrador" y "Cocina" son operativa de venta: SIEMPRE (todos los miembros,
+-    // staff incluido). "Carta" es gestión (owner/manager): solo si showSettings.
+-    const base = withSectorLabels.slice(0, 1);
+-    const rest = withSectorLabels.slice(1);
++    // Se vende en Mostrador/Sala → "Caja" (/tpv, pantalla de vender) se retira del menú.
++    // "Arqueo" (/arqueo) se mantiene: abrir/cerrar turno + cierre Z, donde caen los cobros.
++    // "Mostrador", "Sala" y "Cocina" son operativa de venta: SIEMPRE (todos los
++    // miembros, staff incluido). "Carta" es gestión (owner/manager): solo si showSettings.
++    const base = withSectorLabels.slice(0, 1); // Panel
++    const rest = withSectorLabels.slice(1).filter((item) => item.href !== "/tpv");
+     const extras = showSettings
+-      ? [MOSTRADOR_ITEM, COCINA_ITEM, CARTA_ITEM]
+-      : [MOSTRADOR_ITEM, COCINA_ITEM];
++      ? [MOSTRADOR_ITEM, SALA_ITEM, COCINA_ITEM, CARTA_ITEM]
++      : [MOSTRADOR_ITEM, SALA_ITEM, COCINA_ITEM];
+     return [...base, ...extras, ...rest];
+   }
+ 
+   return withSectorLabels;
+ }
+diff --git a/src/hooks/use-tables.ts b/src/hooks/use-tables.ts
+new file mode 100644
+index 0000000..f84b14c
+--- /dev/null
++++ b/src/hooks/use-tables.ts
+@@ -0,0 +1,244 @@
++"use client";
++
++import { useEffect, useRef, useState } from "react";
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++
++import {
++  createTable,
++  createZone,
++  deleteTable,
++  deleteZone,
++  openTable,
++  saveTablePosition,
++  setTableStatus,
++  updateTable,
++  updateZone,
++} from "@/app/(dashboard)/sala/actions";
++import { createClient } from "@/lib/supabase/client";
++import { fetchTableOrders, fetchTables, fetchZones, tableKeys } from "@/lib/queries/tables";
++import type {
++  OpenTableInput,
++  SaveTablePositionInput,
++  SetTableStatusInput,
++  TableInput,
++  ZoneInput,
++} from "@/lib/validations/table";
++import type { DiningTable, DiningZone, Order } from "@/types/database";
++
++export function useZones(salonId: string) {
++  return useQuery({ queryKey: tableKeys.zones(salonId), queryFn: () => fetchZones(salonId) });
++}
++
++export function useTables(salonId: string) {
++  return useQuery({ queryKey: tableKeys.tables(salonId), queryFn: () => fetchTables(salonId) });
++}
++
++export function useTableOrders(salonId: string) {
++  return useQuery({
++    queryKey: tableKeys.openOrders(salonId),
++    queryFn: () => fetchTableOrders(salonId),
++  });
++}
++
++type RealtimeStatus = "connecting" | "connected" | "error";
++
++/**
++ * Suscripción Supabase Realtime al plano de sala: cambios en `dining_tables`
++ * (estado/posición de mesas) y en `orders` (apertura/cobro de cuenta ligada
++ * a una mesa) para un salón. Cualquier cambio invalida la cache de TanStack
++ * Query, lo que dispara un re-fetch automático del plano.
++ *
++ * Devuelve el estado de la conexión para que la UI pueda mostrarlo.
++ */
++export function useTablesRealtime(salonId: string): RealtimeStatus {
++  const queryClient = useQueryClient();
++  const [status, setStatus] = useState<RealtimeStatus>("connecting");
++  // Ref para evitar que la limpieza de efectos doble-invoke en StrictMode
++  // suscriba dos canales.
++  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
++
++  useEffect(() => {
++    if (!salonId) return;
++
++    const supabase = createClient();
++
++    // Nombre único de canal para evitar colisiones si hay varios montajes.
++    const channelName = `sala-${salonId}`;
++
++    const invalidate = () => {
++      void queryClient.invalidateQueries({ queryKey: tableKeys.all(salonId) });
++    };
++
++    const channel = supabase
++      .channel(channelName)
++      .on(
++        "postgres_changes",
++        {
++          event: "*",
++          schema: "public",
++          table: "dining_tables",
++          filter: `salon_id=eq.${salonId}`,
++        },
++        invalidate,
++      )
++      .on(
++        "postgres_changes",
++        {
++          event: "*",
++          schema: "public",
++          table: "orders",
++          filter: `salon_id=eq.${salonId}`,
++        },
++        invalidate,
++      )
++      .subscribe((s) => {
++        if (s === "SUBSCRIBED") setStatus("connected");
++        else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") setStatus("error");
++      });
++
++    channelRef.current = channel;
++
++    return () => {
++      void supabase.removeChannel(channel);
++      channelRef.current = null;
++    };
++  }, [salonId, queryClient]);
++
++  return status;
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Mutaciones (Task 5): cada una desempaqueta el `ActionResult` de la server
++// action (lanza si `ok:false`, TanStack Query lo expone como `error`) e
++// invalida TODO `tableKeys.all(salonId)` al terminar — más simple que
++// invalidar cada sub-key por separado y, a diferencia de `use-orders.ts`, aquí
++// no hay un detalle por id que sobreviva a una mutación (zonas/mesas se leen
++// siempre como listado completo). El plano también se refresca solo vía
++// `useTablesRealtime` cuando el cambio lo dispara OTRO cliente; esta
++// invalidación cubre el caso del propio autor de la mutación.
++// ─────────────────────────────────────────────────────────────────────────────
++
++function useInvalidateTables(salonId: string) {
++  const queryClient = useQueryClient();
++  return () => queryClient.invalidateQueries({ queryKey: tableKeys.all(salonId) });
++}
++
++/** Abre una mesa libre y crea su cuenta ({@link openTable}, operativa). */
++export function useOpenTable(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: OpenTableInput): Promise<Order> => {
++      const result = await openTable(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++/** Transiciona el estado de una mesa ({@link setTableStatus}, operativa). */
++export function useSetTableStatus(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: SetTableStatusInput): Promise<DiningTable> => {
++      const result = await setTableStatus(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++/** Guarda la posición de una mesa en el plano ({@link saveTablePosition}, gestión). */
++export function useSaveTablePosition(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: SaveTablePositionInput): Promise<DiningTable> => {
++      const result = await saveTablePosition(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Zonas — mismo patrón `{ id, input }` para editar que `use-menu.ts`
++// (useUpdateCategory/useUpdateStation).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export function useCreateZone(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: ZoneInput): Promise<DiningZone> => {
++      const result = await createZone(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useUpdateZone(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async ({ id, input }: { id: string; input: ZoneInput }): Promise<DiningZone> => {
++      const result = await updateZone(id, input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useDeleteZone(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (id: string): Promise<null> => {
++      const result = await deleteZone(id);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Mesas
++// ─────────────────────────────────────────────────────────────────────────────
++
++export function useCreateTable(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: TableInput): Promise<DiningTable> => {
++      const result = await createTable(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useUpdateTable(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async ({ id, input }: { id: string; input: TableInput }): Promise<DiningTable> => {
++      const result = await updateTable(id, input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useDeleteTable(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (id: string): Promise<null> => {
++      const result = await deleteTable(id);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
+diff --git a/src/lib/queries/tables.ts b/src/lib/queries/tables.ts
+new file mode 100644
+index 0000000..efca7d2
+--- /dev/null
++++ b/src/lib/queries/tables.ts
+@@ -0,0 +1,40 @@
++import { createClient } from "@/lib/supabase/client";
++import type { DiningTable, DiningZone, Order } from "@/types/database";
++
++export const tableKeys = {
++  all: (salonId: string) => ["tables", salonId] as const,
++  zones: (salonId: string) => [...tableKeys.all(salonId), "zones"] as const,
++  tables: (salonId: string) => [...tableKeys.all(salonId), "tables"] as const,
++  openOrders: (salonId: string) => [...tableKeys.all(salonId), "openOrders"] as const,
++};
++
++export async function fetchZones(salonId: string): Promise<DiningZone[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_zones").select("*")
++    .eq("salon_id", salonId).eq("active", true)
++    .order("sort_order", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++export async function fetchTables(salonId: string): Promise<DiningTable[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_tables").select("*")
++    .eq("salon_id", salonId).eq("active", true)
++    .order("sort_order", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++export async function fetchTableOrders(salonId: string): Promise<Order[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("orders").select("*")
++    .eq("salon_id", salonId).eq("status", "abierta")
++    .not("dining_table_id", "is", null)
++    .order("created_at", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
+diff --git a/src/lib/restauracion/tables.ts b/src/lib/restauracion/tables.ts
+new file mode 100644
+index 0000000..9453874
+--- /dev/null
++++ b/src/lib/restauracion/tables.ts
+@@ -0,0 +1,29 @@
++export type TableStatusValue = "libre" | "ocupada" | "cuenta_pedida" | "por_limpiar";
++
++const TRANSITIONS: Record<TableStatusValue, readonly TableStatusValue[]> = {
++  libre: ["ocupada"],
++  ocupada: ["cuenta_pedida", "por_limpiar"],
++  cuenta_pedida: ["por_limpiar"],
++  por_limpiar: ["libre"],
++};
++
++export function canTransition(from: TableStatusValue, to: TableStatusValue): boolean {
++  return TRANSITIONS[from].includes(to);
++}
++
++export function validCapacity(min: number, max: number): boolean {
++  return Number.isInteger(min) && Number.isInteger(max) && min >= 1 && max >= min;
++}
++
++export function clampPosition(v: number): number {
++  return Math.min(100, Math.max(0, v));
++}
++
++export function tableTone(status: TableStatusValue): "free" | "busy" | "bill" | "cleaning" {
++  switch (status) {
++    case "libre": return "free";
++    case "ocupada": return "busy";
++    case "cuenta_pedida": return "bill";
++    case "por_limpiar": return "cleaning";
++  }
++}
+diff --git a/src/lib/validations/table.ts b/src/lib/validations/table.ts
+new file mode 100644
+index 0000000..c77c96b
+--- /dev/null
++++ b/src/lib/validations/table.ts
+@@ -0,0 +1,75 @@
++import { z } from "zod";
++
++import { validCapacity } from "@/lib/restauracion/tables";
++
++/**
++ * Validaciones de las server actions de sala (restauración, Task 5):
++ * apertura/estado/posición de mesa (operativas) y CRUD de zonas/mesas
++ * (gestión). Espejo de `TableStatusValue` (lib/restauracion/tables.ts / enum
++ * `public.table_status`) y `TableShape` (types/database.ts / enum
++ * `public.table_shape`).
++ */
++
++export const tableStatusEnum = z.enum(["libre", "ocupada", "cuenta_pedida", "por_limpiar"]);
++export const tableShapeEnum = z.enum(["round", "square"]);
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Operativas: openTable, setTableStatus, saveTablePosition
++// ─────────────────────────────────────────────────────────────────────────────
++
++export const openTableSchema = z.object({
++  tableId: z.string().uuid(),
++  covers: z.number().int().min(1).max(99),
++});
++export type OpenTableInput = z.infer<typeof openTableSchema>;
++
++export const setTableStatusSchema = z.object({
++  tableId: z.string().uuid(),
++  from: tableStatusEnum,
++  to: tableStatusEnum,
++});
++export type SetTableStatusInput = z.infer<typeof setTableStatusSchema>;
++
++export const saveTablePositionSchema = z.object({
++  tableId: z.string().uuid(),
++  posX: z.number(),
++  posY: z.number(),
++});
++export type SaveTablePositionInput = z.infer<typeof saveTablePositionSchema>;
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Gestión: CRUD de zonas y mesas del plano de sala
++// ─────────────────────────────────────────────────────────────────────────────
++
++export const zoneSchema = z.object({
++  name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
++  sortOrder: z.number().int().min(0).default(0),
++});
++export type ZoneInput = z.infer<typeof zoneSchema>;
++
++/**
++ * `capacityMin`/`capacityMax` reutilizan `validCapacity` (lib/restauracion/tables.ts,
++ * Task 3) en vez de repetir la regla a mano — misma fuente única de verdad
++ * que ya usa la UI del plano para pintar el rango de comensales de una mesa.
++ *
++ * Defaults alineados con la columna (migración
++ * `20260810130000_restauracion_sala.sql`, fix de revisión Minor):
++ * `capacity_min integer not null default 1`, `capacity_max integer not null
++ * default 4`, `shape public.table_shape not null default 'square'` — un
++ * payload que omite estos campos debe producir la misma fila que un INSERT
++ * sin ellos directamente en SQL.
++ */
++export const tableSchema = z
++  .object({
++    name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
++    zoneId: z.string().uuid(),
++    capacityMin: z.number().int().min(1).default(1),
++    capacityMax: z.number().int().min(1).default(4),
++    shape: tableShapeEnum.default("square"),
++    sortOrder: z.number().int().min(0).default(0),
++  })
++  .refine((t) => validCapacity(t.capacityMin, t.capacityMax), {
++    message: "La capacidad máxima no puede ser menor que la mínima",
++    path: ["capacityMax"],
++  });
++export type TableInput = z.infer<typeof tableSchema>;
+diff --git a/src/tests/integration/restauracion-sala-actions.test.ts b/src/tests/integration/restauracion-sala-actions.test.ts
+new file mode 100644
+index 0000000..f7702aa
+--- /dev/null
++++ b/src/tests/integration/restauracion-sala-actions.test.ts
+@@ -0,0 +1,125 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++const holder = vi.hoisted(() => ({ supabase: null as unknown, membership: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({
++  getActiveSalonId: () => Promise.resolve("SALON"),
++  getActiveMembership: () => Promise.resolve(holder.membership),
++  canManageSettings: (r: string | null | undefined) => r === "owner" || r === "manager",
++}));
++
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++import { openTable, setTableStatus } from "@/app/(dashboard)/sala/actions";
++
++beforeEach(() => {
++  holder.membership = { salonId: "SALON", role: "staff" };
++  holder.supabase = null;
++});
++
++const TABLE_ID_1 = "11111111-1111-4111-8111-111111111111";
++
++// ─────────────────────────────────────────────────────────────────────────────
++// openTable: UPDATE-mesa-condicionado (libre→ocupada) → insert-order →
++// (si falla) revertir mesa. Ver contrato en el brief de la Task 5.
++// ─────────────────────────────────────────────────────────────────────────────
++
++describe("sala actions — openTable", () => {
++  it("rechaza si la mesa NO está libre (UPDATE condicionado afecta 0 filas), sin insertar order", async () => {
++    const onWrite = vi.fn((op: string) => (op === "update" ? { data: [] } : {}));
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await openTable({ tableId: TABLE_ID_1, covers: 2 });
++
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toContain("no está libre");
++    expect(onWrite).not.toHaveBeenCalledWith("insert", "orders", expect.anything());
++  });
++
++  it("abre la mesa y crea la cuenta cuando está libre", async () => {
++    const onWrite = vi.fn((op: string, table: string) => {
++      if (op === "update" && table === "dining_tables") {
++        return { data: [{ id: TABLE_ID_1, salon_id: "SALON", status: "ocupada", name: "Mesa 3" }] };
++      }
++      if (op === "insert" && table === "orders") {
++        return {
++          data: [
++            {
++              id: "99999999-9999-4999-8999-999999999999",
++              salon_id: "SALON",
++              channel: "mesa",
++              dining_table_id: TABLE_ID_1,
++              covers: 2,
++              label: "Mesa 3",
++              status: "abierta",
++            },
++          ],
++        };
++      }
++      return {};
++    });
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await openTable({ tableId: TABLE_ID_1, covers: 2 });
++
++    expect(r.ok).toBe(true);
++    if (r.ok) {
++      expect(r.data.status).toBe("abierta");
++      expect(r.data.dining_table_id).toBe(TABLE_ID_1);
++      expect(r.data.label).toBe("Mesa 3");
++    }
++    expect(onWrite).toHaveBeenCalledWith("update", "dining_tables", { status: "ocupada" });
++    expect(onWrite).toHaveBeenCalledWith(
++      "insert",
++      "orders",
++      expect.objectContaining({ channel: "mesa", dining_table_id: TABLE_ID_1, covers: 2, label: "Mesa 3" }),
++    );
++  });
++
++  it("revierte la mesa a libre si el insert del pedido falla (compensación manual)", async () => {
++    const onWrite = vi.fn((op: string, table: string) => {
++      if (op === "update" && table === "dining_tables") {
++        return { data: [{ id: TABLE_ID_1, salon_id: "SALON", status: "ocupada", name: "Mesa 3" }] };
++      }
++      if (op === "insert" && table === "orders") {
++        return { error: { message: "boom" } };
++      }
++      return {};
++    });
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await openTable({ tableId: TABLE_ID_1, covers: 2 });
++
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toBe("boom");
++    expect(onWrite).toHaveBeenCalledWith("update", "dining_tables", { status: "libre" });
++  });
++});
++
++// ─────────────────────────────────────────────────────────────────────────────
++// setTableStatus: canTransition ANTES de tocar BD; UPDATE condicionado por
++// status = from; 0 filas ⇒ CONFLICTO (misma seguridad de concurrencia que
++// `setOrderItemStatus`, mostrador/actions.ts).
++// ─────────────────────────────────────────────────────────────────────────────
++
++describe("sala actions — setTableStatus", () => {
++  it("da CONFLICTO cuando el UPDATE condicionado afecta 0 filas", async () => {
++    const onWrite = vi.fn(() => ({ data: [] }));
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await setTableStatus({ tableId: TABLE_ID_1, from: "ocupada", to: "por_limpiar" });
++
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error.toLowerCase()).toContain("conflicto");
++  });
++
++  it("rechaza transición inválida sin tocar BD", async () => {
++    const onWrite = vi.fn(() => ({}));
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await setTableStatus({ tableId: TABLE_ID_1, from: "libre", to: "por_limpiar" });
++
++    expect(r.ok).toBe(false);
++    expect(onWrite).not.toHaveBeenCalledWith("update", expect.anything(), expect.anything());
++  });
++});
+diff --git a/src/tests/unit/dashboard-nav-items.test.ts b/src/tests/unit/dashboard-nav-items.test.ts
+index a2f09d0..51b6007 100644
+--- a/src/tests/unit/dashboard-nav-items.test.ts
++++ b/src/tests/unit/dashboard-nav-items.test.ts
+@@ -109,7 +109,24 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
+     const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
+     const hrefs = items.map((i) => i.href);
+     expect(hrefs).toContain("/mostrador");
+     expect(hrefs).toContain("/cocina");
+     expect(hrefs).not.toContain("/carta");
+   });
++
++  it("restauración: staff ve Mostrador, Sala y Cocina; NO Caja ni Carta", () => {
++    const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/mostrador");
++    expect(hrefs).toContain("/sala");
++    expect(hrefs).toContain("/cocina");
++    expect(hrefs).not.toContain("/tpv"); // "Caja" (vender) se retira: se vende en Mostrador/Sala
++    expect(hrefs).not.toContain("/carta");
++  });
++  it("restauración: manager ve Sala y conserva Arqueo; sigue sin Caja", () => {
++    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/sala");
++    expect(hrefs).toContain("/arqueo");
++    expect(hrefs).not.toContain("/tpv");
++  });
+ });
+diff --git a/src/tests/unit/mostrador-view.test.tsx b/src/tests/unit/mostrador-view.test.tsx
+new file mode 100644
+index 0000000..f67c1d8
+--- /dev/null
++++ b/src/tests/unit/mostrador-view.test.tsx
+@@ -0,0 +1,131 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++import type { Order } from "@/types/database";
++
++/**
++ * Mock de los hooks que `MostradorView` llama DIRECTAMENTE (`@/hooks/use-menu`,
++ * `@/hooks/use-orders`, `@/hooks/use-tpv`) — patrón `table-panel.test.tsx`/
++ * `order-panel.test.tsx` (`vi.hoisted` + `createElement`, sin
++ * `QueryClientProvider`). Los subcomponentes pesados (`ProductGrid`,
++ * `ModifierPickerDialog`, `OrderPanel`) se sustituyen por stubs — no son el
++ * objeto de esta prueba, y montarlos de verdad exigiría mockear TODOS sus
++ * hooks internos (`useMenuCategories`, `useComboComponents`,
++ * `useCreateOrder`... — Task 6/Task 5) sin aportar nada a lo que se quiere
++ * probar aquí: que `initialOrderId` (fix revisión Task 7, Important — llega
++ * desde `/sala` vía `/mostrador?order=<id>`) reanuda la cuenta correcta.
++ * `OpenOrdersBar` SÍ se deja real: solo depende de `useOpenOrders` (ya
++ * mockeado) y da una señal visual independiente (`aria-pressed`) de que la
++ * cuenta quedó seleccionada.
++ */
++const m = vi.hoisted(() => ({
++  menuProducts: { data: [] as unknown[], isPending: false },
++  stations: { data: [] as unknown[], isPending: false },
++  modifierGroups: { data: [] as unknown[], isPending: false },
++  productModifierGroups: { data: [] as unknown[], isPending: false },
++  orderItems: { data: [] as unknown[], isPending: false },
++  openOrders: { data: [] as Order[], isPending: false },
++  paymentMethods: { data: [] as unknown[], isPending: false },
++  orderPanelProps: null as { order: Order | null } | null,
++}));
++
++vi.mock("@/hooks/use-menu", () => ({
++  useMenuProducts: () => m.menuProducts,
++  useStations: () => m.stations,
++  useModifierGroups: () => m.modifierGroups,
++  useAllProductModifierGroups: () => m.productModifierGroups,
++}));
++vi.mock("@/hooks/use-orders", () => ({
++  useOrderItems: () => m.orderItems,
++  useOpenOrders: () => m.openOrders,
++}));
++vi.mock("@/hooks/use-tpv", () => ({
++  useSalePaymentMethods: () => m.paymentMethods,
++}));
++vi.mock("@/app/(dashboard)/mostrador/product-grid", () => ({
++  ProductGrid: () => null,
++}));
++vi.mock("@/app/(dashboard)/mostrador/modifier-picker-dialog", () => ({
++  ModifierPickerDialog: () => null,
++}));
++vi.mock("@/app/(dashboard)/mostrador/order-panel", () => ({
++  OrderPanel: (props: { order: Order | null }) => {
++    m.orderPanelProps = props;
++    return null;
++  },
++}));
++
++import { MostradorView } from "@/app/(dashboard)/mostrador/mostrador-view";
++
++beforeEach(() => {
++  m.orderPanelProps = null;
++  m.openOrders.data = [];
++});
++afterEach(() => cleanup());
++
++const OPEN_ORDER: Order = {
++  id: "order-77",
++  salon_id: "SALON",
++  session_id: null,
++  order_number: 7,
++  channel: "mesa",
++  status: "abierta",
++  label: "Mesa 4",
++  idempotency_key: null,
++  dining_table_id: "table-1",
++  covers: 3,
++  created_by: null,
++  created_at: "2026-08-10T09:00:00.000Z",
++  updated_at: "2026-08-10T09:00:00.000Z",
++};
++
++describe("MostradorView — initialOrderId (fix revisión Task 7)", () => {
++  it("con initialOrderId que coincide con una cuenta abierta, la reanuda automáticamente", () => {
++    m.openOrders.data = [OPEN_ORDER];
++
++    render(
++      createElement(MostradorView, {
++        salonId: "SALON",
++        salonName: "Mi Bar",
++        initialOrderId: OPEN_ORDER.id,
++      }),
++    );
++
++    // `OrderPanel` (stub) recibió la cuenta encontrada como `order` — los
++    // productos que se añadan a partir de ahora viajan a ESE pedido.
++    expect(m.orderPanelProps?.order).toEqual(OPEN_ORDER);
++    // Señal independiente: el chip de esa cuenta en `OpenOrdersBar` (real,
++    // no stub) queda marcado como activo.
++    expect(screen.getByRole("button", { name: /mesa 4/i })).toHaveAttribute(
++      "aria-pressed",
++      "true",
++    );
++  });
++
++  it("sin initialOrderId, arranca en blanco (comportamiento normal)", () => {
++    m.openOrders.data = [OPEN_ORDER];
++
++    render(createElement(MostradorView, { salonId: "SALON", salonName: "Mi Bar" }));
++
++    expect(m.orderPanelProps?.order).toBeNull();
++    expect(screen.getByRole("button", { name: /cuenta nueva/i })).toHaveAttribute(
++      "aria-pressed",
++      "true",
++    );
++  });
++
++  it("con initialOrderId que no coincide con ninguna cuenta abierta (p.ej. ya cobrada), cae al comportamiento normal", () => {
++    m.openOrders.data = [OPEN_ORDER];
++
++    render(
++      createElement(MostradorView, {
++        salonId: "SALON",
++        salonName: "Mi Bar",
++        initialOrderId: "no-existe",
++      }),
++    );
++
++    expect(m.orderPanelProps?.order).toBeNull();
++  });
++});
+diff --git a/src/tests/unit/realtime-dining-sql.test.ts b/src/tests/unit/realtime-dining-sql.test.ts
+new file mode 100644
+index 0000000..8074425
+--- /dev/null
++++ b/src/tests/unit/realtime-dining-sql.test.ts
+@@ -0,0 +1,16 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810140000_realtime_dining.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración realtime sala", () => {
++  it("añade dining_tables y orders a supabase_realtime, idempotente", () => {
++    expect(SQL).toContain("alter publication supabase_realtime add table public.dining_tables");
++    expect(SQL).toContain("alter publication supabase_realtime add table public.orders");
++    expect(SQL).toContain("pg_publication_tables");
++  });
++});
+diff --git a/src/tests/unit/restauracion-sala-sql.test.ts b/src/tests/unit/restauracion-sala-sql.test.ts
+new file mode 100644
+index 0000000..923ebdc
+--- /dev/null
++++ b/src/tests/unit/restauracion-sala-sql.test.ts
+@@ -0,0 +1,36 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810130000_restauracion_sala.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración sala", () => {
++  it("crea los enums de forma y estado de mesa", () => {
++    expect(SQL).toContain("create type public.table_shape as enum");
++    expect(SQL).toContain("create type public.table_status as enum");
++    expect(SQL).toContain("'ocupada'");
++    expect(SQL).toContain("'por_limpiar'");
++  });
++  it("crea dining_zones y dining_tables con clave compuesta", () => {
++    expect(SQL).toContain("create table if not exists public.dining_zones");
++    expect(SQL).toContain("create table if not exists public.dining_tables");
++    expect(SQL).toContain("dining_zones_id_salon_key unique (id, salon_id)");
++    expect(SQL).toContain("dining_tables_id_salon_key unique (id, salon_id)");
++    expect(SQL).toContain("check (capacity_max >= capacity_min)");
++    expect(SQL).toContain("foreign key (zone_id, salon_id)");
++  });
++  it("enlaza orders con la mesa (dining_table_id + covers)", () => {
++    expect(SQL).toContain("add column if not exists dining_table_id uuid");
++    expect(SQL).toContain("add column if not exists covers integer");
++    expect(SQL).toContain("references public.dining_tables (id, salon_id)");
++  });
++  it("RLS: select miembros, gestion managers, update miembros en tables; guardián", () => {
++    expect(SQL).toContain("salon_id in (select app.user_salon_ids())");
++    expect(SQL).toContain("app.has_salon_role(salon_id, array['owner','manager']::public.member_role[])");
++    expect(SQL).toContain("members_update_dining_tables");
++    expect(SQL).toContain("do $guard$");
++  });
++});
+diff --git a/src/tests/unit/restauracion-tables.test.ts b/src/tests/unit/restauracion-tables.test.ts
+new file mode 100644
+index 0000000..6036f58
+--- /dev/null
++++ b/src/tests/unit/restauracion-tables.test.ts
+@@ -0,0 +1,36 @@
++import { describe, it, expect } from "vitest";
++import { canTransition, clampPosition, tableTone, validCapacity } from "@/lib/restauracion/tables";
++
++describe("canTransition", () => {
++  it("acepta las transiciones válidas del ciclo de mesa", () => {
++    expect(canTransition("libre", "ocupada")).toBe(true);
++    expect(canTransition("ocupada", "cuenta_pedida")).toBe(true);
++    expect(canTransition("ocupada", "por_limpiar")).toBe(true);
++    expect(canTransition("cuenta_pedida", "por_limpiar")).toBe(true);
++    expect(canTransition("por_limpiar", "libre")).toBe(true);
++  });
++  it("rechaza saltos inválidos", () => {
++    expect(canTransition("libre", "por_limpiar")).toBe(false);
++    expect(canTransition("por_limpiar", "ocupada")).toBe(false);
++    expect(canTransition("ocupada", "libre")).toBe(false);
++  });
++});
++
++describe("validCapacity / clampPosition / tableTone", () => {
++  it("capacidad válida", () => {
++    expect(validCapacity(2, 4)).toBe(true);
++    expect(validCapacity(0, 4)).toBe(false);
++    expect(validCapacity(4, 2)).toBe(false);
++  });
++  it("acota posición a 0..100", () => {
++    expect(clampPosition(-5)).toBe(0);
++    expect(clampPosition(140)).toBe(100);
++    expect(clampPosition(37.5)).toBe(37.5);
++  });
++  it("color por estado", () => {
++    expect(tableTone("libre")).toBe("free");
++    expect(tableTone("ocupada")).toBe("busy");
++    expect(tableTone("cuenta_pedida")).toBe("bill");
++    expect(tableTone("por_limpiar")).toBe("cleaning");
++  });
++});
+diff --git a/src/tests/unit/table-keys.test.ts b/src/tests/unit/table-keys.test.ts
+new file mode 100644
+index 0000000..8648233
+--- /dev/null
++++ b/src/tests/unit/table-keys.test.ts
+@@ -0,0 +1,10 @@
++import { describe, it, expect } from "vitest";
++import { tableKeys } from "@/lib/queries/tables";
++
++describe("tableKeys", () => {
++  it("deriva sub-keys del salón", () => {
++    expect(tableKeys.all("s1")).toEqual(["tables", "s1"]);
++    expect(tableKeys.tables("s1")).toEqual(["tables", "s1", "tables"]);
++    expect(tableKeys.openOrders("s1")).toEqual(["tables", "s1", "openOrders"]);
++  });
++});
+diff --git a/src/tests/unit/table-node.test.tsx b/src/tests/unit/table-node.test.tsx
+new file mode 100644
+index 0000000..b39b570
+--- /dev/null
++++ b/src/tests/unit/table-node.test.tsx
+@@ -0,0 +1,112 @@
++import { createElement } from "react";
++import { cleanup, fireEvent, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, describe, expect, it, vi } from "vitest";
++
++import { TableNode } from "@/app/(dashboard)/sala/table-node";
++import type { DiningTable } from "@/types/database";
++
++afterEach(() => cleanup());
++
++const TABLE: DiningTable = {
++  id: "table-1",
++  salon_id: "SALON",
++  zone_id: "zone-1",
++  name: "Mesa 4",
++  capacity_min: 2,
++  capacity_max: 4,
++  pos_x: 30,
++  pos_y: 40,
++  shape: "round",
++  status: "libre",
++  sort_order: 0,
++  active: true,
++  created_at: "2026-08-10T09:00:00.000Z",
++  updated_at: "2026-08-10T09:00:00.000Z",
++};
++
++describe("TableNode", () => {
++  it("muestra el nombre de la mesa", () => {
++    render(createElement(TableNode, { table: TABLE, tone: "free", editable: false, onSelect: vi.fn() }));
++
++    expect(screen.getByText("Mesa 4")).toBeInTheDocument();
++  });
++
++  it("aplica el tono recibido como atributo data-tone", () => {
++    render(createElement(TableNode, { table: TABLE, tone: "busy", editable: false, onSelect: vi.fn() }));
++
++    expect(screen.getByRole("button")).toHaveAttribute("data-tone", "busy");
++  });
++
++  it("con otro tono, refleja ese tono en el atributo", () => {
++    render(createElement(TableNode, { table: TABLE, tone: "bill", editable: false, onSelect: vi.fn() }));
++
++    expect(screen.getByRole("button")).toHaveAttribute("data-tone", "bill");
++  });
++
++  it("al hacer click (no editable) llama a onSelect", async () => {
++    const user = userEvent.setup();
++    const onSelect = vi.fn();
++    render(createElement(TableNode, { table: TABLE, tone: "free", editable: false, onSelect }));
++
++    await user.click(screen.getByRole("button"));
++
++    expect(onSelect).toHaveBeenCalledTimes(1);
++  });
++
++  it("en modo edición, el click NO llama a onSelect", async () => {
++    const user = userEvent.setup();
++    const onSelect = vi.fn();
++    render(createElement(TableNode, { table: TABLE, tone: "free", editable: true, onSelect }));
++
++    await user.click(screen.getByRole("button"));
++
++    expect(onSelect).not.toHaveBeenCalled();
++  });
++
++  /**
++   * Fix revisión Task 7 (Minor): un `pointercancel` a mitad de arrastre debía
++   * resetear el estado interno de "arrastrando" — sin el handler, el
++   * `pointerup` que pudiera llegar después seguía disparando `onDragEnd`
++   * (arrastre "fantasma" tras un gesto ya cancelado por el sistema).
++   */
++  it("un pointercancel a mitad de arrastre no dispara onDragEnd en el pointerup posterior", () => {
++    const onDragEnd = vi.fn();
++    render(
++      createElement(TableNode, {
++        table: TABLE,
++        tone: "free",
++        editable: true,
++        onSelect: vi.fn(),
++        onDragEnd,
++      }),
++    );
++    const node = screen.getByRole("button");
++    // jsdom no calcula layout real: `getBoundingClientRect` del padre
++    // devuelve 0x0 por defecto, y con ancho/alto 0 `handlePointerMove` nunca
++    // llega a fijar `dragPos` (guarda explícita contra división por cero) —
++    // sin un rect de tamaño no nulo, este test "pasaría" igual CON o SIN el
++    // fix (onDragEnd nunca se llamaría de todos modos), así que no probaría
++    // nada. Se stubea el rect para que el arrastre sí registre posición.
++    vi.spyOn(node.parentElement as HTMLElement, "getBoundingClientRect").mockReturnValue({
++      left: 0,
++      top: 0,
++      width: 200,
++      height: 200,
++      right: 200,
++      bottom: 200,
++      x: 0,
++      y: 0,
++      toJSON: () => "",
++    } as DOMRect);
++
++    fireEvent.pointerDown(node, { pointerId: 1, clientX: 10, clientY: 10 });
++    fireEvent.pointerMove(node, { pointerId: 1, clientX: 40, clientY: 60 });
++    fireEvent.pointerCancel(node, { pointerId: 1 });
++    // Un `pointerup` tardío (p.ej. el sistema lo entrega igualmente tras
++    // cancelar) no debe reactivar el arrastre ni llamar a `onDragEnd`.
++    fireEvent.pointerUp(node, { pointerId: 1, clientX: 40, clientY: 60 });
++
++    expect(onDragEnd).not.toHaveBeenCalled();
++  });
++});
+diff --git a/src/tests/unit/table-panel.test.tsx b/src/tests/unit/table-panel.test.tsx
+new file mode 100644
+index 0000000..0e0f85d
+--- /dev/null
++++ b/src/tests/unit/table-panel.test.tsx
+@@ -0,0 +1,206 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++import { formatMoney } from "@/lib/format";
++import { settleTotals } from "@/lib/restauracion/order";
++import type { DiningTable, Order, OrderItem } from "@/types/database";
++
++/**
++ * Mock de `@/hooks/use-orders` y `@/hooks/use-tables` (patrón
++ * `order-panel.test.tsx`, vi.hoisted + createElement + getByRole):
++ * `TablePanel` orquesta comanda/cobro/estado llamando a estos hooks
++ * directamente, así que el test no necesita un `QueryClientProvider`.
++ */
++const m = vi.hoisted(() => ({
++  orderItems: { data: [] as OrderItem[], isPending: false },
++  settleOrder: { mutate: vi.fn(), isPending: false, reset: vi.fn() },
++  setTableStatus: { mutate: vi.fn(), isPending: false },
++}));
++vi.mock("@/hooks/use-orders", () => ({
++  useOrderItems: () => m.orderItems,
++  useSettleOrder: () => m.settleOrder,
++}));
++vi.mock("@/hooks/use-tables", () => ({
++  useSetTableStatus: () => m.setTableStatus,
++}));
++
++import { TablePanel } from "@/app/(dashboard)/sala/table-panel";
++
++beforeEach(() => {
++  m.settleOrder.mutate = vi.fn();
++  m.settleOrder.reset = vi.fn();
++  m.setTableStatus.mutate = vi.fn();
++});
++afterEach(() => cleanup());
++
++/**
++ * `formatMoney` (Intl.NumberFormat es-ES) separa el importe del símbolo con
++ * un espacio non-breaking (U+00A0); ver la misma nota en `order-panel.test.tsx`.
++ */
++const NBSP = " ";
++function moneyText(cents: number): string {
++  return formatMoney(cents).replaceAll(NBSP, " ");
++}
++
++const TABLE: DiningTable = {
++  id: "table-1",
++  salon_id: "SALON",
++  zone_id: "zone-1",
++  name: "Mesa 4",
++  capacity_min: 2,
++  capacity_max: 4,
++  pos_x: 10,
++  pos_y: 10,
++  shape: "round",
++  status: "ocupada",
++  sort_order: 0,
++  active: true,
++  created_at: "2026-08-10T09:00:00.000Z",
++  updated_at: "2026-08-10T09:00:00.000Z",
++};
++
++const ORDER: Order = {
++  id: "order-1",
++  salon_id: "SALON",
++  session_id: null,
++  order_number: 12,
++  channel: "mesa",
++  status: "abierta",
++  label: "Mesa 4",
++  idempotency_key: null,
++  dining_table_id: "table-1",
++  covers: 3,
++  created_by: null,
++  created_at: "2026-08-10T09:35:00.000Z",
++  updated_at: "2026-08-10T09:35:00.000Z",
++};
++
++function orderItem(overrides: Partial<OrderItem> = {}): OrderItem {
++  return {
++    id: "item-1",
++    salon_id: "SALON",
++    order_id: "order-1",
++    product_id: "prod-1",
++    qty: 2,
++    unit_price_cents: 880,
++    vat_rate: 10,
++    station_id: "cocina",
++    status: "enviado",
++    combo_group: null,
++    modifiers_snapshot: [],
++    void_of_item_id: null,
++    void_reason: null,
++    created_by: null,
++    created_at: "2026-08-10T09:36:00.000Z",
++    updated_at: "2026-08-10T09:36:00.000Z",
++    ...overrides,
++  };
++}
++
++/**
++ * Dos líneas activas con precio distinto (para que el total agregado no
++ * coincida por casualidad con el importe de ninguna línea suelta) + una
++ * anulada, para comprobar que el total EXCLUYE la anulada.
++ */
++const ITEMS: OrderItem[] = [
++  orderItem({ id: "item-1", qty: 2, unit_price_cents: 880 }),
++  orderItem({ id: "item-3", qty: 1, unit_price_cents: 425, product_id: "prod-3" }),
++  orderItem({ id: "item-2", qty: 1, unit_price_cents: 250, status: "anulado", void_reason: "error" }),
++];
++
++function renderPanel(
++  overrides: Partial<React.ComponentProps<typeof TablePanel>> = {},
++): ReturnType<typeof render> {
++  return render(
++    createElement(TablePanel, {
++      table: TABLE,
++      order: ORDER,
++      salonId: "SALON",
++      now: new Date("2026-08-10T10:00:00.000Z"),
++      onClose: vi.fn(),
++      onAdd: vi.fn(),
++      ...overrides,
++    }),
++  );
++}
++
++describe("TablePanel", () => {
++  beforeEach(() => {
++    m.orderItems.data = ITEMS;
++  });
++
++  it("renderiza el total (excluyendo líneas anuladas) y los comensales", () => {
++    renderPanel();
++
++    const totals = settleTotals([
++      { description: "Producto", qty: 2, unitPriceCents: 880, vatRate: 10 },
++      { description: "Producto", qty: 1, unitPriceCents: 425, vatRate: 10 },
++    ]);
++
++    expect(screen.getByText(moneyText(totals.totalCents))).toBeInTheDocument();
++    expect(screen.getByText(/3 comensales/i)).toBeInTheDocument();
++  });
++
++  it("muestra los botones Añadir y Cobrar", () => {
++    renderPanel();
++
++    expect(screen.getByRole("button", { name: /añadir/i })).toBeInTheDocument();
++    expect(screen.getByRole("button", { name: /cobrar/i })).toBeInTheDocument();
++  });
++
++  it("muestra el cronómetro de tiempo sentados a partir de `now`", () => {
++    renderPanel();
++
++    // order.created_at = 09:35, now = 10:00 → 25 min.
++    expect(screen.getByText(/hace 25 min/i)).toBeInTheDocument();
++  });
++
++  it("con la mesa 'ocupada' muestra Pedir cuenta pero no Limpiar", () => {
++    renderPanel();
++
++    expect(screen.getByRole("button", { name: /pedir cuenta/i })).toBeInTheDocument();
++    expect(screen.queryByRole("button", { name: /limpiar/i })).not.toBeInTheDocument();
++  });
++
++  it("con la mesa 'por_limpiar' muestra Limpiar pero no Pedir cuenta ni Cobrar", () => {
++    renderPanel({ table: { ...TABLE, status: "por_limpiar" } });
++
++    expect(screen.getByRole("button", { name: /limpiar/i })).toBeInTheDocument();
++    expect(screen.queryByRole("button", { name: /pedir cuenta/i })).not.toBeInTheDocument();
++    expect(screen.queryByRole("button", { name: /cobrar/i })).not.toBeInTheDocument();
++  });
++
++  it("sin pedido (mesa sin cuenta abierta), muestra un estado vacío mínimo sin acciones de comanda", () => {
++    renderPanel({ order: null });
++
++    expect(screen.getByText(/no tiene una cuenta abierta/i)).toBeInTheDocument();
++    expect(screen.queryByRole("button", { name: /añadir/i })).not.toBeInTheDocument();
++    expect(screen.queryByRole("button", { name: /cobrar/i })).not.toBeInTheDocument();
++  });
++
++  /**
++   * Fix revisión Task 6 (Important): tras cobrar, `settleOrder` marca el
++   * pedido como cobrado → `order` pasa a `null` en el siguiente refetch,
++   * pero la mesa queda en `por_limpiar`. Sin ruta de recuperación en el
++   * estado vacío, "Limpiar" era inalcanzable justo cuando más se necesita.
++   */
++  it("sin pedido y mesa 'por_limpiar' (caso normal tras cobrar), ofrece el botón Limpiar", () => {
++    renderPanel({ order: null, table: { ...TABLE, status: "por_limpiar" } });
++
++    expect(screen.getByRole("button", { name: /limpiar/i })).toBeInTheDocument();
++  });
++
++  it("sin pedido y mesa 'ocupada' (caso de recuperación), ofrece 'Marcar para limpiar' pero no 'Limpiar'", () => {
++    renderPanel({ order: null, table: { ...TABLE, status: "ocupada" } });
++
++    expect(screen.getByRole("button", { name: /marcar para limpiar/i })).toBeInTheDocument();
++    expect(screen.queryByRole("button", { name: /^limpiar$/i })).not.toBeInTheDocument();
++  });
++
++  it("sin pedido y mesa 'libre', no ofrece ningún botón de limpieza", () => {
++    renderPanel({ order: null, table: { ...TABLE, status: "libre" } });
++
++    expect(screen.queryByRole("button", { name: /limpiar/i })).not.toBeInTheDocument();
++  });
++});
+diff --git a/src/types/database.ts b/src/types/database.ts
+index 8db5b90..da5400a 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -78,12 +78,21 @@ export type OrderItemStatus =
+   | "enviado"
+   | "preparando"
+   | "listo"
+   | "entregado"
+   | "anulado";
+ 
++/**
++ * Forma de la mesa en el plano de sala (espejo del enum public.table_shape).
++ * Migración 20260810130000_restauracion_sala.
++ */
++export type TableShape = "round" | "square";
++
++/** Estado de la mesa (espejo del enum public.table_status). */
++export type TableStatus = "libre" | "ocupada" | "cuenta_pedida" | "por_limpiar";
++
+ export type AppointmentStatus =
+   | "pending"
+   | "confirmed"
+   | "completed"
+   | "cancelled"
+   | "no_show";
+@@ -1121,22 +1130,28 @@ export interface Database {
+       // omitir en Insert). session_id es FK compuesta opcional hacia
+       // pos_sessions (orders_session_id_fkey, on delete set null).
+       // idempotency_key es único por salón (orders_idempotency_key) para que
+       // reintentos del cliente no dupliquen el pedido. Clave de apoyo
+       // orders_id_salon_key (id, salon_id) para las FKs compuestas de
+       // order_items y pos_sales.order_id.
++      // dining_table_id/covers — migración 20260810130000_restauracion_sala:
++      // enlace opcional con la mesa (channel='mesa'); dining_table_id es FK
++      // compuesta hacia dining_tables (orders_dining_table_id_fkey, on delete
++      // set null). covers = número de comensales.
+       orders: {
+         Row: {
+           id: string;
+           salon_id: string;
+           session_id: string | null;
+           order_number: number | null; // bigint — correlativo por salón (trigger)
+           channel: string;
+           status: OrderStatus;
+           label: string | null;
+           idempotency_key: string | null;
++          dining_table_id: string | null;
++          covers: number | null;
+           created_by: string | null;
+           created_at: string;
+           updated_at: string;
+         };
+         Insert: {
+           id: string; // sin default en BD: generado en cliente
+@@ -1144,12 +1159,14 @@ export interface Database {
+           session_id?: string | null;
+           // order_number lo pone el trigger app.set_order_number: omitir
+           channel?: string;
+           status?: OrderStatus;
+           label?: string | null;
+           idempotency_key?: string | null;
++          dining_table_id?: string | null;
++          covers?: number | null;
+           created_by?: string | null;
+           created_at?: string;
+           updated_at?: string;
+         };
+         Update: {
+           id?: string;
+@@ -1157,12 +1174,14 @@ export interface Database {
+           session_id?: string | null;
+           order_number?: number | null;
+           channel?: string;
+           status?: OrderStatus;
+           label?: string | null;
+           idempotency_key?: string | null;
++          dining_table_id?: string | null;
++          covers?: number | null;
+           created_by?: string | null;
+           created_at?: string;
+           updated_at?: string;
+         };
+         Relationships: [
+           {
+@@ -1176,12 +1195,19 @@ export interface Database {
+             foreignKeyName: "orders_session_id_fkey";
+             columns: ["session_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "pos_sessions";
+             referencedColumns: ["id", "salon_id"];
+           },
++          {
++            foreignKeyName: "orders_dining_table_id_fkey";
++            columns: ["dining_table_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "dining_tables";
++            referencedColumns: ["id", "salon_id"];
++          },
+         ];
+       };
+       // Líneas de pedido (restauración), append-only — migración
+       // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE: sin
+       // default en BD → REQUERIDO en Insert. `void_of_item_id` !== null marca
+       // una fila como anulación de otra (append-only: nunca se hace UPDATE del
+@@ -1273,12 +1299,127 @@ export interface Database {
+             isOneToOne: false;
+             referencedRelation: "stations";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      // Zonas de sala (restauración) — migración
++      // 20260810130000_restauracion_sala. Clave compuesta
++      // dining_zones_id_salon_key (id, salon_id) para permitir la FK compuesta
++      // de dominio desde dining_tables.zone_id.
++      dining_zones: {
++        Row: {
++          id: string;
++          salon_id: string;
++          name: string;
++          sort_order: number;
++          active: boolean;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          name: string;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          name?: string;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "dining_zones_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++        ];
++      };
++      // Mesas del plano de sala (restauración) — migración
++      // 20260810130000_restauracion_sala. zone_id es FK compuesta hacia
++      // dining_zones (dining_tables_zone_fkey, on delete cascade).
++      // capacity_max >= capacity_min (constraint dining_tables_capacity_order).
++      // pos_x/pos_y son coordenadas del plano visual (porcentaje 0-100). Clave
++      // de apoyo dining_tables_id_salon_key (id, salon_id) para la FK compuesta
++      // de dominio desde orders.dining_table_id.
++      dining_tables: {
++        Row: {
++          id: string;
++          salon_id: string;
++          zone_id: string;
++          name: string;
++          capacity_min: number;
++          capacity_max: number;
++          pos_x: number;
++          pos_y: number;
++          shape: TableShape;
++          status: TableStatus;
++          sort_order: number;
++          active: boolean;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          zone_id: string;
++          name: string;
++          capacity_min?: number;
++          capacity_max?: number;
++          pos_x?: number;
++          pos_y?: number;
++          shape?: TableShape;
++          status?: TableStatus;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          zone_id?: string;
++          name?: string;
++          capacity_min?: number;
++          capacity_max?: number;
++          pos_x?: number;
++          pos_y?: number;
++          shape?: TableShape;
++          status?: TableStatus;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "dining_tables_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "dining_tables_zone_fkey";
++            columns: ["zone_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "dining_zones";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
+       // Movimientos de stock (libro de inventario) — migración
+       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
+       // aplicado al stock resultante (no la magnitud introducida por el
+       // usuario); ver `@/lib/stock` para la lógica pura de cálculo
+       // (`applyMovement`/`movementDelta`) y `products/stock-actions.ts` para la
+       // Server Action que persiste el movimiento Y actualiza `products.stock`.
+@@ -3780,12 +3921,14 @@ export interface Database {
+       consent_type: ConsentType;
+       consent_status: ConsentStatus;
+       image_modality: ImageModality;
+       stock_movement_kind: StockMovementKind;
+       order_status: OrderStatus;
+       order_item_status: OrderItemStatus;
++      table_shape: TableShape;
++      table_status: TableStatus;
+     };
+     CompositeTypes: Record<never, never>;
+   };
+ }
+ 
+ // Helpers de acceso tipado ------------------------------------------------------
+@@ -3925,12 +4068,17 @@ export type ComboComponent = Tables<"combo_components">;
+ // 20260810100000_restauracion_orders.
+ export type Order = Tables<"orders">;
+ export type OrderInsert = TablesInsert<"orders">;
+ export type OrderItem = Tables<"order_items">;
+ export type OrderItemInsert = TablesInsert<"order_items">;
+ 
++// Sala (restauración) — zonas y mesas del plano, enlazadas con orders vía
++// dining_table_id/covers. Ver migración 20260810130000_restauracion_sala.
++export type DiningZone = Tables<"dining_zones">;
++export type DiningTable = Tables<"dining_tables">;
++
+ // Phase helpers -----------------------------------------------------------------
+ 
+ /** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
+ export interface ServicePhaseRange {
+   label: "application" | "exposure" | "post_exposure";
+   /** Minutos desde el inicio de la cita en que comienza la fase. */
+diff --git a/supabase/migrations/20260810130000_restauracion_sala.sql b/supabase/migrations/20260810130000_restauracion_sala.sql
+new file mode 100644
+index 0000000..7f10ec0
+--- /dev/null
++++ b/supabase/migrations/20260810130000_restauracion_sala.sql
+@@ -0,0 +1,108 @@
++-- =============================================================================
++-- Kairos — Restauración · Sala (zonas + mesas + enlace con la cuenta)
++-- =============================================================================
++begin;
++
++do $$ begin
++  if not exists (select 1 from pg_type where typname = 'table_shape') then
++    create type public.table_shape as enum ('round','square');
++  end if;
++  if not exists (select 1 from pg_type where typname = 'table_status') then
++    create type public.table_status as enum ('libre','ocupada','cuenta_pedida','por_limpiar');
++  end if;
++end $$;
++
++create table if not exists public.dining_zones (
++  id          uuid primary key default gen_random_uuid(),
++  salon_id    uuid not null references public.salons (id) on delete cascade,
++  name        varchar(120) not null,
++  sort_order  integer not null default 0,
++  active      boolean not null default true,
++  created_at  timestamptz not null default now(),
++  updated_at  timestamptz not null default now(),
++  unique (salon_id, name),
++  constraint dining_zones_id_salon_key unique (id, salon_id)
++);
++
++create table if not exists public.dining_tables (
++  id            uuid primary key default gen_random_uuid(),
++  salon_id      uuid not null references public.salons (id) on delete cascade,
++  zone_id       uuid not null,
++  name          varchar(60) not null,
++  capacity_min  integer not null default 1 check (capacity_min >= 1),
++  capacity_max  integer not null default 4 check (capacity_max >= 1),
++  pos_x         numeric not null default 50,
++  pos_y         numeric not null default 50,
++  shape         public.table_shape not null default 'square',
++  status        public.table_status not null default 'libre',
++  sort_order    integer not null default 0,
++  active        boolean not null default true,
++  created_at    timestamptz not null default now(),
++  updated_at    timestamptz not null default now(),
++  constraint dining_tables_capacity_order check (capacity_max >= capacity_min),
++  constraint dining_tables_zone_fkey
++    foreign key (zone_id, salon_id) references public.dining_zones (id, salon_id) on delete cascade,
++  unique (salon_id, name),
++  constraint dining_tables_id_salon_key unique (id, salon_id)
++);
++
++alter table public.orders
++  add column if not exists dining_table_id uuid,
++  add column if not exists covers integer;
++alter table public.orders
++  add constraint orders_dining_table_id_fkey
++    foreign key (dining_table_id, salon_id)
++    references public.dining_tables (id, salon_id) on delete set null (dining_table_id);
++
++create trigger trg_dining_zones_updated_at
++  before update on public.dining_zones for each row execute function app.set_updated_at();
++create trigger trg_dining_tables_updated_at
++  before update on public.dining_tables for each row execute function app.set_updated_at();
++
++create index if not exists idx_dining_tables_zone on public.dining_tables (zone_id);
++create index if not exists idx_orders_dining_table on public.orders (dining_table_id);
++
++alter table public.dining_zones  enable row level security;
++alter table public.dining_tables enable row level security;
++
++-- zonas: lectura miembros, gestión owner/manager
++create policy "members_select_dining_zones" on public.dining_zones
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "managers_insert_dining_zones" on public.dining_zones
++  for insert to authenticated
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_update_dining_zones" on public.dining_zones
++  for update to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_delete_dining_zones" on public.dining_zones
++  for delete to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++-- mesas: lectura + UPDATE miembros (cambiar estado); INSERT/DELETE owner/manager (crear/quitar mesas)
++create policy "members_select_dining_tables" on public.dining_tables
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "managers_insert_dining_tables" on public.dining_tables
++  for insert to authenticated
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "members_update_dining_tables" on public.dining_tables
++  for update to authenticated
++  using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++create policy "managers_delete_dining_tables" on public.dining_tables
++  for delete to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++do $guard$
++declare _cnt integer;
++begin
++  select count(*) into _cnt from pg_policies
++    where schemaname = 'public' and tablename in ('dining_zones','dining_tables');
++  if _cnt < 8 then
++    raise exception 'GUARDIÁN SALA: faltan políticas (encontradas %)', _cnt using errcode = 'raise_exception';
++  end if;
++  raise notice 'GUARDIÁN SALA: dining_zones/dining_tables verificadas';
++end;
++$guard$;
++
++commit;
+diff --git a/supabase/migrations/20260810140000_realtime_dining.sql b/supabase/migrations/20260810140000_realtime_dining.sql
+new file mode 100644
+index 0000000..c78df39
+--- /dev/null
++++ b/supabase/migrations/20260810140000_realtime_dining.sql
+@@ -0,0 +1,17 @@
++-- =============================================================================
++-- Kairos — Restauración · Realtime para el plano de sala (dining_tables + orders)
++-- El plano de mesas debe refrescarse solo al cambiar el estado de mesa/pedido.
++-- Idempotente: no falla si alguna tabla ya está publicada.
++-- (order_items ya se añadió en Plan C — ver 20260810120000_realtime_order_items.sql)
++-- =============================================================================
++do $$
++begin
++  if not exists (select 1 from pg_publication_tables
++      where pubname='supabase_realtime' and schemaname='public' and tablename='dining_tables') then
++    alter publication supabase_realtime add table public.dining_tables;
++  end if;
++  if not exists (select 1 from pg_publication_tables
++      where pubname='supabase_realtime' and schemaname='public' and tablename='orders') then
++    alter publication supabase_realtime add table public.orders;
++  end if;
++end $$;

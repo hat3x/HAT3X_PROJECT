@@ -1,0 +1,54 @@
+=== COMMITS eccf976..d4aabff ===
+d4aabff feat(restauracion): dining_tables + orders en la publicación Realtime (plano)
+
+=== DIFF --stat ===
+ src/tests/unit/realtime-dining-sql.test.ts             | 16 ++++++++++++++++
+ supabase/migrations/20260810140000_realtime_dining.sql | 17 +++++++++++++++++
+ 2 files changed, 33 insertions(+)
+
+=== DIFF -U6 ===
+diff --git a/src/tests/unit/realtime-dining-sql.test.ts b/src/tests/unit/realtime-dining-sql.test.ts
+new file mode 100644
+index 0000000..8074425
+--- /dev/null
++++ b/src/tests/unit/realtime-dining-sql.test.ts
+@@ -0,0 +1,16 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810140000_realtime_dining.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración realtime sala", () => {
++  it("añade dining_tables y orders a supabase_realtime, idempotente", () => {
++    expect(SQL).toContain("alter publication supabase_realtime add table public.dining_tables");
++    expect(SQL).toContain("alter publication supabase_realtime add table public.orders");
++    expect(SQL).toContain("pg_publication_tables");
++  });
++});
+diff --git a/supabase/migrations/20260810140000_realtime_dining.sql b/supabase/migrations/20260810140000_realtime_dining.sql
+new file mode 100644
+index 0000000..c78df39
+--- /dev/null
++++ b/supabase/migrations/20260810140000_realtime_dining.sql
+@@ -0,0 +1,17 @@
++-- =============================================================================
++-- Kairos — Restauración · Realtime para el plano de sala (dining_tables + orders)
++-- El plano de mesas debe refrescarse solo al cambiar el estado de mesa/pedido.
++-- Idempotente: no falla si alguna tabla ya está publicada.
++-- (order_items ya se añadió en Plan C — ver 20260810120000_realtime_order_items.sql)
++-- =============================================================================
++do $$
++begin
++  if not exists (select 1 from pg_publication_tables
++      where pubname='supabase_realtime' and schemaname='public' and tablename='dining_tables') then
++    alter publication supabase_realtime add table public.dining_tables;
++  end if;
++  if not exists (select 1 from pg_publication_tables
++      where pubname='supabase_realtime' and schemaname='public' and tablename='orders') then
++    alter publication supabase_realtime add table public.orders;
++  end if;
++end $$;

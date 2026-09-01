@@ -1,0 +1,182 @@
+=== COMMITS (3289f72..d037b8c) ===
+d037b8c feat(restauracion): queries y hooks del KDS (lectura + Realtime)
+
+=== DIFF -U10 ===
+diff --git a/src/hooks/use-kds.ts b/src/hooks/use-kds.ts
+new file mode 100644
+index 0000000..c2084db
+--- /dev/null
++++ b/src/hooks/use-kds.ts
+@@ -0,0 +1,76 @@
++"use client";
++
++import { useEffect, useRef, useState } from "react";
++import { useQuery, useQueryClient } from "@tanstack/react-query";
++
++import { createClient } from "@/lib/supabase/client";
++import { fetchKdsItems, kdsKeys } from "@/lib/queries/kds";
++
++/** Líneas de pedido activas del KDS para un salón. */
++export function useKdsItems(salonId: string) {
++  return useQuery({
++    queryKey: kdsKeys.items(salonId),
++    queryFn: () => fetchKdsItems(salonId),
++  });
++}
++
++type RealtimeStatus = "connecting" | "connected" | "error";
++
++/**
++ * Suscripción Supabase Realtime a cambios en `order_items` para un salón.
++ * Copia estructural de `useDayPanelRealtime` (mismo patrón de canal,
++ * cleanup y estado de conexión) cambiando la tabla escuchada y la query
++ * invalidada: cuando llega cualquier cambio (INSERT / UPDATE / DELETE)
++ * invalida `kdsKeys.all(salonId)`, lo que dispara un re-fetch automático
++ * del KDS.
++ *
++ * Devuelve el estado de la conexión para que la UI pueda mostrarlo.
++ */
++export function useKdsRealtime(salonId: string): RealtimeStatus {
++  const queryClient = useQueryClient();
++  const [status, setStatus] = useState<RealtimeStatus>("connecting");
++  // Ref para evitar que la limpieza de efectos doble-invoke en StrictMode
++  // suscriba dos canales.
++  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
++
++  useEffect(() => {
++    if (!salonId) return;
++
++    const supabase = createClient();
++
++    // Nombre único de canal para evitar colisiones si hay varios montajes.
++    const channelName = `kds-order-items-${salonId}`;
++
++    const channel = supabase
++      .channel(channelName)
++      .on(
++        "postgres_changes",
++        {
++          event: "*",
++          schema: "public",
++          table: "order_items",
++          filter: `salon_id=eq.${salonId}`,
++        },
++        () => {
++          // Invalida las líneas del KDS del salón; el re-fetch es
++          // automático gracias a TanStack Query.
++          void queryClient.invalidateQueries({
++            queryKey: kdsKeys.all(salonId),
++          });
++        },
++      )
++      .subscribe((s) => {
++        if (s === "SUBSCRIBED") setStatus("connected");
++        else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") setStatus("error");
++      });
++
++    channelRef.current = channel;
++
++    return () => {
++      void supabase.removeChannel(channel);
++      channelRef.current = null;
++    };
++  }, [salonId, queryClient]);
++
++  return status;
++}
+diff --git a/src/lib/queries/kds.ts b/src/lib/queries/kds.ts
+new file mode 100644
+index 0000000..0f7acf9
+--- /dev/null
++++ b/src/lib/queries/kds.ts
+@@ -0,0 +1,75 @@
++import { createClient } from "@/lib/supabase/client";
++import type { KdsItem } from "@/lib/restauracion/kds";
++import type { Json, OrderItemStatus } from "@/types/database";
++
++/** Factoría de query keys del KDS (scoped por salonId). */
++export const kdsKeys = {
++  all: (salonId: string) => ["kds", salonId] as const,
++  items: (salonId: string) => [...kdsKeys.all(salonId), "items"] as const,
++};
++
++const ACTIVE_STATUSES: OrderItemStatus[] = ["enviado", "preparando", "listo"];
++
++/**
++ * Fila de `order_items` con los joins embebidos (`products`, `stations`,
++ * `orders`) que consume el KDS. Solo declara las columnas realmente pedidas
++ * en el `.select()` de abajo — ver `.returns<KdsItemRow[]>()`, el patrón que
++ * ya usa `src/lib/queries/insurers.ts` para tipar joins de supabase-js.
++ */
++interface KdsItemRow {
++  id: string;
++  order_id: string;
++  station_id: string | null;
++  product_id: string;
++  qty: number;
++  status: OrderItemStatus;
++  modifiers_snapshot: Json;
++  created_at: string;
++  products: { name: string } | null;
++  stations: { name: string } | null;
++  orders: { order_number: number | null; label: string | null; created_at: string } | null;
++}
++
++/**
++ * Líneas de pedido "activas" (enviadas, en preparación o listas) para el
++ * Kitchen Display System. Acotada por `salon_id` (multi-tenant), ignora
++ * líneas anuladas (`void_of_item_id is null`) y ordena por antigüedad (FIFO)
++ * para que la cocina/barra despache en el orden en que entraron.
++ */
++export async function fetchKdsItems(salonId: string): Promise<KdsItem[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("order_items")
++    .select(
++      "id, order_id, station_id, product_id, qty, status, modifiers_snapshot, created_at, " +
++        "products(name), stations(name), orders(order_number, label, created_at)",
++    )
++    .eq("salon_id", salonId)
++    .is("void_of_item_id", null)
++    .in("status", ACTIVE_STATUSES)
++    .order("created_at", { ascending: true })
++    .returns<KdsItemRow[]>();
++
++  if (error !== null) throw new Error(error.message);
++
++  return (data ?? []).map((row): KdsItem => {
++    const mods = Array.isArray(row.modifiers_snapshot)
++      ? (row.modifiers_snapshot as Array<{ name?: string }>)
++          .map((m) => m.name ?? "")
++          .filter((n) => n.length > 0)
++      : [];
++    return {
++      id: row.id,
++      orderId: row.order_id,
++      orderNumber: row.orders?.order_number ?? 0,
++      orderLabel: row.orders?.label ?? null,
++      stationId: row.station_id,
++      stationName: row.stations?.name ?? null,
++      productName: row.products?.name ?? "Producto",
++      qty: row.qty,
++      status: row.status,
++      modifiers: mods,
++      createdAt: row.created_at,
++    };
++  });
++}
+diff --git a/src/tests/unit/kds-keys.test.ts b/src/tests/unit/kds-keys.test.ts
+new file mode 100644
+index 0000000..fe67595
+--- /dev/null
++++ b/src/tests/unit/kds-keys.test.ts
+@@ -0,0 +1,9 @@
++import { describe, it, expect } from "vitest";
++import { kdsKeys } from "@/lib/queries/kds";
++
++describe("kdsKeys", () => {
++  it("deriva sub-keys del salón", () => {
++    expect(kdsKeys.all("s1")).toEqual(["kds", "s1"]);
++    expect(kdsKeys.items("s1")).toEqual(["kds", "s1", "items"]);
++  });
++});

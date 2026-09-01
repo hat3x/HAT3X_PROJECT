@@ -1,0 +1,261 @@
+<h2>Kaizen Score en anillo arriba, nutrición debajo</h2>
+<p class="subtitle">Las dos tienen el Score como anillo protagonista y las calorías integradas con los macros en un único bloque. Lo que cambia es cómo se ordena ese bloque: D1 le da a las calorías un lugar destacado dentro de la tarjeta; D2 las trata como una fila más de una tabla de cuatro. Mira sobre todo qué encuentras antes con el ojo.</p>
+
+<style>
+  .sr-row { display:flex; gap:30px; flex-wrap:wrap; justify-content:center; margin:28px 0 8px; align-items:flex-start; }
+  .sr-phone {
+    position:relative; width:282px; background:#060807; border-radius:36px;
+    padding:22px 16px 96px; border:1px solid #1A1E1C; overflow:hidden;
+    color:#F4F5F2; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    box-shadow:0 22px 50px rgba(0,0,0,.55);
+  }
+  .sr-aurora { position:absolute; inset:0; overflow:hidden; }
+  .sr-aurora i { position:absolute; display:block; border-radius:50%; filter:blur(46px); }
+  .sr-b1 { width:230px; height:230px; top:-70px; left:-60px; background:rgba(78,203,156,.30); }
+  .sr-b2 { width:200px; height:200px; top:200px; right:-80px; background:rgba(86,142,214,.22); }
+  .sr-b3 { width:220px; height:220px; bottom:-40px; left:-40px; background:rgba(232,168,124,.14); }
+  .sr-in { position:relative; z-index:1; }
+
+  .sr-glass {
+    background:linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.038));
+    -webkit-backdrop-filter:blur(22px) saturate(170%);
+    backdrop-filter:blur(22px) saturate(170%);
+    border:1px solid rgba(255,255,255,.10);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 10px 30px rgba(0,0,0,.30);
+    border-radius:22px;
+  }
+  .sr-card { padding:15px 16px; margin-top:12px; }
+
+  .sr-greet { font-size:19px; font-weight:600; letter-spacing:-.3px; }
+  .sr-sub { font-size:12px; color:#9AA29C; margin-top:3px; }
+  .sr-label { font-size:10px; letter-spacing:1.3px; text-transform:uppercase; color:#98A09A; font-weight:600; }
+  .sr-hero { font-size:50px; font-weight:640; letter-spacing:-2.2px; line-height:1; }
+  .sr-dim { color:#8C948E; font-weight:500; }
+  .sr-note { font-size:12px; color:#A8AFA9; line-height:1.45; }
+  .sr-flex { display:flex; align-items:center; justify-content:space-between; }
+  .sr-bar { height:7px; border-radius:6px; background:rgba(255,255,255,.10); overflow:hidden; margin-top:9px; }
+  .sr-bar > i { display:block; height:100%; border-radius:6px; }
+  .sr-mini { height:3px; border-radius:3px; background:rgba(255,255,255,.10); overflow:hidden; margin-top:6px; }
+  .sr-mini > i { display:block; height:100%; }
+  .sr-macros { display:flex; gap:11px; margin-top:14px; }
+  .sr-macro { flex:1; }
+  .sr-macro .n { font-size:14px; font-weight:620; margin-top:5px; letter-spacing:-.2px; }
+  .sr-macro .l { font-size:9.5px; color:#98A09A; text-transform:uppercase; letter-spacing:.7px; }
+  .sr-sep { height:1px; background:rgba(255,255,255,.09); margin:14px -16px 0; }
+
+  /* filas tipo tabla (D2) */
+  .sr-line { margin-top:13px; }
+  .sr-line:first-child { margin-top:0; }
+  .sr-line .top { display:flex; align-items:baseline; justify-content:space-between; }
+  .sr-line .k { font-size:11px; color:#B4BAB4; font-weight:600; letter-spacing:.2px; }
+  .sr-line .v { font-size:14px; font-weight:640; letter-spacing:-.3px; }
+  .sr-line.kcal .k { font-size:11px; color:#E6EAE4; }
+  .sr-line.kcal .v { font-size:20px; letter-spacing:-.7px; }
+
+  .sr-btn {
+    background:rgba(255,255,255,.10); color:#E6EAE4; font-size:12px; font-weight:600;
+    padding:7px 12px; border-radius:13px; border:1px solid rgba(255,255,255,.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.15); white-space:nowrap;
+  }
+  .sr-cta {
+    background:rgba(78,203,156,.88); color:#04120C; font-size:12px; font-weight:700;
+    padding:7px 13px; border-radius:13px; white-space:nowrap;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 4px 14px rgba(78,203,156,.25);
+  }
+  .sr-kcalbig { font-size:20px; font-weight:640; letter-spacing:-.7px; }
+  .sr-mission { font-size:12.5px; line-height:2.1; color:#D2D7CF; }
+  .sr-mission .done { color:#6C736D; }
+  .sr-tick { color:#7FE3BB; }
+
+  .sr-tabs {
+    position:absolute; left:16px; right:16px; bottom:18px; z-index:2;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:11px 18px; border-radius:26px;
+  }
+  .sr-tab { font-size:16px; color:#8C948E; }
+  .sr-tab.on { color:#7FE3BB; }
+  .sr-plus {
+    width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:rgba(78,203,156,.92); color:#04120C; font-size:21px; font-weight:600; line-height:1;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 5px 16px rgba(78,203,156,.35);
+  }
+  .sr-caption { text-align:center; font-size:11px; color:#8A8F8C; margin-top:13px; font-style:italic; }
+</style>
+
+<div class="sr-row">
+
+  <!-- ================= D1 ================= -->
+  <div>
+    <div class="sr-phone">
+      <div class="sr-aurora"><i class="sr-b1"></i><i class="sr-b2"></i><i class="sr-b3"></i></div>
+      <div class="sr-in">
+
+        <div class="sr-greet">Buenos días, Jota</div>
+        <div class="sr-sub">Día 24 · Fase Definición</div>
+
+        <div style="margin-top:18px; display:flex; justify-content:center;">
+          <div style="position:relative; width:168px; height:168px;">
+            <svg width="168" height="168" viewBox="0 0 168 168">
+              <circle cx="84" cy="84" r="72" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="12"/>
+              <circle cx="84" cy="84" r="72" fill="none" stroke="#4ECB9C" stroke-width="12"
+                      stroke-linecap="round" stroke-dasharray="371 452" transform="rotate(-90 84 84)"/>
+            </svg>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+              <div class="sr-hero">82</div>
+              <div class="sr-label" style="margin-top:7px;">Kaizen Score</div>
+            </div>
+          </div>
+        </div>
+        <div class="sr-note" style="text-align:center; margin-top:8px;">Vas por muy buen camino.</div>
+
+        <div class="sr-glass sr-card" style="margin-top:16px;">
+          <div class="sr-flex" style="align-items:baseline;">
+            <div class="sr-kcalbig">1.720<span class="sr-dim"> / 2.300</span></div>
+            <div class="sr-note">580 restantes</div>
+          </div>
+          <div class="sr-bar"><i style="width:75%; background:#4ECB9C"></i></div>
+
+          <div class="sr-sep"></div>
+
+          <div class="sr-macros">
+            <div class="sr-macro"><div class="l">Proteína</div><div class="n">132<span class="sr-dim">/170</span></div>
+              <div class="sr-mini"><i style="width:78%; background:#E8A87C"></i></div></div>
+            <div class="sr-macro"><div class="l">Carbos</div><div class="n">164<span class="sr-dim">/220</span></div>
+              <div class="sr-mini"><i style="width:75%; background:#7EA8D9"></i></div></div>
+            <div class="sr-macro"><div class="l">Grasas</div><div class="n">48<span class="sr-dim">/70</span></div>
+              <div class="sr-mini"><i style="width:69%; background:#D9B26F"></i></div></div>
+          </div>
+        </div>
+
+        <div class="sr-glass sr-card sr-flex">
+          <div><div class="sr-label">Agua</div>
+            <div class="sr-kcalbig" style="margin-top:4px;">1,8<span class="sr-dim"> / 2,5 L</span></div></div>
+          <div style="display:flex; gap:7px;"><div class="sr-btn">+250</div><div class="sr-btn">+500</div></div>
+        </div>
+
+        <div class="sr-glass sr-card sr-flex">
+          <div><div class="sr-label">Entrenamiento</div>
+            <div class="sr-note" style="margin-top:5px;">Pendiente hoy</div></div>
+          <div class="sr-cta">Registrar</div>
+        </div>
+
+        <div class="sr-glass sr-card">
+          <div class="sr-label">Tu misión de hoy</div>
+          <div class="sr-mission" style="margin-top:8px;">
+            <div class="done"><span class="sr-tick">✓</span> Desayuno registrado</div>
+            <div class="done"><span class="sr-tick">✓</span> 1 L de agua</div>
+            <div>○ Llegar a 170 g de proteína</div>
+            <div>○ Entrenamiento</div>
+            <div>○ Registrar cena</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sr-tabs sr-glass">
+        <div class="sr-tab on">◉</div><div class="sr-tab">◍</div>
+        <div class="sr-plus">+</div>
+        <div class="sr-tab">◌</div><div class="sr-tab">◇</div>
+      </div>
+    </div>
+    <div class="sr-caption">D1 · Calorías destacadas sobre los macros</div>
+  </div>
+
+  <!-- ================= D2 ================= -->
+  <div>
+    <div class="sr-phone">
+      <div class="sr-aurora"><i class="sr-b1"></i><i class="sr-b2"></i><i class="sr-b3"></i></div>
+      <div class="sr-in">
+
+        <div class="sr-greet">Buenos días, Jota</div>
+        <div class="sr-sub">Día 24 · Fase Definición</div>
+
+        <div style="margin-top:18px; display:flex; justify-content:center;">
+          <div style="position:relative; width:168px; height:168px;">
+            <svg width="168" height="168" viewBox="0 0 168 168">
+              <circle cx="84" cy="84" r="72" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="12"/>
+              <circle cx="84" cy="84" r="72" fill="none" stroke="#4ECB9C" stroke-width="12"
+                      stroke-linecap="round" stroke-dasharray="371 452" transform="rotate(-90 84 84)"/>
+            </svg>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+              <div class="sr-hero">82</div>
+              <div class="sr-label" style="margin-top:7px;">Kaizen Score</div>
+            </div>
+          </div>
+        </div>
+        <div class="sr-note" style="text-align:center; margin-top:8px;">Vas por muy buen camino.</div>
+
+        <div class="sr-glass sr-card" style="margin-top:16px;">
+          <div class="sr-line kcal">
+            <div class="top"><div class="k">Calorías</div>
+              <div class="v">1.720<span class="sr-dim"> / 2.300</span></div></div>
+            <div class="sr-bar"><i style="width:75%; background:#4ECB9C"></i></div>
+            <div class="sr-note" style="margin-top:6px; text-align:right;">580 restantes</div>
+          </div>
+          <div class="sr-line">
+            <div class="top"><div class="k">Proteína</div>
+              <div class="v">132<span class="sr-dim"> / 170 g</span></div></div>
+            <div class="sr-mini"><i style="width:78%; background:#E8A87C"></i></div>
+          </div>
+          <div class="sr-line">
+            <div class="top"><div class="k">Carbohidratos</div>
+              <div class="v">164<span class="sr-dim"> / 220 g</span></div></div>
+            <div class="sr-mini"><i style="width:75%; background:#7EA8D9"></i></div>
+          </div>
+          <div class="sr-line">
+            <div class="top"><div class="k">Grasas</div>
+              <div class="v">48<span class="sr-dim"> / 70 g</span></div></div>
+            <div class="sr-mini"><i style="width:69%; background:#D9B26F"></i></div>
+          </div>
+        </div>
+
+        <div class="sr-glass sr-card sr-flex">
+          <div><div class="sr-label">Agua</div>
+            <div class="sr-kcalbig" style="margin-top:4px;">1,8<span class="sr-dim"> / 2,5 L</span></div></div>
+          <div style="display:flex; gap:7px;"><div class="sr-btn">+250</div><div class="sr-btn">+500</div></div>
+        </div>
+
+        <div class="sr-glass sr-card sr-flex">
+          <div><div class="sr-label">Entrenamiento</div>
+            <div class="sr-note" style="margin-top:5px;">Pendiente hoy</div></div>
+          <div class="sr-cta">Registrar</div>
+        </div>
+
+        <div class="sr-glass sr-card">
+          <div class="sr-label">Tu misión de hoy</div>
+          <div class="sr-mission" style="margin-top:8px;">
+            <div class="done"><span class="sr-tick">✓</span> Desayuno registrado</div>
+            <div class="done"><span class="sr-tick">✓</span> 1 L de agua</div>
+            <div>○ Llegar a 170 g de proteína</div>
+            <div>○ Entrenamiento</div>
+            <div>○ Registrar cena</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sr-tabs sr-glass">
+        <div class="sr-tab on">◉</div><div class="sr-tab">◍</div>
+        <div class="sr-plus">+</div>
+        <div class="sr-tab">◌</div><div class="sr-tab">◇</div>
+      </div>
+    </div>
+    <div class="sr-caption">D2 · Cuatro filas, calorías como una más</div>
+  </div>
+
+</div>
+
+<div class="options">
+  <div class="option" data-choice="d1" onclick="toggleSelect(this)">
+    <div class="letter">D1</div>
+    <div class="content">
+      <h3>Calorías destacadas sobre los macros</h3>
+      <p>Dentro del bloque de nutrición sigue habiendo jerarquía: las calorías arriba con barra ancha, una línea de separación, y los tres macros debajo en columnas. Encuentras «cuánto llevo» de un vistazo sin leer. Contra: los nombres de los macros van abreviados y en muy pequeño para que quepan tres columnas.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="d2" onclick="toggleSelect(this)">
+    <div class="letter">D2</div>
+    <div class="content">
+      <h3>Cuatro filas, calorías como una más</h3>
+      <p>Todo el bloque es una tabla de cuatro filas a ancho completo. Más editorial y mucho más legible: cabe «Carbohidratos» entero, las barras son largas y comparables entre sí, y la proteína gana presencia. Las calorías conservan su peso por tamaño de número, no por posición. Contra: es más alto, así que empuja el resto de tarjetas hacia abajo.</p>
+    </div>
+  </div>
+</div>

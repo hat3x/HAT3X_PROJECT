@@ -1,0 +1,143 @@
+=== COMMITS (ad2c14f..80d3874) ===
+80d3874 feat(restauracion): lógica pura de pedido (drafts de ítems + líneas de cobro)
+
+=== DIFF --stat ===
+ src/lib/restauracion/order.ts             | 71 +++++++++++++++++++++++++++++++
+ src/tests/unit/restauracion-order.test.ts | 51 ++++++++++++++++++++++
+ 2 files changed, 122 insertions(+)
+
+=== DIFF -U10 ===
+diff --git a/src/lib/restauracion/order.ts b/src/lib/restauracion/order.ts
+new file mode 100644
+index 0000000..c8d4e28
+--- /dev/null
++++ b/src/lib/restauracion/order.ts
+@@ -0,0 +1,71 @@
++import { computeSaleTotals, type SaleTotals } from "@/lib/payments";
++import { effectiveUnitPriceCents, expandCombo, type ComboPiece } from "@/lib/restauracion/menu";
++
++export interface MenuSelection {
++  productId: string;
++  name: string;
++  basePriceCents: number;
++  vatRate: number;
++  stationId: string | null;
++  isCombo: boolean;
++  qty: number;
++  modifiers: Array<{ name: string; priceDeltaCents: number }>;
++  comboPieces: ComboPiece[];
++}
++
++export interface OrderItemDraft {
++  id: string;
++  productId: string;
++  qty: number;
++  unitPriceCents: number;
++  vatRate: number;
++  stationId: string | null;
++  comboGroup: string | null;
++  modifiersSnapshot: Array<{ name: string; priceDeltaCents: number }>;
++}
++
++export function buildOrderItemDrafts(sel: MenuSelection, newId: () => string): OrderItemDraft[] {
++  const headPrice = effectiveUnitPriceCents(sel.basePriceCents, sel.modifiers);
++  if (!sel.isCombo || sel.comboPieces.length === 0) {
++    return [{
++      id: newId(), productId: sel.productId, qty: sel.qty, unitPriceCents: headPrice,
++      vatRate: sel.vatRate, stationId: sel.stationId, comboGroup: null, modifiersSnapshot: sel.modifiers,
++    }];
++  }
++  const comboGroup = newId();
++  const head: OrderItemDraft = {
++    id: newId(), productId: sel.productId, qty: sel.qty, unitPriceCents: headPrice,
++    vatRate: sel.vatRate, stationId: sel.stationId, comboGroup, modifiersSnapshot: sel.modifiers,
++  };
++  const pieces = expandCombo(sel.qty, sel.comboPieces).map((line): OrderItemDraft => ({
++    id: newId(), productId: line.productId, qty: line.qty, unitPriceCents: 0,
++    vatRate: sel.vatRate, stationId: line.stationId, comboGroup, modifiersSnapshot: [],
++  }));
++  return [head, ...pieces];
++}
++
++export interface SettleLineInput {
++  description: string;
++  qty: number;
++  unitPriceCents: number;
++  vatRate: number;
++}
++
++export function buildSettleLines(
++  items: Array<{ productName: string; qty: number; unitPriceCents: number; vatRate: number;
++                 modifiersSnapshot: Array<{ name: string }> }>,
++): SettleLineInput[] {
++  return items.map((it) => {
++    const mods = it.modifiersSnapshot.map((m) => m.name).join(", ");
++    return {
++      description: mods.length > 0 ? `${it.productName} (${mods})` : it.productName,
++      qty: it.qty, unitPriceCents: it.unitPriceCents, vatRate: it.vatRate,
++    };
++  });
++}
++
++export function settleTotals(lines: SettleLineInput[]): SaleTotals {
++  return computeSaleTotals(lines.map((l) => ({
++    quantity: l.qty, unitPriceCents: l.unitPriceCents, vatRate: l.vatRate,
++  })));
++}
+diff --git a/src/tests/unit/restauracion-order.test.ts b/src/tests/unit/restauracion-order.test.ts
+new file mode 100644
+index 0000000..07f4529
+--- /dev/null
++++ b/src/tests/unit/restauracion-order.test.ts
+@@ -0,0 +1,51 @@
++import { describe, it, expect } from "vitest";
++import { buildOrderItemDrafts, buildSettleLines, settleTotals } from "@/lib/restauracion/order";
++
++let n = 0;
++const newId = () => `id-${++n}`;
++
++describe("buildOrderItemDrafts", () => {
++  it("producto simple con modificadores → 1 draft con precio efectivo", () => {
++    n = 0;
++    const drafts = buildOrderItemDrafts({
++      productId: "p1", name: "Hamburguesa", basePriceCents: 800, vatRate: 10,
++      stationId: "cocina", isCombo: false, qty: 2,
++      modifiers: [{ name: "Extra bacon", priceDeltaCents: 80 }], comboPieces: [],
++    }, newId);
++    expect(drafts).toHaveLength(1);
++    expect(drafts[0]).toMatchObject({ productId: "p1", qty: 2, unitPriceCents: 880, stationId: "cocina", comboGroup: null });
++  });
++
++  it("combo → cabecera con precio + piezas a 0 con su estación y comboGroup común", () => {
++    n = 0;
++    const drafts = buildOrderItemDrafts({
++      productId: "combo1", name: "Menú", basePriceCents: 1000, vatRate: 10,
++      stationId: "cocina", isCombo: true, qty: 1, modifiers: [],
++      comboPieces: [
++        { componentProductId: "food", qty: 1, stationId: "cocina", stationOverrideId: null },
++        { componentProductId: "drink", qty: 1, stationId: "cocina", stationOverrideId: "barra" },
++      ],
++    }, newId);
++    expect(drafts).toHaveLength(3);
++    expect(drafts[0]!.unitPriceCents).toBe(1000);
++    const group = drafts[0]!.comboGroup;
++    expect(group).not.toBeNull();
++    expect(drafts.every((d) => d.comboGroup === group)).toBe(true);
++    expect(drafts[1]!.unitPriceCents).toBe(0);
++    expect(drafts[2]!.stationId).toBe("barra");
++  });
++});
++
++describe("buildSettleLines + settleTotals", () => {
++  it("una línea por ítem con nombre+modificadores; base+IVA==bruto", () => {
++    const lines = buildSettleLines([
++      { productName: "Hamburguesa", qty: 2, unitPriceCents: 880, vatRate: 10,
++        modifiersSnapshot: [{ name: "Extra bacon" }] },
++    ]);
++    expect(lines[0]!.description).toContain("Hamburguesa");
++    expect(lines[0]!.description).toContain("Extra bacon");
++    const totals = settleTotals(lines);
++    expect(totals.subtotalCents + totals.taxCents).toBe(totals.totalCents);
++    expect(totals.totalCents).toBe(1760);
++  });
++});

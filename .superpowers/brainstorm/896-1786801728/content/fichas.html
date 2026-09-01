@@ -1,0 +1,216 @@
+<h2>Las dos fichas: proyecto y cliente</h2>
+<p class="subtitle">Aquí no eliges entre opciones — <strong>esto es lo que propongo y quiero que lo destroces</strong>. Mira las dos pantallas y dime en el terminal qué falta, qué sobra y qué está en el sitio equivocado. Lo gris es lo que llega en bloques posteriores.</p>
+
+<style>
+  .fx{font-family:system-ui,-apple-system,sans-serif;color:var(--text-primary)}
+  .fx-hero{height:66px;position:relative;display:flex;align-items:flex-end;padding:10px 14px}
+  .fx-hero.p{background:linear-gradient(135deg,#ff375f,#ff9f0a)}
+  .fx-hero.c{background:linear-gradient(135deg,#0071e3,#5ac8fa)}
+  .fx-hero h4{margin:0;color:#fff;font-size:15px;font-weight:650;letter-spacing:-.2px}
+  .fx-hero p{margin:1px 0 0;color:rgba(255,255,255,.88);font-size:9.5px}
+  .fx-badge{position:absolute;top:10px;right:12px;background:rgba(0,0,0,.34);color:#fff;font-size:9px;font-weight:600;padding:3px 8px;border-radius:20px;backdrop-filter:blur(8px);display:flex;align-items:center;gap:5px}
+  .fx-badge s{text-decoration:none;width:6px;height:6px;border-radius:50%;background:#fff}
+  .fx-acts{position:absolute;bottom:10px;right:12px;display:flex;gap:5px}
+  .fx-acts span{background:rgba(255,255,255,.22);backdrop-filter:blur(8px);color:#fff;font-size:8.5px;padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.3)}
+
+  .fx-tabs{display:flex;gap:16px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--bg-secondary)}
+  .fx-tabs span{font-size:10px;padding:8px 0;color:var(--text-secondary);border-bottom:2px solid transparent}
+  .fx-tabs span.on{color:var(--text-primary);font-weight:600;border-bottom-color:var(--accent)}
+  .fx-tabs span.off{color:var(--text-tertiary);opacity:.5}
+
+  .fx-body{display:grid;grid-template-columns:1fr 190px;gap:12px;padding:12px 14px;background:var(--bg-primary)}
+  .fx-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+
+  .fx-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+  .fx-kpi{background:var(--bg-secondary);border:1px solid var(--border);border-radius:9px;padding:7px 9px}
+  .fx-kpi b{display:block;font-size:15px;line-height:1.15;font-variant-numeric:tabular-nums}
+  .fx-kpi span{font-size:7.5px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px}
+  .fx-kpi.bad b{color:var(--error)}
+
+  .fx-box{background:var(--bg-secondary);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+  .fx-box>h5{margin:0;padding:7px 10px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .fx-box>h5 em{font-style:normal;font-size:8.5px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--accent)}
+  .fx-box.soon{opacity:.42}
+  .fx-box.soon h5 em{color:var(--text-tertiary)}
+
+  .fx-li{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:9.5px}
+  .fx-li:last-child{border-bottom:0}
+  .fx-li s{text-decoration:none;width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .fx-li b{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fx-li i{font-style:normal;color:var(--text-secondary);font-size:8.5px;white-space:nowrap}
+  .fx-li u{text-decoration:none;color:var(--text-secondary);font-size:8.5px;font-variant-numeric:tabular-nums}
+  .fx-li .tag{background:var(--bg-tertiary);color:var(--text-secondary);font-size:7.5px;padding:1.5px 6px;border-radius:20px;white-space:nowrap}
+  .fx-li .eur{font-weight:650;font-variant-numeric:tabular-nums;font-size:9.5px}
+  .ok{background:var(--success)} .warn{background:var(--warning)} .down{background:var(--error)}
+
+  .fx-bars{display:flex;gap:1.5px;align-items:flex-end;height:34px;padding:9px 10px}
+  .fx-bars i{flex:1;background:var(--success);border-radius:1.5px;min-height:4px}
+
+  .fx-links{padding:7px 10px;display:flex;flex-wrap:wrap;gap:5px}
+  .fx-links span{font-size:8.5px;background:var(--bg-tertiary);padding:3px 7px;border-radius:6px;color:var(--text-secondary)}
+
+  .fx-note{padding:7px 10px;font-size:8.5px;color:var(--text-secondary);line-height:1.45}
+  .fx-avatar{width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.25);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;margin-right:10px;flex-shrink:0}
+  .fx-head{display:flex;align-items:flex-end;width:100%}
+  .mockup-body{padding:0}
+  .fx-ask{background:var(--bg-secondary);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:.9rem 1.1rem;margin-top:1.2rem}
+  .fx-ask h4{margin:0 0 .4rem;font-size:.9rem}
+  .fx-ask ul{margin:.3rem 0 0 1.1rem;padding:0;font-size:.82rem;color:var(--text-secondary);line-height:1.6}
+</style>
+
+<div class="mockup">
+  <div class="mockup-header">Ficha de PROYECTO — «Recepcionista Sara», ahora mismo caída</div>
+  <div class="mockup-body fx">
+
+    <div class="fx-hero p">
+      <div class="fx-head">
+        <div>
+          <h4>Recepcionista de voz — Sara</h4>
+          <p>Voz · Retell AI + n8n + Google Calendar + Twilio · en producción desde jun 2026</p>
+        </div>
+      </div>
+      <div class="fx-badge"><s></s> CAÍDO · 14 min</div>
+      <div class="fx-acts"><span>Editar ficha</span><span>Silenciar 1 h</span></div>
+    </div>
+
+    <div class="fx-tabs">
+      <span class="on">Resumen</span><span>Servicios</span><span>Incidencias</span><span class="off">Administración · bloque 4</span><span>Ajustes</span>
+    </div>
+
+    <div class="fx-body">
+      <div class="fx-col">
+
+        <div class="fx-kpis">
+          <div class="fx-kpi"><b>97,2 %</b><span>Uptime 30 d</span></div>
+          <div class="fx-kpi"><b>340 ms</b><span>Respuesta media</span></div>
+          <div class="fx-kpi bad"><b>3</b><span>Incidencias 30 d</span></div>
+          <div class="fx-kpi"><b>2 d</b><span>Último cambio</span></div>
+        </div>
+
+        <div class="fx-box">
+          <h5>Servicios vigilados <em>5 de 6 operativos</em></h5>
+          <div class="fx-li"><s class="down"></s><b>n8n · 02-crear-cita</b><i>webhook</i><span class="tag">cada 5 min</span><u>HTTP 500</u></div>
+          <div class="fx-li"><s class="ok"></s><b>n8n · 01-verificar-disponibilidad</b><i>webhook</i><span class="tag">cada 5 min</span><u>210 ms</u></div>
+          <div class="fx-li"><s class="ok"></s><b>Agente Retell «Sara»</b><i>publicado</i><span class="tag">cada 15 min</span><u>ok</u></div>
+          <div class="fx-li"><s class="ok"></s><b>Número Twilio</b><i>telefonía</i><span class="tag">cada 15 min</span><u>ok</u></div>
+          <div class="fx-li"><s class="ok"></s><b>Google Calendar API</b><i>integración</i><span class="tag">cada 15 min</span><u>ok</u></div>
+          <div class="fx-li"><s class="ok"></s><b>Dominio y SSL</b><i>caduca en 214 d</i><span class="tag">diario</span><u>ok</u></div>
+        </div>
+
+        <div class="fx-box">
+          <h5>Uptime · últimos 30 días</h5>
+          <div class="fx-bars">
+            <i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:96%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i>
+            <i style="height:100%"></i><i style="height:62%;background:var(--warning)"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i>
+            <i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:41%;background:var(--error)"></i><i style="height:100%"></i><i style="height:100%"></i>
+            <i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i><i style="height:100%"></i>
+            <i style="height:100%"></i><i style="height:28%;background:var(--error)"></i>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="fx-col">
+        <div class="fx-box">
+          <h5>Quién lo tiene contratado</h5>
+          <div class="fx-li"><s class="down"></s><b>Biodental</b><span class="eur">290 €</span></div>
+        </div>
+        <div class="fx-box">
+          <h5>Ir a</h5>
+          <div class="fx-links"><span>n8n</span><span>Retell</span><span>Twilio</span><span>Google Cloud</span><span>Repo</span><span>Docs</span></div>
+        </div>
+        <div class="fx-box">
+          <h5>Quién tiene acceso</h5>
+          <div class="fx-li"><b>Jose</b><i>propietario</i></div>
+          <div class="fx-li"><b>Colaborador X</b><i>lectura</i></div>
+        </div>
+        <div class="fx-box">
+          <h5>Notas</h5>
+          <div class="fx-note">42 % de llamadas piden callback en vez de reservar. Endodoncias solo martes.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="mockup" style="margin-top:1.4rem">
+  <div class="mockup-header">Ficha de CLIENTE — «Biodental»</div>
+  <div class="mockup-body fx">
+
+    <div class="fx-hero c">
+      <div class="fx-head">
+        <div class="fx-avatar">B</div>
+        <div>
+          <h4>Clínica Dental Biodental</h4>
+          <p>Odontología · Colmenarejo, Madrid · cliente desde may 2026</p>
+        </div>
+      </div>
+      <div class="fx-badge"><s style="background:#30d158"></s> ACTIVO · 350 €/mes</div>
+      <div class="fx-acts"><span>Editar</span><span>Dar de alta usuario</span></div>
+    </div>
+
+    <div class="fx-tabs">
+      <span class="on">Resumen</span><span>Contratado</span><span>Usuarios y roles</span><span class="off">Facturación · bloque 2</span><span class="off">Gastos · bloque 2</span><span>Notas</span>
+    </div>
+
+    <div class="fx-body">
+      <div class="fx-col">
+
+        <div class="fx-kpis">
+          <div class="fx-kpi"><b>350 €</b><span>Cuota mensual</span></div>
+          <div class="fx-kpi"><b>2</b><span>Proyectos</span></div>
+          <div class="fx-kpi bad"><b>1</b><span>Servicio caído</span></div>
+          <div class="fx-kpi"><b>3</b><span>Usuarios</span></div>
+        </div>
+
+        <div class="fx-box">
+          <h5>Qué tiene contratado <em>2 proyectos activos</em></h5>
+          <div class="fx-li"><s class="down"></s><b>Recepcionista de voz — Sara</b><i>alta may 2026</i><span class="tag">producción</span><span class="eur">290 €</span></div>
+          <div class="fx-li"><s class="ok"></s><b>Kairos · sector odontología</b><i>alta 5 ago 2026</i><span class="tag">recepcionista IA</span><span class="tag">TPV</span><span class="eur">60 €</span></div>
+        </div>
+
+        <div class="fx-box">
+          <h5>Usuarios dados de alta <em>gestionar</em></h5>
+          <div class="fx-li"><b>Dirección de la clínica</b><i>dueño · acceso total a Kairos</i></div>
+          <div class="fx-li"><b>Recepción</b><i>agenda y pacientes</i></div>
+          <div class="fx-li"><b>Kristel — ortodoncia</b><i>solo su agenda</i></div>
+        </div>
+
+        <div class="fx-box soon">
+          <h5>Facturación y gastos <em>llega en el bloque 2</em></h5>
+          <div class="fx-li"><b>Presupuesto agosto 2026</b><i>emitido</i><span class="eur">350 €</span></div>
+          <div class="fx-li"><b>Coste real del mes</b><i>Retell + Twilio + Supabase</i><span class="eur">— €</span></div>
+        </div>
+
+      </div>
+
+      <div class="fx-col">
+        <div class="fx-box">
+          <h5>Contactos</h5>
+          <div class="fx-li"><b>Clínica</b><i>recepción</i></div>
+          <div class="fx-li"><b>Kristel</b><i>ortodoncia</i></div>
+        </div>
+        <div class="fx-box">
+          <h5>Le afecta ahora</h5>
+          <div class="fx-li"><s class="down"></s><b>02-crear-cita</b><i>hace 14 min</i></div>
+        </div>
+        <div class="fx-box">
+          <h5>Historial</h5>
+          <div class="fx-note">5 ago — alta en Kairos, cuota a 350 €.<br>24 jul — registro de llamadas desplegado.<br>Jul — primera cuota cobrada.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="fx-ask">
+  <h4>Lo que necesito que me digas</h4>
+  <ul>
+    <li>¿Falta alguna pestaña o algún bloque que uses de verdad en tu día a día?</li>
+    <li>En la ficha de proyecto, ¿la columna derecha (contratado / enlaces / accesos / notas) es lo que quieres ahí, o cambiarías algo?</li>
+    <li>¿Los «servicios vigilados» los quieres a ese nivel de detalle — workflow a workflow — o te vale con «n8n de Sara: bien / mal»?</li>
+    <li>Las acciones de la cabecera: ¿qué botones querrías tener siempre a mano?</li>
+  </ul>
+</div>

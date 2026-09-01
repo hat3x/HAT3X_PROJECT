@@ -1,0 +1,188 @@
+=== COMMITS fea00ce..ff881e1 ===
+ff881e1 feat(restauracion): nav Sala + retirar Caja de vender (se vende en Mostrador/Sala)
+
+=== DIFF --stat ===
+ src/components/dashboard-nav-items.ts      | 46 ++++++++++++++++++++++--------
+ src/tests/unit/dashboard-nav-items.test.ts | 17 +++++++++++
+ 2 files changed, 51 insertions(+), 12 deletions(-)
+
+=== DIFF -U12 ===
+diff --git a/src/components/dashboard-nav-items.ts b/src/components/dashboard-nav-items.ts
+index 09ba4e3..fb99041 100644
+--- a/src/components/dashboard-nav-items.ts
++++ b/src/components/dashboard-nav-items.ts
+@@ -4,24 +4,25 @@
+  * para que la lógica delicada —qué se muestra según el ROL y los ADD-ONS— sea
+  * testeable en aislamiento, igual que `metric-cards.ts` para los KPIs del panel.
+  *
+  * ── Gating por `pos` (TPV) ────────────────────────────────────────────────────
+  * Facturación es una superficie de PAGO: sus facturas y tickets NACEN del TPV, así
+  * que sin el add-on `pos` se OCULTA del nav (coherente con el panel y la analítica,
+  * que ya ocultan los KPIs y gráficas de ingresos sin `pos`). La analítica de gestión
+  * (citas, clientes, ocupación) NO depende de `pos` y permanece visible. Es gating de
+  * PRESENTACIÓN: el gate de datos vive en el servidor de cada dominio.
+  */
+ import {
+   Activity,
++  Armchair,
+   BarChart3,
+   BellRing,
+   CalendarClock,
+   CalendarDays,
+   ChefHat,
+   ClipboardList,
+   Clock,
+   ConciergeBell,
+   FileText,
+   FolderOpen,
+   LayoutDashboard,
+   Package,
+@@ -173,24 +174,37 @@ export const MOSTRADOR_ITEM: NavItem = {
+ 
+ /**
+  * Cocina (KDS — Kitchen Display System: comandas por estación en tiempo real).
+  * Solo visible para el sector restauración, y para TODOS los miembros (incluido
+  * staff): igual que Mostrador, es operativa de venta del día a día, no gestión.
+  */
+ export const COCINA_ITEM: NavItem = {
+   href: "/cocina",
+   label: "Cocina",
+   icon: ChefHat,
+ };
+ 
++/**
++ * Sala (plano de mesas: comensales, comanda, cobro). Solo visible para el
++ * sector restauración, y para TODOS los miembros (incluido staff): igual que
++ * Mostrador y Cocina, es operativa de venta del día a día, no gestión. En
++ * restauración se vende en Mostrador/Sala, por lo que "Caja" (`/tpv`) se
++ * retira del menú para este sector.
++ */
++export const SALA_ITEM: NavItem = {
++  href: "/sala",
++  label: "Sala",
++  icon: Armchair,
++};
++
+ /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
+ export interface NavGating {
+   /** El usuario puede ver materia de gestión (owner/manager). */
+   showSettings: boolean;
+   /** El salón tiene el add-on `pos` (TPV) contratado y activo. */
+   hasPos: boolean;
+   /** Sector del salón activo; determina labels y disponibilidad. Por defecto "peluqueria". */
+   sector?: SalonSector;
+ }
+ 
+ /**
+  * Compone la lista de secciones del panel según el rol y los add-ons contratados:
+@@ -202,30 +216,36 @@ export interface NavGating {
+  * Facturación se coloca entre Analítica y Ajustes (del «cómo va» al «papeleo»).
+  * Puro y determinista → testeable sin render (`dashboard-nav-items.test.ts`).
+  *
+  * ── Por sector ────────────────────────────────────────────────────────────────
+  * Sector no implementado (`SECTOR_REGISTRY[sector].implemented === false`) →
+  * cascarón: solo Panel + "Próximamente" (+ Ajustes si `showSettings`), ignorando
+  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
+  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
+  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
+  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
+  * (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
+  * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
+- * staff incluido) — es operativa de venta del día a día, como la Caja. Justo
+- * detrás, Cocina (KDS: comandas por estación en tiempo real) también SIEMPRE
+- * (todos los miembros, staff incluido) — misma naturaleza operativa que
+- * Mostrador. Por último, Carta (gestión de la carta: categorías/estaciones/
+- * productos/combos) solo si `showSettings` (owner/manager); sin gestión no se
+- * añade (staff no ve Carta, pero sí Mostrador y Cocina).
++ * staff incluido) — es operativa de venta del día a día, como la Caja lo es
++ * para el resto de sectores. Justo detrás, Sala (plano de mesas: comensales,
++ * comanda, cobro) también SIEMPRE (todos los miembros, staff incluido) —
++ * misma naturaleza operativa que Mostrador. Justo detrás, Cocina (KDS:
++ * comandas por estación en tiempo real) también SIEMPRE (todos los miembros,
++ * staff incluido) — misma naturaleza operativa que Mostrador y Sala. Por
++ * último, Carta (gestión de la carta: categorías/estaciones/productos/combos)
++ * solo si `showSettings` (owner/manager); sin gestión no se añade (staff no
++ * ve Carta, pero sí Mostrador, Sala y Cocina). En restauración se vende en
++ * Mostrador/Sala, así que "Caja" (`/tpv`, pantalla de vender) se RETIRA del
++ * menú para este sector; "Arqueo" (`/arqueo`, abrir/cerrar turno + cierre Z)
++ * se mantiene, solo para owner/manager, igual que en el resto de sectores.
+  */
+ export function buildDashboardNavItems({
+   showSettings,
+   hasPos,
+   sector = "peluqueria",
+ }: NavGating): NavItem[] {
+   const items: NavItem[] = [...PRIMARY_NAV_ITEMS];
+ 
+   if (showSettings) {
+     items.push(ANALITICA_ITEM);
+     if (hasPos) {
+       items.push(FACTURACION_ITEM);
+@@ -263,24 +283,26 @@ export function buildDashboardNavItems({
+     const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
+     return [
+       ...withSectorLabels.slice(0, insertAt),
+       ODONTOGRAMA_ITEM,
+       PERIODONTOGRAMA_ITEM,
+       PLANES_ITEM,
+       EXPEDIENTE_ITEM,
+       ...withSectorLabels.slice(insertAt),
+     ];
+   }
+ 
+   if (sector === "restauracion") {
+-    // "Mostrador" y "Cocina" son operativa de venta: SIEMPRE (todos los miembros,
+-    // staff incluido). "Carta" es gestión (owner/manager): solo si showSettings.
+-    const base = withSectorLabels.slice(0, 1);
+-    const rest = withSectorLabels.slice(1);
++    // Se vende en Mostrador/Sala → "Caja" (/tpv, pantalla de vender) se retira del menú.
++    // "Arqueo" (/arqueo) se mantiene: abrir/cerrar turno + cierre Z, donde caen los cobros.
++    // "Mostrador", "Sala" y "Cocina" son operativa de venta: SIEMPRE (todos los
++    // miembros, staff incluido). "Carta" es gestión (owner/manager): solo si showSettings.
++    const base = withSectorLabels.slice(0, 1); // Panel
++    const rest = withSectorLabels.slice(1).filter((item) => item.href !== "/tpv");
+     const extras = showSettings
+-      ? [MOSTRADOR_ITEM, COCINA_ITEM, CARTA_ITEM]
+-      : [MOSTRADOR_ITEM, COCINA_ITEM];
++      ? [MOSTRADOR_ITEM, SALA_ITEM, COCINA_ITEM, CARTA_ITEM]
++      : [MOSTRADOR_ITEM, SALA_ITEM, COCINA_ITEM];
+     return [...base, ...extras, ...rest];
+   }
+ 
+   return withSectorLabels;
+ }
+diff --git a/src/tests/unit/dashboard-nav-items.test.ts b/src/tests/unit/dashboard-nav-items.test.ts
+index a2f09d0..51b6007 100644
+--- a/src/tests/unit/dashboard-nav-items.test.ts
++++ b/src/tests/unit/dashboard-nav-items.test.ts
+@@ -103,13 +103,30 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
+     const hrefs = items.map((i) => i.href);
+     expect(hrefs).toContain("/mostrador");
+     expect(hrefs).toContain("/carta");
+   });
+ 
+   it("restauración: staff ve Mostrador y Cocina, no Carta", () => {
+     const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
+     const hrefs = items.map((i) => i.href);
+     expect(hrefs).toContain("/mostrador");
+     expect(hrefs).toContain("/cocina");
+     expect(hrefs).not.toContain("/carta");
+   });
++
++  it("restauración: staff ve Mostrador, Sala y Cocina; NO Caja ni Carta", () => {
++    const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/mostrador");
++    expect(hrefs).toContain("/sala");
++    expect(hrefs).toContain("/cocina");
++    expect(hrefs).not.toContain("/tpv"); // "Caja" (vender) se retira: se vende en Mostrador/Sala
++    expect(hrefs).not.toContain("/carta");
++  });
++  it("restauración: manager ve Sala y conserva Arqueo; sigue sin Caja", () => {
++    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/sala");
++    expect(hrefs).toContain("/arqueo");
++    expect(hrefs).not.toContain("/tpv");
++  });
+ });

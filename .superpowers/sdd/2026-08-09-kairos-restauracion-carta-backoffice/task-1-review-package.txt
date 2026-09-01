@@ -1,0 +1,655 @@
+=== COMMITS (eb679f3^..eb679f3) ===
+eb679f3 feat(restauracion): catálogo base — categorías, estaciones, alérgenos
+
+=== DIFF --stat ===
+ src/tests/unit/restauracion-menu-base-sql.test.ts  |  45 ++++
+ src/tests/unit/stock-movement-dialog.test.tsx      |   6 +
+ src/types/database.ts                              | 272 +++++++++++++++++++++
+ .../20260809120000_restauracion_menu_base.sql      | 116 +++++++++
+ 4 files changed, 439 insertions(+)
+
+=== DIFF -U10 ===
+diff --git a/src/tests/unit/restauracion-menu-base-sql.test.ts b/src/tests/unit/restauracion-menu-base-sql.test.ts
+new file mode 100644
+index 0000000..ce05c56
+--- /dev/null
++++ b/src/tests/unit/restauracion-menu-base-sql.test.ts
+@@ -0,0 +1,45 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260809120000_restauracion_menu_base.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración catálogo base restauración", () => {
++  it("crea el enum allergen con los 14 alérgenos UE", () => {
++    expect(SQL).toContain("create type public.allergen as enum");
++    for (const a of ["gluten", "crustaceos", "huevos", "pescado", "lacteos", "sesamo", "moluscos"]) {
++      expect(SQL).toContain(`'${a}'`);
++    }
++  });
++
++  it("crea menu_categories y stations con clave compuesta (id, salon_id)", () => {
++    expect(SQL).toContain("create table if not exists public.menu_categories");
++    expect(SQL).toContain("create table if not exists public.stations");
++    expect(SQL).toContain("menu_categories_id_salon_key unique (id, salon_id)");
++    expect(SQL).toContain("stations_id_salon_key unique (id, salon_id)");
++  });
++
++  it("extiende products con category_id/station_id por FK compuesta y campos de carta", () => {
++    expect(SQL).toContain("add column if not exists category_id uuid");
++    expect(SQL).toContain("add column if not exists station_id  uuid");
++    expect(SQL).toContain("add column if not exists is_combo");
++    expect(SQL).toContain("allergens    public.allergen[]");
++    expect(SQL).toContain("foreign key (category_id, salon_id)");
++    expect(SQL).toContain("references public.menu_categories (id, salon_id)");
++  });
++
++  it("habilita RLS y separa lectura (miembros) de gestión (owner/manager)", () => {
++    expect(SQL).toContain("alter table public.menu_categories enable row level security");
++    expect(SQL).toContain("alter table public.stations enable row level security");
++    expect(SQL).toContain("salon_id in (select app.user_salon_ids())");
++    expect(SQL).toContain("app.has_salon_role(salon_id, array['owner','manager']::public.member_role[])");
++  });
++
++  it("incluye un bloque guardián", () => {
++    expect(SQL).toContain("do $guard$");
++    expect(SQL).toContain("raise exception");
++  });
++});
+diff --git a/src/tests/unit/stock-movement-dialog.test.tsx b/src/tests/unit/stock-movement-dialog.test.tsx
+index db150ae..7b38f75 100644
+--- a/src/tests/unit/stock-movement-dialog.test.tsx
++++ b/src/tests/unit/stock-movement-dialog.test.tsx
+@@ -48,20 +48,26 @@ function product(overrides: Partial<Product> = {}): Product {
+     description: null,
+     price_cents: 1200,
+     currency: "EUR",
+     vat_rate: 21,
+     stock: 10,
+     min_stock: 5,
+     unit: "unidad",
+     active: true,
+     created_at: "2026-01-01T00:00:00.000Z",
+     updated_at: "2026-01-01T00:00:00.000Z",
++    category_id: null,
++    station_id: null,
++    is_combo: false,
++    image_url: null,
++    allergens: [],
++    available_channels: ["mostrador"],
+     ...overrides,
+   };
+ }
+ 
+ function movement(overrides: Partial<StockMovement> = {}): StockMovement {
+   return {
+     id: "mov-1",
+     salon_id: "salon-1",
+     product_id: "product-1",
+     kind: "entrada",
+diff --git a/src/types/database.ts b/src/types/database.ts
+index 065148d..52a0e10 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -132,20 +132,28 @@ export type SalonFeature =
+   | "ai_receptionist"
+   | "pos";
+ 
+ /**
+  * Sector del tenant. Espejo TS del enum `public.salon_sector` (migración
+  * 20260731100000_salon_sector). Lo fija HAT3X al alta; determina
+  * nav/terminologia/modulos. Default `peluqueria` (back-compat).
+  */
+ export type SalonSector = "peluqueria" | "odontologia" | "restauracion";
+ 
++/**
++ * Alérgenos de declaración obligatoria (Reglamento UE 1169/2011). Espejo TS
++ * del enum `public.allergen` (migración 20260809120000_restauracion_menu_base).
++ */
++export type Allergen =
++  | "gluten" | "crustaceos" | "huevos" | "pescado" | "cacahuetes" | "soja" | "lacteos"
++  | "frutos_cascara" | "apio" | "mostaza" | "sesamo" | "sulfitos" | "altramuces" | "moluscos";
++
+ /** Tipo de consentimiento informado (espejo del enum public.consent_type). */
+ export type ConsentType =
+   | "general"
+   | "endodoncia"
+   | "exodoncia"
+   | "implante"
+   | "ortodoncia"
+   | "anestesia"
+   | "periodoncia"
+   | "blanqueamiento"
+@@ -167,20 +175,158 @@ export type ImageModality =
+ /**
+  * Estado de una receta/prescripción (espejo del enum public.prescription_status).
+  * Borrador → emitida → revocada; INMUTABLE tras emitir (trigger
+  * `prescription_guard`, migración 20260801140000_prescriptions.sql).
+  */
+ export type PrescriptionStatus = "draft" | "issued" | "revoked";
+ 
+ export interface Database {
+   public: {
+     Tables: {
++      time_clock: {
++        Row: {
++          id: string;
++          salon_id: string;
++          user_id: string | null;
++          clock_in: string;
++          clock_out: string | null;
++          note: string | null;
++          created_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          user_id?: string | null;
++          clock_in?: string;
++          clock_out?: string | null;
++          note?: string | null;
++          created_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          user_id?: string | null;
++          clock_in?: string;
++          clock_out?: string | null;
++          note?: string | null;
++          created_at?: string;
++        };
++        Relationships: [];
++      };
++      clinical_history: {
++        Row: {
++          id: string;
++          salon_id: string;
++          customer_id: string;
++          occurred_on: string;
++          kind: string | null;
++          category: "clinica" | "comunicacion" | "nota" | "otro";
++          note: string | null;
++          fdi_tooth: number | null;
++          amount_cents: number | null;
++          done: boolean;
++          professional: string | null;
++          source_ref: string | null;
++          data: Json;
++          created_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          customer_id: string;
++          occurred_on: string;
++          kind?: string | null;
++          category?: "clinica" | "comunicacion" | "nota" | "otro";
++          note?: string | null;
++          fdi_tooth?: number | null;
++          amount_cents?: number | null;
++          done?: boolean;
++          professional?: string | null;
++          source_ref?: string | null;
++          data?: Json;
++          created_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          customer_id?: string;
++          occurred_on?: string;
++          kind?: string | null;
++          category?: "clinica" | "comunicacion" | "nota" | "otro";
++          note?: string | null;
++          fdi_tooth?: number | null;
++          amount_cents?: number | null;
++          done?: boolean;
++          professional?: string | null;
++          source_ref?: string | null;
++          data?: Json;
++          created_at?: string;
++        };
++        Relationships: [];
++      };
++      billing_history: {
++        Row: {
++          id: string;
++          salon_id: string;
++          customer_id: string | null;
++          issued_on: string;
++          series: string | null;
++          number: number | null;
++          full_number: string | null;
++          total_cents: number;
++          tax_cents: number | null;
++          paid: boolean;
++          paid_on: string | null;
++          payment_method: string | null;
++          status: string | null;
++          concept: string | null;
++          source_ref: string | null;
++          created_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          customer_id?: string | null;
++          issued_on: string;
++          series?: string | null;
++          number?: number | null;
++          full_number?: string | null;
++          total_cents?: number;
++          tax_cents?: number | null;
++          paid?: boolean;
++          paid_on?: string | null;
++          payment_method?: string | null;
++          status?: string | null;
++          concept?: string | null;
++          source_ref?: string | null;
++          created_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          customer_id?: string | null;
++          issued_on?: string;
++          series?: string | null;
++          number?: number | null;
++          full_number?: string | null;
++          total_cents?: number;
++          tax_cents?: number | null;
++          paid?: boolean;
++          paid_on?: string | null;
++          payment_method?: string | null;
++          status?: string | null;
++          concept?: string | null;
++          source_ref?: string | null;
++          created_at?: string;
++        };
++        Relationships: [];
++      };
+       salons: {
+         Row: {
+           id: string;
+           name: string;
+           slug: string;
+           timezone: string;
+           phone: string | null;
+           email: string | null;
+           address: string | null;
+           // Datos fiscales del emisor (facturación)
+@@ -534,79 +680,199 @@ export interface Database {
+         Relationships: [
+           {
+             foreignKeyName: "customers_salon_id_fkey";
+             columns: ["salon_id"];
+             isOneToOne: false;
+             referencedRelation: "salons";
+             referencedColumns: ["id"];
+           },
+         ];
+       };
++      // Categorías de la carta (restauración) — migración
++      // 20260809120000_restauracion_menu_base. Clave compuesta
++      // menu_categories_id_salon_key (id, salon_id) para permitir FK
++      // compuestas de dominio desde products.category_id.
++      menu_categories: {
++        Row: {
++          id: string;
++          salon_id: string;
++          name: string;
++          sort_order: number;
++          active: boolean;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          name: string;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          name?: string;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "menu_categories_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++        ];
++      };
++      // Estaciones de producción (cocina, barra, plancha, ...) — migración
++      // 20260809120000_restauracion_menu_base. Clave compuesta
++      // stations_id_salon_key (id, salon_id) para permitir FK compuestas de
++      // dominio desde products.station_id.
++      stations: {
++        Row: {
++          id: string;
++          salon_id: string;
++          name: string;
++          sort_order: number;
++          active: boolean;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          name: string;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          name?: string;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "stations_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++        ];
++      };
+       products: {
+         Row: {
+           id: string;
+           salon_id: string;
+           name: string;
+           description: string | null;
+           price_cents: number;
+           currency: string;
+           vat_rate: number; // tipo de IVA en porcentaje (p. ej. 21.00)
+           stock: number | null; // null = producto no inventariado
+           // min_stock/unit — migración 20260801120000_stock_inventory: control
+           // de stock/inventario de material (peluquería + odontología, sin gate
+           // de sector). min_stock = umbral de reposición (stock <= min_stock ⇒
+           // "Bajo mínimo"); unit = unidad de medida a mostrar (p. ej. "unidad",
+           // "ml", "ampolla").
+           min_stock: number;
+           unit: string;
+           active: boolean;
+           created_at: string;
+           updated_at: string;
++          // Carta (restauración) — migración
++          // 20260809120000_restauracion_menu_base. category_id/station_id son
++          // FKs compuestas (id, salon_id) hacia menu_categories/stations
++          // (products_category_id_fkey/products_station_id_fkey).
++          category_id: string | null;
++          station_id: string | null;
++          is_combo: boolean;
++          image_url: string | null;
++          allergens: Allergen[];
++          available_channels: string[];
+         };
+         Insert: {
+           id?: string;
+           salon_id: string;
+           name: string;
+           description?: string | null;
+           price_cents?: number;
+           currency?: string;
+           vat_rate?: number;
+           stock?: number | null;
+           min_stock?: number; // default 0
+           unit?: string; // default 'unidad'
+           active?: boolean;
+           created_at?: string;
+           updated_at?: string;
++          category_id?: string | null;
++          station_id?: string | null;
++          is_combo?: boolean;
++          image_url?: string | null;
++          allergens?: Allergen[];
++          available_channels?: string[];
+         };
+         Update: {
+           id?: string;
+           salon_id?: string;
+           name?: string;
+           description?: string | null;
+           price_cents?: number;
+           currency?: string;
+           vat_rate?: number;
+           stock?: number | null;
+           min_stock?: number;
+           unit?: string;
+           active?: boolean;
+           created_at?: string;
+           updated_at?: string;
++          category_id?: string | null;
++          station_id?: string | null;
++          is_combo?: boolean;
++          image_url?: string | null;
++          allergens?: Allergen[];
++          available_channels?: string[];
+         };
+         Relationships: [
+           {
+             foreignKeyName: "products_salon_id_fkey";
+             columns: ["salon_id"];
+             isOneToOne: false;
+             referencedRelation: "salons";
+             referencedColumns: ["id"];
+           },
++          {
++            foreignKeyName: "products_category_id_fkey";
++            columns: ["category_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "menu_categories";
++            referencedColumns: ["id", "salon_id"];
++          },
++          {
++            foreignKeyName: "products_station_id_fkey";
++            columns: ["station_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "stations";
++            referencedColumns: ["id", "salon_id"];
++          },
+         ];
+       };
+       // Movimientos de stock (libro de inventario) — migración
+       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
+       // aplicado al stock resultante (no la magnitud introducida por el
+       // usuario); ver `@/lib/stock` para la lógica pura de cálculo
+       // (`applyMovement`/`movementDelta`) y `products/stock-actions.ts` para la
+       // Server Action que persiste el movimiento Y actualiza `products.stock`.
+       // Lote/caducidad viajan en las ENTRADAS (trazabilidad de lotes).
+       stock_movement: {
+@@ -3082,20 +3348,21 @@ export interface Database {
+       reminder_status: ReminderStatus;
+       pos_sale_status: PosSaleStatus;
+       pos_payment_method: PosPaymentMethod;
+       pos_session_status: PosSessionStatus;
+       pos_invoice_type: PosInvoiceType;
+       points_movement_type: PointsMovementType;
+       coupon_status: CouponStatus;
+       reward_status: RewardStatus;
+       salon_feature: SalonFeature;
+       salon_sector: SalonSector;
++      allergen: Allergen;
+       consent_type: ConsentType;
+       consent_status: ConsentStatus;
+       image_modality: ImageModality;
+       stock_movement_kind: StockMovementKind;
+     };
+     CompositeTypes: Record<never, never>;
+   };
+ }
+ 
+ // Helpers de acceso tipado ------------------------------------------------------
+@@ -3206,20 +3473,25 @@ export type VisitNoteUpdate = TablesUpdate<"visit_notes">;
+ export type StockMovement = Tables<"stock_movement">;
+ export type StockMovementInsert = TablesInsert<"stock_movement">;
+ 
+ // Escandallo (BOM) de materiales por tratamiento — vincula servicios con los
+ // productos que consumen (Fase 2 del inventario). Ver
+ // `@/lib/queries/service-material.ts` y
+ // `ajustes/servicios/material-actions.ts`.
+ export type ServiceMaterial = Tables<"service_material">;
+ export type ServiceMaterialInsert = TablesInsert<"service_material">;
+ 
++// Carta (restauración) — categorías y estaciones de producción. Ver
++// migración 20260809120000_restauracion_menu_base.
++export type MenuCategory = Tables<"menu_categories">;
++export type Station = Tables<"stations">;
++
+ // Phase helpers -----------------------------------------------------------------
+ 
+ /** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
+ export interface ServicePhaseRange {
+   label: "application" | "exposure" | "post_exposure";
+   /** Minutos desde el inicio de la cita en que comienza la fase. */
+   startMin: number;
+   /** Minutos desde el inicio de la cita en que termina la fase. */
+   endMin: number;
+   /** Duración de la fase en minutos. */
+diff --git a/supabase/migrations/20260809120000_restauracion_menu_base.sql b/supabase/migrations/20260809120000_restauracion_menu_base.sql
+new file mode 100644
+index 0000000..bfe171e
+--- /dev/null
++++ b/supabase/migrations/20260809120000_restauracion_menu_base.sql
+@@ -0,0 +1,116 @@
++-- =============================================================================
++-- Kairos — Restauración · Catálogo base (categorías, estaciones, extensión products)
++-- Identificadores en inglés, comentarios en español. Dinero en céntimos.
++-- FKs de dominio COMPUESTAS (fk_id, salon_id) → tabla(id, salon_id).
++-- =============================================================================
++begin;
++
++-- Alérgenos: los 14 del Reglamento UE 1169/2011 (lista cerrada).
++do $$ begin
++  if not exists (select 1 from pg_type where typname = 'allergen') then
++    create type public.allergen as enum (
++      'gluten','crustaceos','huevos','pescado','cacahuetes','soja','lacteos',
++      'frutos_cascara','apio','mostaza','sesamo','sulfitos','altramuces','moluscos'
++    );
++  end if;
++end $$;
++
++-- Categorías de la carta.
++create table if not exists public.menu_categories (
++  id          uuid primary key default gen_random_uuid(),
++  salon_id    uuid not null references public.salons (id) on delete cascade,
++  name        varchar(120) not null,
++  sort_order  integer not null default 0,
++  active      boolean not null default true,
++  created_at  timestamptz not null default now(),
++  updated_at  timestamptz not null default now(),
++  unique (salon_id, name),
++  constraint menu_categories_id_salon_key unique (id, salon_id)
++);
++
++-- Estaciones de producción (cocina, barra, plancha, ...).
++create table if not exists public.stations (
++  id          uuid primary key default gen_random_uuid(),
++  salon_id    uuid not null references public.salons (id) on delete cascade,
++  name        varchar(120) not null,
++  sort_order  integer not null default 0,
++  active      boolean not null default true,
++  created_at  timestamptz not null default now(),
++  updated_at  timestamptz not null default now(),
++  unique (salon_id, name),
++  constraint stations_id_salon_key unique (id, salon_id)
++);
++
++-- Extensión de products para restauración.
++alter table public.products
++  add column if not exists category_id uuid,
++  add column if not exists station_id  uuid,
++  add column if not exists is_combo     boolean not null default false,
++  add column if not exists image_url    text,
++  add column if not exists allergens    public.allergen[] not null default '{}',
++  add column if not exists available_channels text[] not null default array['mostrador'];
++
++alter table public.products
++  add constraint products_category_id_fkey
++    foreign key (category_id, salon_id)
++    references public.menu_categories (id, salon_id) on delete set null (category_id),
++  add constraint products_station_id_fkey
++    foreign key (station_id, salon_id)
++    references public.stations (id, salon_id) on delete set null (station_id);
++
++create trigger trg_menu_categories_updated_at
++  before update on public.menu_categories
++  for each row execute function app.set_updated_at();
++create trigger trg_stations_updated_at
++  before update on public.stations
++  for each row execute function app.set_updated_at();
++
++-- RLS: lectura miembros / gestión owner-manager.
++alter table public.menu_categories enable row level security;
++alter table public.stations enable row level security;
++
++create policy "members_select_menu_categories" on public.menu_categories
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "managers_insert_menu_categories" on public.menu_categories
++  for insert to authenticated
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_update_menu_categories" on public.menu_categories
++  for update to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_delete_menu_categories" on public.menu_categories
++  for delete to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++create policy "members_select_stations" on public.stations
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "managers_insert_stations" on public.stations
++  for insert to authenticated
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_update_stations" on public.stations
++  for update to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_delete_stations" on public.stations
++  for delete to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++-- Guardián: RLS habilitada + política SELECT de miembros presente.
++do $guard$
++declare _rls boolean; _cnt integer;
++begin
++  select relrowsecurity into _rls from pg_class where oid = 'public.menu_categories'::regclass;
++  if not coalesce(_rls, false) then
++    raise exception 'GUARDIÁN CARTA: RLS no habilitada en menu_categories' using errcode = 'raise_exception';
++  end if;
++  select count(*) into _cnt from pg_policies
++    where schemaname = 'public' and tablename in ('menu_categories','stations')
++      and cmd = 'SELECT';
++  if _cnt < 2 then
++    raise exception 'GUARDIÁN CARTA: faltan políticas SELECT (encontradas %)', _cnt using errcode = 'raise_exception';
++  end if;
++  raise notice 'GUARDIÁN CARTA: menu_categories/stations verificadas';
++end;
++$guard$;
++
++commit;

@@ -1,0 +1,250 @@
+<h2>Home completo en Liquid Glass — ¿cuánto peso le damos al Score?</h2>
+<p class="subtitle">Las dos llevan lo mismo y en el mismo orden: anillo de kcal restantes, macros, agua, entrenamiento, misión del día y barra inferior flotante. Lo único que cambia es el tratamiento del Kaizen Score. Fíjate también en el fondo: el cristal necesita algo detrás que refractar, así que hay un campo de color muy tenue bajo todo.</p>
+
+<style>
+  .lg-row { display:flex; gap:30px; flex-wrap:wrap; justify-content:center; margin:28px 0 8px; align-items:flex-start; }
+  .lg-phone {
+    position:relative; width:282px; background:#060807; border-radius:36px;
+    padding:22px 16px 96px; border:1px solid #1A1E1C; overflow:hidden;
+    color:#F4F5F2; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    box-shadow:0 22px 50px rgba(0,0,0,.55);
+  }
+  /* ---- aurora: lo que le da al cristal algo que refractar ---- */
+  .lg-aurora { position:absolute; inset:0; overflow:hidden; }
+  .lg-aurora i { position:absolute; display:block; border-radius:50%; filter:blur(46px); }
+  .lg-b1 { width:230px; height:230px; top:-60px; left:-70px; background:rgba(78,203,156,.30); }
+  .lg-b2 { width:200px; height:200px; top:180px; right:-80px; background:rgba(86,142,214,.22); }
+  .lg-b3 { width:220px; height:220px; bottom:-40px; left:-40px; background:rgba(232,168,124,.14); }
+  .lg-in { position:relative; z-index:1; }
+
+  /* ---- el material ---- */
+  .lg-glass {
+    background:linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.038));
+    -webkit-backdrop-filter:blur(22px) saturate(170%);
+    backdrop-filter:blur(22px) saturate(170%);
+    border:1px solid rgba(255,255,255,.10);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 10px 30px rgba(0,0,0,.30);
+    border-radius:22px;
+  }
+  .lg-card { padding:15px 16px; margin-top:12px; }
+
+  .lg-greet { font-size:19px; font-weight:600; letter-spacing:-.3px; }
+  .lg-sub { font-size:12px; color:#9AA29C; margin-top:3px; }
+  .lg-label { font-size:10px; letter-spacing:1.3px; text-transform:uppercase; color:#98A09A; font-weight:600; }
+  .lg-hero { font-size:52px; font-weight:640; letter-spacing:-2.4px; line-height:1; }
+  .lg-kcal { font-size:20px; font-weight:620; letter-spacing:-.6px; }
+  .lg-dim { color:#8C948E; font-weight:500; }
+  .lg-note { font-size:12px; color:#A8AFA9; line-height:1.45; }
+  .lg-flex { display:flex; align-items:center; justify-content:space-between; }
+  .lg-macros { display:flex; gap:11px; }
+  .lg-macro { flex:1; }
+  .lg-macro .n { font-size:14px; font-weight:620; margin-top:5px; letter-spacing:-.2px; }
+  .lg-macro .l { font-size:9.5px; color:#98A09A; text-transform:uppercase; letter-spacing:.7px; }
+  .lg-mini { height:3px; border-radius:3px; background:rgba(255,255,255,.10); overflow:hidden; margin-top:6px; }
+  .lg-mini > i { display:block; height:100%; }
+  .lg-pill {
+    background:rgba(78,203,156,.18); color:#7FE3BB; font-size:12px; font-weight:660;
+    padding:6px 13px; border-radius:20px; border:1px solid rgba(78,203,156,.28);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+  }
+  .lg-btn {
+    background:rgba(255,255,255,.10); color:#E6EAE4; font-size:12px; font-weight:600;
+    padding:7px 12px; border-radius:13px; border:1px solid rgba(255,255,255,.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.15); white-space:nowrap;
+  }
+  .lg-cta {
+    background:rgba(78,203,156,.88); color:#04120C; font-size:12px; font-weight:700;
+    padding:7px 13px; border-radius:13px; white-space:nowrap;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 4px 14px rgba(78,203,156,.25);
+  }
+  .lg-mission { font-size:12.5px; line-height:2.1; color:#D2D7CF; }
+  .lg-mission .done { color:#6C736D; }
+  .lg-tick { color:#7FE3BB; }
+  .lg-rule { height:1px; background:rgba(255,255,255,.09); margin:17px 0 2px; }
+
+  /* ---- barra inferior flotante ---- */
+  .lg-tabs {
+    position:absolute; left:16px; right:16px; bottom:18px; z-index:2;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:11px 18px; border-radius:26px;
+  }
+  .lg-tab { font-size:16px; color:#8C948E; }
+  .lg-tab.on { color:#7FE3BB; }
+  .lg-plus {
+    width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:rgba(78,203,156,.92); color:#04120C; font-size:21px; font-weight:600; line-height:1;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 5px 16px rgba(78,203,156,.35);
+  }
+  .lg-caption { text-align:center; font-size:11px; color:#8A8F8C; margin-top:13px; font-style:italic; }
+</style>
+
+<div class="lg-row">
+
+  <!-- ================= C1 ================= -->
+  <div>
+    <div class="lg-phone">
+      <div class="lg-aurora"><i class="lg-b1"></i><i class="lg-b2"></i><i class="lg-b3"></i></div>
+
+      <div class="lg-in">
+        <div class="lg-flex">
+          <div>
+            <div class="lg-greet">Buenos días, Jota</div>
+            <div class="lg-sub">Día 24 · Fase Definición</div>
+          </div>
+          <div class="lg-pill">82</div>
+        </div>
+
+        <div style="margin-top:22px; display:flex; justify-content:center;">
+          <div style="position:relative; width:174px; height:174px;">
+            <svg width="174" height="174" viewBox="0 0 174 174">
+              <circle cx="87" cy="87" r="75" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="11"/>
+              <circle cx="87" cy="87" r="75" fill="none" stroke="#4ECB9C" stroke-width="11"
+                      stroke-linecap="round" stroke-dasharray="353 471" transform="rotate(-90 87 87)"/>
+            </svg>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+              <div class="lg-hero" style="font-size:46px;">580</div>
+              <div class="lg-label" style="margin-top:6px;">kcal restantes</div>
+            </div>
+          </div>
+        </div>
+        <div class="lg-note" style="text-align:center; margin-top:6px;">1.720 de 2.300 consumidas</div>
+
+        <div class="lg-glass lg-card">
+          <div class="lg-macros">
+            <div class="lg-macro"><div class="l">Proteína</div><div class="n">132<span class="lg-dim">/170</span></div>
+              <div class="lg-mini"><i style="width:78%; background:#E8A87C"></i></div></div>
+            <div class="lg-macro"><div class="l">Carbos</div><div class="n">164<span class="lg-dim">/220</span></div>
+              <div class="lg-mini"><i style="width:75%; background:#7EA8D9"></i></div></div>
+            <div class="lg-macro"><div class="l">Grasas</div><div class="n">48<span class="lg-dim">/70</span></div>
+              <div class="lg-mini"><i style="width:69%; background:#D9B26F"></i></div></div>
+          </div>
+        </div>
+
+        <div class="lg-glass lg-card lg-flex">
+          <div><div class="lg-label">Agua</div>
+            <div class="lg-kcal" style="margin-top:4px;">1,8<span class="lg-dim"> / 2,5 L</span></div></div>
+          <div style="display:flex; gap:7px;"><div class="lg-btn">+250</div><div class="lg-btn">+500</div></div>
+        </div>
+
+        <div class="lg-glass lg-card lg-flex">
+          <div><div class="lg-label">Entrenamiento</div>
+            <div class="lg-note" style="margin-top:5px;">Pendiente hoy</div></div>
+          <div class="lg-cta">Registrar</div>
+        </div>
+
+        <div class="lg-glass lg-card">
+          <div class="lg-label">Tu misión de hoy</div>
+          <div class="lg-mission" style="margin-top:8px;">
+            <div class="done"><span class="lg-tick">✓</span> Desayuno registrado</div>
+            <div class="done"><span class="lg-tick">✓</span> 1 L de agua</div>
+            <div>○ Llegar a 170 g de proteína</div>
+            <div>○ Entrenamiento</div>
+            <div>○ Registrar cena</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lg-tabs lg-glass">
+        <div class="lg-tab on">◉</div><div class="lg-tab">◍</div>
+        <div class="lg-plus">+</div>
+        <div class="lg-tab">◌</div><div class="lg-tab">◇</div>
+      </div>
+    </div>
+    <div class="lg-caption">C1 · Score como pastilla de cristal</div>
+  </div>
+
+  <!-- ================= C2 ================= -->
+  <div>
+    <div class="lg-phone">
+      <div class="lg-aurora"><i class="lg-b1"></i><i class="lg-b2"></i><i class="lg-b3"></i></div>
+
+      <div class="lg-in">
+        <div class="lg-greet">Buenos días, Jota</div>
+        <div class="lg-sub">Día 24 · Fase Definición</div>
+
+        <div style="margin-top:20px;">
+          <div class="lg-label">Kaizen Score</div>
+          <div class="lg-flex" style="align-items:flex-end; margin-top:6px;">
+            <div class="lg-hero">82</div>
+            <div class="lg-note" style="text-align:right; max-width:136px; padding-bottom:5px;">Vas por muy buen camino.</div>
+          </div>
+        </div>
+        <div class="lg-rule"></div>
+
+        <div style="margin-top:14px; display:flex; justify-content:center;">
+          <div style="position:relative; width:174px; height:174px;">
+            <svg width="174" height="174" viewBox="0 0 174 174">
+              <circle cx="87" cy="87" r="75" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="11"/>
+              <circle cx="87" cy="87" r="75" fill="none" stroke="#4ECB9C" stroke-width="11"
+                      stroke-linecap="round" stroke-dasharray="353 471" transform="rotate(-90 87 87)"/>
+            </svg>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+              <div class="lg-hero" style="font-size:46px;">580</div>
+              <div class="lg-label" style="margin-top:6px;">kcal restantes</div>
+            </div>
+          </div>
+        </div>
+        <div class="lg-note" style="text-align:center; margin-top:6px;">1.720 de 2.300 consumidas</div>
+
+        <div class="lg-glass lg-card">
+          <div class="lg-macros">
+            <div class="lg-macro"><div class="l">Proteína</div><div class="n">132<span class="lg-dim">/170</span></div>
+              <div class="lg-mini"><i style="width:78%; background:#E8A87C"></i></div></div>
+            <div class="lg-macro"><div class="l">Carbos</div><div class="n">164<span class="lg-dim">/220</span></div>
+              <div class="lg-mini"><i style="width:75%; background:#7EA8D9"></i></div></div>
+            <div class="lg-macro"><div class="l">Grasas</div><div class="n">48<span class="lg-dim">/70</span></div>
+              <div class="lg-mini"><i style="width:69%; background:#D9B26F"></i></div></div>
+          </div>
+        </div>
+
+        <div class="lg-glass lg-card lg-flex">
+          <div><div class="lg-label">Agua</div>
+            <div class="lg-kcal" style="margin-top:4px;">1,8<span class="lg-dim"> / 2,5 L</span></div></div>
+          <div style="display:flex; gap:7px;"><div class="lg-btn">+250</div><div class="lg-btn">+500</div></div>
+        </div>
+
+        <div class="lg-glass lg-card lg-flex">
+          <div><div class="lg-label">Entrenamiento</div>
+            <div class="lg-note" style="margin-top:5px;">Pendiente hoy</div></div>
+          <div class="lg-cta">Registrar</div>
+        </div>
+
+        <div class="lg-glass lg-card">
+          <div class="lg-label">Tu misión de hoy</div>
+          <div class="lg-mission" style="margin-top:8px;">
+            <div class="done"><span class="lg-tick">✓</span> Desayuno registrado</div>
+            <div class="done"><span class="lg-tick">✓</span> 1 L de agua</div>
+            <div>○ Llegar a 170 g de proteína</div>
+            <div>○ Entrenamiento</div>
+            <div>○ Registrar cena</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lg-tabs lg-glass">
+        <div class="lg-tab on">◉</div><div class="lg-tab">◍</div>
+        <div class="lg-plus">+</div>
+        <div class="lg-tab">◌</div><div class="lg-tab">◇</div>
+      </div>
+    </div>
+    <div class="lg-caption">C2 · Score tipográfico, con su frase</div>
+  </div>
+
+</div>
+
+<div class="options">
+  <div class="option" data-choice="c1" onclick="toggleSelect(this)">
+    <div class="letter">C1</div>
+    <div class="content">
+      <h3>Score como pastilla de cristal</h3>
+      <p>Lo que elegiste. Máxima economía: lo primero y más grande que ves es lo único accionable, las kcal que te quedan. El Score está arriba si lo buscas, pero no reclama nada. Contra: se pierde la frase («Vas por muy buen camino»), que es donde vive el tono humano de la app.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c2" onclick="toggleSelect(this)">
+    <div class="letter">C2</div>
+    <div class="content">
+      <h3>Score tipográfico, con su frase</h3>
+      <p>Cumple tu sección 6 sin romper lo que te gustó de C: el 82 es grande y elegante, pero es <strong>tipografía</strong>, no un anillo, así que no le disputa el sitio al círculo. Recupera la frase. Contra: el anillo baja unos 90 px y la misión del día ya no asoma sin desplazar.</p>
+    </div>
+  </div>
+</div>

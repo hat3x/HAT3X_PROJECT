@@ -1,0 +1,1011 @@
+=== COMMITS 008d8b3..a4a23cf ===
+a4a23cf feat(restauracion): plano de sala arrastrable (/sala) en tiempo real
+
+=== DIFF --stat ===
+ src/app/(dashboard)/sala/floor-editor.tsx | 235 ++++++++++++++++++++
+ src/app/(dashboard)/sala/layout.tsx       |  17 ++
+ src/app/(dashboard)/sala/page.tsx         |  47 ++++
+ src/app/(dashboard)/sala/sala-view.tsx    | 346 ++++++++++++++++++++++++++++++
+ src/app/(dashboard)/sala/table-node.tsx   | 124 +++++++++++
+ src/app/(dashboard)/sala/table-panel.tsx  |  31 ++-
+ src/tests/unit/table-node.test.tsx        |  66 ++++++
+ 7 files changed, 860 insertions(+), 6 deletions(-)
+
+=== DIFF -U8 ===
+diff --git a/src/app/(dashboard)/sala/floor-editor.tsx b/src/app/(dashboard)/sala/floor-editor.tsx
+new file mode 100644
+index 0000000..fdf276a
+--- /dev/null
++++ b/src/app/(dashboard)/sala/floor-editor.tsx
+@@ -0,0 +1,235 @@
++"use client";
++
++import { useState } from "react";
++import { Pencil, Plus } from "lucide-react";
++
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { useCreateTable, useCreateZone } from "@/hooks/use-tables";
++import type { DiningZone } from "@/types/database";
++
++interface FloorEditorProps {
++  salonId: string;
++  zones: DiningZone[];
++  /** Zona activa en el lienzo — sugerida por defecto al crear una mesa nueva. */
++  activeZoneId: string | null;
++  editMode: boolean;
++  onToggleEditMode: () => void;
++}
++
++/**
++ * Controles del modo edición del plano de sala (Task 7): el toggle de
++ * edición SIEMPRE está visible (`sala-view.tsx` solo monta este componente
++ * si `canManageSettings(role)`, así que aquí no hace falta repetir el gate);
++ * "Nueva zona"/"Nueva mesa" solo aparecen CON el modo edición activo, mismo
++ * patrón alta-en-diálogo que `carta-view.tsx` (`CategoriesSection`/
++ * `StationsSection`): botón que abre un `Dialog`, formulario mínimo, mutación
++ * de `use-tables.ts` (Task 5) y cierre al éxito.
++ *
++ * El arrastre de mesas (`TableNode`/`onDragEnd` → `useSaveTablePosition`) vive
++ * en `sala-view.tsx`, no aquí — este fichero solo cubre alta de zona/mesa y el
++ * propio toggle.
++ */
++export function FloorEditor({
++  salonId,
++  zones,
++  activeZoneId,
++  editMode,
++  onToggleEditMode,
++}: FloorEditorProps): React.ReactElement {
++  const createZone = useCreateZone(salonId);
++  const createTable = useCreateTable(salonId);
++
++  const [zoneDialogOpen, setZoneDialogOpen] = useState(false);
++  const [zoneName, setZoneName] = useState("");
++
++  const [tableDialogOpen, setTableDialogOpen] = useState(false);
++  const [tableName, setTableName] = useState("");
++  const [tableZoneId, setTableZoneId] = useState<string | null>(null);
++
++  function openZoneDialog(): void {
++    createZone.reset();
++    setZoneName("");
++    setZoneDialogOpen(true);
++  }
++
++  function openTableDialog(): void {
++    createTable.reset();
++    setTableName("");
++    setTableZoneId(activeZoneId ?? zones[0]?.id ?? null);
++    setTableDialogOpen(true);
++  }
++
++  function handleCreateZone(): void {
++    const name = zoneName.trim();
++    if (name === "") return;
++    createZone.mutate(
++      { name, sortOrder: zones.length },
++      { onSuccess: () => setZoneDialogOpen(false) },
++    );
++  }
++
++  function handleCreateTable(): void {
++    const name = tableName.trim();
++    if (name === "" || tableZoneId === null) return;
++    createTable.mutate(
++      {
++        name,
++        zoneId: tableZoneId,
++        capacityMin: 1,
++        capacityMax: 4,
++        shape: "square",
++        sortOrder: 0,
++      },
++      { onSuccess: () => setTableDialogOpen(false) },
++    );
++  }
++
++  return (
++    <div className="flex flex-wrap items-center gap-2">
++      <Button
++        type="button"
++        variant={editMode ? "default" : "outline"}
++        size="sm"
++        onClick={onToggleEditMode}
++      >
++        <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
++        {editMode ? "Salir de edición" : "Modo edición"}
++      </Button>
++
++      {editMode ? (
++        <>
++          <Dialog open={zoneDialogOpen} onOpenChange={setZoneDialogOpen}>
++            <Button type="button" variant="outline" size="sm" onClick={openZoneDialog}>
++              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++              Nueva zona
++            </Button>
++            <DialogContent>
++              <DialogHeader>
++                <DialogTitle>Nueva zona</DialogTitle>
++                <DialogDescription>Añade una zona al plano de sala.</DialogDescription>
++              </DialogHeader>
++              <div className="space-y-2">
++                <Label htmlFor="sala-zone-name">Nombre</Label>
++                <Input
++                  id="sala-zone-name"
++                  value={zoneName}
++                  onChange={(e) => setZoneName(e.target.value)}
++                  placeholder="Terraza"
++                />
++              </div>
++              {createZone.error instanceof Error ? (
++                <p role="alert" className="text-sm text-destructive">
++                  {createZone.error.message}
++                </p>
++              ) : null}
++              <DialogFooter>
++                <Button
++                  type="button"
++                  variant="outline"
++                  onClick={() => setZoneDialogOpen(false)}
++                  disabled={createZone.isPending}
++                >
++                  Cancelar
++                </Button>
++                <Button
++                  type="button"
++                  onClick={handleCreateZone}
++                  disabled={createZone.isPending || zoneName.trim() === ""}
++                >
++                  {createZone.isPending ? "Creando…" : "Crear zona"}
++                </Button>
++              </DialogFooter>
++            </DialogContent>
++          </Dialog>
++
++          <Dialog open={tableDialogOpen} onOpenChange={setTableDialogOpen}>
++            <Button
++              type="button"
++              variant="outline"
++              size="sm"
++              onClick={openTableDialog}
++              disabled={zones.length === 0}
++            >
++              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++              Nueva mesa
++            </Button>
++            <DialogContent>
++              <DialogHeader>
++                <DialogTitle>Nueva mesa</DialogTitle>
++                <DialogDescription>Añade una mesa a la zona seleccionada.</DialogDescription>
++              </DialogHeader>
++              <div className="space-y-3">
++                <div className="space-y-2">
++                  <Label htmlFor="sala-table-name">Nombre</Label>
++                  <Input
++                    id="sala-table-name"
++                    value={tableName}
++                    onChange={(e) => setTableName(e.target.value)}
++                    placeholder="Mesa 5"
++                  />
++                </div>
++                <div className="space-y-2">
++                  <Label htmlFor="sala-table-zone">Zona</Label>
++                  <Select
++                    value={tableZoneId ?? undefined}
++                    onValueChange={(value) => setTableZoneId(value)}
++                  >
++                    <SelectTrigger id="sala-table-zone">
++                      <SelectValue placeholder="Elige una zona" />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {zones.map((zone) => (
++                        <SelectItem key={zone.id} value={zone.id}>
++                          {zone.name}
++                        </SelectItem>
++                      ))}
++                    </SelectContent>
++                  </Select>
++                </div>
++              </div>
++              {createTable.error instanceof Error ? (
++                <p role="alert" className="text-sm text-destructive">
++                  {createTable.error.message}
++                </p>
++              ) : null}
++              <DialogFooter>
++                <Button
++                  type="button"
++                  variant="outline"
++                  onClick={() => setTableDialogOpen(false)}
++                  disabled={createTable.isPending}
++                >
++                  Cancelar
++                </Button>
++                <Button
++                  type="button"
++                  onClick={handleCreateTable}
++                  disabled={createTable.isPending || tableName.trim() === "" || tableZoneId === null}
++                >
++                  {createTable.isPending ? "Creando…" : "Crear mesa"}
++                </Button>
++              </DialogFooter>
++            </DialogContent>
++          </Dialog>
++        </>
++      ) : null}
++    </div>
++  );
++}
+diff --git a/src/app/(dashboard)/sala/layout.tsx b/src/app/(dashboard)/sala/layout.tsx
+new file mode 100644
+index 0000000..2402144
+--- /dev/null
++++ b/src/app/(dashboard)/sala/layout.tsx
+@@ -0,0 +1,17 @@
++import { SectorGate } from "@/components/guards/sector-gate";
++
++/**
++ * Layout de `/sala` (Task 7): SOLO gate de sector, patrón `carta/layout.tsx`
++ * pero SIN gate de rol — a diferencia de la carta (configuración, solo
++ * owner/manager), la sala es operativa de staff del día a día (abrir mesas,
++ * ver comandas, cobrar). El modo edición del plano (arrastrar mesas, crear
++ * zonas/mesas) SÍ exige `canManageSettings`, pero eso se decide dentro de
++ * `sala-view.tsx` con el `role` resuelto por `page.tsx`, no aquí.
++ */
++export default async function SalaLayout({
++  children,
++}: {
++  children: React.ReactNode;
++}): Promise<React.ReactElement> {
++  return <SectorGate required="restauracion">{children}</SectorGate>;
++}
+diff --git a/src/app/(dashboard)/sala/page.tsx b/src/app/(dashboard)/sala/page.tsx
+new file mode 100644
+index 0000000..85f6858
+--- /dev/null
++++ b/src/app/(dashboard)/sala/page.tsx
+@@ -0,0 +1,47 @@
++import type { Metadata } from "next";
++import { redirect } from "next/navigation";
++
++import { SalaView } from "@/app/(dashboard)/sala/sala-view";
++import { getActiveMembership, getActiveSalon } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++
++export const metadata: Metadata = {
++  title: "Sala",
++};
++
++/**
++ * `page.tsx` de `/sala` (Task 7): resuelve `salonId` y `role` en servidor —
++ * mismo patrón que `mostrador/page.tsx` (comprobar sesión, resolver salón
++ * activo, delegar el resto a la vista cliente). `role` se pasa a `SalaView`
++ * para decidir si se muestra el modo edición del plano (solo owner/manager,
++ * vía `canManageSettings` — Task 7 la comprueba en cliente para la UI Y el
++ * servidor la vuelve a comprobar en `saveTablePosition`/`createZone`/
++ * `createTable`, `sala/actions.ts`, Task 5: la UI oculta, el servidor rechaza).
++ */
++export default async function SalaPage(): Promise<React.ReactElement> {
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  if (user === null) {
++    redirect("/login");
++  }
++
++  const salon = await getActiveSalon();
++
++  if (salon === null) {
++    return (
++      <main className="container py-10">
++        <h1 className="text-3xl font-bold tracking-tight">Sala</h1>
++        <p className="mt-2 text-muted-foreground">
++          Tu usuario no está asociado a ningún salón todavía.
++        </p>
++      </main>
++    );
++  }
++
++  const membership = await getActiveMembership();
++
++  return <SalaView salonId={salon.id} role={membership?.role ?? null} />;
++}
+diff --git a/src/app/(dashboard)/sala/sala-view.tsx b/src/app/(dashboard)/sala/sala-view.tsx
+new file mode 100644
+index 0000000..d32aff2
+--- /dev/null
++++ b/src/app/(dashboard)/sala/sala-view.tsx
+@@ -0,0 +1,346 @@
++"use client";
++
++import { useEffect, useMemo, useState } from "react";
++import { useRouter } from "next/navigation";
++import { Loader2, WifiOff } from "lucide-react";
++
++import { FloorEditor } from "@/app/(dashboard)/sala/floor-editor";
++import { TableNode } from "@/app/(dashboard)/sala/table-node";
++import { TablePanel } from "@/app/(dashboard)/sala/table-panel";
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import { useMenuProducts } from "@/hooks/use-menu";
++import {
++  useOpenTable,
++  useSaveTablePosition,
++  useTableOrders,
++  useTables,
++  useTablesRealtime,
++  useZones,
++} from "@/hooks/use-tables";
++import { useSalePaymentMethods } from "@/hooks/use-tpv";
++import { canManageSettings } from "@/lib/salon";
++import { tableTone } from "@/lib/restauracion/tables";
++import type { DiningTable, MemberRole } from "@/types/database";
++
++interface SalaViewProps {
++  salonId: string;
++  /** `null` si el usuario no tiene una pertenencia resuelta (no debería
++   * ocurrir tras `SectorGate`, pero se trata como "sin permiso de gestión"). */
++  role: MemberRole | null;
++}
++
++/**
++ * Indicador "En directo" del estado de `useTablesRealtime` — mismo patrón
++ * visual que `LiveIndicator` de `cocina-view.tsx` (punto pulsante en
++ * verde/conectado, icono de sin-conexión en error, spinner conectando),
++ * adaptado al copy de sala.
++ */
++function LiveIndicator({
++  status,
++}: {
++  status: "connecting" | "connected" | "error";
++}): React.ReactElement {
++  const base =
++    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-150 ease-apple-out";
++
++  if (status === "connected") {
++    return (
++      <span
++        className={`${base} border-success/25 bg-success/10 text-success`}
++        title="Los cambios se reflejan al instante"
++      >
++        <span className="relative flex h-1.5 w-1.5">
++          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/70" />
++          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
++        </span>
++        En directo
++      </span>
++    );
++  }
++  if (status === "error") {
++    return (
++      <span className={`${base} border-destructive/25 bg-destructive/10 text-destructive`}>
++        <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
++        Sin conexión en tiempo real
++      </span>
++    );
++  }
++  return (
++    <span className={`${base} border-border bg-muted text-muted-foreground`}>
++      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++      Conectando…
++    </span>
++  );
++}
++
++/** Diálogo "Abrir mesa": pide el número de comensales antes de crear la cuenta. */
++function OpenTableDialog({
++  table,
++  pending,
++  error,
++  onClose,
++  onConfirm,
++}: {
++  table: DiningTable | null;
++  pending: boolean;
++  error: string | null;
++  onClose: () => void;
++  onConfirm: (covers: number) => void;
++}): React.ReactElement {
++  const [covers, setCovers] = useState(2);
++
++  // Reinicia el número de comensales cada vez que se abre para OTRA mesa.
++  useEffect(() => {
++    setCovers(2);
++  }, [table?.id]);
++
++  return (
++    <Dialog
++      open={table !== null}
++      onOpenChange={(open) => {
++        if (!open) onClose();
++      }}
++    >
++      <DialogContent>
++        <DialogHeader>
++          <DialogTitle>Abrir {table?.name}</DialogTitle>
++          <DialogDescription>Indica cuántos comensales van a sentarse.</DialogDescription>
++        </DialogHeader>
++        <div className="space-y-2">
++          <Label htmlFor="sala-open-covers">Comensales</Label>
++          <Input
++            id="sala-open-covers"
++            type="number"
++            inputMode="numeric"
++            min={1}
++            max={99}
++            value={covers}
++            onChange={(e) => setCovers(Number(e.target.value))}
++          />
++        </div>
++        {error !== null ? (
++          <p role="alert" className="text-sm text-destructive">
++            {error}
++          </p>
++        ) : null}
++        <DialogFooter>
++          <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
++            Cancelar
++          </Button>
++          <Button
++            type="button"
++            onClick={() => onConfirm(covers)}
++            disabled={pending || !Number.isInteger(covers) || covers < 1}
++          >
++            {pending ? "Abriendo…" : "Abrir mesa"}
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
++
++/**
++ * Plano de sala (Task 7): lienzo con las mesas de la zona activa en tiempo
++ * real, abrir mesa (libre → diálogo de comensales → `useOpenTable`), panel de
++ * mesa (ocupada/cuenta_pedida/por_limpiar → `TablePanel`, Task 6) y modo
++ * edición (solo `canManageSettings(role)`: arrastrar mesas + alta de
++ * zona/mesa vía `FloorEditor`).
++ *
++ * Cronómetro `now` — mismo patrón que `CocinaView`: `useState(() => new
++ * Date())` + `setInterval(30s)`, NUNCA `Date.now()` fuera de este efecto;
++ * se pasa a `TablePanel` para su propio cronómetro de tiempo sentados.
++ *
++ * Dos cableados cross-task heredados de la Task 6 (ver brief de Task 7):
++ * `productNames` (mapa `product_id → nombre`, resuelto aquí con
++ * `useMenuProducts` — mismo hook que usa el mostrador) y `paymentMethods`
++ * (`useSalePaymentMethods`, también compartido con el mostrador), ambos
++ * reenviados a `TablePanel`.
++ */
++export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
++  const router = useRouter();
++  const canEdit = canManageSettings(role);
++
++  const realtimeStatus = useTablesRealtime(salonId);
++  const zonesQuery = useZones(salonId);
++  const tablesQuery = useTables(salonId);
++  const ordersQuery = useTableOrders(salonId);
++  const productsQuery = useMenuProducts(salonId);
++  const paymentMethodsQuery = useSalePaymentMethods(salonId);
++
++  const openTableMutation = useOpenTable(salonId);
++  const savePosition = useSaveTablePosition(salonId);
++
++  const [now, setNow] = useState(() => new Date());
++  useEffect(() => {
++    const id = setInterval(() => setNow(new Date()), 30000);
++    return () => clearInterval(id);
++  }, []);
++
++  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
++  const [editMode, setEditMode] = useState(false);
++  const [openDialogTable, setOpenDialogTable] = useState<DiningTable | null>(null);
++  const [openError, setOpenError] = useState<string | null>(null);
++  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
++
++  const zones = zonesQuery.data ?? [];
++  const tables = tablesQuery.data ?? [];
++  const orders = ordersQuery.data ?? [];
++
++  const ordersByTable = useMemo(() => {
++    const map = new Map<string, (typeof orders)[number]>();
++    for (const order of orders) {
++      if (order.dining_table_id !== null) map.set(order.dining_table_id, order);
++    }
++    return map;
++  }, [orders]);
++
++  const productNames = useMemo(() => {
++    const map: Record<string, string> = {};
++    for (const product of productsQuery.data ?? []) map[product.id] = product.name;
++    return map;
++  }, [productsQuery.data]);
++
++  const currentZoneId = activeZoneId ?? zones[0]?.id ?? null;
++  const visibleTables = tables.filter((t) => t.zone_id === currentZoneId);
++
++  const selectedTable = tables.find((t) => t.id === selectedTableId) ?? null;
++  const selectedOrder = selectedTable !== null ? ordersByTable.get(selectedTable.id) ?? null : null;
++
++  function toggleEditMode(): void {
++    setEditMode((prev) => !prev);
++  }
++
++  function handleTableSelect(table: DiningTable): void {
++    if (editMode) return;
++    if (table.status === "libre") {
++      setOpenError(null);
++      setOpenDialogTable(table);
++      return;
++    }
++    setSelectedTableId(table.id);
++  }
++
++  function handleConfirmOpen(covers: number): void {
++    if (openDialogTable === null) return;
++    setOpenError(null);
++    openTableMutation.mutate(
++      { tableId: openDialogTable.id, covers },
++      {
++        onSuccess: () => {
++          setSelectedTableId(openDialogTable.id);
++          setOpenDialogTable(null);
++        },
++        onError: (e) => setOpenError(e instanceof Error ? e.message : "No se pudo abrir la mesa"),
++      },
++    );
++  }
++
++  function handleDragEnd(table: DiningTable, pos: { posX: number; posY: number }): void {
++    savePosition.mutate({ tableId: table.id, posX: pos.posX, posY: pos.posY });
++  }
++
++  return (
++    <main className="container py-6 lg:py-8">
++      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
++        <div className="space-y-1">
++          <h1 className="text-3xl font-bold tracking-tight">Sala</h1>
++          <p className="text-sm text-muted-foreground">
++            Plano de mesas: toca una mesa libre para abrirla o una ocupada para ver su cuenta.
++          </p>
++        </div>
++        <LiveIndicator status={realtimeStatus} />
++      </div>
++
++      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
++        <div className="flex flex-wrap gap-2">
++          {zones.map((zone) => (
++            <Button
++              key={zone.id}
++              type="button"
++              size="sm"
++              variant={zone.id === currentZoneId ? "default" : "outline"}
++              onClick={() => setActiveZoneId(zone.id)}
++            >
++              {zone.name}
++            </Button>
++          ))}
++        </div>
++
++        {canEdit ? (
++          <FloorEditor
++            salonId={salonId}
++            zones={zones}
++            activeZoneId={currentZoneId}
++            editMode={editMode}
++            onToggleEditMode={toggleEditMode}
++          />
++        ) : null}
++      </div>
++
++      <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
++        <div className="relative min-h-[34rem] w-full overflow-hidden rounded-2xl border border-dashed border-border bg-muted/20">
++          {tablesQuery.isPending || zonesQuery.isPending ? (
++            <p className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
++              Cargando plano…
++            </p>
++          ) : zones.length === 0 ? (
++            <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
++              Todavía no hay zonas en el plano.
++              {canEdit ? " Crea una desde el modo edición." : ""}
++            </p>
++          ) : visibleTables.length === 0 ? (
++            <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
++              No hay mesas en esta zona.
++              {canEdit ? " Crea una desde el modo edición." : ""}
++            </p>
++          ) : (
++            visibleTables.map((table) => (
++              <TableNode
++                key={table.id}
++                table={table}
++                tone={tableTone(table.status)}
++                editable={editMode}
++                onSelect={() => handleTableSelect(table)}
++                onDragEnd={editMode ? (pos) => handleDragEnd(table, pos) : undefined}
++              />
++            ))
++          )}
++        </div>
++
++        {selectedTable !== null ? (
++          <TablePanel
++            table={selectedTable}
++            order={selectedOrder}
++            salonId={salonId}
++            now={now}
++            productNames={productNames}
++            paymentMethods={paymentMethodsQuery.data ?? []}
++            onClose={() => setSelectedTableId(null)}
++            onAdd={() => {
++              if (selectedOrder !== null) router.push(`/mostrador?order=${selectedOrder.id}`);
++            }}
++          />
++        ) : null}
++      </div>
++
++      <OpenTableDialog
++        table={openDialogTable}
++        pending={openTableMutation.isPending}
++        error={openError}
++        onClose={() => setOpenDialogTable(null)}
++        onConfirm={handleConfirmOpen}
++      />
++    </main>
++  );
++}
+diff --git a/src/app/(dashboard)/sala/table-node.tsx b/src/app/(dashboard)/sala/table-node.tsx
+new file mode 100644
+index 0000000..3057853
+--- /dev/null
++++ b/src/app/(dashboard)/sala/table-node.tsx
+@@ -0,0 +1,124 @@
++"use client";
++
++import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
++
++import { clampPosition } from "@/lib/restauracion/tables";
++import { cn } from "@/lib/utils";
++import type { DiningTable } from "@/types/database";
++
++export type TableTone = "free" | "busy" | "bill" | "cleaning";
++
++const TONE_CLASSES: Record<TableTone, string> = {
++  free: "border-success/40 bg-success/10 text-success",
++  busy: "border-primary/40 bg-primary/10 text-primary",
++  bill: "border-warning/40 bg-warning/10 text-warning",
++  cleaning: "border-muted-foreground/30 bg-muted text-muted-foreground",
++};
++
++interface TableNodeProps {
++  table: DiningTable;
++  tone: TableTone;
++  /** Modo edición del plano (Task 7): habilita el arrastre y desactiva la
++   * selección por click (en edición, tocar una mesa no debe abrir su panel). */
++  editable: boolean;
++  onSelect: () => void;
++  /** Llamado al soltar tras arrastrar, con la nueva posición en % [0,100]
++   * ya acotada (`clampPosition`). Solo se dispara en modo edición. */
++  onDragEnd?: (pos: { posX: number; posY: number }) => void;
++}
++
++/**
++ * Nodo de mesa del plano de sala (Task 7): pinta el nombre y el rango de
++ * comensales de la mesa, coloreado según `tone` (derivado de `tableTone`,
++ * `@/lib/restauracion/tables`, Task 3). Se posiciona en `%` de `pos_x`/`pos_y`
++ * dentro del lienzo `position:relative` del padre (`sala-view.tsx`) — el
++ * PROPIO nodo calcula su `left`/`top`, así el padre solo necesita listar las
++ * mesas de la zona activa.
++ *
++ * Arrastre: eventos de puntero nativos (`onPointerDown/Move/Up`, sin
++ * librería) SOLO cuando `editable`. Mientras se arrastra, la posición visual
++ * sigue al puntero en estado local (`dragPos`) calculada contra el
++ * `getBoundingClientRect()` del contenedor padre; al soltar, `onDragEnd`
++ * entrega la posición final acotada y el padre decide cuándo persistirla
++ * (`useSaveTablePosition`) — este componente NUNCA llama a la mutación
++ * directamente, mismo reparto de responsabilidades que `TablePanel`.
++ */
++export function TableNode({
++  table,
++  tone,
++  editable,
++  onSelect,
++  onDragEnd,
++}: TableNodeProps): React.ReactElement {
++  const ref = useRef<HTMLButtonElement>(null);
++  const draggingRef = useRef(false);
++  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
++
++  function handlePointerDown(event: ReactPointerEvent<HTMLButtonElement>): void {
++    if (!editable) return;
++    draggingRef.current = true;
++    // jsdom (entorno de test) no implementa la captura de puntero — se
++    // comprueba el método antes de llamarlo para no romper `table-node.test.tsx`
++    // (mismo motivo por el que `image-gallery.tsx` evita el `Select` de Radix
++    // en su filtro: `hasPointerCapture`/`setPointerCapture` no existen en jsdom).
++    if (typeof ref.current?.setPointerCapture === "function") {
++      ref.current.setPointerCapture(event.pointerId);
++    }
++  }
++
++  function handlePointerMove(event: ReactPointerEvent<HTMLButtonElement>): void {
++    if (!editable || !draggingRef.current) return;
++    const canvas = ref.current?.parentElement;
++    if (canvas === null || canvas === undefined) return;
++    const rect = canvas.getBoundingClientRect();
++    if (rect.width === 0 || rect.height === 0) return;
++    setDragPos({
++      x: clampPosition(((event.clientX - rect.left) / rect.width) * 100),
++      y: clampPosition(((event.clientY - rect.top) / rect.height) * 100),
++    });
++  }
++
++  function handlePointerUp(event: ReactPointerEvent<HTMLButtonElement>): void {
++    if (!editable || !draggingRef.current) return;
++    draggingRef.current = false;
++    if (typeof ref.current?.releasePointerCapture === "function") {
++      ref.current.releasePointerCapture(event.pointerId);
++    }
++    if (dragPos !== null) {
++      onDragEnd?.({ posX: dragPos.x, posY: dragPos.y });
++    }
++    setDragPos(null);
++  }
++
++  function handleClick(): void {
++    if (editable) return;
++    onSelect();
++  }
++
++  const posX = dragPos?.x ?? table.pos_x;
++  const posY = dragPos?.y ?? table.pos_y;
++
++  return (
++    <button
++      ref={ref}
++      type="button"
++      data-tone={tone}
++      aria-label={table.name}
++      className={cn(
++        "absolute flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 touch-none flex-col items-center justify-center gap-0.5 rounded-2xl border-2 text-sm font-semibold shadow-sm transition-colors duration-150 ease-apple-out",
++        editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
++        TONE_CLASSES[tone],
++      )}
++      style={{ left: `${posX}%`, top: `${posY}%` }}
++      onClick={handleClick}
++      onPointerDown={handlePointerDown}
++      onPointerMove={handlePointerMove}
++      onPointerUp={handlePointerUp}
++    >
++      <span className="max-w-[4.25rem] truncate px-1">{table.name}</span>
++      <span className="text-xs font-normal opacity-80">
++        {table.capacity_min}-{table.capacity_max}
++      </span>
++    </button>
++  );
++}
+diff --git a/src/app/(dashboard)/sala/table-panel.tsx b/src/app/(dashboard)/sala/table-panel.tsx
+index 0153a74..8141a15 100644
+--- a/src/app/(dashboard)/sala/table-panel.tsx
++++ b/src/app/(dashboard)/sala/table-panel.tsx
+@@ -9,43 +9,58 @@ import { Button } from "@/components/ui/button";
+ import { Card, CardContent } from "@/components/ui/card";
+ import { useOrderItems, useSettleOrder } from "@/hooks/use-orders";
+ import { useSetTableStatus } from "@/hooks/use-tables";
+ import { formatMoney } from "@/lib/format";
+ import { elapsedMinutes } from "@/lib/restauracion/kds";
+ import { settleTotals, type SettleLineInput } from "@/lib/restauracion/order";
+ import { canTransition } from "@/lib/restauracion/tables";
+ import type { SettleTenderInput } from "@/lib/validations/order";
+-import type { DiningTable, Order, TableStatus } from "@/types/database";
++import type { DiningTable, Order, PosPaymentMethodRow, TableStatus } from "@/types/database";
+ 
+ const STATUS_LABELS: Record<TableStatus, string> = {
+   libre: "Libre",
+   ocupada: "Ocupada",
+   cuenta_pedida: "Cuenta pedida",
+   por_limpiar: "Por limpiar",
+ };
+ 
+ /**
+  * Etiqueta de línea de comanda: `useOrderItems` (`@/hooks/use-orders`) lee
+  * `order_items` en crudo (solo `product_id`, sin el nombre resuelto que sí
+  * lleva `OrderPanelItem` en el mostrador — ahí el nombre se conoce en
+  * cliente porque la línea nace de la carta ya cargada). Sin un join al
+- * catálogo (que esta tarea no trae, ver "Dudas" del reporte), se usa el
+- * mismo fallback que ya adopta el KDS cuando no puede resolver el nombre
+- * (`fetchKdsItems`, `@/lib/queries/kds.ts`: `row.products?.name ?? "Producto"`).
++ * catálogo, se usa el mismo fallback que ya adopta el KDS cuando no puede
++ * resolver el nombre (`fetchKdsItems`, `@/lib/queries/kds.ts`:
++ * `row.products?.name ?? "Producto"`).
++ *
++ * Task 7 (cableado cross-task #1): el padre (`sala-view.tsx`) SÍ conoce el
++ * catálogo (carga `useMenuProducts`, igual que el mostrador) y puede pasar
++ * `productNames` con el nombre real; este fallback solo entra en juego si
++ * `productNames` se omite (compatibilidad con el test existente) o no
++ * contiene ese `product_id`.
+  */
+ const LINE_FALLBACK_NAME = "Producto";
+ 
+ interface TablePanelProps {
+   table: DiningTable;
+   order: Order | null;
+   salonId: string;
+   now: Date;
+   onClose: () => void;
+   onAdd: () => void;
++  /** Mapa `product_id → nombre`, para etiquetar las líneas de la comanda con
++   * el nombre real del producto (Task 7, cableado cross-task #1). OPCIONAL:
++   * si se omite (p.ej. el test existente de este componente no lo pasa),
++   * cada línea cae al mismo fallback `LINE_FALLBACK_NAME` de siempre. */
++  productNames?: Record<string, string>;
++  /** Métodos de pago del salón, reenviados a `PaymentSheet` (Task 7, cableado
++   * cross-task #2). OPCIONAL: si se omite, `PaymentSheet` recibe `[]` — mismo
++   * comportamiento que antes de este cableado. */
++  paymentMethods?: PosPaymentMethodRow[];
+ }
+ 
+ /**
+  * Panel de mesa (Task 6): al tocar una mesa ocupada, muestra su comanda, el
+  * tiempo sentados, el total, los comensales y las acciones — reusa
+  * `useOrderItems`/`useSettleOrder` (comanda + cobro) y `useSetTableStatus`
+  * (Task 5, transición de estado) en vez de reimplementar nada. Sigue el
+  * patrón visual de `mostrador/order-panel.tsx`: el propio panel orquesta las
+@@ -54,16 +69,18 @@ interface TablePanelProps {
+  */
+ export function TablePanel({
+   table,
+   order,
+   salonId,
+   now,
+   onClose,
+   onAdd,
++  productNames,
++  paymentMethods,
+ }: TablePanelProps): React.ReactElement {
+   const [paying, setPaying] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+ 
+   const { data: rawItems } = useOrderItems(salonId, order?.id ?? null);
+   const setTableStatus = useSetTableStatus(salonId);
+   const settleOrder = useSettleOrder(salonId);
+ 
+@@ -208,17 +225,19 @@ export function TablePanel({
+               <ul className="flex flex-col gap-2">
+                 {activeItems.map((item) => (
+                   <li
+                     key={item.id}
+                     className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card p-3 text-sm shadow-xs"
+                   >
+                     <span className="min-w-0 flex-1">
+                       <span className="font-medium tabular-nums text-foreground">{item.qty}×</span>{" "}
+-                      <span className="text-foreground">{LINE_FALLBACK_NAME}</span>
++                      <span className="text-foreground">
++                        {productNames?.[item.product_id] ?? LINE_FALLBACK_NAME}
++                      </span>
+                     </span>
+                     <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                       {formatMoney(item.unit_price_cents * item.qty)}
+                     </span>
+                   </li>
+                 ))}
+               </ul>
+             )}
+@@ -288,17 +307,17 @@ export function TablePanel({
+           {paying ? (
+             <PaymentSheet
+               open={paying}
+               onOpenChange={(open) => {
+                 setPaying(open);
+                 if (!open) settleOrder.reset();
+               }}
+               totalCents={totals.totalCents}
+-              paymentMethods={[]}
++              paymentMethods={paymentMethods ?? []}
+               pending={settleOrder.isPending}
+               error={error}
+               onConfirm={handleConfirmPayment}
+             />
+           ) : null}
+         </>
+       )}
+     </Card>
+diff --git a/src/tests/unit/table-node.test.tsx b/src/tests/unit/table-node.test.tsx
+new file mode 100644
+index 0000000..abb083a
+--- /dev/null
++++ b/src/tests/unit/table-node.test.tsx
+@@ -0,0 +1,66 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, describe, expect, it, vi } from "vitest";
++
++import { TableNode } from "@/app/(dashboard)/sala/table-node";
++import type { DiningTable } from "@/types/database";
++
++afterEach(() => cleanup());
++
++const TABLE: DiningTable = {
++  id: "table-1",
++  salon_id: "SALON",
++  zone_id: "zone-1",
++  name: "Mesa 4",
++  capacity_min: 2,
++  capacity_max: 4,
++  pos_x: 30,
++  pos_y: 40,
++  shape: "round",
++  status: "libre",
++  sort_order: 0,
++  active: true,
++  created_at: "2026-08-10T09:00:00.000Z",
++  updated_at: "2026-08-10T09:00:00.000Z",
++};
++
++describe("TableNode", () => {
++  it("muestra el nombre de la mesa", () => {
++    render(createElement(TableNode, { table: TABLE, tone: "free", editable: false, onSelect: vi.fn() }));
++
++    expect(screen.getByText("Mesa 4")).toBeInTheDocument();
++  });
++
++  it("aplica el tono recibido como atributo data-tone", () => {
++    render(createElement(TableNode, { table: TABLE, tone: "busy", editable: false, onSelect: vi.fn() }));
++
++    expect(screen.getByRole("button")).toHaveAttribute("data-tone", "busy");
++  });
++
++  it("con otro tono, refleja ese tono en el atributo", () => {
++    render(createElement(TableNode, { table: TABLE, tone: "bill", editable: false, onSelect: vi.fn() }));
++
++    expect(screen.getByRole("button")).toHaveAttribute("data-tone", "bill");
++  });
++
++  it("al hacer click (no editable) llama a onSelect", async () => {
++    const user = userEvent.setup();
++    const onSelect = vi.fn();
++    render(createElement(TableNode, { table: TABLE, tone: "free", editable: false, onSelect }));
++
++    await user.click(screen.getByRole("button"));
++
++    expect(onSelect).toHaveBeenCalledTimes(1);
++  });
++
++  it("en modo edición, el click NO llama a onSelect", async () => {
++    const user = userEvent.setup();
++    const onSelect = vi.fn();
++    render(createElement(TableNode, { table: TABLE, tone: "free", editable: true, onSelect }));
++
++    await user.click(screen.getByRole("button"));
++
++    expect(onSelect).not.toHaveBeenCalled();
++  });
++});

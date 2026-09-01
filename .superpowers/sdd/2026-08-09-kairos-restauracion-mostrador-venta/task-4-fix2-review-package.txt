@@ -1,0 +1,209 @@
+=== COMMITS (69a89b8..31cee5b) ===
+31cee5b fix(restauracion): marcar el item original como anulado al anular (excluir del cobro)
+
+=== DIFF -U15 ===
+diff --git a/src/app/(dashboard)/mostrador/actions.ts b/src/app/(dashboard)/mostrador/actions.ts
+index bb6ab2b..8c82423 100644
+--- a/src/app/(dashboard)/mostrador/actions.ts
++++ b/src/app/(dashboard)/mostrador/actions.ts
+@@ -120,73 +120,98 @@ export async function addOrderItems(input: unknown): Promise<ActionResult<{ adde
+     qty: item.qty,
+     unit_price_cents: item.unitPriceCents,
+     vat_rate: item.vatRate,
+     station_id: item.stationId,
+     combo_group: item.comboGroup,
+     modifiers_snapshot: item.modifiersSnapshot,
+     status: "pendiente",
+   }));
+   const { error } = await supabase.from("order_items").insert(rows);
+   if (error !== null) return { ok: false, error: error.message };
+   revalidatePath("/mostrador");
+   return { ok: true, data: { added: rows.length } };
+ }
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+-// voidOrderItem: append-only — NUNCA se hace UPDATE/DELETE de la línea
+-// original (histórico intacto para cocina/caja/auditoría). Primero pasa la
+-// MISMA guarda que `addOrderItems` (`assertOrderOpenInSalon`): no tiene
+-// sentido anular una línea de un pedido ya cobrado/cerrado (el ticket ya
+-// salió) ni de un pedido que no pertenece a este salón. Luego se lee el ítem
+-// original acotado por `order_id` + `salon_id` (garantiza que pertenece AL
+-// PEDIDO y AL SALÓN indicados, aunque el `itemId` sea arbitrario), se
+-// rechaza si esa línea YA es una anulación (no tiene sentido anular una
+-// anulación), y se inserta una fila NUEVA que referencia la original vía
++// voidOrderItem: append-only para el HISTÓRICO — NUNCA se hace DELETE de la
++// línea original. Primero pasa la MISMA guarda que `addOrderItems`
++// (`assertOrderOpenInSalon`): no tiene sentido anular una línea de un pedido
++// ya cobrado/cerrado (el ticket ya salió) ni de un pedido que no pertenece a
++// este salón. Luego se lee el ítem original acotado por `order_id` +
++// `salon_id` (garantiza que pertenece AL PEDIDO y AL SALÓN indicados, aunque
++// el `itemId` sea arbitrario) y se rechaza si esa línea YA es una anulación
++// (no tiene sentido anular una anulación).
++//
++// Dos escrituras, no una: (1) UPDATE del ítem ORIGINAL a `status: "anulado"`
++// (+ `void_reason`) — necesario para que `settleOrder` (task futura, filtra
++// `status != 'anulado'` al cargar líneas a cobrar) EXCLUYA esta línea del
++// cobro. Sin este update, el original seguiría `pendiente`/`enviado`/…  y se
++// cobraría igual pese a estar anulada — el bug que corrige este cambio. (2)
++// INSERT de una fila NUEVA de auditoría que referencia la original vía
+ // `void_of_item_id`, con un `id` de cliente NUEVO generado en el SERVIDOR
+ // (`randomUUID` — a diferencia de createOrder/addOrderItems, esta fila no la
+ // propone el cliente porque nace de una acción de servidor, no de
+ // composición offline).
+ //
+-// Se copian solo los campos que importan para el histórico/cocina/caja
+-// (product_id/qty/station_id/order_id/salon_id/unit_price_cents/vat_rate),
+-// tal como pide el brief. `combo_group` y `modifiers_snapshot` NO se copian:
+-// la fila de anulación es un registro de auditoría de cantidad/importe (para
+-// que el ticket y el estado de cocina reflejen la baja), no una réplica
+-// visual de la línea — el modificador/combo ya quedó registrado en la línea
+-// original, que sigue existiendo (no se borra).
++// El UPDATE va ANTES del INSERT (no al revés): sin transacción explícita
++// entre ambas escrituras, si UNA de las dos fallara preferimos que sea el
++// registro de auditoría el que falte, no la exclusión del cobro — la
++// garantía financiera (no cobrar una línea anulada) importa más que la
++// completitud del histórico. Si el UPDATE fallara, se aborta antes de tocar
++// nada más (no queda una fila de auditoría "huérfana" sobre un original que
++// en realidad no cambió de estado).
++//
++// El propio UPDATE (marca `status: "anulado"` en el original) es también lo
++// que hace que la guarda de arriba ("no anular una anulación") bloquee
++// anular DOS VECES el mismo ítem: la segunda llamada lee el original ya
++// marcado `anulado` por la primera y lo rechaza antes de llegar aquí.
++//
++// La fila de auditoría copia solo los campos que importan para el
++// histórico/cocina/caja (product_id/qty/station_id/order_id/salon_id/
++// unit_price_cents/vat_rate), tal como pide el brief. `combo_group` y
++// `modifiers_snapshot` NO se copian: es un registro de cantidad/importe, no
++// una réplica visual — el modificador/combo ya quedó registrado en la línea
++// original, que sigue existiendo (nunca se borra, solo se actualiza su
++// `status`).
+ // ─────────────────────────────────────────────────────────────────────────────
+ 
+ export async function voidOrderItem(input: unknown): Promise<ActionResult<OrderItem>> {
+   const parsed = voidOrderItemSchema.safeParse(input);
+   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+   const salonId = await getActiveSalonId();
+   if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+   const supabase = createClient();
+ 
+   const orderError = await assertOrderOpenInSalon(supabase, salonId, parsed.data.orderId);
+   if (orderError !== null) return { ok: false, error: orderError };
+ 
+   const { data: original, error: fetchError } = await supabase
+     .from("order_items").select("*")
+     .eq("id", parsed.data.itemId).eq("order_id", parsed.data.orderId).eq("salon_id", salonId)
+     .maybeSingle();
+   if (fetchError !== null) return { ok: false, error: fetchError.message };
+   if (original === null) return { ok: false, error: "El ítem no pertenece a tu salón o a ese pedido" };
+   if (original.status === "anulado" || original.void_of_item_id !== null) {
+     return { ok: false, error: "Esta línea ya está anulada" };
+   }
+ 
++  const { error: updateError } = await supabase
++    .from("order_items")
++    .update({ status: "anulado", void_reason: parsed.data.reason })
++    .eq("id", parsed.data.itemId).eq("salon_id", salonId);
++  if (updateError !== null) return { ok: false, error: updateError.message };
++
+   const payload: OrderItemInsert = {
+     id: randomUUID(),
+     salon_id: original.salon_id,
+     order_id: original.order_id,
+     product_id: original.product_id,
+     qty: original.qty,
+     unit_price_cents: original.unit_price_cents,
+     vat_rate: original.vat_rate,
+     station_id: original.station_id,
+     status: "anulado",
+     void_of_item_id: parsed.data.itemId,
+     void_reason: parsed.data.reason,
+   };
+   const { data, error } = await supabase.from("order_items").insert(payload).select("*").single();
+   if (error !== null) return { ok: false, error: error.message };
+diff --git a/src/tests/integration/restauracion-order-actions.test.ts b/src/tests/integration/restauracion-order-actions.test.ts
+index ec5e9e8..e889c8b 100644
+--- a/src/tests/integration/restauracion-order-actions.test.ts
++++ b/src/tests/integration/restauracion-order-actions.test.ts
+@@ -77,56 +77,71 @@ describe("order actions", () => {
+     if (r.ok) expect(r.data.id).toBe(ORDER_ID_1);
+   });
+ 
+   // Ronda de fix (Important #1): voidOrderItem debe gatear por estado del
+   // pedido igual que addOrderItems — no se puede anular una línea de un
+   // pedido que ya no está abierta (p.ej. cobrada).
+   it("voidOrderItem rechaza si el pedido no está abierta", async () => {
+     holder.supabase = makeSupabaseMock({
+       tables: { orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "cobrada" }] } },
+     });
+     const r = await voidOrderItem({ orderId: ORDER_ID_1, itemId: ITEM_ID_1, reason: "pedido equivocado" });
+     expect(r.ok).toBe(false);
+   });
+ 
+   // Happy path que no existía todavía: pedido abierta + ítem pendiente →
+-  // inserta la fila de anulación (append-only).
+-  it("voidOrderItem inserta fila de anulación cuando el pedido está abierta", async () => {
++  // (1) UPDATE del original a status:"anulado" (excluye del cobro futuro de
++  // settleOrder, que filtrará status != 'anulado') + (2) INSERT de la fila de
++  // auditoría append-only. `onWrite` es un `vi.fn` para poder comprobar que
++  // el UPDATE se emitió de verdad (no solo confiar en el resultado final).
++  it("voidOrderItem marca el original como anulado (UPDATE) e inserta la fila de anulación (INSERT)", async () => {
++    const onWrite = vi.fn((op: string, table: string) => {
++      if (op === "update" && table === "order_items") return { data: null, error: null };
++      if (op === "insert" && table === "order_items") {
++        return { data: [{
++          id: "66666666-6666-4666-8666-666666666666", salon_id: "SALON", order_id: ORDER_ID_1,
++          product_id: PRODUCT_ID_1, qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null,
++          status: "anulado", void_of_item_id: ITEM_ID_1, void_reason: "pedido equivocado",
++        }] };
++      }
++      return {};
++    });
+     holder.supabase = makeSupabaseMock({
+       tables: {
+         orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "abierta" }] },
+         order_items: { data: [{
+           id: ITEM_ID_1, salon_id: "SALON", order_id: ORDER_ID_1, product_id: PRODUCT_ID_1,
+           qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null, status: "pendiente",
+           combo_group: null, modifiers_snapshot: [], void_of_item_id: null, void_reason: null,
+         }] },
+       },
+-      onWrite: (op: string, table: string) =>
+-        op === "insert" && table === "order_items"
+-          ? { data: [{
+-              id: "66666666-6666-4666-8666-666666666666", salon_id: "SALON", order_id: ORDER_ID_1,
+-              product_id: PRODUCT_ID_1, qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null,
+-              status: "anulado", void_of_item_id: ITEM_ID_1, void_reason: "pedido equivocado",
+-            }] }
+-          : {},
++      onWrite,
+     });
+     const r = await voidOrderItem({ orderId: ORDER_ID_1, itemId: ITEM_ID_1, reason: "pedido equivocado" });
+     expect(r.ok).toBe(true);
+     if (r.ok) {
+       expect(r.data.status).toBe("anulado");
+       expect(r.data.void_of_item_id).toBe(ITEM_ID_1);
+     }
++    // El original se marcó anulado — esto es lo que lo excluye del cobro.
++    expect(onWrite).toHaveBeenCalledWith(
++      "update", "order_items", { status: "anulado", void_reason: "pedido equivocado" },
++    );
++    // Y sigue existiendo la fila de auditoría append-only.
++    expect(onWrite).toHaveBeenCalledWith(
++      "insert", "order_items", expect.objectContaining({ void_of_item_id: ITEM_ID_1 }),
++    );
+   });
+ 
+   // Ronda de fix (Minor #3): no tiene sentido anular una anulación.
+   it("voidOrderItem rechaza anular una línea que ya está anulada", async () => {
+     holder.supabase = makeSupabaseMock({
+       tables: {
+         orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "abierta" }] },
+         order_items: { data: [{
+           id: ITEM_ID_1, salon_id: "SALON", order_id: ORDER_ID_1, product_id: PRODUCT_ID_1,
+           qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null, status: "anulado",
+           combo_group: null, modifiers_snapshot: [], void_of_item_id: "77777777-7777-4777-8777-777777777777",
+           void_reason: "ya anulada antes",
+         }] },
+       },
+     });

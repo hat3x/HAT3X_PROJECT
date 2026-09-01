@@ -1,0 +1,569 @@
+=== COMMITS (75787bd..6f460c6) ===
+6f460c6 feat(restauracion): settleOrder — materializa pos_sale desde el pedido (patrón createSale)
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/actions.ts          | 236 +++++++++++++++++++++-
+ src/hooks/use-orders.ts                           |  19 ++
+ src/lib/validations/order.ts                      |  34 ++++
+ src/tests/helpers/supabase-mock.ts                |  26 ++-
+ src/tests/integration/restauracion-settle.test.ts |  69 +++++++
+ 5 files changed, 382 insertions(+), 2 deletions(-)
+
+=== DIFF -U10 ===
+diff --git a/src/app/(dashboard)/mostrador/actions.ts b/src/app/(dashboard)/mostrador/actions.ts
+index 17b2759..d81080d 100644
+--- a/src/app/(dashboard)/mostrador/actions.ts
++++ b/src/app/(dashboard)/mostrador/actions.ts
+@@ -1,25 +1,28 @@
+ "use server";
+ import { randomUUID } from "node:crypto";
+ 
+ import { revalidatePath } from "next/cache";
+ 
++import { computeLineTotals } from "@/lib/payments";
++import { buildSettleLines, settleTotals } from "@/lib/restauracion/order";
+ import { getActiveSalonId } from "@/lib/salon";
+ import { createClient } from "@/lib/supabase/server";
+ import {
+   addOrderItemsSchema,
+   createOrderSchema,
+   sendOrderToStationsSchema,
+   setOrderItemStatusSchema,
++  settleOrderSchema,
+   voidOrderItemSchema,
+ } from "@/lib/validations/order";
+-import type { Order, OrderItem, OrderItemInsert } from "@/types/database";
++import type { Order, OrderItem, OrderItemInsert, TablesInsert } from "@/types/database";
+ 
+ /**
+  * Server actions de pedido de mostrador (restauración, Task 4): crear pedido
+  * (idempotente por `idempotencyKey`), añadir líneas y anular una línea.
+  *
+  * A diferencia de `carta/actions.ts` (gate de rol vía `assertManager`), aquí
+  * solo se exige salón activo (`getActiveSalonId`) — no rol de gestión: es el
+  * flujo operativo del día a día (tomar pedidos, añadir líneas, anular una
+  * línea mal tecleada), no configuración de carta. La restricción real de
+  * quién puede tocar `/mostrador` vive en la navegación/gate de esa ruta, no
+@@ -287,10 +290,241 @@ export async function setOrderItemStatus(input: unknown): Promise<ActionResult<O
+     .select("*");
+   if (error !== null) return { ok: false, error: error.message };
+   // Destructuring (no `data[0]`) para que TS narrowe sin `!`: con
+   // `noUncheckedIndexedAccess`, `data[0]` seguiría tipando `T | undefined`
+   // aunque ya hubiéramos comprobado `data.length > 0` en la línea de arriba.
+   const [updated] = data ?? [];
+   if (updated === undefined) return { ok: false, error: "CONFLICTO: el estado ya cambió" };
+   revalidatePath("/mostrador");
+   return { ok: true, data: updated };
+ }
++
++// ─────────────────────────────────────────────────────────────────────────────
++// settleOrder (Task 6): cobra un pedido de mostrador MATERIALIZANDO un
++// `pos_sale` — es el puente entre "restauración" (pedidos/comandas) y "TPV"
++// (caja/facturación): un pedido no se factura hasta que pasa por aquí. La
++// estructura replica `createSale` (tpv/actions.ts) a propósito: misma cabecera
++// `pos_sales` (status "completed", `session_id` de la caja abierta), mismas
++// líneas `pos_sale_lines` y mismos pagos `pos_payments`, con el MISMO patrón
++// de rollback manual — supabase-js no expone transacciones multi-sentencia
++// desde el cliente, así que un fallo posterior a crear la cabecera se COMPENSA
++// borrándola (el `on delete cascade` de las FKs arrastra líneas y pagos). La
++// diferencia frente a `createSale`: aquí las líneas NO las teclea el cajero
++// (vienen del pedido ya tomado) y el cobro no pasa por `getPaymentGateway` —
++// los tenders ya vienen resueltos en céntimos desde el flujo de cobro de
++// mostrador, se insertan tal cual en `pos_payments`.
++//
++// ── Idempotencia ─────────────────────────────────────────────────────────────
++// Cobrar el MISMO pedido dos veces (doble tap en el botón de cobrar, reintento
++// de red) NO debe crear una segunda venta. La guarda comprueba, en este orden:
++// (1) si YA existe un `pos_sales` con `order_id = orderId` en este salón, esa
++// es la fuente autoritativa — se devuelve tal cual, sin volver a cobrar; (2) si
++// no hay venta pero el pedido YA está `status = "cobrada"`, es un estado
++// inconsistente (no debería poder pasar salvo un fallo entre el UPDATE de
++// `orders` y la lectura) y se informa en vez de cobrar a ciegas una segunda
++// vez. El caso normal (primera llamada) no entra en ninguna de las dos ramas.
++// ─────────────────────────────────────────────────────────────────────────────
++
++/** Fila de `pos_sales` mínima para responder en la rama idempotente. */
++interface ExistingSaleRow {
++  id: string;
++  total_cents: number;
++}
++
++/** `order_items` con el join `products(name)` que pide `buildSettleLines`. */
++interface SettleableOrderItemRow {
++  product_id: string;
++  qty: number;
++  unit_price_cents: number;
++  vat_rate: number;
++  modifiers_snapshot: unknown;
++  products: { name: string } | null;
++}
++
++/** `modifiers_snapshot` es `Json` en la BD; en la práctica siempre es esta forma (la escribe `addOrderItems`). */
++function asModifiersSnapshot(value: unknown): Array<{ name: string; priceDeltaCents: number }> {
++  return Array.isArray(value) ? (value as Array<{ name: string; priceDeltaCents: number }>) : [];
++}
++
++export async function settleOrder(
++  input: unknown,
++): Promise<ActionResult<{ saleId: string; totalCents: number }>> {
++  const parsed = settleOrderSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const { orderId, tenders, sendPending } = parsed.data;
++
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++  if (user === null) return { ok: false, error: "Sesión no válida" };
++
++  // 1) El pedido debe existir EN ESTE salón (aislamiento multi-tenant, además de RLS).
++  const { data: order, error: orderError } = await supabase
++    .from("orders")
++    .select("id,status")
++    .eq("id", orderId)
++    .eq("salon_id", salonId)
++    .maybeSingle();
++  if (orderError !== null) return { ok: false, error: orderError.message };
++  if (order === null) return { ok: false, error: "El pedido no existe o no pertenece a tu salón" };
++
++  // 2) Idempotencia — ver comentario de bloque arriba.
++  const { data: existingSaleData, error: existingSaleError } = await supabase
++    .from("pos_sales")
++    .select("id,total_cents")
++    .eq("order_id", orderId)
++    .eq("salon_id", salonId)
++    .maybeSingle();
++  if (existingSaleError !== null) return { ok: false, error: existingSaleError.message };
++  const existingSale = existingSaleData as ExistingSaleRow | null;
++  if (existingSale !== null) {
++    return { ok: true, data: { saleId: existingSale.id, totalCents: existingSale.total_cents } };
++  }
++  if (order.status === "cobrada") {
++    return {
++      ok: false,
++      error: "El pedido ya está cobrado pero no se encontró la venta asociada",
++    };
++  }
++
++  // 3) Líneas a cobrar: NO anuladas (Task 4 marca el original `status:"anulado"`
++  //    al anular, así que basta este filtro — no hace falta excluir por `id`).
++  const { data: itemsData, error: itemsError } = await supabase
++    .from("order_items")
++    .select("*, products(name)")
++    .eq("order_id", orderId)
++    .eq("salon_id", salonId)
++    .is("void_of_item_id", null)
++    .neq("status", "anulado");
++  if (itemsError !== null) return { ok: false, error: itemsError.message };
++  const items = (itemsData ?? []) as unknown as SettleableOrderItemRow[];
++  if (items.length === 0) return { ok: false, error: "El pedido no tiene líneas para cobrar" };
++
++  // 4) Líneas + totales — misma fuente única de verdad que el TPV (`@/lib/payments`).
++  const lines = buildSettleLines(
++    items.map((it) => ({
++      productName: it.products?.name ?? "Producto",
++      qty: it.qty,
++      unitPriceCents: it.unit_price_cents,
++      vatRate: it.vat_rate,
++      modifiersSnapshot: asModifiersSnapshot(it.modifiers_snapshot),
++    })),
++  );
++  const totals = settleTotals(lines);
++
++  // 5) Caja abierta del salón (si la hay) — mismo patrón que `createSale`.
++  const { data: openSession, error: openSessionError } = await supabase
++    .from("pos_sessions")
++    .select("id")
++    .eq("salon_id", salonId)
++    .eq("status", "open")
++    .limit(1)
++    .maybeSingle();
++  if (openSessionError !== null) return { ok: false, error: openSessionError.message };
++  const sessionId = (openSession as { id: string } | null)?.id ?? null;
++
++  // 6) Cabecera de la venta, enlazada al pedido de origen (`order_id`).
++  const saleInsert: TablesInsert<"pos_sales"> = {
++    salon_id: salonId,
++    order_id: orderId,
++    session_id: sessionId,
++    status: "completed",
++    subtotal_cents: totals.subtotalCents,
++    discount_cents: 0,
++    tax_cents: totals.taxCents,
++    total_cents: totals.totalCents,
++    currency: "EUR",
++    sold_by: user.id,
++  };
++  const { data: saleData, error: saleError } = await supabase
++    .from("pos_sales")
++    .insert(saleInsert)
++    .select("id")
++    .single();
++  if (saleError !== null || saleData === null) {
++    return { ok: false, error: saleError?.message ?? "No se pudo crear la venta" };
++  }
++  const saleId = (saleData as { id: string }).id;
++
++  // A partir de aquí, cualquier fallo compensa borrando la venta (cascade
++  // arrastra líneas y pagos) — mismo patrón que `createSale`.
++  async function rollback(): Promise<void> {
++    await supabase.from("pos_sales").delete().eq("id", saleId).eq("salon_id", salonId!);
++  }
++
++  // 7) Líneas del ticket (snapshot de importes por línea), 1:1 con `items`
++  //    (`buildSettleLines` preserva el orden) para poder anotar `product_id`.
++  const lineInserts: TablesInsert<"pos_sale_lines">[] = lines.map((line, i) => {
++    const sourceItem = items[i]!;
++    const lineTotals = computeLineTotals({
++      quantity: line.qty,
++      unitPriceCents: line.unitPriceCents,
++      vatRate: line.vatRate,
++    });
++    return {
++      salon_id: salonId,
++      sale_id: saleId,
++      product_id: sourceItem.product_id,
++      description: line.description,
++      quantity: line.qty,
++      unit_price_cents: line.unitPriceCents,
++      vat_rate: line.vatRate,
++      line_total_cents: lineTotals.grossCents,
++    };
++  });
++  const { error: linesError } = await supabase.from("pos_sale_lines").insert(lineInserts);
++  if (linesError !== null) {
++    await rollback();
++    return { ok: false, error: `No se pudieron guardar las líneas: ${linesError.message}` };
++  }
++
++  // 8) Cobro — a diferencia de `createSale`, aquí NO se pasa por
++  //    `getPaymentGateway`: los tenders ya vienen resueltos en céntimos desde
++  //    el flujo de cobro de mostrador (validados por `settleTenderSchema`), se
++  //    insertan directo en `pos_payments` (una fila por tender = pago mixto).
++  const paymentInserts: TablesInsert<"pos_payments">[] = tenders.map((tender) => ({
++    salon_id: salonId,
++    sale_id: saleId,
++    session_id: sessionId,
++    method: tender.method,
++    payment_method_id: tender.paymentMethodId,
++    amount_cents: tender.amountCents,
++    reference: tender.reference ?? null,
++  }));
++  const { error: paymentsError } = await supabase.from("pos_payments").insert(paymentInserts);
++  if (paymentsError !== null) {
++    await rollback();
++    return { ok: false, error: `No se pudo registrar el cobro: ${paymentsError.message}` };
++  }
++
++  // 9) El pedido queda cerrado a facturación: un pedido cobrado es un
++  //    documento cerrado (mismo criterio que `assertOrderOpenInSalon`). Este
++  //    paso NO revierte la venta si falla — el cobro ya está firme (mismas
++  //    filas en pos_sales/pos_sale_lines/pos_payments que si hubiera ido
++  //    bien); revertirlo sería peor que dejar el pedido con el estado desfasado.
++  const { error: orderUpdateError } = await supabase
++    .from("orders")
++    .update({ status: "cobrada" })
++    .eq("id", orderId)
++    .eq("salon_id", salonId);
++  if (orderUpdateError !== null) return { ok: false, error: orderUpdateError.message };
++
++  // 10) "Pagar primero": si se pidió, las líneas `pendiente` que quedaran se
++  //     mandan a cocina/barra ahora que el cobro ya está firme (mismo UPDATE
++  //     que `sendOrderToStations`, inline). Best-effort: la venta ya está
++  //     cerrada — un fallo aquí no debe revertir ni bloquear la respuesta.
++  if (sendPending) {
++    await supabase
++      .from("order_items")
++      .update({ status: "enviado" })
++      .eq("salon_id", salonId)
++      .eq("order_id", orderId)
++      .eq("status", "pendiente");
++  }
++
++  revalidatePath("/mostrador");
++  return { ok: true, data: { saleId, totalCents: totals.totalCents } };
++}
+diff --git a/src/hooks/use-orders.ts b/src/hooks/use-orders.ts
+index 1a56b98..08fea0f 100644
+--- a/src/hooks/use-orders.ts
++++ b/src/hooks/use-orders.ts
+@@ -1,25 +1,27 @@
+ "use client";
+ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ 
+ import {
+   addOrderItems,
+   createOrder,
+   sendOrderToStations,
++  settleOrder,
+   setOrderItemStatus,
+   voidOrderItem,
+ } from "@/app/(dashboard)/mostrador/actions";
+ import { fetchOpenOrders, fetchOrderItems, orderKeys } from "@/lib/queries/orders";
+ import type {
+   AddOrderItemsInput,
+   CreateOrderInput,
+   SendOrderToStationsInput,
++  SettleOrderInput,
+   SetOrderItemStatusInput,
+   VoidOrderItemInput,
+ } from "@/lib/validations/order";
+ import type { Order, OrderItem } from "@/types/database";
+ 
+ export function useOpenOrders(salonId: string) {
+   return useQuery({ queryKey: orderKeys.open(salonId), queryFn: () => fetchOpenOrders(salonId) });
+ }
+ export function useOrderItems(salonId: string, orderId: string | null) {
+   return useQuery({
+@@ -87,10 +89,27 @@ export function useSetOrderItemStatus(salonId: string) {
+   const invalidate = useInvalidateOrders(salonId);
+   return useMutation({
+     mutationFn: async (input: SetOrderItemStatusInput): Promise<OrderItem> => {
+       const result = await setOrderItemStatus(input);
+       if (!result.ok) throw new Error(result.error);
+       return result.data;
+     },
+     onSuccess: () => void invalidate(),
+   });
+ }
++
++/**
++ * Cobra un pedido de mostrador (Task 6): materializa el `pos_sale` vía
++ * `settleOrder`. Invalida los pedidos abiertos del salón al terminar —el
++ * pedido cobrado deja de aparecer entre los abiertos (`status: "cobrada"`).
++ */
++export function useSettleOrder(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: SettleOrderInput): Promise<{ saleId: string; totalCents: number }> => {
++      const result = await settleOrder(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
+diff --git a/src/lib/validations/order.ts b/src/lib/validations/order.ts
+index 3b07163..bfa501a 100644
+--- a/src/lib/validations/order.ts
++++ b/src/lib/validations/order.ts
+@@ -1,12 +1,14 @@
+ import { z } from "zod";
+ 
++import { paymentMethodEnum } from "@/lib/validations/sale";
++
+ /**
+  * Validaciones de las server actions de pedido de mostrador (restauración,
+  * Task 4). Los nombres de campo replican `OrderItemDraft`
+  * (lib/restauracion/order.ts, lógica pura de Task 2) para que el payload que
+  * construye el cliente pase directo por `safeParse` sin mapeo intermedio.
+  */
+ 
+ export const orderItemDraftSchema = z.object({
+   id: z.string().uuid(),
+   productId: z.string().uuid(),
+@@ -58,10 +60,42 @@ export type SendOrderToStationsInput = z.infer<typeof sendOrderToStationsSchema>
+  * `from`/`to` acotan la transición que la UI espera aplicar; la action
+  * (`setOrderItemStatus`) es quien la hace SEGURA de verdad al condicionar el
+  * UPDATE por `status = from` en la propia query (ver `mostrador/actions.ts`).
+  */
+ export const setOrderItemStatusSchema = z.object({
+   itemId: z.string().uuid(),
+   from: orderItemStatusEnum,
+   to: orderItemStatusEnum,
+ });
+ export type SetOrderItemStatusInput = z.infer<typeof setOrderItemStatusSchema>;
++
++/**
++ * Un medio de pago aplicado al cobro del pedido (Task 6, `settleOrder`).
++ * A diferencia de `tenderSchema` (lib/validations/sale.ts, TPV: `amount` llega
++ * como texto en euros desde un `<input>`), aquí `amountCents` ya llega como
++ * entero — el importe lo calcula el propio flujo de cobro de mostrador a
++ * partir de `settleTotals`, no lo teclea el cajero línea a línea. `method`
++ * reutiliza el mismo enum (`paymentMethodEnum`) que el TPV: es el mismo
++ * catálogo `pos_payment_method` de la BD, no tiene sentido duplicarlo.
++ */
++export const settleTenderSchema = z.object({
++  method: paymentMethodEnum,
++  amountCents: z.number().int().min(0),
++  /** Método concreto del catálogo del salón (opcional, para informes); `null` si no se eligió uno. */
++  paymentMethodId: z.string().uuid().nullable(),
++  reference: z.string().trim().max(120).optional(),
++});
++export type SettleTenderInput = z.infer<typeof settleTenderSchema>;
++
++/**
++ * Payload de `settleOrder` (Task 6): liquida un pedido de mostrador,
++ * materializando un `pos_sale` (ver `mostrador/actions.ts`). `sendPending`
++ * cubre el flujo "pagar primero, comanda después" — si es `true`, las líneas
++ * `pendiente` del pedido se mandan a cocina/barra tras cobrar (mismo efecto
++ * que `sendOrderToStations`, pero encadenado al cobro).
++ */
++export const settleOrderSchema = z.object({
++  orderId: z.string().uuid(),
++  tenders: z.array(settleTenderSchema).min(1, "Selecciona al menos un medio de pago"),
++  sendPending: z.boolean(),
++});
++export type SettleOrderInput = z.infer<typeof settleOrderSchema>;
+diff --git a/src/tests/helpers/supabase-mock.ts b/src/tests/helpers/supabase-mock.ts
+index b0bfa2e..b90cb5d 100644
+--- a/src/tests/helpers/supabase-mock.ts
++++ b/src/tests/helpers/supabase-mock.ts
+@@ -15,20 +15,27 @@ export interface TableResult {
+   error?: { message: string; code?: string } | null;
+ }
+ 
+ export interface MockConfig {
+   tables?: Record<string, TableResult>;
+   onWrite?: (
+     op: "insert" | "update" | "delete",
+     table: string,
+     payload: unknown,
+   ) => TableResult;
++  /**
++   * Usuario de `supabase.auth.getUser()` (Task 6, `settleOrder`: necesita
++   * `user.id` para `pos_sales.sold_by`, igual que `createSale`). Por defecto
++   * resuelve a un usuario fijo — los tests que no ejercitan ninguna ruta con
++   * `auth.getUser()` pueden ignorar esta opción sin más.
++   */
++  auth?: { user: { id: string } | null; error?: { message: string } | null };
+ }
+ 
+ export function makeSupabaseMock(config: MockConfig) {
+   function builder(table: string) {
+     let pending: { op: "insert" | "update" | "delete"; payload: unknown } | null =
+       null;
+ 
+     function readResult(): { data: unknown; error: unknown } {
+       const t = config.tables?.[table] ?? { data: [], error: null };
+       return { data: t.data ?? [], error: t.error ?? null };
+@@ -47,20 +54,27 @@ export function makeSupabaseMock(config: MockConfig) {
+       return {
+         data: Array.isArray(data) ? (data[0] ?? null) : data,
+         error,
+       };
+     }
+ 
+     const b = {
+       select: () => b,
+       eq: () => b,
+       in: () => b,
++      // `is`/`neq` (Task 6, `settleOrder`: filtra `order_items` no anulados vía
++      // `.is("void_of_item_id", null).neq("status","anulado")`) son, como el
++      // resto de filtros de este doble, no-ops encadenables: el mock no filtra
++      // de verdad — `tables[table].data` ya llega preparado por el test —, solo
++      // necesitan EXISTIR para que la cadena de filtros no reviente.
++      is: () => b,
++      neq: () => b,
+       order: () => b,
+       limit: () => b,
+       insert: (payload: unknown) => {
+         pending = { op: "insert", payload };
+         return b;
+       },
+       update: (payload: unknown) => {
+         pending = { op: "update", payload };
+         return b;
+       },
+@@ -69,12 +83,22 @@ export function makeSupabaseMock(config: MockConfig) {
+         return b;
+       },
+       maybeSingle: () => Promise.resolve(resolveSingle()),
+       single: () => Promise.resolve(resolveSingle()),
+       then: (onFulfilled: (v: { data: unknown; error: unknown }) => unknown) =>
+         onFulfilled(resolveList()),
+     };
+     return b;
+   }
+ 
+-  return { from: (table: string) => builder(table) };
++  return {
++    from: (table: string) => builder(table),
++    // `auth.getUser()` (Task 6, `settleOrder`): ver `MockConfig.auth` arriba.
++    auth: {
++      getUser: () =>
++        Promise.resolve({
++          data: { user: config.auth?.user ?? { id: "mock-user" } },
++          error: config.auth?.error ?? null,
++        }),
++    },
++  };
+ }
+diff --git a/src/tests/integration/restauracion-settle.test.ts b/src/tests/integration/restauracion-settle.test.ts
+new file mode 100644
+index 0000000..ef71cd5
+--- /dev/null
++++ b/src/tests/integration/restauracion-settle.test.ts
+@@ -0,0 +1,69 @@
++/**
++ * Test de integración de `settleOrder` (Task 6 del plan de restauración): la
++ * pieza que MATERIALIZA un `pos_sale` a partir de un pedido de mostrador,
++ * replicando el patrón de `createSale` (TPV) — cabecera + líneas + pagos, con
++ * rollback manual si un paso falla (ver `mostrador/actions.ts`).
++ */
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++const holder = vi.hoisted(() => ({ supabase: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({ getActiveSalonId: () => Promise.resolve("SALON") }));
++
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++
++import { settleOrder } from "@/app/(dashboard)/mostrador/actions";
++
++beforeEach(() => {
++  holder.supabase = null;
++});
++
++// `settleOrderSchema` exige `.uuid()` en `orderId` (transcrito verbatim del
++// brief) — el id de ejemplo del brief ("O1") no es un uuid válido y no pasaría
++// `safeParse`. Se usa un uuid real aquí, MISMA estructura/aserciones que el
++// brief (precedente: `restauracion-order-actions.test.ts`, mismo motivo).
++const ORDER_ID = "11111111-1111-4111-8111-111111111111";
++
++describe("settleOrder", () => {
++  it("materializa un pos_sale desde el pedido", async () => {
++    holder.supabase = makeSupabaseMock({
++      tables: {
++        orders: { data: [{ id: ORDER_ID, salon_id: "SALON", status: "abierta" }] },
++        order_items: {
++          data: [
++            {
++              id: "i1",
++              salon_id: "SALON",
++              order_id: ORDER_ID,
++              product_id: "p1",
++              qty: 2,
++              unit_price_cents: 880,
++              vat_rate: 10,
++              status: "enviado",
++              void_of_item_id: null,
++              modifiers_snapshot: [],
++              products: { name: "Hamburguesa" },
++            },
++          ],
++        },
++        pos_sessions: { data: [{ id: "SESS1" }] },
++        pos_sales: { data: [] },
++      },
++      onWrite: (op: string, table: string) =>
++        op === "insert" && table === "pos_sales" ? { data: [{ id: "S1" }] } : {},
++    });
++
++    const r = await settleOrder({
++      orderId: ORDER_ID,
++      tenders: [{ method: "efectivo", amountCents: 1760, paymentMethodId: null }],
++      sendPending: true,
++    });
++
++    expect(r.ok).toBe(true);
++    if (r.ok) {
++      expect(r.data.saleId).toBe("S1");
++      expect(r.data.totalCents).toBe(1760);
++    }
++  });
++});

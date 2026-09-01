@@ -1,0 +1,363 @@
+=== COMMITS (75f044f..202480b) ===
+202480b feat(restauracion): modificadores — grupos, opciones y asignación a producto
+
+=== DIFF --stat ===
+ src/tests/unit/restauracion-modifiers-sql.test.ts  |  36 +++++
+ src/types/database.ts                              | 166 +++++++++++++++++++++
+ .../20260809121000_restauracion_modifiers.sql      |  93 ++++++++++++
+ 3 files changed, 295 insertions(+)
+
+=== DIFF -U10 ===
+diff --git a/src/tests/unit/restauracion-modifiers-sql.test.ts b/src/tests/unit/restauracion-modifiers-sql.test.ts
+new file mode 100644
+index 0000000..6903210
+--- /dev/null
++++ b/src/tests/unit/restauracion-modifiers-sql.test.ts
+@@ -0,0 +1,36 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260809121000_restauracion_modifiers.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración modificadores", () => {
++  it("crea las tres tablas con clave compuesta (id, salon_id)", () => {
++    for (const t of ["modifier_groups", "modifiers", "product_modifier_groups"]) {
++      expect(SQL).toContain(`create table if not exists public.${t}`);
++      expect(SQL).toContain(`${t}_id_salon_key unique (id, salon_id)`);
++    }
++  });
++
++  it("modifier_groups valida min<=max y modifiers guarda price_delta_cents (permite negativo)", () => {
++    expect(SQL).toContain("min_select");
++    expect(SQL).toContain("max_select");
++    expect(SQL).toContain("check (min_select <= max_select)");
++    expect(SQL).toContain("price_delta_cents integer not null default 0");
++  });
++
++  it("product_modifier_groups enlaza product y group por FK compuesta", () => {
++    expect(SQL).toContain("foreign key (product_id, salon_id)");
++    expect(SQL).toContain("foreign key (group_id, salon_id)");
++    expect(SQL).toContain("unique (salon_id, product_id, group_id)");
++  });
++
++  it("RLS: lectura miembros, gestión owner/manager, y guardián", () => {
++    expect(SQL).toContain("salon_id in (select app.user_salon_ids())");
++    expect(SQL).toContain("app.has_salon_role(salon_id, array['owner','manager']::public.member_role[])");
++    expect(SQL).toContain("do $guard$");
++  });
++});
+diff --git a/src/types/database.ts b/src/types/database.ts
+index 52a0e10..4b63506 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -861,20 +861,179 @@ export interface Database {
+           },
+           {
+             foreignKeyName: "products_station_id_fkey";
+             columns: ["station_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "stations";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      // Grupos de modificadores de la carta (restauración) — migración
++      // 20260809121000_restauracion_modifiers. min_select/max_select acotan
++      // cuántas opciones puede elegir el cliente dentro del grupo (constraint
++      // modifier_groups_min_le_max: min_select <= max_select). Clave compuesta
++      // modifier_groups_id_salon_key (id, salon_id) para permitir FKs
++      // compuestas de dominio desde modifiers.group_id y
++      // product_modifier_groups.group_id.
++      modifier_groups: {
++        Row: {
++          id: string;
++          salon_id: string;
++          name: string;
++          min_select: number;
++          max_select: number;
++          required: boolean;
++          sort_order: number;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          name: string;
++          min_select?: number;
++          max_select?: number;
++          required?: boolean;
++          sort_order?: number;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          name?: string;
++          min_select?: number;
++          max_select?: number;
++          required?: boolean;
++          sort_order?: number;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "modifier_groups_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++        ];
++      };
++      // Opciones de un grupo de modificadores — migración
++      // 20260809121000_restauracion_modifiers. price_delta_cents puede ser
++      // negativo (p. ej. un descuento por elegir "sin queso"). group_id es FK
++      // compuesta (id, salon_id) hacia modifier_groups
++      // (modifiers_group_id_fkey).
++      modifiers: {
++        Row: {
++          id: string;
++          salon_id: string;
++          group_id: string;
++          name: string;
++          price_delta_cents: number;
++          sort_order: number;
++          active: boolean;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          group_id: string;
++          name: string;
++          price_delta_cents?: number;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          group_id?: string;
++          name?: string;
++          price_delta_cents?: number;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "modifiers_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "modifiers_group_id_fkey";
++            columns: ["group_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "modifier_groups";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
++      // Asignación de grupos de modificadores a productos — migración
++      // 20260809121000_restauracion_modifiers. product_id/group_id son FKs
++      // compuestas (id, salon_id) hacia products/modifier_groups
++      // (product_modifier_groups_product_fkey/product_modifier_groups_group_fkey).
++      // unique (salon_id, product_id, group_id): un grupo no puede asignarse
++      // dos veces al mismo producto.
++      product_modifier_groups: {
++        Row: {
++          id: string;
++          salon_id: string;
++          product_id: string;
++          group_id: string;
++          sort_order: number;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          product_id: string;
++          group_id: string;
++          sort_order?: number;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          product_id?: string;
++          group_id?: string;
++          sort_order?: number;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "product_modifier_groups_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "product_modifier_groups_product_fkey";
++            columns: ["product_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "products";
++            referencedColumns: ["id", "salon_id"];
++          },
++          {
++            foreignKeyName: "product_modifier_groups_group_fkey";
++            columns: ["group_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "modifier_groups";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
+       // Movimientos de stock (libro de inventario) — migración
+       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
+       // aplicado al stock resultante (no la magnitud introducida por el
+       // usuario); ver `@/lib/stock` para la lógica pura de cálculo
+       // (`applyMovement`/`movementDelta`) y `products/stock-actions.ts` para la
+       // Server Action que persiste el movimiento Y actualiza `products.stock`.
+       // Lote/caducidad viajan en las ENTRADAS (trazabilidad de lotes).
+       stock_movement: {
+         Row: {
+           id: string;
+@@ -3478,20 +3637,27 @@ export type StockMovementInsert = TablesInsert<"stock_movement">;
+ // `@/lib/queries/service-material.ts` y
+ // `ajustes/servicios/material-actions.ts`.
+ export type ServiceMaterial = Tables<"service_material">;
+ export type ServiceMaterialInsert = TablesInsert<"service_material">;
+ 
+ // Carta (restauración) — categorías y estaciones de producción. Ver
+ // migración 20260809120000_restauracion_menu_base.
+ export type MenuCategory = Tables<"menu_categories">;
+ export type Station = Tables<"stations">;
+ 
++// Modificadores de la carta (restauración) — grupos de opciones, opciones y
++// su asignación a productos. Ver migración
++// 20260809121000_restauracion_modifiers.
++export type ModifierGroup = Tables<"modifier_groups">;
++export type Modifier = Tables<"modifiers">;
++export type ProductModifierGroup = Tables<"product_modifier_groups">;
++
+ // Phase helpers -----------------------------------------------------------------
+ 
+ /** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
+ export interface ServicePhaseRange {
+   label: "application" | "exposure" | "post_exposure";
+   /** Minutos desde el inicio de la cita en que comienza la fase. */
+   startMin: number;
+   /** Minutos desde el inicio de la cita en que termina la fase. */
+   endMin: number;
+   /** Duración de la fase en minutos. */
+diff --git a/supabase/migrations/20260809121000_restauracion_modifiers.sql b/supabase/migrations/20260809121000_restauracion_modifiers.sql
+new file mode 100644
+index 0000000..34ea895
+--- /dev/null
++++ b/supabase/migrations/20260809121000_restauracion_modifiers.sql
+@@ -0,0 +1,93 @@
++-- =============================================================================
++-- Kairos — Restauración · Modificadores (grupos, opciones, asignación a producto)
++-- =============================================================================
++begin;
++
++create table if not exists public.modifier_groups (
++  id          uuid primary key default gen_random_uuid(),
++  salon_id    uuid not null references public.salons (id) on delete cascade,
++  name        varchar(120) not null,
++  min_select  integer not null default 0 check (min_select >= 0),
++  max_select  integer not null default 1 check (max_select >= 1),
++  required    boolean not null default false,
++  sort_order  integer not null default 0,
++  created_at  timestamptz not null default now(),
++  updated_at  timestamptz not null default now(),
++  constraint modifier_groups_min_le_max check (min_select <= max_select),
++  constraint modifier_groups_id_salon_key unique (id, salon_id)
++);
++
++create table if not exists public.modifiers (
++  id                uuid primary key default gen_random_uuid(),
++  salon_id          uuid not null references public.salons (id) on delete cascade,
++  group_id          uuid not null,
++  name              varchar(120) not null,
++  price_delta_cents integer not null default 0,   -- puede ser negativo (descuento)
++  sort_order        integer not null default 0,
++  active            boolean not null default true,
++  created_at        timestamptz not null default now(),
++  updated_at        timestamptz not null default now(),
++  constraint modifiers_group_id_fkey
++    foreign key (group_id, salon_id)
++    references public.modifier_groups (id, salon_id) on delete cascade,
++  constraint modifiers_id_salon_key unique (id, salon_id)
++);
++
++create table if not exists public.product_modifier_groups (
++  id          uuid primary key default gen_random_uuid(),
++  salon_id    uuid not null references public.salons (id) on delete cascade,
++  product_id  uuid not null,
++  group_id    uuid not null,
++  sort_order  integer not null default 0,
++  constraint product_modifier_groups_product_fkey
++    foreign key (product_id, salon_id)
++    references public.products (id, salon_id) on delete cascade,
++  constraint product_modifier_groups_group_fkey
++    foreign key (group_id, salon_id)
++    references public.modifier_groups (id, salon_id) on delete cascade,
++  unique (salon_id, product_id, group_id),
++  constraint product_modifier_groups_id_salon_key unique (id, salon_id)
++);
++
++create trigger trg_modifier_groups_updated_at
++  before update on public.modifier_groups
++  for each row execute function app.set_updated_at();
++create trigger trg_modifiers_updated_at
++  before update on public.modifiers
++  for each row execute function app.set_updated_at();
++
++-- RLS (patrón: lectura miembros / gestión owner-manager) para las tres tablas.
++do $$
++declare t text;
++begin
++  foreach t in array array['modifier_groups','modifiers','product_modifier_groups'] loop
++    execute format('alter table public.%I enable row level security', t);
++    execute format($p$create policy "members_select_%1$s" on public.%1$I
++      for select to authenticated using (salon_id in (select app.user_salon_ids()))$p$, t);
++    execute format($p$create policy "managers_insert_%1$s" on public.%1$I
++      for insert to authenticated
++      with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))$p$, t);
++    execute format($p$create policy "managers_update_%1$s" on public.%1$I
++      for update to authenticated
++      using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))
++      with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))$p$, t);
++    execute format($p$create policy "managers_delete_%1$s" on public.%1$I
++      for delete to authenticated
++      using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))$p$, t);
++  end loop;
++end $$;
++
++do $guard$
++declare _cnt integer;
++begin
++  select count(*) into _cnt from pg_policies
++    where schemaname = 'public'
++      and tablename in ('modifier_groups','modifiers','product_modifier_groups');
++  if _cnt < 12 then
++    raise exception 'GUARDIÁN MODIFICADORES: faltan políticas (encontradas %)', _cnt using errcode = 'raise_exception';
++  end if;
++  raise notice 'GUARDIÁN MODIFICADORES: 3 tablas verificadas';
++end;
++$guard$;
++
++commit;

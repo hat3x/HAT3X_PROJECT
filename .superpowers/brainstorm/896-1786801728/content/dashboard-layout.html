@@ -1,0 +1,172 @@
+<h2>¿Cómo quieres que se vea la pantalla principal?</h2>
+<p class="subtitle">Las cuatro comparten la misma barra lateral (Proyectos · Clientes · Alertas · Ajustes) y las mismas portadas por proyecto. Lo que cambia es <strong>qué ves en el primer segundo</strong>. Haz clic en la que te encaje y cuéntame en el terminal.</p>
+
+<style>
+  .hx-shot{background:var(--bg-primary);display:flex;height:250px;overflow:hidden;font-family:system-ui,-apple-system,sans-serif}
+  .hx-side{width:52px;flex-shrink:0;background:var(--bg-secondary);border-right:1px solid var(--border);padding:9px 6px;display:flex;flex-direction:column;gap:6px}
+  .hx-logo{font-size:8px;font-weight:700;letter-spacing:.5px;color:var(--text-primary);margin-bottom:3px}
+  .hx-side em{font-style:normal;font-size:7px;color:var(--text-tertiary);padding:3px 4px;border-radius:4px;display:block}
+  .hx-side em.on{background:var(--accent);color:#fff}
+  .hx-main{flex:1;padding:9px;overflow:hidden;display:flex;flex-direction:column;gap:7px}
+
+  .hx-bar{display:flex;gap:5px}
+  .hx-stat{flex:1;background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;padding:5px 6px}
+  .hx-stat b{display:block;font-size:13px;line-height:1.1;color:var(--text-primary)}
+  .hx-stat span{font-size:6.5px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px}
+  .hx-stat.bad b{color:var(--error)} .hx-stat.warn b{color:var(--warning)}
+
+  .hx-inc{background:rgba(255,59,48,.09);border:1px solid rgba(255,59,48,.3);border-radius:7px;padding:5px 7px;font-size:7.5px;color:var(--text-primary);display:flex;align-items:center;gap:5px}
+  .hx-inc s{text-decoration:none;width:5px;height:5px;border-radius:50%;background:var(--error);flex-shrink:0}
+
+  .hx-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .hx-tile{background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;overflow:hidden}
+  .hx-cover{height:30px;position:relative}
+  .hx-cover s{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;border:1.5px solid rgba(255,255,255,.9)}
+  .hx-meta{padding:4px 5px}
+  .hx-meta b{display:block;font-size:7px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hx-meta span{font-size:6px;color:var(--text-secondary)}
+  .ok{background:var(--success)} .warn{background:var(--warning)} .down{background:var(--error)}
+
+  .c1{background:linear-gradient(135deg,#0071e3,#5ac8fa)}
+  .c2{background:linear-gradient(135deg,#ff375f,#ff9f0a)}
+  .c3{background:linear-gradient(135deg,#30d158,#0aa2c0)}
+  .c4{background:linear-gradient(135deg,#bf5af2,#0071e3)}
+  .c5{background:linear-gradient(135deg,#ff9f0a,#ff375f)}
+  .c6{background:linear-gradient(135deg,#64d2ff,#5e5ce6)}
+
+  .hx-row{display:flex;align-items:center;gap:6px;padding:4.5px 6px;border-bottom:1px solid var(--border);font-size:7px;color:var(--text-primary)}
+  .hx-row s{text-decoration:none;width:5px;height:5px;border-radius:50%;flex-shrink:0}
+  .hx-row b{font-weight:600;width:74px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hx-row i{font-style:normal;color:var(--text-secondary);flex:1;white-space:nowrap;overflow:hidden}
+  .hx-row u{text-decoration:none;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+  .hx-spark{display:flex;gap:1px;align-items:flex-end;height:11px;width:44px}
+  .hx-spark i{background:var(--success);width:2px;border-radius:1px}
+  .hx-list{background:var(--bg-secondary);border:1px solid var(--border);border-radius:7px;overflow:hidden}
+
+  .hx-mosaic{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:52px;gap:6px}
+  .hx-m{border-radius:7px;padding:6px;color:#fff;font-size:7px;font-weight:600;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+  .hx-m small{font-weight:400;opacity:.85;font-size:6px}
+  .hx-m.big{grid-column:span 2;grid-row:span 2;font-size:9px}
+  .hx-m.wide{grid-column:span 2}
+
+  .cards .card-image{padding:0;background:var(--bg-tertiary)}
+  .hx-note{font-size:.75rem;color:var(--text-secondary);margin-top:.4rem}
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="hx-shot">
+        <div class="hx-side">
+          <div class="hx-logo">HAT3X</div>
+          <em class="on">Proyectos</em><em>Clientes</em><em>Alertas</em><em>Ajustes</em>
+        </div>
+        <div class="hx-main">
+          <div class="hx-grid">
+            <div class="hx-tile"><div class="hx-cover c1"><s class="ok"></s></div><div class="hx-meta"><b>Kairos</b><span>2 clientes</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c2"><s class="down"></s></div><div class="hx-meta"><b>Recep. Sara</b><span>Biodental</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c3"><s class="ok"></s></div><div class="hx-meta"><b>100M Dashboard</b><span>3 locales</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c4"><s class="ok"></s></div><div class="hx-meta"><b>denueveanueve</b><span>App + Staff</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c5"><s class="warn"></s></div><div class="hx-meta"><b>Oficina Virtual</b><span>Interno</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c6"><s class="ok"></s></div><div class="hx-meta"><b>Web J. Peralta</b><span>Mantenim.</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Galería</h3>
+      <p>Solo las portadas, grandes y limpias, como el App Store. Es la más bonita y la que más luce la imagen de cada proyecto.</p>
+      <p class="hx-note"><strong>Pero:</strong> para saber qué va mal tienes que buscar el punto rojo entre las tarjetas. Con 20 proyectos, eso es scroll.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="hx-shot">
+        <div class="hx-side">
+          <div class="hx-logo">HAT3X</div>
+          <em class="on">Resumen</em><em>Proyectos</em><em>Clientes</em><em>Alertas</em>
+        </div>
+        <div class="hx-main">
+          <div class="hx-bar">
+            <div class="hx-stat"><b>12</b><span>Proyectos</span></div>
+            <div class="hx-stat"><b>10</b><span>Operativos</span></div>
+            <div class="hx-stat warn"><b>1</b><span>Degradado</span></div>
+            <div class="hx-stat bad"><b>1</b><span>Caído</span></div>
+          </div>
+          <div class="hx-inc"><s></s><strong>Recepcionista Sara</strong>&nbsp;· workflow 02-crear-cita falla desde hace 14 min · Biodental</div>
+          <div class="hx-grid">
+            <div class="hx-tile"><div class="hx-cover c2"><s class="down"></s></div><div class="hx-meta"><b>Recep. Sara</b><span>Biodental</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c5"><s class="warn"></s></div><div class="hx-meta"><b>Oficina Virtual</b><span>lenta</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c1"><s class="ok"></s></div><div class="hx-meta"><b>Kairos</b><span>2 clientes</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c3"><s class="ok"></s></div><div class="hx-meta"><b>100M Dashboard</b><span>3 locales</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c4"><s class="ok"></s></div><div class="hx-meta"><b>denueveanueve</b><span>App + Staff</span></div></div>
+            <div class="hx-tile"><div class="hx-cover c6"><s class="ok"></s></div><div class="hx-meta"><b>Web J. Peralta</b><span>Mantenim.</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Sala de control <em style="color:var(--accent);font-style:normal">— mi recomendación</em></h3>
+      <p>Franja de estado global, debajo las incidencias abiertas, y debajo la galería <strong>ordenada por gravedad</strong>: lo roto sube solo arriba.</p>
+      <p class="hx-note"><strong>Por qué:</strong> respondes «¿está todo bien?» sin leer nada, y sigues teniendo la galería con portadas que querías.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="hx-shot">
+        <div class="hx-side">
+          <div class="hx-logo">HAT3X</div>
+          <em class="on">Proyectos</em><em>Clientes</em><em>Alertas</em><em>Ajustes</em>
+        </div>
+        <div class="hx-main">
+          <div class="hx-list">
+            <div class="hx-row"><s class="down"></s><b>Recep. Sara</b><i>Biodental · n8n</i><span class="hx-spark"><i style="height:9px"></i><i style="height:10px"></i><i style="height:8px"></i><i style="height:10px"></i><i style="height:3px;background:var(--error)"></i><i style="height:2px;background:var(--error)"></i></span><u>97,2%</u></div>
+            <div class="hx-row"><s class="warn"></s><b>Oficina Virtual</b><i>HAT3X · interno</i><span class="hx-spark"><i style="height:10px"></i><i style="height:9px"></i><i style="height:6px;background:var(--warning)"></i><i style="height:7px;background:var(--warning)"></i><i style="height:10px"></i><i style="height:9px"></i></span><u>99,1%</u></div>
+            <div class="hx-row"><s class="ok"></s><b>Kairos</b><i>Producto propio · 2 clientes</i><span class="hx-spark"><i style="height:10px"></i><i style="height:11px"></i><i style="height:10px"></i><i style="height:11px"></i><i style="height:10px"></i><i style="height:11px"></i></span><u>99,9%</u></div>
+            <div class="hx-row"><s class="ok"></s><b>100M Dashboard</b><i>100 Montaditos · 3 locales</i><span class="hx-spark"><i style="height:11px"></i><i style="height:10px"></i><i style="height:11px"></i><i style="height:10px"></i><i style="height:11px"></i><i style="height:11px"></i></span><u>100%</u></div>
+            <div class="hx-row"><s class="ok"></s><b>denueveanueve</b><i>App cliente + staff</i><span class="hx-spark"><i style="height:10px"></i><i style="height:11px"></i><i style="height:10px"></i><i style="height:10px"></i><i style="height:11px"></i><i style="height:10px"></i></span><u>99,8%</u></div>
+            <div class="hx-row"><s class="ok"></s><b>Web J. Peralta</b><i>Mantenimiento mensual</i><span class="hx-spark"><i style="height:11px"></i><i style="height:11px"></i><i style="height:10px"></i><i style="height:11px"></i><i style="height:10px"></i><i style="height:11px"></i></span><u>100%</u></div>
+            <div class="hx-row" style="border:0"><s class="ok"></s><b>Club BioSpa</b><i>Llamadas perdidas · n8n</i><span class="hx-spark"><i style="height:10px"></i><i style="height:10px"></i><i style="height:11px"></i><i style="height:10px"></i><i style="height:11px"></i><i style="height:10px"></i></span><u>99,7%</u></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Lista densa</h3>
+      <p>Una fila por proyecto con su uptime de los últimos días. Cabe todo sin scroll y es la más rápida de leer para un técnico.</p>
+      <p class="hx-note"><strong>Pero:</strong> no hay imagen por proyecto. Es lo contrario de lo que pediste.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="d" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="hx-shot">
+        <div class="hx-side">
+          <div class="hx-logo">HAT3X</div>
+          <em class="on">Mando</em><em>Proyectos</em><em>Clientes</em><em>Alertas</em>
+        </div>
+        <div class="hx-main">
+          <div class="hx-mosaic">
+            <div class="hx-m big c2">Recepcionista Sara<small>CAÍDO · 14 min · Biodental</small></div>
+            <div class="hx-m wide c5">Oficina Virtual<small>Lenta</small></div>
+            <div class="hx-m c1">Kairos<small>OK</small></div>
+            <div class="hx-m c3">100M<small>OK</small></div>
+            <div class="hx-m c4">9a9<small>OK</small></div>
+            <div class="hx-m c6">Peralta<small>OK</small></div>
+            <div class="hx-m c1" style="opacity:.75">BioSpa<small>OK</small></div>
+            <div class="hx-m c3" style="opacity:.75">Obratech<small>OK</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>D · Mosaico adaptativo</h3>
+      <p>Cada proyecto es un mosaico y <strong>el tamaño lo decide la urgencia</strong>: lo que está roto se agranda solo, lo sano se encoge. Pensado para dejarlo en una pantalla siempre encendida.</p>
+      <p class="hx-note"><strong>Pero:</strong> la posición de las cosas cambia sola, y eso cansa cuando lo usas para trabajar y no solo para mirar.</p>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,41 @@
+=== COMMITS (b75baca..75f044f) ===
+75f044f feat(restauracion): indices FK de products (categoria/estacion)
+
+=== DIFF --stat ===
+ src/tests/unit/restauracion-menu-indexes-sql.test.ts      | 15 +++++++++++++++
+ .../20260809120500_restauracion_menu_base_indexes.sql     |  5 +++++
+ 2 files changed, 20 insertions(+)
+
+=== DIFF -U10 ===
+diff --git a/src/tests/unit/restauracion-menu-indexes-sql.test.ts b/src/tests/unit/restauracion-menu-indexes-sql.test.ts
+new file mode 100644
+index 0000000..c12fa73
+--- /dev/null
++++ b/src/tests/unit/restauracion-menu-indexes-sql.test.ts
+@@ -0,0 +1,15 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260809120500_restauracion_menu_base_indexes.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración índices FK de products (categoría/estación)", () => {
++  it("crea índices para products.category_id y products.station_id", () => {
++    expect(SQL).toContain("create index if not exists idx_products_category_id");
++    expect(SQL).toContain("idx_products_station_id");
++  });
++});
+diff --git a/supabase/migrations/20260809120500_restauracion_menu_base_indexes.sql b/supabase/migrations/20260809120500_restauracion_menu_base_indexes.sql
+new file mode 100644
+index 0000000..2bc68e3
+--- /dev/null
++++ b/supabase/migrations/20260809120500_restauracion_menu_base_indexes.sql
+@@ -0,0 +1,5 @@
++-- Kairos — Restauración · Índices de soporte para las FK de products (categoría/estación)
++begin;
++create index if not exists idx_products_category_id on public.products (category_id);
++create index if not exists idx_products_station_id  on public.products (station_id);
++commit;

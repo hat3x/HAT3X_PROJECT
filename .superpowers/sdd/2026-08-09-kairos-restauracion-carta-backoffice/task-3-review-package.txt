@@ -1,0 +1,227 @@
+=== COMMITS (202480b..587c244) ===
+587c244 feat(restauracion): combos — piezas con ruteo por estación
+
+=== DIFF --stat ===
+ src/tests/unit/restauracion-combos-sql.test.ts     | 30 +++++++++
+ src/types/database.ts                              | 76 ++++++++++++++++++++++
+ .../20260809122000_restauracion_combos.sql         | 53 +++++++++++++++
+ 3 files changed, 159 insertions(+)
+
+=== DIFF -U10 ===
+diff --git a/src/tests/unit/restauracion-combos-sql.test.ts b/src/tests/unit/restauracion-combos-sql.test.ts
+new file mode 100644
+index 0000000..1387bce
+--- /dev/null
++++ b/src/tests/unit/restauracion-combos-sql.test.ts
+@@ -0,0 +1,30 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260809122000_restauracion_combos.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración combos", () => {
++  it("crea combo_components con FKs compuestas a producto combo, pieza y estación", () => {
++    expect(SQL).toContain("create table if not exists public.combo_components");
++    expect(SQL).toContain("foreign key (combo_product_id, salon_id)");
++    expect(SQL).toContain("foreign key (component_product_id, salon_id)");
++    expect(SQL).toContain("foreign key (station_id_override, salon_id)");
++    expect(SQL).toContain("references public.stations (id, salon_id)");
++  });
++
++  it("qty es positivo y hay clave compuesta (id, salon_id)", () => {
++    expect(SQL).toContain("qty");
++    expect(SQL).toContain("check (qty > 0)");
++    expect(SQL).toContain("combo_components_id_salon_key unique (id, salon_id)");
++  });
++
++  it("RLS + guardián", () => {
++    expect(SQL).toContain("salon_id in (select app.user_salon_ids())");
++    expect(SQL).toContain("app.has_salon_role(salon_id, array['owner','manager']::public.member_role[])");
++    expect(SQL).toContain("do $guard$");
++  });
++});
+diff --git a/src/types/database.ts b/src/types/database.ts
+index 4b63506..d324ce4 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -1020,20 +1020,92 @@ export interface Database {
+           },
+           {
+             foreignKeyName: "product_modifier_groups_group_fkey";
+             columns: ["group_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "modifier_groups";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      // Piezas de un producto combo (restauración) — migración
++      // 20260809122000_restauracion_combos. combo_product_id/component_product_id
++      // son FKs compuestas (id, salon_id) hacia products (el combo en sí y cada
++      // pieza que lo compone: combo_components_combo_fkey/
++      // combo_components_component_fkey). station_id_override permite el ruteo
++      // por pieza (p. ej. comida→cocina, bebida→barra) cuando difiere de la
++      // estación por defecto del producto pieza; FK compuesta opcional hacia
++      // stations (combo_components_station_fkey, on delete set null). qty > 0
++      // (combo_components_id_salon_key: (id, salon_id) unique para permitir
++      // FKs compuestas de dominio desde otras tablas).
++      combo_components: {
++        Row: {
++          id: string;
++          salon_id: string;
++          combo_product_id: string;
++          component_product_id: string;
++          qty: number;
++          station_id_override: string | null;
++          sort_order: number;
++          created_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          combo_product_id: string;
++          component_product_id: string;
++          qty?: number;
++          station_id_override?: string | null;
++          sort_order?: number;
++          created_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          combo_product_id?: string;
++          component_product_id?: string;
++          qty?: number;
++          station_id_override?: string | null;
++          sort_order?: number;
++          created_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "combo_components_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "combo_components_combo_fkey";
++            columns: ["combo_product_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "products";
++            referencedColumns: ["id", "salon_id"];
++          },
++          {
++            foreignKeyName: "combo_components_component_fkey";
++            columns: ["component_product_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "products";
++            referencedColumns: ["id", "salon_id"];
++          },
++          {
++            foreignKeyName: "combo_components_station_fkey";
++            columns: ["station_id_override", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "stations";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
+       // Movimientos de stock (libro de inventario) — migración
+       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
+       // aplicado al stock resultante (no la magnitud introducida por el
+       // usuario); ver `@/lib/stock` para la lógica pura de cálculo
+       // (`applyMovement`/`movementDelta`) y `products/stock-actions.ts` para la
+       // Server Action que persiste el movimiento Y actualiza `products.stock`.
+       // Lote/caducidad viajan en las ENTRADAS (trazabilidad de lotes).
+       stock_movement: {
+         Row: {
+           id: string;
+@@ -3644,20 +3716,24 @@ export type ServiceMaterialInsert = TablesInsert<"service_material">;
+ export type MenuCategory = Tables<"menu_categories">;
+ export type Station = Tables<"stations">;
+ 
+ // Modificadores de la carta (restauración) — grupos de opciones, opciones y
+ // su asignación a productos. Ver migración
+ // 20260809121000_restauracion_modifiers.
+ export type ModifierGroup = Tables<"modifier_groups">;
+ export type Modifier = Tables<"modifiers">;
+ export type ProductModifierGroup = Tables<"product_modifier_groups">;
+ 
++// Combos (restauración) — piezas de un producto combo con ruteo por estación
++// opcional. Ver migración 20260809122000_restauracion_combos.
++export type ComboComponent = Tables<"combo_components">;
++
+ // Phase helpers -----------------------------------------------------------------
+ 
+ /** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
+ export interface ServicePhaseRange {
+   label: "application" | "exposure" | "post_exposure";
+   /** Minutos desde el inicio de la cita en que comienza la fase. */
+   startMin: number;
+   /** Minutos desde el inicio de la cita en que termina la fase. */
+   endMin: number;
+   /** Duración de la fase en minutos. */
+diff --git a/supabase/migrations/20260809122000_restauracion_combos.sql b/supabase/migrations/20260809122000_restauracion_combos.sql
+new file mode 100644
+index 0000000..3d95bc6
+--- /dev/null
++++ b/supabase/migrations/20260809122000_restauracion_combos.sql
+@@ -0,0 +1,53 @@
++-- =============================================================================
++-- Kairos — Restauración · Combos (piezas de un producto combo + ruteo por pieza)
++-- =============================================================================
++begin;
++
++create table if not exists public.combo_components (
++  id                    uuid primary key default gen_random_uuid(),
++  salon_id              uuid not null references public.salons (id) on delete cascade,
++  combo_product_id      uuid not null,
++  component_product_id  uuid not null,
++  qty                   integer not null default 1 check (qty > 0),
++  station_id_override   uuid,
++  sort_order            integer not null default 0,
++  created_at            timestamptz not null default now(),
++  constraint combo_components_combo_fkey
++    foreign key (combo_product_id, salon_id)
++    references public.products (id, salon_id) on delete cascade,
++  constraint combo_components_component_fkey
++    foreign key (component_product_id, salon_id)
++    references public.products (id, salon_id) on delete cascade,
++  constraint combo_components_station_fkey
++    foreign key (station_id_override, salon_id)
++    references public.stations (id, salon_id) on delete set null (station_id_override),
++  constraint combo_components_id_salon_key unique (id, salon_id)
++);
++
++alter table public.combo_components enable row level security;
++create policy "members_select_combo_components" on public.combo_components
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "managers_insert_combo_components" on public.combo_components
++  for insert to authenticated
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_update_combo_components" on public.combo_components
++  for update to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_delete_combo_components" on public.combo_components
++  for delete to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++do $guard$
++declare _cnt integer;
++begin
++  select count(*) into _cnt from pg_policies
++    where schemaname = 'public' and tablename = 'combo_components';
++  if _cnt < 4 then
++    raise exception 'GUARDIÁN COMBOS: faltan políticas (encontradas %)', _cnt using errcode = 'raise_exception';
++  end if;
++  raise notice 'GUARDIÁN COMBOS: combo_components verificada';
++end;
++$guard$;
++
++commit;

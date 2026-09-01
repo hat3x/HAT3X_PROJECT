@@ -1,0 +1,1789 @@
+=== COMMITS (8fa60a6..f3b8098) ===
+f3b8098 feat(restauracion): rejilla de mostrador (/mostrador) con dos flujos y comanda
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/layout.tsx           |  16 +
+ .../mostrador/modifier-picker-dialog.tsx           | 244 ++++++++++++++
+ src/app/(dashboard)/mostrador/mostrador-view.tsx   | 208 ++++++++++++
+ src/app/(dashboard)/mostrador/open-orders-bar.tsx  |  92 ++++++
+ src/app/(dashboard)/mostrador/order-panel.tsx      | 350 +++++++++++++++++++++
+ src/app/(dashboard)/mostrador/page.tsx             |  36 +++
+ src/app/(dashboard)/mostrador/payment-sheet.tsx    | 333 ++++++++++++++++++++
+ src/app/(dashboard)/mostrador/product-grid.tsx     | 169 ++++++++++
+ src/hooks/use-menu.ts                              |  28 ++
+ src/lib/queries/menu.ts                            |  45 +++
+ src/tests/unit/order-panel.test.tsx                | 140 +++++++++
+ 11 files changed, 1661 insertions(+)
+
+=== DIFF -U8 ===
+diff --git a/src/app/(dashboard)/mostrador/layout.tsx b/src/app/(dashboard)/mostrador/layout.tsx
+new file mode 100644
+index 0000000..0565676
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/layout.tsx
+@@ -0,0 +1,16 @@
++import { SectorGate } from "@/components/guards/sector-gate";
++
++/**
++ * Layout del mostrador (restauración): SOLO gate de sector, SIN gate de rol.
++ * A diferencia de `carta/layout.tsx` (gestión de la carta, exige
++ * `canManageSettings`), el mostrador es el flujo operativo del día a día
++ * —tomar pedidos y cobrar— y lo usa CUALQUIER miembro del equipo (staff
++ * incluido), igual que `tpv/page.tsx` no exige rol para cobrar.
++ */
++export default async function MostradorLayout({
++  children,
++}: {
++  children: React.ReactNode;
++}): Promise<React.ReactElement> {
++  return <SectorGate required="restauracion">{children}</SectorGate>;
++}
+diff --git a/src/app/(dashboard)/mostrador/modifier-picker-dialog.tsx b/src/app/(dashboard)/mostrador/modifier-picker-dialog.tsx
+new file mode 100644
+index 0000000..3b684cb
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/modifier-picker-dialog.tsx
+@@ -0,0 +1,244 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Minus, Plus } from "lucide-react";
++
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Skeleton } from "@/components/ui/skeleton";
++import { useComboComponents, useModifierOptionsForGroups } from "@/hooks/use-menu";
++import { formatMoney } from "@/lib/format";
++import type { ComboPiece } from "@/lib/restauracion/menu";
++import type { MenuSelection } from "@/lib/restauracion/order";
++import type { ModifierGroup, Product } from "@/types/database";
++
++interface ModifierPickerDialogProps {
++  salonId: string;
++  /** Producto a configurar, o `null` si el diálogo está cerrado. */
++  product: Product | null;
++  /** Grupos de modificadores asignados a `product` (ya resueltos). */
++  groups: ModifierGroup[];
++  /** Catálogo completo, para resolver nombre/estación de las piezas de combo. */
++  productsById: Map<string, Product>;
++  onClose: () => void;
++  onConfirm: (selection: MenuSelection) => void;
++}
++
++/**
++ * Diálogo para configurar UNA unidad de un producto antes de añadirlo al
++ * pedido: cantidad + opciones de cada grupo de modificadores (respetando
++ * `min_select`/`max_select`) y, si el producto es un combo, la lista de
++ * piezas que lo componen (informativa: el combo se ordena entero, sin elegir
++ * piezas alternativas). Al confirmar entrega una {@link MenuSelection} que
++ * `mostrador-view.tsx` pasa a `buildOrderItemDrafts`.
++ */
++export function ModifierPickerDialog({
++  salonId,
++  product,
++  groups,
++  productsById,
++  onClose,
++  onConfirm,
++}: ModifierPickerDialogProps): React.ReactElement {
++  const [qty, setQty] = useState(1);
++  const [selected, setSelected] = useState<Record<string, string[]>>({});
++
++  // Reinicia cantidad/selección cada vez que se abre para un producto distinto.
++  useEffect(() => {
++    setQty(1);
++    setSelected({});
++  }, [product?.id]);
++
++  const groupIds = groups.map((g) => g.id);
++  const optionsQuery = useModifierOptionsForGroups(salonId, product !== null ? groupIds : []);
++  const comboQuery = useComboComponents(
++    salonId,
++    product?.is_combo === true ? product.id : null,
++  );
++
++  const options = optionsQuery.data ?? [];
++  const optionsLoading = product !== null && groupIds.length > 0 && optionsQuery.isPending;
++  const comboLoading = product?.is_combo === true && comboQuery.isPending;
++
++  function toggleOption(group: ModifierGroup, optionId: string): void {
++    setSelected((prev) => {
++      const current = prev[group.id] ?? [];
++      const already = current.includes(optionId);
++      if (group.max_select <= 1) {
++        // Selección única (tipo radio): un segundo toque la quita.
++        return { ...prev, [group.id]: already ? [] : [optionId] };
++      }
++      if (already) {
++        return { ...prev, [group.id]: current.filter((id) => id !== optionId) };
++      }
++      if (current.length >= group.max_select) return prev; // respeta el máximo
++      return { ...prev, [group.id]: [...current, optionId] };
++    });
++  }
++
++  const allRequiredMet = groups.every(
++    (g) => (selected[g.id]?.length ?? 0) >= g.min_select,
++  );
++  const canConfirm = allRequiredMet && qty >= 1 && !optionsLoading && !comboLoading;
++
++  function handleConfirm(): void {
++    if (product === null || !canConfirm) return;
++    const modifiers = groups.flatMap((g) =>
++      (selected[g.id] ?? []).map((optionId) => {
++        const opt = options.find((o) => o.id === optionId);
++        return { name: opt?.name ?? "", priceDeltaCents: opt?.price_delta_cents ?? 0 };
++      }),
++    );
++    const comboPieces: ComboPiece[] = product.is_combo
++      ? (comboQuery.data ?? []).map((piece) => ({
++          componentProductId: piece.component_product_id,
++          qty: piece.qty,
++          stationId: productsById.get(piece.component_product_id)?.station_id ?? null,
++          stationOverrideId: piece.station_id_override,
++        }))
++      : [];
++    onConfirm({
++      productId: product.id,
++      name: product.name,
++      basePriceCents: product.price_cents,
++      vatRate: product.vat_rate,
++      stationId: product.station_id,
++      isCombo: product.is_combo,
++      qty,
++      modifiers,
++      comboPieces,
++    });
++  }
++
++  return (
++    <Dialog
++      open={product !== null}
++      onOpenChange={(open) => {
++        if (!open) onClose();
++      }}
++    >
++      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
++        <DialogHeader>
++          <DialogTitle>{product?.name}</DialogTitle>
++          <DialogDescription>
++            {product !== null ? formatMoney(product.price_cents) : ""}
++            {product?.is_combo === true ? " · combo" : ""}
++          </DialogDescription>
++        </DialogHeader>
++
++        {/* Cantidad */}
++        <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 p-3">
++          <span className="text-sm font-medium text-foreground">Cantidad</span>
++          <div className="inline-flex items-center rounded-lg border border-border/70 bg-background">
++            <Button
++              type="button"
++              variant="ghost"
++              size="icon"
++              className="h-10 w-10 rounded-r-none"
++              aria-label="Restar una unidad"
++              onClick={() => setQty((q) => Math.max(1, q - 1))}
++            >
++              <Minus className="h-4 w-4" />
++            </Button>
++            <span className="w-10 text-center text-sm font-semibold tabular-nums">{qty}</span>
++            <Button
++              type="button"
++              variant="ghost"
++              size="icon"
++              className="h-10 w-10 rounded-l-none"
++              aria-label="Sumar una unidad"
++              onClick={() => setQty((q) => q + 1)}
++            >
++              <Plus className="h-4 w-4" />
++            </Button>
++          </div>
++        </div>
++
++        {/* Piezas del combo (informativo) */}
++        {product?.is_combo === true ? (
++          comboLoading ? (
++            <Skeleton className="h-16 w-full" />
++          ) : (
++            <div className="rounded-xl border border-border/70 bg-muted/30 p-3">
++              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
++                Incluye
++              </p>
++              <ul className="grid gap-1 text-sm text-foreground">
++                {(comboQuery.data ?? []).map((piece) => (
++                  <li key={piece.id}>
++                    {piece.qty}× {productsById.get(piece.component_product_id)?.name ?? "Pieza"}
++                  </li>
++                ))}
++              </ul>
++            </div>
++          )
++        ) : null}
++
++        {/* Grupos de modificadores */}
++        {optionsLoading ? (
++          <Skeleton className="h-24 w-full" />
++        ) : (
++          groups.map((group) => (
++            <fieldset key={group.id} className="grid gap-2 rounded-xl border border-border/70 p-3">
++              <legend className="flex items-center gap-2 px-1 text-sm font-semibold text-foreground">
++                {group.name}
++                {group.required ? (
++                  <span className="text-xs font-normal text-destructive">obligatorio</span>
++                ) : null}
++                <span className="text-xs font-normal text-muted-foreground">
++                  (elige {group.min_select}
++                  {group.max_select !== group.min_select ? `–${group.max_select}` : ""})
++                </span>
++              </legend>
++              <div className="grid gap-1.5">
++                {options
++                  .filter((option) => option.group_id === group.id)
++                  .map((option) => {
++                    const isSelected = (selected[group.id] ?? []).includes(option.id);
++                    return (
++                      <button
++                        key={option.id}
++                        type="button"
++                        aria-pressed={isSelected}
++                        onClick={() => toggleOption(group, option.id)}
++                        className={[
++                          "flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors",
++                          isSelected
++                            ? "border-primary/40 bg-primary/10 text-primary"
++                            : "border-border/70 bg-background text-foreground hover:bg-accent",
++                        ].join(" ")}
++                      >
++                        <span>{option.name}</span>
++                        {option.price_delta_cents !== 0 ? (
++                          <span className="tabular-nums">
++                            {option.price_delta_cents > 0 ? "+" : ""}
++                            {formatMoney(option.price_delta_cents)}
++                          </span>
++                        ) : null}
++                      </button>
++                    );
++                  })}
++              </div>
++            </fieldset>
++          ))
++        )}
++
++        <DialogFooter>
++          <Button type="button" variant="outline" onClick={onClose}>
++            Cancelar
++          </Button>
++          <Button type="button" disabled={!canConfirm} onClick={handleConfirm}>
++            Añadir al pedido
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/mostrador-view.tsx b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+new file mode 100644
+index 0000000..0df0ac8
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+@@ -0,0 +1,208 @@
++"use client";
++
++import { useEffect, useMemo, useRef, useState } from "react";
++
++import { ModifierPickerDialog } from "@/app/(dashboard)/mostrador/modifier-picker-dialog";
++import { OpenOrdersBar } from "@/app/(dashboard)/mostrador/open-orders-bar";
++import { OrderPanel, type OrderPanelItem } from "@/app/(dashboard)/mostrador/order-panel";
++import { ProductGrid } from "@/app/(dashboard)/mostrador/product-grid";
++import {
++  useAllProductModifierGroups,
++  useMenuProducts,
++  useModifierGroups,
++  useStations,
++} from "@/hooks/use-menu";
++import { useOrderItems } from "@/hooks/use-orders";
++import { useSalePaymentMethods } from "@/hooks/use-tpv";
++import { buildOrderItemDrafts, type MenuSelection } from "@/lib/restauracion/order";
++import type { Order, OrderItem, Product } from "@/types/database";
++
++interface MostradorViewProps {
++  salonId: string;
++  /** Nombre comercial del salón; cabecera del ticket impreso. */
++  salonName: string;
++}
++
++/** `order_items.modifiers_snapshot` es `Json` en la BD; en la práctica siempre
++ * tiene esta forma (la escribe `addOrderItems`, ver `mostrador/actions.ts`). */
++function asModifiersSnapshot(value: unknown): Array<{ name: string; priceDeltaCents: number }> {
++  return Array.isArray(value) ? (value as Array<{ name: string; priceDeltaCents: number }>) : [];
++}
++
++/** Una línea persistida cuenta para el pedido si no es una anulación ni está
++ * anulada — mismo criterio que `settleOrder` al cargar líneas a cobrar. */
++function isActiveOrderItem(row: OrderItem): boolean {
++  return row.void_of_item_id === null && row.status !== "anulado";
++}
++
++/**
++ * Pantalla de mostrador (restauración): rejilla de carta a la izquierda,
++ * panel de pedido a la derecha, con la barra de cuentas abiertas arriba.
++ * Mantiene en estado LOCAL las líneas del pedido en curso (drafts con
++ * `crypto.randomUUID()`, patrón de `tpv-view.tsx`); es `OrderPanel` quien
++ * decide CUÁNDO persistirlas (Mandar/Cobrar). Al reabrir una cuenta desde
++ * `OpenOrdersBar`, las líneas ya persistidas se cargan una única vez con
++ * `useOrderItems`.
++ */
++export function MostradorView({ salonId, salonName }: MostradorViewProps): React.ReactElement {
++  const products = useMenuProducts(salonId);
++  const stations = useStations(salonId);
++  const modifierGroups = useModifierGroups(salonId);
++  const productModifierGroups = useAllProductModifierGroups(salonId);
++  const paymentMethods = useSalePaymentMethods(salonId);
++
++  const [order, setOrder] = useState<Order | null>(null);
++  const [items, setItems] = useState<OrderPanelItem[]>([]);
++  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
++  const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
++
++  const orderItemsQuery = useOrderItems(salonId, order?.id ?? null);
++  // Evita recargar las líneas del mismo pedido dos veces: solo se leen de BD
++  // al REABRIR una cuenta desde `OpenOrdersBar`; cuando `OrderPanel` crea el
++  // pedido en el primer Mandar/Cobrar, las líneas ya están en `items` (son la
++  // fuente de verdad que se está empujando HACIA el servidor, no al revés).
++  const loadedOrderIdRef = useRef<string | null>(null);
++
++  const productsById = useMemo(
++    () => new Map((products.data ?? []).map((p) => [p.id, p])),
++    [products.data],
++  );
++  const groupsByProduct = useMemo(() => {
++    const map = new Map<string, string[]>();
++    for (const link of productModifierGroups.data ?? []) {
++      const list = map.get(link.product_id) ?? [];
++      list.push(link.group_id);
++      map.set(link.product_id, list);
++    }
++    return map;
++  }, [productModifierGroups.data]);
++
++  useEffect(() => {
++    if (order === null || orderItemsQuery.data === undefined) return;
++    if (loadedOrderIdRef.current === order.id) return;
++    loadedOrderIdRef.current = order.id;
++    const loaded: OrderPanelItem[] = orderItemsQuery.data.filter(isActiveOrderItem).map((row) => ({
++      id: row.id,
++      productId: row.product_id,
++      qty: row.qty,
++      unitPriceCents: row.unit_price_cents,
++      vatRate: row.vat_rate,
++      stationId: row.station_id,
++      comboGroup: row.combo_group,
++      modifiersSnapshot: asModifiersSnapshot(row.modifiers_snapshot),
++      name: productsById.get(row.product_id)?.name ?? "Producto",
++    }));
++    setItems(loaded);
++    setPendingIds(new Set());
++  }, [order, orderItemsQuery.data, productsById]);
++
++  function addSelection(selection: MenuSelection): void {
++    const drafts = buildOrderItemDrafts(selection, () => crypto.randomUUID());
++    const withNames: OrderPanelItem[] = drafts.map((draft) => ({
++      ...draft,
++      name: productsById.get(draft.productId)?.name ?? selection.name,
++    }));
++    setItems((prev) => [...prev, ...withNames]);
++    setPendingIds((prev) => {
++      const next = new Set(prev);
++      for (const draft of withNames) next.add(draft.id);
++      return next;
++    });
++  }
++
++  function handleAddDirect(product: Product): void {
++    addSelection({
++      productId: product.id,
++      name: product.name,
++      basePriceCents: product.price_cents,
++      vatRate: product.vat_rate,
++      stationId: product.station_id,
++      isCombo: false,
++      qty: 1,
++      modifiers: [],
++      comboPieces: [],
++    });
++  }
++
++  function handleSelectOrder(selected: Order): void {
++    // Fuerza la recarga de líneas de la cuenta elegida (distinta a la actual).
++    loadedOrderIdRef.current = null;
++    setOrder(selected);
++  }
++
++  function handleNewOrder(): void {
++    loadedOrderIdRef.current = null;
++    setOrder(null);
++    setItems([]);
++    setPendingIds(new Set());
++    setPickerProduct(null);
++  }
++
++  const assignedGroupIds = pickerProduct !== null
++    ? groupsByProduct.get(pickerProduct.id) ?? []
++    : [];
++  const assignedGroups = (modifierGroups.data ?? []).filter((g) =>
++    assignedGroupIds.includes(g.id),
++  );
++
++  return (
++    <main className="container py-6 lg:py-8">
++      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
++        <div className="space-y-1">
++          <h1 className="text-3xl font-bold tracking-tight">Mostrador</h1>
++          <p className="text-sm text-muted-foreground">
++            Toma pedidos, manda la comanda a cocina/barra y cobra.
++          </p>
++        </div>
++      </div>
++
++      <div className="mb-5">
++        <OpenOrdersBar
++          salonId={salonId}
++          activeOrderId={order?.id ?? null}
++          onSelect={handleSelectOrder}
++          onNew={handleNewOrder}
++        />
++      </div>
++
++      <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
++        <ProductGrid
++          salonId={salonId}
++          productModifierGroupsByProduct={groupsByProduct}
++          onAddDirect={handleAddDirect}
++          onOpenPicker={setPickerProduct}
++        />
++
++        <OrderPanel
++          salonId={salonId}
++          salonName={salonName}
++          order={order}
++          items={items}
++          pendingIds={pendingIds}
++          stations={stations.data ?? []}
++          paymentMethods={paymentMethods.data ?? []}
++          onOrderPersisted={(created) => {
++            // Ya tenemos las líneas en local state (son las que se están
++            // mandando AL servidor); no dispares la recarga de arriba.
++            loadedOrderIdRef.current = created.id;
++            setOrder(created);
++          }}
++          onItemsSent={() => setPendingIds(new Set())}
++          onSettled={handleNewOrder}
++        />
++      </div>
++
++      <ModifierPickerDialog
++        salonId={salonId}
++        product={pickerProduct}
++        groups={assignedGroups}
++        productsById={productsById}
++        onClose={() => setPickerProduct(null)}
++        onConfirm={(selection) => {
++          addSelection(selection);
++          setPickerProduct(null);
++        }}
++      />
++    </main>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/open-orders-bar.tsx b/src/app/(dashboard)/mostrador/open-orders-bar.tsx
+new file mode 100644
+index 0000000..5551643
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/open-orders-bar.tsx
+@@ -0,0 +1,92 @@
++"use client";
++
++import { Plus, Receipt } from "lucide-react";
++
++import { Skeleton } from "@/components/ui/skeleton";
++import { useOpenOrders } from "@/hooks/use-orders";
++import type { Order } from "@/types/database";
++
++interface OpenOrdersBarProps {
++  salonId: string;
++  /** Id del pedido que se está trabajando ahora mismo, o `null` (cuenta nueva). */
++  activeOrderId: string | null;
++  /** Reabre una cuenta abierta: carga sus líneas en el panel. */
++  onSelect: (order: Order) => void;
++  /** Empieza una cuenta nueva (descarta el trabajo en curso sin persistir). */
++  onNew: () => void;
++}
++
++/**
++ * Barra de cuentas abiertas del salón: permite retomar un pedido `abierta`
++ * (mandado a cocina pero aún no cobrado) o empezar uno nuevo. Mismo patrón
++ * visual que el `AppointmentPicker` de `tpv/tpv-view.tsx` (fila de chips con
++ * `aria-pressed` para la selección activa).
++ */
++export function OpenOrdersBar({
++  salonId,
++  activeOrderId,
++  onSelect,
++  onNew,
++}: OpenOrdersBarProps): React.ReactElement {
++  const openOrders = useOpenOrders(salonId);
++
++  if (openOrders.isPending) {
++    return <Skeleton className="h-11 w-full max-w-md rounded-xl" />;
++  }
++
++  const orders = openOrders.data ?? [];
++
++  return (
++    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-card p-3 shadow-xs">
++      <span className="inline-flex items-center gap-1.5 pl-1 pr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
++        <Receipt className="h-3.5 w-3.5" />
++        Cuentas abiertas
++      </span>
++
++      <button
++        type="button"
++        onClick={onNew}
++        aria-pressed={activeOrderId === null}
++        className={[
++          "inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-all duration-200 ease-apple-out active:scale-[0.98]",
++          activeOrderId === null
++            ? "border-primary/40 bg-primary/10 text-primary"
++            : "border-border/70 bg-background text-foreground hover:border-primary/30 hover:bg-accent",
++        ].join(" ")}
++      >
++        <Plus className="h-3.5 w-3.5" />
++        Cuenta nueva
++      </button>
++
++      {orders.length === 0 ? (
++        <span className="text-sm text-muted-foreground">No hay cuentas abiertas.</span>
++      ) : (
++        orders.map((order) => {
++          const active = activeOrderId === order.id;
++          return (
++            <button
++              key={order.id}
++              type="button"
++              onClick={() => onSelect(order)}
++              aria-pressed={active}
++              className={[
++                "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all duration-200 ease-apple-out active:scale-[0.98]",
++                active
++                  ? "border-primary/40 bg-primary/10 text-primary"
++                  : "border-border/70 bg-background text-foreground hover:border-primary/30 hover:bg-accent",
++              ].join(" ")}
++            >
++              <span className="tabular-nums">#{order.order_number ?? "—"}</span>
++              {order.label !== null && order.label.trim() !== "" ? (
++                <>
++                  <span className="text-muted-foreground">·</span>
++                  <span className="max-w-[9rem] truncate">{order.label}</span>
++                </>
++              ) : null}
++            </button>
++          );
++        })
++      )}
++    </div>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/order-panel.tsx b/src/app/(dashboard)/mostrador/order-panel.tsx
+new file mode 100644
+index 0000000..3b85646
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/order-panel.tsx
+@@ -0,0 +1,350 @@
++"use client";
++
++import { useState } from "react";
++import { AlertCircle, CreditCard, Send, ShoppingBag } from "lucide-react";
++
++import { centsToEuroInput, type TicketLine, type TicketTotals } from "@/app/(dashboard)/tpv/cart";
++import { PaymentSheet } from "@/app/(dashboard)/mostrador/payment-sheet";
++import {
++  buildTicketData,
++  PAYMENT_METHOD_LABELS,
++  printTicketDocument,
++} from "@/app/(dashboard)/tpv/print-ticket";
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import { Card, CardContent } from "@/components/ui/card";
++import {
++  useAddOrderItems,
++  useCreateOrder,
++  useSendOrderToStations,
++  useSettleOrder,
++} from "@/hooks/use-orders";
++import { formatMoney } from "@/lib/format";
++import { printKitchenComanda } from "@/lib/restauracion/kitchen-comanda";
++import {
++  buildSettleLines,
++  settleTotals,
++  type OrderItemDraft,
++} from "@/lib/restauracion/order";
++import type { SettleTenderInput } from "@/lib/validations/order";
++import type { Order, PosPaymentMethodRow, Station } from "@/types/database";
++
++/** Una línea del pedido con el nombre ya resuelto (cabecera de producto o
++ * pieza de combo) para poder pintarla e imprimirla sin volver a consultar
++ * el catálogo. */
++export interface OrderPanelItem extends OrderItemDraft {
++  name: string;
++}
++
++interface OrderPanelProps {
++  salonId: string;
++  /** Nombre comercial del salón; cabecera del ticket impreso. */
++  salonName: string;
++  /** Pedido actual (ya persistido), o `null` si todavía no se ha creado. */
++  order: Order | null;
++  /** TODAS las líneas del pedido en curso (ya enviadas + pendientes de mandar). */
++  items: OrderPanelItem[];
++  /** Ids de `items` que TODAVÍA no están en base de datos. */
++  pendingIds: ReadonlySet<string>;
++  stations: Station[];
++  paymentMethods: PosPaymentMethodRow[];
++  /** El pedido se creó (primer Mandar/Cobrar): el padre debe recordar su id. */
++  onOrderPersisted: (order: Order) => void;
++  /** Mandar terminó con éxito: el padre debe vaciar `pendingIds`. */
++  onItemsSent: () => void;
++  /** Cobro registrado: el padre debe resetear a un pedido nuevo/vacío. */
++  onSettled: () => void;
++}
++
++/**
++ * Panel de líneas + totales del mostrador, con las dos acciones del flujo:
++ * Mandar (abre cuenta / envía comanda sin cobrar) y Cobrar (abre el diálogo
++ * de pago y liquida el pedido). Sigue el patrón de `tpv-view.tsx`: el propio
++ * panel orquesta las mutaciones de `@/hooks/use-orders` y la impresión, en
++ * vez de delegar en el padre — así `mostrador-view.tsx` solo mantiene el
++ * ESTADO del pedido en curso (líneas locales) y este componente decide CUÁNDO
++ * persistirlo.
++ */
++export function OrderPanel({
++  salonId,
++  salonName,
++  order,
++  items,
++  pendingIds,
++  stations,
++  paymentMethods,
++  onOrderPersisted,
++  onItemsSent,
++  onSettled,
++}: OrderPanelProps): React.ReactElement {
++  const [paying, setPaying] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  const createOrder = useCreateOrder(salonId);
++  const addOrderItems = useAddOrderItems(salonId);
++  const sendOrderToStations = useSendOrderToStations(salonId);
++  const settleOrder = useSettleOrder(salonId);
++
++  const displayLines = buildSettleLines(
++    items.map((it) => ({
++      productName: it.name,
++      qty: it.qty,
++      unitPriceCents: it.unitPriceCents,
++      vatRate: it.vatRate,
++      modifiersSnapshot: it.modifiersSnapshot,
++    })),
++  );
++  const totals = settleTotals(displayLines);
++  const pendingItems = items.filter((it) => pendingIds.has(it.id));
++
++  const busy =
++    createOrder.isPending ||
++    addOrderItems.isPending ||
++    sendOrderToStations.isPending ||
++    settleOrder.isPending;
++
++  function stationName(stationId: string | null): string {
++    if (stationId === null) return "Sin estación";
++    return stations.find((s) => s.id === stationId)?.name ?? "Estación";
++  }
++
++  /** Crea el pedido si todavía no existe (primer Mandar/Cobrar de la cuenta). */
++  async function ensureOrder(): Promise<Order> {
++    if (order !== null) return order;
++    const id = crypto.randomUUID();
++    const created = await createOrder.mutateAsync({ id, label: null, idempotencyKey: id });
++    onOrderPersisted(created);
++    return created;
++  }
++
++  /** Imprime una comanda por estación, agrupando las líneas recién mandadas. */
++  function printComandas(current: Order, mandados: OrderPanelItem[]): void {
++    const groups = new Map<string, OrderPanelItem[]>();
++    for (const item of mandados) {
++      const key = item.stationId ?? "__none__";
++      const list = groups.get(key) ?? [];
++      list.push(item);
++      groups.set(key, list);
++    }
++    for (const [key, groupItems] of groups) {
++      printKitchenComanda({
++        orderNumber: current.order_number ?? 0,
++        stationName: stationName(key === "__none__" ? null : key),
++        label: current.label,
++        issuedAt: new Date(),
++        lines: groupItems.map((item) => ({
++          qty: item.qty,
++          name: item.name,
++          modifiers: item.modifiersSnapshot.map((mod) => mod.name),
++        })),
++      });
++    }
++  }
++
++  /** Ticket de cliente para el pedido cobrado (adapta las líneas resueltas al
++   * formato de `buildTicketData`, que reutiliza el documento térmico del TPV). */
++  function printTicket(saleId: string, tenders: SettleTenderInput[]): void {
++    const ticketLines: TicketLine[] = displayLines.map((line, i) => ({
++      localId: items[i]!.id,
++      kind: "manual",
++      refId: null,
++      description: line.description,
++      quantity: String(line.qty),
++      unitPrice: centsToEuroInput(line.unitPriceCents),
++      vatRate: String(line.vatRate),
++    }));
++    const ticketTotals: TicketTotals = {
++      ...totals,
++      couponPercentOff: null,
++      couponDiscountCents: 0,
++      grossTotalCents: totals.totalCents,
++    };
++    const ticketTenders = tenders.map((t) => ({
++      label:
++        (t.paymentMethodId !== null
++          ? paymentMethods.find((m) => m.id === t.paymentMethodId)?.name
++          : undefined) ?? PAYMENT_METHOD_LABELS[t.method],
++      amountCents: t.amountCents,
++    }));
++    printTicketDocument(
++      buildTicketData({
++        salonName,
++        ticketRef: saleId.slice(0, 8).toUpperCase(),
++        issuedAt: new Date(),
++        lines: ticketLines,
++        totals: ticketTotals,
++        tenders: ticketTenders,
++        loyalty: null,
++        notes: null,
++      }),
++    );
++  }
++
++  async function handleSend(): Promise<void> {
++    if (pendingItems.length === 0) return;
++    setError(null);
++    try {
++      const current = await ensureOrder();
++      await addOrderItems.mutateAsync({ orderId: current.id, items: pendingItems });
++      await sendOrderToStations.mutateAsync({ orderId: current.id });
++      printComandas(current, pendingItems);
++      onItemsSent();
++    } catch (e) {
++      setError(e instanceof Error ? e.message : "No se pudo mandar el pedido");
++    }
++  }
++
++  async function handleConfirmPayment(tenders: SettleTenderInput[]): Promise<void> {
++    setError(null);
++    try {
++      const current = await ensureOrder();
++      // "Pagar primero": si quedan líneas sin mandar, se añaden ahora; el
++      // propio `settleOrder` con `sendPending: true` las manda a estación
++      // tras cobrar (mismo criterio que `mostrador/actions.ts`, §10).
++      const payFirst = pendingItems.length > 0;
++      if (payFirst) {
++        await addOrderItems.mutateAsync({ orderId: current.id, items: pendingItems });
++      }
++      const result = await settleOrder.mutateAsync({
++        orderId: current.id,
++        tenders,
++        sendPending: true,
++      });
++      printTicket(result.saleId, tenders);
++      if (payFirst) {
++        printComandas(current, pendingItems);
++      }
++      setPaying(false);
++      onSettled();
++    } catch (e) {
++      setError(e instanceof Error ? e.message : "No se pudo cobrar el pedido");
++    }
++  }
++
++  return (
++    <Card className="flex flex-col overflow-hidden lg:sticky lg:top-6 lg:h-fit lg:max-h-[calc(100vh-3rem)]">
++      <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-muted/30 px-5 py-4">
++        <div className="flex items-center gap-2.5">
++          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
++            <ShoppingBag className="h-[1.15rem] w-[1.15rem]" />
++          </span>
++          <div className="leading-tight">
++            <p className="text-sm font-semibold text-foreground">Pedido</p>
++            <p className="text-xs text-muted-foreground">
++              {items.length > 0
++                ? `${items.length} línea${items.length !== 1 ? "s" : ""}`
++                : "Vacío"}
++            </p>
++          </div>
++        </div>
++        {order !== null ? (
++          <Badge variant="secondary" className="tabular-nums">
++            Pedido #{order.order_number ?? "—"}
++          </Badge>
++        ) : null}
++      </div>
++
++      <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
++        {displayLines.length === 0 ? (
++          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 px-4 py-10 text-center">
++            <p className="max-w-[16rem] text-sm text-muted-foreground">
++              Toca un producto de la carta para empezar el pedido.
++            </p>
++          </div>
++        ) : (
++          <ul className="flex flex-col gap-2">
++            {displayLines.map((line, i) => (
++              <li
++                key={items[i]!.id}
++                className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card p-3 text-sm shadow-xs"
++              >
++                <span className="min-w-0 flex-1">
++                  <span className="font-medium tabular-nums text-foreground">
++                    {line.qty}×
++                  </span>{" "}
++                  <span className="text-foreground">{line.description}</span>
++                  {pendingIds.has(items[i]!.id) ? (
++                    <Badge variant="outline" className="ml-2 align-middle text-[10px]">
++                      Sin mandar
++                    </Badge>
++                  ) : null}
++                </span>
++                <span className="shrink-0 font-semibold tabular-nums text-foreground">
++                  {formatMoney(line.unitPriceCents * line.qty)}
++                </span>
++              </li>
++            ))}
++          </ul>
++        )}
++      </CardContent>
++
++      <div className="border-t border-border/70 bg-muted/30 p-5">
++        <dl className="grid gap-1.5 text-sm">
++          <div className="flex justify-between text-muted-foreground">
++            <dt>Base imponible</dt>
++            <dd className="tabular-nums">{formatMoney(totals.subtotalCents)}</dd>
++          </div>
++          {totals.vatBreakdown.map((entry) => (
++            <div key={entry.vatRate} className="flex justify-between text-muted-foreground">
++              <dt>IVA {entry.vatRate}%</dt>
++              <dd className="tabular-nums">{formatMoney(entry.taxCents)}</dd>
++            </div>
++          ))}
++          <div className="mt-1.5 flex items-baseline justify-between border-t border-border/70 pt-3">
++            <dt className="text-base font-semibold">Total</dt>
++            <dd className="text-2xl font-bold tabular-nums tracking-tight">
++              {formatMoney(totals.totalCents)}
++            </dd>
++          </div>
++        </dl>
++
++        {error !== null ? (
++          <p
++            role="alert"
++            className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++          >
++            <AlertCircle className="h-4 w-4 shrink-0" />
++            {error}
++          </p>
++        ) : null}
++
++        <div className="mt-4 grid grid-cols-2 gap-2.5">
++          <Button
++            size="lg"
++            variant="outline"
++            className="h-14 rounded-xl text-base font-semibold"
++            disabled={pendingItems.length === 0 || busy}
++            onClick={() => void handleSend()}
++          >
++            <Send className="mr-2 h-4 w-4" />
++            Mandar
++          </Button>
++          <Button
++            size="lg"
++            className="h-14 rounded-xl text-base font-semibold"
++            disabled={items.length === 0 || busy}
++            onClick={() => setPaying(true)}
++          >
++            <CreditCard className="mr-2 h-4 w-4" />
++            Cobrar {items.length > 0 ? formatMoney(totals.totalCents) : ""}
++          </Button>
++        </div>
++      </div>
++
++      {paying ? (
++        <PaymentSheet
++          open={paying}
++          onOpenChange={(open) => {
++            setPaying(open);
++            if (!open) settleOrder.reset();
++          }}
++          totalCents={totals.totalCents}
++          paymentMethods={paymentMethods}
++          pending={settleOrder.isPending || addOrderItems.isPending || createOrder.isPending}
++          error={error}
++          onConfirm={(tenders) => void handleConfirmPayment(tenders)}
++        />
++      ) : null}
++    </Card>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/page.tsx b/src/app/(dashboard)/mostrador/page.tsx
+new file mode 100644
+index 0000000..4aceabc
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/page.tsx
+@@ -0,0 +1,36 @@
++import type { Metadata } from "next";
++import { redirect } from "next/navigation";
++
++import { MostradorView } from "@/app/(dashboard)/mostrador/mostrador-view";
++import { getActiveSalon } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++
++export const metadata: Metadata = {
++  title: "Mostrador",
++};
++
++export default async function MostradorPage(): Promise<React.ReactElement> {
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  if (user === null) {
++    redirect("/login");
++  }
++
++  const salon = await getActiveSalon();
++
++  if (salon === null) {
++    return (
++      <main className="container py-10">
++        <h1 className="text-3xl font-bold tracking-tight">Mostrador</h1>
++        <p className="mt-2 text-muted-foreground">
++          Tu usuario no está asociado a ningún salón todavía.
++        </p>
++      </main>
++    );
++  }
++
++  return <MostradorView salonId={salon.id} salonName={salon.name} />;
++}
+diff --git a/src/app/(dashboard)/mostrador/payment-sheet.tsx b/src/app/(dashboard)/mostrador/payment-sheet.tsx
+new file mode 100644
+index 0000000..7a74d01
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/payment-sheet.tsx
+@@ -0,0 +1,333 @@
++"use client";
++
++import { useMemo, useState } from "react";
++import { AlertCircle, CheckCircle2, Coins, Plus, Trash2 } from "lucide-react";
++
++import { centsToEuroInput, parseEuroToCents } from "@/app/(dashboard)/tpv/cart";
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { formatMoney } from "@/lib/format";
++import type { SettleTenderInput } from "@/lib/validations/order";
++import type { PosPaymentMethod, PosPaymentMethodRow } from "@/types/database";
++
++/**
++ * Diálogo de cobro del mostrador (restauración): reparte el TOTAL del pedido
++ * en uno o varios medios de pago, igual que `tpv/payment-dialog.tsx`. La
++ * diferencia clave está en el EFECTIVO: `settleOrder` exige que
++ * `Σ tenders.amountCents === totalCents` EXACTO (ver `mostrador/actions.ts`,
++ * §8), así que aquí cada fila de efectivo separa "lo que entrega el cliente"
++ * (`amount`, para poder calcular el cambio) de "lo que se APLICA al cobro"
++ * (`amountCents` que sale hacia `onConfirm`, topado al importe pendiente). El
++ * resto de medios (tarjeta, bizum…) no tienen concepto de cambio: lo tecleado
++ * ES lo aplicado, igual que en el TPV.
++ */
++
++/** Métodos base cuando el salón no tiene catálogo `pos_payment_methods`. */
++const BASE_METHODS: { method: PosPaymentMethod; label: string }[] = [
++  { method: "efectivo", label: "Efectivo" },
++  { method: "tarjeta", label: "Tarjeta" },
++  { method: "bizum", label: "Bizum" },
++  { method: "transferencia", label: "Transferencia" },
++  { method: "otro", label: "Otro" },
++];
++
++interface MethodOption {
++  value: string;
++  label: string;
++  method: PosPaymentMethod;
++  paymentMethodId: string | null;
++}
++
++/** Una fila de cobro en edición. `amount` es lo tecleado (euros); para
++ * efectivo es "lo que entrega el cliente", para el resto es lo aplicado. */
++interface TenderRow {
++  optionValue: string;
++  method: PosPaymentMethod;
++  paymentMethodId: string | null;
++  amount: string;
++}
++
++interface AppliedRow {
++  appliedCents: number;
++  changeCents: number;
++}
++
++/**
++ * Aplica cada fila, en orden, contra el importe pendiente. Para efectivo la
++ * fila se topa al pendiente (el resto es cambio); para el resto, lo tecleado
++ * se aplica tal cual (sin concepto de cambio, como en el TPV).
++ */
++function computeApplied(rows: readonly TenderRow[], totalCents: number): AppliedRow[] {
++  let remaining = totalCents;
++  return rows.map((row) => {
++    const entered = parseEuroToCents(row.amount) ?? 0;
++    if (row.method !== "efectivo") {
++      remaining -= entered;
++      return { appliedCents: entered, changeCents: 0 };
++    }
++    const applied = Math.max(0, Math.min(entered, Math.max(remaining, 0)));
++    remaining -= applied;
++    return { appliedCents: applied, changeCents: Math.max(0, entered - applied) };
++  });
++}
++
++interface PaymentSheetProps {
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++  totalCents: number;
++  paymentMethods: PosPaymentMethodRow[];
++  pending: boolean;
++  error: string | null;
++  onConfirm: (tenders: SettleTenderInput[]) => void;
++}
++
++export function PaymentSheet({
++  open,
++  onOpenChange,
++  totalCents,
++  paymentMethods,
++  pending,
++  error,
++  onConfirm,
++}: PaymentSheetProps): React.ReactElement {
++  const options = useMemo<MethodOption[]>(() => {
++    if (paymentMethods.length > 0) {
++      return paymentMethods.map((m) => ({
++        value: m.id,
++        label: m.name,
++        method: m.kind,
++        paymentMethodId: m.id,
++      }));
++    }
++    return BASE_METHODS.map((m) => ({
++      value: m.method,
++      label: m.label,
++      method: m.method,
++      paymentMethodId: null,
++    }));
++  }, [paymentMethods]);
++
++  const firstOption = options[0]!;
++
++  // Arranca con un único tender de efectivo que cubre todo el total: el caso
++  // más común (pagar justo) queda a un solo toque en "Confirmar cobro".
++  const [rows, setRows] = useState<TenderRow[]>(() => [
++    {
++      optionValue: firstOption.value,
++      method: firstOption.method,
++      paymentMethodId: firstOption.paymentMethodId,
++      amount: centsToEuroInput(totalCents),
++    },
++  ]);
++
++  const applied = computeApplied(rows, totalCents);
++  const appliedTotalCents = applied.reduce((acc, a) => acc + a.appliedCents, 0);
++  const remainingCents = totalCents - appliedTotalCents;
++  const covered = remainingCents === 0 && totalCents > 0;
++
++  function updateRow(index: number, patch: Partial<TenderRow>): void {
++    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
++  }
++
++  function chooseMethod(index: number, optionValue: string): void {
++    const option = options.find((o) => o.value === optionValue);
++    if (option === undefined) return;
++    updateRow(index, {
++      optionValue,
++      method: option.method,
++      paymentMethodId: option.paymentMethodId,
++    });
++  }
++
++  function addRow(): void {
++    const pendingAmount = remainingCents > 0 ? centsToEuroInput(remainingCents) : "";
++    setRows((prev) => [
++      ...prev,
++      {
++        optionValue: firstOption.value,
++        method: firstOption.method,
++        paymentMethodId: firstOption.paymentMethodId,
++        amount: pendingAmount,
++      },
++    ]);
++  }
++
++  function removeRow(index: number): void {
++    setRows((prev) => prev.filter((_, i) => i !== index));
++  }
++
++  function handleConfirm(): void {
++    const tenders: SettleTenderInput[] = rows.map((row, i) => ({
++      method: row.method,
++      amountCents: applied[i]!.appliedCents,
++      paymentMethodId: row.paymentMethodId,
++    }));
++    onConfirm(tenders);
++  }
++
++  const status: "settled" | "due" | "excess" =
++    remainingCents === 0 ? "settled" : remainingCents > 0 ? "due" : "excess";
++  const totalChangeCents = applied.reduce((acc, a) => acc + a.changeCents, 0);
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      <DialogContent className="sm:max-w-md">
++        <DialogHeader>
++          <DialogDescription className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
++            Importe a cobrar
++          </DialogDescription>
++          <DialogTitle className="text-3xl font-bold tabular-nums tracking-tight">
++            {formatMoney(totalCents)}
++          </DialogTitle>
++          <DialogDescription>
++            Reparte el total en uno o varios medios de pago.
++          </DialogDescription>
++        </DialogHeader>
++
++        <div className="grid gap-3">
++          {rows.map((row, index) => (
++            <div
++              key={index}
++              className="grid gap-2 rounded-xl border border-border/70 bg-muted/30 p-3"
++            >
++              <div className="flex items-end gap-2">
++                <div className="grid flex-1 gap-1.5">
++                  <Label htmlFor={`ms-method-${index}`} className="text-xs">
++                    Medio de pago
++                  </Label>
++                  <Select
++                    value={row.optionValue}
++                    onValueChange={(value) => chooseMethod(index, value)}
++                  >
++                    <SelectTrigger id={`ms-method-${index}`} className="h-11">
++                      <SelectValue />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {options.map((option) => (
++                        <SelectItem key={option.value} value={option.value}>
++                          {option.label}
++                        </SelectItem>
++                      ))}
++                    </SelectContent>
++                  </Select>
++                </div>
++                <div className="grid w-28 gap-1.5">
++                  <Label htmlFor={`ms-amount-${index}`} className="text-xs">
++                    {row.method === "efectivo" ? "Entrega (€)" : "Importe (€)"}
++                  </Label>
++                  <Input
++                    id={`ms-amount-${index}`}
++                    inputMode="decimal"
++                    value={row.amount}
++                    onChange={(e) => updateRow(index, { amount: e.target.value })}
++                    placeholder="0,00"
++                    className="h-11 text-right text-base tabular-nums"
++                  />
++                </div>
++                <Button
++                  type="button"
++                  variant="ghost"
++                  size="icon"
++                  className="h-11 w-11 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
++                  aria-label={`Quitar medio de pago ${index + 1}`}
++                  disabled={rows.length === 1}
++                  onClick={() => removeRow(index)}
++                >
++                  <Trash2 className="h-4 w-4" />
++                </Button>
++              </div>
++              {row.method === "efectivo" && applied[index]!.changeCents > 0 ? (
++                <p className="flex items-center gap-1.5 text-xs font-medium text-info">
++                  <Coins className="h-3.5 w-3.5" />
++                  Cambio: {formatMoney(applied[index]!.changeCents)}
++                </p>
++              ) : null}
++            </div>
++          ))}
++
++          <Button
++            type="button"
++            variant="outline"
++            className="h-10 justify-start rounded-lg"
++            onClick={addRow}
++          >
++            <Plus className="mr-2 h-4 w-4" />
++            Añadir otro medio de pago
++          </Button>
++
++          <div
++            className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition-colors ${
++              status === "settled"
++                ? "border-success/25 bg-success/10 text-success"
++                : "border-warning/30 bg-warning/10 text-warning"
++            }`}
++          >
++            <span className="inline-flex items-center gap-2 font-medium">
++              {status === "settled" ? (
++                <CheckCircle2 className="h-4 w-4" />
++              ) : (
++                <AlertCircle className="h-4 w-4" />
++              )}
++              {status === "settled"
++                ? totalChangeCents > 0
++                  ? `Cobro cuadrado · cambio ${formatMoney(totalChangeCents)}`
++                  : "Cobro cuadrado"
++                : status === "due"
++                  ? "Falta por cobrar"
++                  : "Sobra por revisar"}
++            </span>
++            <span className="text-base font-bold tabular-nums">
++              {formatMoney(Math.abs(remainingCents))}
++            </span>
++          </div>
++        </div>
++
++        {error !== null ? (
++          <p
++            role="alert"
++            className="flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++          >
++            <AlertCircle className="h-4 w-4 shrink-0" />
++            {error}
++          </p>
++        ) : null}
++
++        <DialogFooter>
++          <Button
++            type="button"
++            variant="outline"
++            className="h-11"
++            onClick={() => onOpenChange(false)}
++            disabled={pending}
++          >
++            Cancelar
++          </Button>
++          <Button
++            type="button"
++            className="h-11 font-semibold"
++            disabled={!covered || pending}
++            onClick={handleConfirm}
++          >
++            {pending ? "Registrando…" : "Confirmar cobro"}
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/product-grid.tsx b/src/app/(dashboard)/mostrador/product-grid.tsx
+new file mode 100644
+index 0000000..9121089
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/product-grid.tsx
+@@ -0,0 +1,169 @@
++"use client";
++
++import { useState } from "react";
++import { Package, UtensilsCrossed } from "lucide-react";
++
++import { Input } from "@/components/ui/input";
++import { Skeleton } from "@/components/ui/skeleton";
++import { useMenuCategories, useMenuProducts } from "@/hooks/use-menu";
++import { formatMoney } from "@/lib/format";
++import type { Product } from "@/types/database";
++
++/** Sentinela de la pestaña "Todas" (sin filtrar por categoría). */
++const ALL_CATEGORIES = "__all__";
++
++interface ProductGridProps {
++  salonId: string;
++  /** productId → ids de los grupos de modificadores asignados. */
++  productModifierGroupsByProduct: Map<string, string[]>;
++  /** Producto SIN modificadores y sin combo: se añade directo (qty 1). */
++  onAddDirect: (product: Product) => void;
++  /** Producto CON modificadores o combo: abre el selector. */
++  onOpenPicker: (product: Product) => void;
++}
++
++/**
++ * Rejilla táctil de la carta: pestañas de categoría + botones grandes de
++ * producto, filtrable por texto. Decide, por producto, si tocarlo añade
++ * directo al pedido (sin grupos de modificadores y no es combo) o abre
++ * `ModifierPickerDialog` — mismo patrón de botonera que `tpv/tpv-view.tsx`
++ * (`CatalogButton`), adaptado a categorías de carta en vez de
++ * servicios/productos.
++ */
++export function ProductGrid({
++  salonId,
++  productModifierGroupsByProduct,
++  onAddDirect,
++  onOpenPicker,
++}: ProductGridProps): React.ReactElement {
++  const categories = useMenuCategories(salonId);
++  const products = useMenuProducts(salonId);
++  const [activeCategory, setActiveCategory] = useState<string>(ALL_CATEGORIES);
++  const [search, setSearch] = useState("");
++
++  const allProducts = products.data ?? [];
++  const filtered = allProducts.filter((product) => {
++    const matchesCategory =
++      activeCategory === ALL_CATEGORIES || product.category_id === activeCategory;
++    const matchesSearch =
++      search.trim() === "" || product.name.toLowerCase().includes(search.trim().toLowerCase());
++    return matchesCategory && matchesSearch;
++  });
++
++  function handleTap(product: Product): void {
++    const groupIds = productModifierGroupsByProduct.get(product.id) ?? [];
++    if (!product.is_combo && groupIds.length === 0) {
++      onAddDirect(product);
++    } else {
++      onOpenPicker(product);
++    }
++  }
++
++  return (
++    <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card p-4 shadow-xs sm:p-5">
++      <Input
++        value={search}
++        onChange={(e) => setSearch(e.target.value)}
++        placeholder="Buscar producto…"
++        className="h-11 rounded-xl text-base"
++        aria-label="Buscar en la carta"
++      />
++
++      {categories.isPending ? (
++        <Skeleton className="h-10 w-full max-w-md rounded-lg" />
++      ) : (
++        <div className="flex flex-wrap gap-1.5 rounded-lg border border-border/70 bg-muted/50 p-1">
++          <CategoryTab
++            active={activeCategory === ALL_CATEGORIES}
++            label="Todas"
++            onClick={() => setActiveCategory(ALL_CATEGORIES)}
++          />
++          {(categories.data ?? []).map((category) => (
++            <CategoryTab
++              key={category.id}
++              active={activeCategory === category.id}
++              label={category.name}
++              onClick={() => setActiveCategory(category.id)}
++            />
++          ))}
++        </div>
++      )}
++
++      <div className="grid max-h-[32rem] grid-cols-2 gap-2.5 overflow-y-auto pr-0.5 sm:grid-cols-3 xl:grid-cols-4">
++        {products.isPending ? (
++          Array.from({ length: 8 }).map((_, i) => (
++            <Skeleton key={i} className="h-24 w-full rounded-xl" />
++          ))
++        ) : filtered.length === 0 ? (
++          <div className="col-span-full flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 py-12 text-center">
++            <UtensilsCrossed className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
++            <p className="text-sm text-muted-foreground">No hay productos en esta categoría.</p>
++          </div>
++        ) : (
++          filtered.map((product) => (
++            <ProductButton key={product.id} product={product} onClick={() => handleTap(product)} />
++          ))
++        )}
++      </div>
++    </div>
++  );
++}
++
++function CategoryTab({
++  active,
++  label,
++  onClick,
++}: {
++  active: boolean;
++  label: string;
++  onClick: () => void;
++}): React.ReactElement {
++  return (
++    <button
++      type="button"
++      onClick={onClick}
++      aria-pressed={active}
++      className={[
++        "inline-flex h-9 items-center rounded-md px-3 text-sm font-medium transition-all duration-150 ease-apple-out",
++        active
++          ? "bg-background text-foreground shadow-sm"
++          : "text-muted-foreground hover:text-foreground",
++      ].join(" ")}
++    >
++      {label}
++    </button>
++  );
++}
++
++function ProductButton({
++  product,
++  onClick,
++}: {
++  product: Product;
++  onClick: () => void;
++}): React.ReactElement {
++  return (
++    <button
++      type="button"
++      onClick={onClick}
++      className="group relative flex h-24 flex-col items-start justify-between overflow-hidden rounded-xl border border-border/70 bg-card p-3 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.98]"
++    >
++      <span className="flex w-full items-start justify-between gap-1.5">
++        <Package className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
++        {product.is_combo ? (
++          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
++            Combo
++          </span>
++        ) : null}
++      </span>
++      <span className="w-full space-y-0.5">
++        <span className="line-clamp-2 text-xs font-medium leading-tight text-foreground">
++          {product.name}
++        </span>
++        <span className="block text-sm font-semibold tabular-nums text-foreground">
++          {formatMoney(product.price_cents)}
++        </span>
++      </span>
++    </button>
++  );
++}
+diff --git a/src/hooks/use-menu.ts b/src/hooks/use-menu.ts
+index 524b5b2..a910cb7 100644
+--- a/src/hooks/use-menu.ts
++++ b/src/hooks/use-menu.ts
+@@ -11,21 +11,23 @@ import {
+   saveModifierGroup,
+   setProductModifierGroups,
+   updateCategory,
+   updateMenuProduct,
+   updateStation,
+   createMenuProduct as createMenuProductAction,
+ } from "@/app/(dashboard)/carta/actions";
+ import {
++  fetchAllProductModifierGroups,
+   fetchComboComponents,
+   fetchMenuCategories,
+   fetchMenuProducts,
+   fetchModifierGroups,
+   fetchModifierOptions,
++  fetchModifierOptionsForGroups,
+   fetchProductModifierGroups,
+   fetchStations,
+   menuKeys,
+ } from "@/lib/queries/menu";
+ import type {
+   CategoryInput,
+   ComboPieceInput,
+   MenuProductInput,
+@@ -69,16 +71,42 @@ export function useComboComponents(salonId: string, comboProductId: string | nul
+ export function useProductModifierGroups(salonId: string, productId: string | null) {
+   return useQuery({
+     queryKey: menuKeys.productModifierGroups(salonId, productId ?? ""),
+     queryFn: () => fetchProductModifierGroups(salonId, productId as string),
+     enabled: productId !== null,
+   });
+ }
+ 
++/**
++ * TODAS las asignaciones producto↔grupo del salón (Task 8, mostrador): permite
++ * construir en un único mapa qué productos tienen modificadores, sin una
++ * consulta por botón de la rejilla. Ver {@link fetchAllProductModifierGroups}.
++ */
++export function useAllProductModifierGroups(salonId: string) {
++  return useQuery({
++    queryKey: [...menuKeys.all(salonId), "productModifierGroupsAll"] as const,
++    queryFn: () => fetchAllProductModifierGroups(salonId),
++  });
++}
++
++/**
++ * Opciones de VARIOS grupos de modificadores a la vez (Task 8, selector de
++ * mostrador). `groupIds: []` (producto sin grupos, o diálogo cerrado) no
++ * consulta. Ver {@link fetchModifierOptionsForGroups}.
++ */
++export function useModifierOptionsForGroups(salonId: string, groupIds: string[]) {
++  const key = [...groupIds].sort().join(",");
++  return useQuery({
++    queryKey: [...menuKeys.all(salonId), "modifierOptionsForGroups", key] as const,
++    queryFn: () => fetchModifierOptionsForGroups(salonId, groupIds),
++    enabled: groupIds.length > 0,
++  });
++}
++
+ /** Invalida todas las queries de carta del salón (categorías, estaciones, productos, grupos). */
+ function useInvalidateMenu(salonId: string) {
+   const queryClient = useQueryClient();
+   return () => queryClient.invalidateQueries({ queryKey: menuKeys.all(salonId) });
+ }
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+ // Categorías
+diff --git a/src/lib/queries/menu.ts b/src/lib/queries/menu.ts
+index b218c85..37f2a34 100644
+--- a/src/lib/queries/menu.ts
++++ b/src/lib/queries/menu.ts
+@@ -94,8 +94,53 @@ export async function fetchProductModifierGroups(
+   const supabase = createClient();
+   const { data, error } = await supabase
+     .from("product_modifier_groups").select("group_id")
+     .eq("salon_id", salonId).eq("product_id", productId)
+     .order("sort_order", { ascending: true });
+   if (error !== null) throw new Error(error.message);
+   return data.map((row) => row.group_id);
+ }
++
++/** Un enlace producto↔grupo de modificadores (fila cruda de `product_modifier_groups`). */
++export interface ProductModifierGroupLink {
++  product_id: string;
++  group_id: string;
++}
++
++/**
++ * TODAS las asignaciones producto↔grupo del salón en una sola consulta (Task 8,
++ * mostrador). A diferencia de {@link fetchProductModifierGroups} (un producto,
++ * para precargar su formulario de edición), esta trae el salón entero de una
++ * vez: el mostrador necesita decidir, para CADA botón de la rejilla, si el
++ * producto tiene grupos asignados (abre el selector de modificadores) o no
++ * (se añade directo) — una consulta por producto no escalaría.
++ */
++export async function fetchAllProductModifierGroups(
++  salonId: string,
++): Promise<ProductModifierGroupLink[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("product_modifier_groups").select("product_id,group_id")
++    .eq("salon_id", salonId);
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++/**
++ * Opciones (`modifiers`) de VARIOS grupos a la vez — para el selector de
++ * modificadores del mostrador (Task 8), que muestra todos los grupos
++ * asignados a un producto de golpe. A diferencia de {@link fetchModifierOptions}
++ * (un grupo, para precargar el formulario de edición de carta), agrupar la
++ * consulta evita un hook por cada grupo del producto.
++ */
++export async function fetchModifierOptionsForGroups(
++  salonId: string,
++  groupIds: string[],
++): Promise<Modifier[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("modifiers").select("*")
++    .eq("salon_id", salonId).in("group_id", groupIds)
++    .order("sort_order", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
+diff --git a/src/tests/unit/order-panel.test.tsx b/src/tests/unit/order-panel.test.tsx
+new file mode 100644
+index 0000000..7d00187
+--- /dev/null
++++ b/src/tests/unit/order-panel.test.tsx
+@@ -0,0 +1,140 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++import { formatMoney } from "@/lib/format";
++import { buildSettleLines, settleTotals } from "@/lib/restauracion/order";
++
++/**
++ * Mock de `@/hooks/use-orders` (patrón `menu-item-form.test.tsx`, vi.hoisted +
++ * createElement + getByRole): `OrderPanel` orquesta Mandar/Cobrar llamando a
++ * estos hooks directamente, así que el test no necesita un `QueryClientProvider`
++ * — igual que `MenuItemForm` no lo necesita al mockear `@/hooks/use-menu`.
++ */
++const m = vi.hoisted(() => ({
++  createOrder: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++  addOrderItems: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++  sendOrderToStations: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++  settleOrder: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++}));
++vi.mock("@/hooks/use-orders", () => ({
++  useCreateOrder: () => m.createOrder,
++  useAddOrderItems: () => m.addOrderItems,
++  useSendOrderToStations: () => m.sendOrderToStations,
++  useSettleOrder: () => m.settleOrder,
++}));
++
++import { OrderPanel, type OrderPanelItem } from "@/app/(dashboard)/mostrador/order-panel";
++
++beforeEach(() => {
++  m.createOrder.mutateAsync = vi.fn();
++  m.addOrderItems.mutateAsync = vi.fn();
++  m.sendOrderToStations.mutateAsync = vi.fn();
++  m.settleOrder.mutateAsync = vi.fn();
++});
++afterEach(() => cleanup());
++
++/**
++ * `formatMoney` (Intl.NumberFormat es-ES) separa el importe del símbolo con un
++ * espacio non-breaking (U+00A0). El normalizador por defecto de
++ * testing-library colapsa el TEXTO DEL DOM (NBSP → espacio normal) pero NO el
++ * string que se le pasa como matcher (`matches()` compara
++ * `normalizedText === String(matcher)` sin normalizar `matcher`) — así que
++ * hay que normalizar aquí a mano o `getByText` nunca encuentra el importe.
++ */
++const NBSP = " ";
++function moneyText(cents: number): string {
++  return formatMoney(cents).replaceAll(NBSP, " ");
++}
++
++/** Dos líneas del pedido: un producto simple y una bebida, sin modificadores. */
++const ITEMS: OrderPanelItem[] = [
++  {
++    id: "item-1",
++    productId: "p1",
++    name: "Hamburguesa",
++    qty: 2,
++    unitPriceCents: 880,
++    vatRate: 10,
++    stationId: "cocina",
++    comboGroup: null,
++    modifiersSnapshot: [],
++  },
++  {
++    id: "item-2",
++    productId: "p2",
++    name: "Coca-Cola",
++    qty: 1,
++    unitPriceCents: 250,
++    vatRate: 10,
++    stationId: "barra",
++    comboGroup: null,
++    modifiersSnapshot: [],
++  },
++];
++
++function renderPanel(
++  overrides: Partial<React.ComponentProps<typeof OrderPanel>> = {},
++): ReturnType<typeof render> {
++  return render(
++    createElement(OrderPanel, {
++      salonId: "SALON",
++      salonName: "Mi Bar",
++      order: null,
++      items: ITEMS,
++      pendingIds: new Set(ITEMS.map((i) => i.id)),
++      stations: [],
++      paymentMethods: [],
++      onOrderPersisted: vi.fn(),
++      onItemsSent: vi.fn(),
++      onSettled: vi.fn(),
++      ...overrides,
++    }),
++  );
++}
++
++describe("OrderPanel", () => {
++  it("renderiza cada línea del pedido y el total calculado con settleTotals", () => {
++    renderPanel();
++
++    expect(screen.getByText(/hamburguesa/i)).toBeInTheDocument();
++    expect(screen.getByText(/coca-cola/i)).toBeInTheDocument();
++
++    const lines = buildSettleLines(
++      ITEMS.map((it) => ({
++        productName: it.name,
++        qty: it.qty,
++        unitPriceCents: it.unitPriceCents,
++        vatRate: it.vatRate,
++        modifiersSnapshot: it.modifiersSnapshot,
++      })),
++    );
++    const totals = settleTotals(lines);
++
++    expect(screen.getByText(moneyText(totals.totalCents))).toBeInTheDocument();
++  });
++
++  it("muestra los botones Mandar y Cobrar", () => {
++    renderPanel();
++
++    expect(screen.getByRole("button", { name: /mandar/i })).toBeInTheDocument();
++    expect(screen.getByRole("button", { name: /cobrar/i })).toBeInTheDocument();
++  });
++
++  it("al pulsar Cobrar dispara el flujo de pago", async () => {
++    const user = userEvent.setup();
++    renderPanel();
++
++    await user.click(screen.getByRole("button", { name: /cobrar/i }));
++
++    expect(screen.getByRole("button", { name: /confirmar cobro/i })).toBeInTheDocument();
++  });
++
++  it("con el pedido vacío, Mandar y Cobrar están deshabilitados", () => {
++    renderPanel({ items: [], pendingIds: new Set() });
++
++    expect(screen.getByRole("button", { name: /mandar/i })).toBeDisabled();
++    expect(screen.getByRole("button", { name: /cobrar/i })).toBeDisabled();
++  });
++});

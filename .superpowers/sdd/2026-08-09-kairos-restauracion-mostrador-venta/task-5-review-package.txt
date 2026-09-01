@@ -1,0 +1,296 @@
+=== COMMITS (31cee5b..75787bd) ===
+75787bd feat(restauracion): mandar a estaciones + transición de estado segura
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/actions.ts           | 78 +++++++++++++++++++++-
+ src/hooks/use-orders.ts                            | 40 ++++++++++-
+ src/lib/validations/order.ts                       | 27 ++++++++
+ .../integration/restauracion-order-status.test.ts  | 56 ++++++++++++++++
+ 4 files changed, 198 insertions(+), 3 deletions(-)
+
+=== DIFF -U10 ===
+diff --git a/src/app/(dashboard)/mostrador/actions.ts b/src/app/(dashboard)/mostrador/actions.ts
+index 8c82423..17b2759 100644
+--- a/src/app/(dashboard)/mostrador/actions.ts
++++ b/src/app/(dashboard)/mostrador/actions.ts
+@@ -1,18 +1,24 @@
+ "use server";
+ import { randomUUID } from "node:crypto";
+ 
+ import { revalidatePath } from "next/cache";
+ 
+ import { getActiveSalonId } from "@/lib/salon";
+ import { createClient } from "@/lib/supabase/server";
+-import { addOrderItemsSchema, createOrderSchema, voidOrderItemSchema } from "@/lib/validations/order";
++import {
++  addOrderItemsSchema,
++  createOrderSchema,
++  sendOrderToStationsSchema,
++  setOrderItemStatusSchema,
++  voidOrderItemSchema,
++} from "@/lib/validations/order";
+ import type { Order, OrderItem, OrderItemInsert } from "@/types/database";
+ 
+ /**
+  * Server actions de pedido de mostrador (restauración, Task 4): crear pedido
+  * (idempotente por `idempotencyKey`), añadir líneas y anular una línea.
+  *
+  * A diferencia de `carta/actions.ts` (gate de rol vía `assertManager`), aquí
+  * solo se exige salón activo (`getActiveSalonId`) — no rol de gestión: es el
+  * flujo operativo del día a día (tomar pedidos, añadir líneas, anular una
+  * línea mal tecleada), no configuración de carta. La restricción real de
+@@ -211,10 +217,80 @@ export async function voidOrderItem(input: unknown): Promise<ActionResult<OrderI
+     station_id: original.station_id,
+     status: "anulado",
+     void_of_item_id: parsed.data.itemId,
+     void_reason: parsed.data.reason,
+   };
+   const { data, error } = await supabase.from("order_items").insert(payload).select("*").single();
+   if (error !== null) return { ok: false, error: error.message };
+   revalidatePath("/mostrador");
+   return { ok: true, data };
+ }
++
++// ─────────────────────────────────────────────────────────────────────────────
++// sendOrderToStations (Task 5): manda a cocina/barra las líneas `pendiente` de
++// un pedido — es el "enviar comanda" del mostrador. Un único UPDATE acotado
++// por `salon_id` + `order_id` + `status = "pendiente"`: solo mueve las líneas
++// que TODAVÍA no se enviaron (si se llama dos veces seguidas, la segunda no
++// vuelve a mover nada — `sent` da 0, no es un error). No hay guarda de
++// `assertOrderOpenInSalon` explícita porque el propio filtro por `salon_id`
++// ya impide tocar líneas de otro salón, y el pedido sigue `abierta`: este
++// paso NO cierra ni cobra el pedido, solo adelanta el estado de sus líneas
++// para que cocina/barra las vean. `select("id")` es lo mínimo necesario para
++// contar cuántas filas afectó el UPDATE — no se necesita la fila completa.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function sendOrderToStations(input: unknown): Promise<ActionResult<{ sent: number }>> {
++  const parsed = sendOrderToStationsSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("order_items")
++    .update({ status: "enviado" })
++    .eq("salon_id", salonId).eq("order_id", parsed.data.orderId).eq("status", "pendiente")
++    .select("id");
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/mostrador");
++  return { ok: true, data: { sent: (data ?? []).length } };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// setOrderItemStatus (Task 5): transición de estado de UNA línea (p.ej.
++// cocina marca "preparando"→"listo") SEGURA frente a concurrencia — varias
++// pantallas (cocina, barra, mostrador) pueden estar mirando el mismo pedido a
++// la vez. La seguridad no viene de leer-y-luego-escribir (eso tiene ventana
++// de carrera) sino de condicionar el UPDATE por `status = from` EN LA MISMA
++// query: si otra pantalla ya movió la línea (o si `from` no coincide con el
++// estado real por cualquier otro motivo), el UPDATE afecta 0 filas y eso ES
++// la señal de conflicto — no hace falta un SELECT previo para detectarlo.
++//
++// `data.length === 0` tras el UPDATE condicionado ⇒ CONFLICTO: alguien más ya
++// cambió el estado (o la pantalla tenía una copia obsoleta). La UI debe
++// recargar y no reintentar ciegamente. Cuando SÍ afecta una fila, `data[0]`
++// es la línea ya actualizada — se devuelve completa (`select("*")`) porque el
++// caller (kanban de cocina/barra) necesita pintarla tal cual quedó, no solo
++// confirmar el cambio.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function setOrderItemStatus(input: unknown): Promise<ActionResult<OrderItem>> {
++  const parsed = setOrderItemStatusSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("order_items")
++    .update({ status: parsed.data.to })
++    .eq("id", parsed.data.itemId).eq("salon_id", salonId).eq("status", parsed.data.from)
++    .select("*");
++  if (error !== null) return { ok: false, error: error.message };
++  // Destructuring (no `data[0]`) para que TS narrowe sin `!`: con
++  // `noUncheckedIndexedAccess`, `data[0]` seguiría tipando `T | undefined`
++  // aunque ya hubiéramos comprobado `data.length > 0` en la línea de arriba.
++  const [updated] = data ?? [];
++  if (updated === undefined) return { ok: false, error: "CONFLICTO: el estado ya cambió" };
++  revalidatePath("/mostrador");
++  return { ok: true, data: updated };
++}
+diff --git a/src/hooks/use-orders.ts b/src/hooks/use-orders.ts
+index 593337f..1a56b98 100644
+--- a/src/hooks/use-orders.ts
++++ b/src/hooks/use-orders.ts
+@@ -1,16 +1,28 @@
+ "use client";
+ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ 
+-import { addOrderItems, createOrder, voidOrderItem } from "@/app/(dashboard)/mostrador/actions";
++import {
++  addOrderItems,
++  createOrder,
++  sendOrderToStations,
++  setOrderItemStatus,
++  voidOrderItem,
++} from "@/app/(dashboard)/mostrador/actions";
+ import { fetchOpenOrders, fetchOrderItems, orderKeys } from "@/lib/queries/orders";
+-import type { AddOrderItemsInput, CreateOrderInput, VoidOrderItemInput } from "@/lib/validations/order";
++import type {
++  AddOrderItemsInput,
++  CreateOrderInput,
++  SendOrderToStationsInput,
++  SetOrderItemStatusInput,
++  VoidOrderItemInput,
++} from "@/lib/validations/order";
+ import type { Order, OrderItem } from "@/types/database";
+ 
+ export function useOpenOrders(salonId: string) {
+   return useQuery({ queryKey: orderKeys.open(salonId), queryFn: () => fetchOpenOrders(salonId) });
+ }
+ export function useOrderItems(salonId: string, orderId: string | null) {
+   return useQuery({
+     queryKey: orderKeys.detail(salonId, orderId ?? "none"),
+     queryFn: () => fetchOrderItems(salonId, orderId as string),
+     enabled: orderId !== null,
+@@ -51,10 +63,34 @@ export function useVoidOrderItem(salonId: string) {
+   const invalidate = useInvalidateOrders(salonId);
+   return useMutation({
+     mutationFn: async (input: VoidOrderItemInput): Promise<OrderItem> => {
+       const result = await voidOrderItem(input);
+       if (!result.ok) throw new Error(result.error);
+       return result.data;
+     },
+     onSuccess: () => void invalidate(),
+   });
+ }
++
++export function useSendOrderToStations(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: SendOrderToStationsInput): Promise<{ sent: number }> => {
++      const result = await sendOrderToStations(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useSetOrderItemStatus(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: SetOrderItemStatusInput): Promise<OrderItem> => {
++      const result = await setOrderItemStatus(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
+diff --git a/src/lib/validations/order.ts b/src/lib/validations/order.ts
+index ccb0778..3b07163 100644
+--- a/src/lib/validations/order.ts
++++ b/src/lib/validations/order.ts
+@@ -31,10 +31,37 @@ export const addOrderItemsSchema = z.object({
+   items: z.array(orderItemDraftSchema).min(1),
+ });
+ export type AddOrderItemsInput = z.infer<typeof addOrderItemsSchema>;
+ 
+ export const voidOrderItemSchema = z.object({
+   orderId: z.string().uuid(),
+   itemId: z.string().uuid(),
+   reason: z.string().trim().min(1).max(200),
+ });
+ export type VoidOrderItemInput = z.infer<typeof voidOrderItemSchema>;
++
++/** Espejo de `OrderItemStatus` (types/database.ts / enum public.order_item_status). */
++export const orderItemStatusEnum = z.enum([
++  "pendiente",
++  "enviado",
++  "preparando",
++  "listo",
++  "entregado",
++  "anulado",
++]);
++
++export const sendOrderToStationsSchema = z.object({
++  orderId: z.string().uuid(),
++});
++export type SendOrderToStationsInput = z.infer<typeof sendOrderToStationsSchema>;
++
++/**
++ * `from`/`to` acotan la transición que la UI espera aplicar; la action
++ * (`setOrderItemStatus`) es quien la hace SEGURA de verdad al condicionar el
++ * UPDATE por `status = from` en la propia query (ver `mostrador/actions.ts`).
++ */
++export const setOrderItemStatusSchema = z.object({
++  itemId: z.string().uuid(),
++  from: orderItemStatusEnum,
++  to: orderItemStatusEnum,
++});
++export type SetOrderItemStatusInput = z.infer<typeof setOrderItemStatusSchema>;
+diff --git a/src/tests/integration/restauracion-order-status.test.ts b/src/tests/integration/restauracion-order-status.test.ts
+new file mode 100644
+index 0000000..9223f1a
+--- /dev/null
++++ b/src/tests/integration/restauracion-order-status.test.ts
+@@ -0,0 +1,56 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++const holder = vi.hoisted(() => ({ supabase: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({ getActiveSalonId: () => Promise.resolve("SALON") }));
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++import { sendOrderToStations, setOrderItemStatus } from "@/app/(dashboard)/mostrador/actions";
++
++beforeEach(() => { holder.supabase = null; });
++
++// Mismos uuids que `restauracion-order-actions.test.ts` (los ids de ejemplo
++// del brief, "O1"/"i1", no son UUIDs válidos y no pasarían `safeParse` —
++// `sendOrderToStationsSchema`/`setOrderItemStatusSchema` exigen `.uuid()`).
++const ORDER_ID_1 = "11111111-1111-4111-8111-111111111111";
++const ITEM_ID_1 = "44444444-4444-4444-8444-444444444444";
++
++describe("order status actions", () => {
++  it("setOrderItemStatus da CONFLICTO si el estado esperado ya cambió", async () => {
++    holder.supabase = makeSupabaseMock({ onWrite: (op: string) => op === "update" ? { data: [] } : {} });
++    const r = await setOrderItemStatus({ itemId: ITEM_ID_1, from: "enviado", to: "listo" });
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error.toLowerCase()).toContain("conflicto");
++  });
++
++  it("setOrderItemStatus transiciona el ítem cuando el estado esperado coincide", async () => {
++    const onWrite = vi.fn((op: string) =>
++      op === "update"
++        ? { data: [{ id: ITEM_ID_1, salon_id: "SALON", order_id: ORDER_ID_1, status: "listo" }] }
++        : {},
++    );
++    holder.supabase = makeSupabaseMock({ onWrite });
++    const r = await setOrderItemStatus({ itemId: ITEM_ID_1, from: "enviado", to: "listo" });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.status).toBe("listo");
++    expect(onWrite).toHaveBeenCalledWith("update", "order_items", { status: "listo" });
++  });
++
++  it("sendOrderToStations cuenta las líneas pendientes que pasan a enviado", async () => {
++    holder.supabase = makeSupabaseMock({
++      onWrite: (op: string) =>
++        op === "update"
++          ? { data: [{ id: ITEM_ID_1 }, { id: "88888888-8888-4888-8888-888888888888" }] }
++          : {},
++    });
++    const r = await sendOrderToStations({ orderId: ORDER_ID_1 });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.sent).toBe(2);
++  });
++
++  it("sendOrderToStations devuelve 0 si no había líneas pendientes", async () => {
++    holder.supabase = makeSupabaseMock({ onWrite: (op: string) => (op === "update" ? { data: [] } : {}) });
++    const r = await sendOrderToStations({ orderId: ORDER_ID_1 });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.sent).toBe(0);
++  });
++});

@@ -1,0 +1,332 @@
+=== COMMITS (a9c110d..e263ac1) ===
+e263ac1 feat(restauracion): actions de pedido (crear/añadir/anular, append-only + idempotencia)
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/actions.ts           | 147 +++++++++++++++++++++
+ src/hooks/use-orders.ts                            |  48 ++++++-
+ src/lib/validations/order.ts                       |  40 ++++++
+ .../integration/restauracion-order-actions.test.ts |  50 +++++++
+ 4 files changed, 284 insertions(+), 1 deletion(-)
+
+=== DIFF -U10 ===
+diff --git a/src/app/(dashboard)/mostrador/actions.ts b/src/app/(dashboard)/mostrador/actions.ts
+new file mode 100644
+index 0000000..81ee87b
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/actions.ts
+@@ -0,0 +1,147 @@
++"use server";
++import { randomUUID } from "node:crypto";
++
++import { revalidatePath } from "next/cache";
++
++import { getActiveSalonId } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++import { addOrderItemsSchema, createOrderSchema, voidOrderItemSchema } from "@/lib/validations/order";
++import type { Order, OrderItem, OrderItemInsert } from "@/types/database";
++
++/**
++ * Server actions de pedido de mostrador (restauración, Task 4): crear pedido
++ * (idempotente por `idempotencyKey`), añadir líneas y anular una línea.
++ *
++ * A diferencia de `carta/actions.ts` (gate de rol vía `assertManager`), aquí
++ * solo se exige salón activo (`getActiveSalonId`) — no rol de gestión: es el
++ * flujo operativo del día a día (tomar pedidos, añadir líneas, anular una
++ * línea mal tecleada), no configuración de carta. La restricción real de
++ * quién puede tocar `/mostrador` vive en la navegación/gate de esa ruta, no
++ * en estas actions.
++ */
++export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
++
++// ─────────────────────────────────────────────────────────────────────────────
++// createOrder: idempotente por `idempotencyKey` — si YA existe una fila con
++// esa key en el salón, se devuelve tal cual (no reinserta, no actualiza). El
++// `id` lo genera el CLIENTE (offline-ready, ver migración
++// 20260810100000_restauracion_orders): se inserta tal cual llega, ya validado
++// como uuid por el schema. Reintentos de red del cliente (mismo `idempotencyKey`,
++// `id` distinto si genera uno nuevo) no duplican el pedido.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createOrder(input: unknown): Promise<ActionResult<Order>> {
++  const parsed = createOrderSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  if (parsed.data.idempotencyKey !== null) {
++    const { data: existing } = await supabase.from("orders").select("*")
++      .eq("salon_id", salonId).eq("idempotency_key", parsed.data.idempotencyKey).maybeSingle();
++    if (existing) return { ok: true, data: existing };
++  }
++  const { data, error } = await supabase.from("orders").insert({
++    id: parsed.data.id, salon_id: salonId, label: parsed.data.label,
++    idempotency_key: parsed.data.idempotencyKey, channel: "mostrador", status: "abierta",
++  }).select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/mostrador");
++  return { ok: true, data };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// addOrderItems: el pedido debe existir EN ESTE salón y estar `abierta` — no
++// se puede añadir líneas a un pedido de otro salón (aislamiento multi-tenant
++// en profundidad, además de RLS) ni a uno ya cobrado/cerrado/anulado. El lote
++// completo se inserta en un único `insert` (todas las líneas o ninguna: si
++// Postgres rechaza una fila, ninguna del lote queda a medias) con ids de
++// cliente ya validados como uuid por `orderItemDraftSchema`.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function addOrderItems(input: unknown): Promise<ActionResult<{ added: number }>> {
++  const parsed = addOrderItemsSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  const { data: order, error: orderError } = await supabase
++    .from("orders").select("id,status")
++    .eq("id", parsed.data.orderId).eq("salon_id", salonId).maybeSingle();
++  if (orderError !== null) return { ok: false, error: orderError.message };
++  if (order === null || order.status !== "abierta") {
++    return { ok: false, error: "El pedido no existe, no pertenece a tu salón o no está abierto" };
++  }
++
++  const rows: OrderItemInsert[] = parsed.data.items.map((item) => ({
++    id: item.id,
++    salon_id: salonId,
++    order_id: parsed.data.orderId,
++    product_id: item.productId,
++    qty: item.qty,
++    unit_price_cents: item.unitPriceCents,
++    vat_rate: item.vatRate,
++    station_id: item.stationId,
++    combo_group: item.comboGroup,
++    modifiers_snapshot: item.modifiersSnapshot,
++    status: "pendiente",
++  }));
++  const { error } = await supabase.from("order_items").insert(rows);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/mostrador");
++  return { ok: true, data: { added: rows.length } };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// voidOrderItem: append-only — NUNCA se hace UPDATE/DELETE de la línea
++// original (histórico intacto para cocina/caja/auditoría). Se lee el ítem
++// original acotado por `order_id` + `salon_id` (garantiza que pertenece AL
++// PEDIDO y AL SALÓN indicados, aunque el `itemId` sea arbitrario) y se
++// inserta una fila NUEVA que referencia la original vía `void_of_item_id`,
++// con un `id` de cliente NUEVO generado en el SERVIDOR (`randomUUID` — a
++// diferencia de createOrder/addOrderItems, esta fila no la propone el
++// cliente porque nace de una acción de servidor, no de composición offline).
++//
++// Se copian solo los campos que importan para el histórico/cocina/caja
++// (product_id/qty/station_id/order_id/salon_id/unit_price_cents/vat_rate),
++// tal como pide el brief. `combo_group` y `modifiers_snapshot` NO se copian:
++// la fila de anulación es un registro de auditoría de cantidad/importe (para
++// que el ticket y el estado de cocina reflejen la baja), no una réplica
++// visual de la línea — el modificador/combo ya quedó registrado en la línea
++// original, que sigue existiendo (no se borra).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function voidOrderItem(input: unknown): Promise<ActionResult<OrderItem>> {
++  const parsed = voidOrderItemSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  const { data: original, error: fetchError } = await supabase
++    .from("order_items").select("*")
++    .eq("id", parsed.data.itemId).eq("order_id", parsed.data.orderId).eq("salon_id", salonId)
++    .maybeSingle();
++  if (fetchError !== null) return { ok: false, error: fetchError.message };
++  if (original === null) return { ok: false, error: "El ítem no pertenece a tu salón o a ese pedido" };
++
++  const payload: OrderItemInsert = {
++    id: randomUUID(),
++    salon_id: original.salon_id,
++    order_id: original.order_id,
++    product_id: original.product_id,
++    qty: original.qty,
++    unit_price_cents: original.unit_price_cents,
++    vat_rate: original.vat_rate,
++    station_id: original.station_id,
++    status: "anulado",
++    void_of_item_id: parsed.data.itemId,
++    void_reason: parsed.data.reason,
++  };
++  const { data, error } = await supabase.from("order_items").insert(payload).select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/mostrador");
++  return { ok: true, data };
++}
+diff --git a/src/hooks/use-orders.ts b/src/hooks/use-orders.ts
+index 7814c70..593337f 100644
+--- a/src/hooks/use-orders.ts
++++ b/src/hooks/use-orders.ts
+@@ -1,14 +1,60 @@
+ "use client";
+-import { useQuery } from "@tanstack/react-query";
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++
++import { addOrderItems, createOrder, voidOrderItem } from "@/app/(dashboard)/mostrador/actions";
+ import { fetchOpenOrders, fetchOrderItems, orderKeys } from "@/lib/queries/orders";
++import type { AddOrderItemsInput, CreateOrderInput, VoidOrderItemInput } from "@/lib/validations/order";
++import type { Order, OrderItem } from "@/types/database";
+ 
+ export function useOpenOrders(salonId: string) {
+   return useQuery({ queryKey: orderKeys.open(salonId), queryFn: () => fetchOpenOrders(salonId) });
+ }
+ export function useOrderItems(salonId: string, orderId: string | null) {
+   return useQuery({
+     queryKey: orderKeys.detail(salonId, orderId ?? "none"),
+     queryFn: () => fetchOrderItems(salonId, orderId as string),
+     enabled: orderId !== null,
+   });
+ }
++
++/** Invalida todas las queries de pedidos del salón (abiertos + detalle de cada uno). */
++function useInvalidateOrders(salonId: string) {
++  const queryClient = useQueryClient();
++  return () => queryClient.invalidateQueries({ queryKey: orderKeys.all(salonId) });
++}
++
++export function useCreateOrder(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: CreateOrderInput): Promise<Order> => {
++      const result = await createOrder(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useAddOrderItems(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: AddOrderItemsInput): Promise<{ added: number }> => {
++      const result = await addOrderItems(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useVoidOrderItem(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: VoidOrderItemInput): Promise<OrderItem> => {
++      const result = await voidOrderItem(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
+diff --git a/src/lib/validations/order.ts b/src/lib/validations/order.ts
+new file mode 100644
+index 0000000..ccb0778
+--- /dev/null
++++ b/src/lib/validations/order.ts
+@@ -0,0 +1,40 @@
++import { z } from "zod";
++
++/**
++ * Validaciones de las server actions de pedido de mostrador (restauración,
++ * Task 4). Los nombres de campo replican `OrderItemDraft`
++ * (lib/restauracion/order.ts, lógica pura de Task 2) para que el payload que
++ * construye el cliente pase directo por `safeParse` sin mapeo intermedio.
++ */
++
++export const orderItemDraftSchema = z.object({
++  id: z.string().uuid(),
++  productId: z.string().uuid(),
++  qty: z.number().int().positive(),
++  unitPriceCents: z.number().int().min(0),
++  vatRate: z.number().min(0).max(100).default(10),
++  stationId: z.string().uuid().nullable(),
++  comboGroup: z.string().nullable(),
++  modifiersSnapshot: z.array(z.object({ name: z.string(), priceDeltaCents: z.number().int() })).default([]),
++});
++export type OrderItemDraftInput = z.infer<typeof orderItemDraftSchema>;
++
++export const createOrderSchema = z.object({
++  id: z.string().uuid(),
++  label: z.string().trim().max(120).nullable(),
++  idempotencyKey: z.string().max(200).nullable(),
++});
++export type CreateOrderInput = z.infer<typeof createOrderSchema>;
++
++export const addOrderItemsSchema = z.object({
++  orderId: z.string().uuid(),
++  items: z.array(orderItemDraftSchema).min(1),
++});
++export type AddOrderItemsInput = z.infer<typeof addOrderItemsSchema>;
++
++export const voidOrderItemSchema = z.object({
++  orderId: z.string().uuid(),
++  itemId: z.string().uuid(),
++  reason: z.string().trim().min(1).max(200),
++});
++export type VoidOrderItemInput = z.infer<typeof voidOrderItemSchema>;
+diff --git a/src/tests/integration/restauracion-order-actions.test.ts b/src/tests/integration/restauracion-order-actions.test.ts
+new file mode 100644
+index 0000000..d7b6e1b
+--- /dev/null
++++ b/src/tests/integration/restauracion-order-actions.test.ts
+@@ -0,0 +1,50 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++const holder = vi.hoisted(() => ({ supabase: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({ getActiveSalonId: () => Promise.resolve("SALON") }));
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++import { createOrder, addOrderItems } from "@/app/(dashboard)/mostrador/actions";
++
++beforeEach(() => { holder.supabase = null; });
++
++// `createOrderSchema`/`addOrderItemsSchema` exigen `.uuid()` en id/orderId/
++// itemId/productId (transcritos verbatim del brief) — los ids de ejemplo del
++// brief ("O1", "OX", "i1"...) no son UUIDs válidos y no pasarían `safeParse`.
++// Se usan uuids reales aquí, con la MISMA estructura/aserciones que el brief.
++const ORDER_ID_1 = "11111111-1111-4111-8111-111111111111";
++const ORDER_ID_2 = "22222222-2222-4222-8222-222222222222";
++const ORDER_ID_X = "33333333-3333-4333-8333-333333333333";
++const ITEM_ID_1 = "44444444-4444-4444-8444-444444444444";
++const PRODUCT_ID_1 = "55555555-5555-4555-8555-555555555555";
++
++describe("order actions", () => {
++  it("createOrder inserta con id de cliente", async () => {
++    holder.supabase = makeSupabaseMock({
++      tables: { orders: { data: [] } },
++      onWrite: (op: string, table: string) =>
++        op === "insert" && table === "orders"
++          ? { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "abierta" }] } : {},
++    });
++    const r = await createOrder({ id: ORDER_ID_1, label: null, idempotencyKey: "k1" });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.id).toBe(ORDER_ID_1);
++  });
++
++  it("createOrder es idempotente por idempotencyKey", async () => {
++    holder.supabase = makeSupabaseMock({
++      tables: { orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", idempotency_key: "k1", status: "abierta" }] } },
++    });
++    const r = await createOrder({ id: ORDER_ID_2, label: null, idempotencyKey: "k1" });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.id).toBe(ORDER_ID_1);
++  });
++
++  it("addOrderItems rechaza pedido de otro salón / inexistente", async () => {
++    holder.supabase = makeSupabaseMock({ tables: { orders: { data: [] } } });
++    const r = await addOrderItems({ orderId: ORDER_ID_X, items: [
++      { id: ITEM_ID_1, productId: PRODUCT_ID_1, qty: 1, unitPriceCents: 500, vatRate: 10, stationId: null, comboGroup: null, modifiersSnapshot: [] },
++    ]});
++    expect(r.ok).toBe(false);
++  });
++});

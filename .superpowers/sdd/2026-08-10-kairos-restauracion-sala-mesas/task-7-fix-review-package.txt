@@ -1,0 +1,574 @@
+=== FIX a4a23cf..fea00ce ===
+fea00ce fix(restauracion): cierra flujo Añadir mesa->mostrador + pointercancel + onError arrastre
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/mostrador-view.tsx |  41 ++++++-
+ src/app/(dashboard)/mostrador/page.tsx           |  17 ++-
+ src/app/(dashboard)/sala/sala-view.tsx           |  21 +++-
+ src/app/(dashboard)/sala/table-node.tsx          |  25 +++++
+ src/tests/unit/mostrador-view.test.tsx           | 131 +++++++++++++++++++++++
+ src/tests/unit/table-node.test.tsx               |  48 ++++++++-
+ 6 files changed, 275 insertions(+), 8 deletions(-)
+
+=== DIFF -U10 ===
+diff --git a/src/app/(dashboard)/mostrador/mostrador-view.tsx b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+index 56976d1..8744025 100644
+--- a/src/app/(dashboard)/mostrador/mostrador-view.tsx
++++ b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+@@ -5,29 +5,35 @@ import { useEffect, useMemo, useRef, useState } from "react";
+ import { ModifierPickerDialog } from "@/app/(dashboard)/mostrador/modifier-picker-dialog";
+ import { OpenOrdersBar } from "@/app/(dashboard)/mostrador/open-orders-bar";
+ import { OrderPanel, type OrderPanelItem } from "@/app/(dashboard)/mostrador/order-panel";
+ import { ProductGrid } from "@/app/(dashboard)/mostrador/product-grid";
+ import {
+   useAllProductModifierGroups,
+   useMenuProducts,
+   useModifierGroups,
+   useStations,
+ } from "@/hooks/use-menu";
+-import { useOrderItems } from "@/hooks/use-orders";
++import { useOpenOrders, useOrderItems } from "@/hooks/use-orders";
+ import { useSalePaymentMethods } from "@/hooks/use-tpv";
+ import { buildOrderItemDrafts, type MenuSelection } from "@/lib/restauracion/order";
+ import type { Order, OrderItem, Product } from "@/types/database";
+ 
+ interface MostradorViewProps {
+   salonId: string;
+   /** Nombre comercial del salón; cabecera del ticket impreso. */
+   salonName: string;
++  /** Id de la cuenta con la que arrancar el mostrador ya seleccionada, tal
++   * como llega desde `/sala` (fix revisión Task 7, Important: "Añadir" en el
++   * panel de una mesa navega a `/mostrador?order=<id>`, `page.tsx` lee ese
++   * parámetro y lo pasa aquí). Mismo patrón que `initialAppointmentId` en
++   * `tpv-view.tsx`. */
++  initialOrderId?: string;
+ }
+ 
+ /** `order_items.modifiers_snapshot` es `Json` en la BD; en la práctica siempre
+  * tiene esta forma (la escribe `addOrderItems`, ver `mostrador/actions.ts`). */
+ function asModifiersSnapshot(value: unknown): Array<{ name: string; priceDeltaCents: number }> {
+   return Array.isArray(value) ? (value as Array<{ name: string; priceDeltaCents: number }>) : [];
+ }
+ 
+ /** Una línea persistida cuenta para el pedido si no es una anulación ni está
+  * anulada — mismo criterio que `settleOrder` al cargar líneas a cobrar. */
+@@ -35,28 +41,34 @@ function isActiveOrderItem(row: OrderItem): boolean {
+   return row.void_of_item_id === null && row.status !== "anulado";
+ }
+ 
+ /**
+  * Pantalla de mostrador (restauración): rejilla de carta a la izquierda,
+  * panel de pedido a la derecha, con la barra de cuentas abiertas arriba.
+  * Mantiene en estado LOCAL las líneas del pedido en curso (drafts con
+  * `crypto.randomUUID()`, patrón de `tpv-view.tsx`); es `OrderPanel` quien
+  * decide CUÁNDO persistirlas (Mandar/Cobrar). Al reabrir una cuenta desde
+  * `OpenOrdersBar`, las líneas ya persistidas se cargan una única vez con
+- * `useOrderItems`.
++ * `useOrderItems`. `initialOrderId` (opcional) reanuda una cuenta abierta
++ * automáticamente al montar — llegada desde `/sala` vía `?order=<id>`.
+  */
+-export function MostradorView({ salonId, salonName }: MostradorViewProps): React.ReactElement {
++export function MostradorView({
++  salonId,
++  salonName,
++  initialOrderId,
++}: MostradorViewProps): React.ReactElement {
+   const products = useMenuProducts(salonId);
+   const stations = useStations(salonId);
+   const modifierGroups = useModifierGroups(salonId);
+   const productModifierGroups = useAllProductModifierGroups(salonId);
+   const paymentMethods = useSalePaymentMethods(salonId);
++  const openOrders = useOpenOrders(salonId);
+ 
+   const [order, setOrder] = useState<Order | null>(null);
+   const [items, setItems] = useState<OrderPanelItem[]>([]);
+   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
+ 
+   const orderItemsQuery = useOrderItems(salonId, order?.id ?? null);
+   // Evita recargar las líneas del mismo pedido dos veces: solo se leen de BD
+   // al REABRIR una cuenta desde `OpenOrdersBar`; cuando `OrderPanel` crea el
+   // pedido en el primer Mandar/Cobrar, las líneas ya están en `items` (son la
+@@ -89,20 +101,43 @@ export function MostradorView({ salonId, salonName }: MostradorViewProps): React
+       vatRate: row.vat_rate,
+       stationId: row.station_id,
+       comboGroup: row.combo_group,
+       modifiersSnapshot: asModifiersSnapshot(row.modifiers_snapshot),
+       name: productsById.get(row.product_id)?.name ?? "Producto",
+     }));
+     setItems(loaded);
+     setPendingIds(new Set());
+   }, [order, orderItemsQuery.data, productsById]);
+ 
++  // "Añadir" desde el panel de una mesa en /sala abre /mostrador?order=<id>
++  // (fix revisión Task 7, Important): en cuanto las cuentas abiertas cargan,
++  // retomamos ESA cuenta una sola vez — mismo patrón `initialAppointmentId` /
++  // `startedFromParamRef` de `tpv-view.tsx`, y reutiliza `handleSelectOrder`
++  // (el MISMO handler que usa `OpenOrdersBar` al reanudar una cuenta) en vez
++  // de duplicar su lógica de limpieza síncrona. Así los productos que se
++  // añadan van al MISMO pedido, que ya lleva `dining_table_id`, en vez de
++  // crear uno nuevo desconectado de la mesa. Si no se encuentra (p.ej. ya se
++  // cobró entre que se abrió el enlace y cargó el mostrador), no hace nada:
++  // cae al mostrador en blanco de siempre.
++  const startedFromOrderParamRef = useRef(false);
++  useEffect(() => {
++    if (startedFromOrderParamRef.current || initialOrderId === undefined) return;
++    const match = openOrders.data?.find((o) => o.id === initialOrderId);
++    if (match !== undefined) {
++      startedFromOrderParamRef.current = true;
++      handleSelectOrder(match);
++    }
++    // handleSelectOrder es una declaración hoisted y estable; no va en deps
++    // (mismo criterio que `startFromAppointment` en `tpv-view.tsx`).
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [initialOrderId, openOrders.data]);
++
+   function addSelection(selection: MenuSelection): void {
+     const drafts = buildOrderItemDrafts(selection, () => crypto.randomUUID());
+     const withNames: OrderPanelItem[] = drafts.map((draft) => ({
+       ...draft,
+       name: productsById.get(draft.productId)?.name ?? selection.name,
+     }));
+     setItems((prev) => [...prev, ...withNames]);
+     setPendingIds((prev) => {
+       const next = new Set(prev);
+       for (const draft of withNames) next.add(draft.id);
+diff --git a/src/app/(dashboard)/mostrador/page.tsx b/src/app/(dashboard)/mostrador/page.tsx
+index 4aceabc..d50009b 100644
+--- a/src/app/(dashboard)/mostrador/page.tsx
++++ b/src/app/(dashboard)/mostrador/page.tsx
+@@ -2,21 +2,25 @@ import type { Metadata } from "next";
+ import { redirect } from "next/navigation";
+ 
+ import { MostradorView } from "@/app/(dashboard)/mostrador/mostrador-view";
+ import { getActiveSalon } from "@/lib/salon";
+ import { createClient } from "@/lib/supabase/server";
+ 
+ export const metadata: Metadata = {
+   title: "Mostrador",
+ };
+ 
+-export default async function MostradorPage(): Promise<React.ReactElement> {
++export default async function MostradorPage({
++  searchParams,
++}: {
++  searchParams: { order?: string };
++}): Promise<React.ReactElement> {
+   const supabase = createClient();
+   const {
+     data: { user },
+   } = await supabase.auth.getUser();
+ 
+   if (user === null) {
+     redirect("/login");
+   }
+ 
+   const salon = await getActiveSalon();
+@@ -25,12 +29,21 @@ export default async function MostradorPage(): Promise<React.ReactElement> {
+     return (
+       <main className="container py-10">
+         <h1 className="text-3xl font-bold tracking-tight">Mostrador</h1>
+         <p className="mt-2 text-muted-foreground">
+           Tu usuario no está asociado a ningún salón todavía.
+         </p>
+       </main>
+     );
+   }
+ 
+-  return <MostradorView salonId={salon.id} salonName={salon.name} />;
++  return (
++    <MostradorView
++      salonId={salon.id}
++      salonName={salon.name}
++      // Cuenta a reanudar desde /sala ("Añadir" del panel de una mesa abre
++      // /mostrador?order=<id>, fix revisión Task 7, Important) — mismo
++      // patrón que `initialAppointmentId` en `tpv/page.tsx`.
++      initialOrderId={typeof searchParams.order === "string" ? searchParams.order : undefined}
++    />
++  );
+ }
+diff --git a/src/app/(dashboard)/sala/sala-view.tsx b/src/app/(dashboard)/sala/sala-view.tsx
+index d32aff2..7c23312 100644
+--- a/src/app/(dashboard)/sala/sala-view.tsx
++++ b/src/app/(dashboard)/sala/sala-view.tsx
+@@ -1,15 +1,15 @@
+ "use client";
+ 
+ import { useEffect, useMemo, useState } from "react";
+ import { useRouter } from "next/navigation";
+-import { Loader2, WifiOff } from "lucide-react";
++import { AlertCircle, Loader2, WifiOff } from "lucide-react";
+ 
+ import { FloorEditor } from "@/app/(dashboard)/sala/floor-editor";
+ import { TableNode } from "@/app/(dashboard)/sala/table-node";
+ import { TablePanel } from "@/app/(dashboard)/sala/table-panel";
+ import { Button } from "@/components/ui/button";
+ import {
+   Dialog,
+   DialogContent,
+   DialogDescription,
+   DialogFooter,
+@@ -185,20 +185,21 @@ export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
+   useEffect(() => {
+     const id = setInterval(() => setNow(new Date()), 30000);
+     return () => clearInterval(id);
+   }, []);
+ 
+   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+   const [editMode, setEditMode] = useState(false);
+   const [openDialogTable, setOpenDialogTable] = useState<DiningTable | null>(null);
+   const [openError, setOpenError] = useState<string | null>(null);
+   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
++  const [dragError, setDragError] = useState<string | null>(null);
+ 
+   const zones = zonesQuery.data ?? [];
+   const tables = tablesQuery.data ?? [];
+   const orders = ordersQuery.data ?? [];
+ 
+   const ordersByTable = useMemo(() => {
+     const map = new Map<string, (typeof orders)[number]>();
+     for (const order of orders) {
+       if (order.dining_table_id !== null) map.set(order.dining_table_id, order);
+     }
+@@ -240,21 +241,27 @@ export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
+         onSuccess: () => {
+           setSelectedTableId(openDialogTable.id);
+           setOpenDialogTable(null);
+         },
+         onError: (e) => setOpenError(e instanceof Error ? e.message : "No se pudo abrir la mesa"),
+       },
+     );
+   }
+ 
+   function handleDragEnd(table: DiningTable, pos: { posX: number; posY: number }): void {
+-    savePosition.mutate({ tableId: table.id, posX: pos.posX, posY: pos.posY });
++    setDragError(null);
++    savePosition.mutate(
++      { tableId: table.id, posX: pos.posX, posY: pos.posY },
++      {
++        onError: (e) => setDragError(e instanceof Error ? e.message : "No se pudo mover la mesa"),
++      },
++    );
+   }
+ 
+   return (
+     <main className="container py-6 lg:py-8">
+       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+         <div className="space-y-1">
+           <h1 className="text-3xl font-bold tracking-tight">Sala</h1>
+           <p className="text-sm text-muted-foreground">
+             Plano de mesas: toca una mesa libre para abrirla o una ocupada para ver su cuenta.
+           </p>
+@@ -281,20 +288,30 @@ export function SalaView({ salonId, role }: SalaViewProps): React.ReactElement {
+           <FloorEditor
+             salonId={salonId}
+             zones={zones}
+             activeZoneId={currentZoneId}
+             editMode={editMode}
+             onToggleEditMode={toggleEditMode}
+           />
+         ) : null}
+       </div>
+ 
++      {dragError !== null ? (
++        <p
++          role="alert"
++          className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++        >
++          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
++          {dragError}
++        </p>
++      ) : null}
++
+       <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
+         <div className="relative min-h-[34rem] w-full overflow-hidden rounded-2xl border border-dashed border-border bg-muted/20">
+           {tablesQuery.isPending || zonesQuery.isPending ? (
+             <p className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+               Cargando plano…
+             </p>
+           ) : zones.length === 0 ? (
+             <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground">
+               Todavía no hay zonas en el plano.
+               {canEdit ? " Crea una desde el modo edición." : ""}
+diff --git a/src/app/(dashboard)/sala/table-node.tsx b/src/app/(dashboard)/sala/table-node.tsx
+index 3057853..5d83906 100644
+--- a/src/app/(dashboard)/sala/table-node.tsx
++++ b/src/app/(dashboard)/sala/table-node.tsx
+@@ -83,20 +83,44 @@ export function TableNode({
+     draggingRef.current = false;
+     if (typeof ref.current?.releasePointerCapture === "function") {
+       ref.current.releasePointerCapture(event.pointerId);
+     }
+     if (dragPos !== null) {
+       onDragEnd?.({ posX: dragPos.x, posY: dragPos.y });
+     }
+     setDragPos(null);
+   }
+ 
++  /**
++   * Un gesto de arrastre puede CANCELARSE sin soltar (p.ej. el navegador lo
++   * interrumpe por un gesto del sistema, o el elemento pierde el puntero) —
++   * `pointercancel` en vez de `pointerup`. Fix revisión Task 7 (Minor): sin
++   * este handler, `draggingRef` se quedaba en `true` y el nodo seguía
++   * "arrastrando" en el siguiente `pointermove`, aunque el usuario ya no
++   * tuviera el dedo/puntero sobre él. NO llama a `onDragEnd` — el gesto no
++   * terminó con normalidad, así que no hay una posición final que persistir.
++   */
++  function handlePointerCancel(event: ReactPointerEvent<HTMLButtonElement>): void {
++    if (!draggingRef.current) return;
++    draggingRef.current = false;
++    if (typeof ref.current?.releasePointerCapture === "function") {
++      try {
++        ref.current.releasePointerCapture(event.pointerId);
++      } catch {
++        // El navegador puede haber soltado la captura ANTES de disparar
++        // `pointercancel` (motivo típico de la propia cancelación) —
++        // liberar una captura ya perdida no es un error real aquí.
++      }
++    }
++    setDragPos(null);
++  }
++
+   function handleClick(): void {
+     if (editable) return;
+     onSelect();
+   }
+ 
+   const posX = dragPos?.x ?? table.pos_x;
+   const posY = dragPos?.y ?? table.pos_y;
+ 
+   return (
+     <button
+@@ -107,18 +131,19 @@ export function TableNode({
+       className={cn(
+         "absolute flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 touch-none flex-col items-center justify-center gap-0.5 rounded-2xl border-2 text-sm font-semibold shadow-sm transition-colors duration-150 ease-apple-out",
+         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+         TONE_CLASSES[tone],
+       )}
+       style={{ left: `${posX}%`, top: `${posY}%` }}
+       onClick={handleClick}
+       onPointerDown={handlePointerDown}
+       onPointerMove={handlePointerMove}
+       onPointerUp={handlePointerUp}
++      onPointerCancel={handlePointerCancel}
+     >
+       <span className="max-w-[4.25rem] truncate px-1">{table.name}</span>
+       <span className="text-xs font-normal opacity-80">
+         {table.capacity_min}-{table.capacity_max}
+       </span>
+     </button>
+   );
+ }
+diff --git a/src/tests/unit/mostrador-view.test.tsx b/src/tests/unit/mostrador-view.test.tsx
+new file mode 100644
+index 0000000..f67c1d8
+--- /dev/null
++++ b/src/tests/unit/mostrador-view.test.tsx
+@@ -0,0 +1,131 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++import type { Order } from "@/types/database";
++
++/**
++ * Mock de los hooks que `MostradorView` llama DIRECTAMENTE (`@/hooks/use-menu`,
++ * `@/hooks/use-orders`, `@/hooks/use-tpv`) — patrón `table-panel.test.tsx`/
++ * `order-panel.test.tsx` (`vi.hoisted` + `createElement`, sin
++ * `QueryClientProvider`). Los subcomponentes pesados (`ProductGrid`,
++ * `ModifierPickerDialog`, `OrderPanel`) se sustituyen por stubs — no son el
++ * objeto de esta prueba, y montarlos de verdad exigiría mockear TODOS sus
++ * hooks internos (`useMenuCategories`, `useComboComponents`,
++ * `useCreateOrder`... — Task 6/Task 5) sin aportar nada a lo que se quiere
++ * probar aquí: que `initialOrderId` (fix revisión Task 7, Important — llega
++ * desde `/sala` vía `/mostrador?order=<id>`) reanuda la cuenta correcta.
++ * `OpenOrdersBar` SÍ se deja real: solo depende de `useOpenOrders` (ya
++ * mockeado) y da una señal visual independiente (`aria-pressed`) de que la
++ * cuenta quedó seleccionada.
++ */
++const m = vi.hoisted(() => ({
++  menuProducts: { data: [] as unknown[], isPending: false },
++  stations: { data: [] as unknown[], isPending: false },
++  modifierGroups: { data: [] as unknown[], isPending: false },
++  productModifierGroups: { data: [] as unknown[], isPending: false },
++  orderItems: { data: [] as unknown[], isPending: false },
++  openOrders: { data: [] as Order[], isPending: false },
++  paymentMethods: { data: [] as unknown[], isPending: false },
++  orderPanelProps: null as { order: Order | null } | null,
++}));
++
++vi.mock("@/hooks/use-menu", () => ({
++  useMenuProducts: () => m.menuProducts,
++  useStations: () => m.stations,
++  useModifierGroups: () => m.modifierGroups,
++  useAllProductModifierGroups: () => m.productModifierGroups,
++}));
++vi.mock("@/hooks/use-orders", () => ({
++  useOrderItems: () => m.orderItems,
++  useOpenOrders: () => m.openOrders,
++}));
++vi.mock("@/hooks/use-tpv", () => ({
++  useSalePaymentMethods: () => m.paymentMethods,
++}));
++vi.mock("@/app/(dashboard)/mostrador/product-grid", () => ({
++  ProductGrid: () => null,
++}));
++vi.mock("@/app/(dashboard)/mostrador/modifier-picker-dialog", () => ({
++  ModifierPickerDialog: () => null,
++}));
++vi.mock("@/app/(dashboard)/mostrador/order-panel", () => ({
++  OrderPanel: (props: { order: Order | null }) => {
++    m.orderPanelProps = props;
++    return null;
++  },
++}));
++
++import { MostradorView } from "@/app/(dashboard)/mostrador/mostrador-view";
++
++beforeEach(() => {
++  m.orderPanelProps = null;
++  m.openOrders.data = [];
++});
++afterEach(() => cleanup());
++
++const OPEN_ORDER: Order = {
++  id: "order-77",
++  salon_id: "SALON",
++  session_id: null,
++  order_number: 7,
++  channel: "mesa",
++  status: "abierta",
++  label: "Mesa 4",
++  idempotency_key: null,
++  dining_table_id: "table-1",
++  covers: 3,
++  created_by: null,
++  created_at: "2026-08-10T09:00:00.000Z",
++  updated_at: "2026-08-10T09:00:00.000Z",
++};
++
++describe("MostradorView — initialOrderId (fix revisión Task 7)", () => {
++  it("con initialOrderId que coincide con una cuenta abierta, la reanuda automáticamente", () => {
++    m.openOrders.data = [OPEN_ORDER];
++
++    render(
++      createElement(MostradorView, {
++        salonId: "SALON",
++        salonName: "Mi Bar",
++        initialOrderId: OPEN_ORDER.id,
++      }),
++    );
++
++    // `OrderPanel` (stub) recibió la cuenta encontrada como `order` — los
++    // productos que se añadan a partir de ahora viajan a ESE pedido.
++    expect(m.orderPanelProps?.order).toEqual(OPEN_ORDER);
++    // Señal independiente: el chip de esa cuenta en `OpenOrdersBar` (real,
++    // no stub) queda marcado como activo.
++    expect(screen.getByRole("button", { name: /mesa 4/i })).toHaveAttribute(
++      "aria-pressed",
++      "true",
++    );
++  });
++
++  it("sin initialOrderId, arranca en blanco (comportamiento normal)", () => {
++    m.openOrders.data = [OPEN_ORDER];
++
++    render(createElement(MostradorView, { salonId: "SALON", salonName: "Mi Bar" }));
++
++    expect(m.orderPanelProps?.order).toBeNull();
++    expect(screen.getByRole("button", { name: /cuenta nueva/i })).toHaveAttribute(
++      "aria-pressed",
++      "true",
++    );
++  });
++
++  it("con initialOrderId que no coincide con ninguna cuenta abierta (p.ej. ya cobrada), cae al comportamiento normal", () => {
++    m.openOrders.data = [OPEN_ORDER];
++
++    render(
++      createElement(MostradorView, {
++        salonId: "SALON",
++        salonName: "Mi Bar",
++        initialOrderId: "no-existe",
++      }),
++    );
++
++    expect(m.orderPanelProps?.order).toBeNull();
++  });
++});
+diff --git a/src/tests/unit/table-node.test.tsx b/src/tests/unit/table-node.test.tsx
+index abb083a..b39b570 100644
+--- a/src/tests/unit/table-node.test.tsx
++++ b/src/tests/unit/table-node.test.tsx
+@@ -1,12 +1,12 @@
+ import { createElement } from "react";
+-import { cleanup, render, screen } from "@testing-library/react";
++import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+ import { afterEach, describe, expect, it, vi } from "vitest";
+ 
+ import { TableNode } from "@/app/(dashboard)/sala/table-node";
+ import type { DiningTable } from "@/types/database";
+ 
+ afterEach(() => cleanup());
+ 
+ const TABLE: DiningTable = {
+   id: "table-1",
+@@ -56,11 +56,57 @@ describe("TableNode", () => {
+ 
+   it("en modo edición, el click NO llama a onSelect", async () => {
+     const user = userEvent.setup();
+     const onSelect = vi.fn();
+     render(createElement(TableNode, { table: TABLE, tone: "free", editable: true, onSelect }));
+ 
+     await user.click(screen.getByRole("button"));
+ 
+     expect(onSelect).not.toHaveBeenCalled();
+   });
++
++  /**
++   * Fix revisión Task 7 (Minor): un `pointercancel` a mitad de arrastre debía
++   * resetear el estado interno de "arrastrando" — sin el handler, el
++   * `pointerup` que pudiera llegar después seguía disparando `onDragEnd`
++   * (arrastre "fantasma" tras un gesto ya cancelado por el sistema).
++   */
++  it("un pointercancel a mitad de arrastre no dispara onDragEnd en el pointerup posterior", () => {
++    const onDragEnd = vi.fn();
++    render(
++      createElement(TableNode, {
++        table: TABLE,
++        tone: "free",
++        editable: true,
++        onSelect: vi.fn(),
++        onDragEnd,
++      }),
++    );
++    const node = screen.getByRole("button");
++    // jsdom no calcula layout real: `getBoundingClientRect` del padre
++    // devuelve 0x0 por defecto, y con ancho/alto 0 `handlePointerMove` nunca
++    // llega a fijar `dragPos` (guarda explícita contra división por cero) —
++    // sin un rect de tamaño no nulo, este test "pasaría" igual CON o SIN el
++    // fix (onDragEnd nunca se llamaría de todos modos), así que no probaría
++    // nada. Se stubea el rect para que el arrastre sí registre posición.
++    vi.spyOn(node.parentElement as HTMLElement, "getBoundingClientRect").mockReturnValue({
++      left: 0,
++      top: 0,
++      width: 200,
++      height: 200,
++      right: 200,
++      bottom: 200,
++      x: 0,
++      y: 0,
++      toJSON: () => "",
++    } as DOMRect);
++
++    fireEvent.pointerDown(node, { pointerId: 1, clientX: 10, clientY: 10 });
++    fireEvent.pointerMove(node, { pointerId: 1, clientX: 40, clientY: 60 });
++    fireEvent.pointerCancel(node, { pointerId: 1 });
++    // Un `pointerup` tardío (p.ej. el sistema lo entrega igualmente tras
++    // cancelar) no debe reactivar el arrastre ni llamar a `onDragEnd`.
++    fireEvent.pointerUp(node, { pointerId: 1, clientX: 40, clientY: 60 });
++
++    expect(onDragEnd).not.toHaveBeenCalled();
++  });
+ });

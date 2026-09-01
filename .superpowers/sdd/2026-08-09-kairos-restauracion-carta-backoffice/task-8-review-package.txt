@@ -1,0 +1,3351 @@
+=== COMMITS (65d207d..d122b04) ===
+d122b04 feat(restauracion): backoffice de carta (/carta) con importador CSV
+
+=== DIFF --stat ===
+ package-lock.json                                 | 941 +++++++++++++++++++--
+ package.json                                      |   3 +
+ src/app/(dashboard)/carta/carta-view.tsx          | 985 ++++++++++++++++++++++
+ src/app/(dashboard)/carta/category-form.tsx       | 111 +++
+ src/app/(dashboard)/carta/csv-import-dialog.tsx   | 132 +++
+ src/app/(dashboard)/carta/layout.tsx              |   9 +
+ src/app/(dashboard)/carta/menu-item-form.tsx      | 266 ++++++
+ src/app/(dashboard)/carta/modifier-group-form.tsx | 246 ++++++
+ src/app/(dashboard)/carta/page.tsx                |  36 +
+ src/components/ui/checkbox.tsx                    |  32 +
+ src/components/ui/switch.tsx                      |  32 +
+ src/components/ui/tabs.tsx                        |  59 ++
+ src/hooks/use-menu.ts                             |  59 +-
+ src/lib/queries/menu.ts                           |  66 +-
+ src/tests/setup.ts                                |  17 +
+ src/tests/unit/menu-item-form.test.tsx            |  31 +
+ 16 files changed, 2970 insertions(+), 55 deletions(-)
+
+=== DIFF -U8 ===
+diff --git a/package-lock.json b/package-lock.json
+index d9ed792..b1515c2 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -3,20 +3,23 @@
+   "version": "0.1.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "salon-os",
+       "version": "0.1.0",
+       "dependencies": {
++        "@radix-ui/react-checkbox": "^1.3.11",
+         "@radix-ui/react-dialog": "^1.1.19",
+         "@radix-ui/react-label": "^2.1.0",
+         "@radix-ui/react-select": "^2.3.3",
+         "@radix-ui/react-slot": "^1.1.0",
++        "@radix-ui/react-switch": "^1.3.7",
++        "@radix-ui/react-tabs": "^1.1.21",
+         "@supabase/ssr": "^0.5.2",
+         "@supabase/supabase-js": "2.49.4",
+         "@tanstack/react-query": "^5.101.2",
+         "@zxing/browser": "^0.1.5",
+         "class-variance-authority": "^0.7.0",
+         "clsx": "^2.1.1",
+         "date-fns": "^3.6.0",
+         "lucide-react": "^0.446.0",
+@@ -1340,16 +1343,216 @@
+         "@types/react": {
+           "optional": true
+         },
+         "@types/react-dom": {
+           "optional": true
+         }
+       }
+     },
++    "node_modules/@radix-ui/react-checkbox": {
++      "version": "1.3.11",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-checkbox/-/react-checkbox-1.3.11.tgz",
++      "integrity": "sha512-Gnptr9pDDQxD3hgq2dtPbtrp/c2qH1mBwIzw3X/ivrMb2e1t0jMTi606fVEqFPaQR1ggXIVQWKj3P2WW9v7zGQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/primitive": "1.1.7",
++        "@radix-ui/react-compose-refs": "1.1.5",
++        "@radix-ui/react-context": "1.2.2",
++        "@radix-ui/react-presence": "1.1.10",
++        "@radix-ui/react-primitive": "2.1.10",
++        "@radix-ui/react-use-controllable-state": "1.2.6",
++        "@radix-ui/react-use-size": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/primitive": {
++      "version": "1.1.7",
++      "resolved": "https://registry.npmjs.org/@radix-ui/primitive/-/primitive-1.1.7.tgz",
++      "integrity": "sha512-rqWnm76nYT8HoNNqEjpgJ7Pw/DrBj5iBTrmEPo6HTX5+VJyBNOqTdv4g89G63HuR5g0AaENoAcH7Is5fF2kZ8Q==",
++      "license": "MIT"
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-compose-refs": {
++      "version": "1.1.5",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-compose-refs/-/react-compose-refs-1.1.5.tgz",
++      "integrity": "sha512-+48PbAAbq3didjJxa+OaWY2ZwgAKsNiRGyeHKszblZMQ+kcpd9pAaT11cMkGEie0vsOi3QdeTE6d5Fe3Gn61kA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-context": {
++      "version": "1.2.2",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-context/-/react-context-1.2.2.tgz",
++      "integrity": "sha512-RHCUGwKHDr0hDGg4X7ma4JG4/+12qxw8rkh5QKdDldlCvtja6nUx1Ef/8HVrJze81lEsgLQlqjzjGNHantgnQA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-presence": {
++      "version": "1.1.10",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-presence/-/react-presence-1.1.10.tgz",
++      "integrity": "sha512-3wyzCQ6+ubRA+D4uv9m95JYLXxmOHp05qjrkjeA7uKHHtjpPggQzc6DAb0URl7j67oR0K2foO4ip27TiX037Bw==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-primitive": {
++      "version": "2.1.10",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-primitive/-/react-primitive-2.1.10.tgz",
++      "integrity": "sha512-MucOnzh6hR5mid6VpkbglRAMYMjKLqRnGBbjXkzjK52fuQDd1qbkx78a5P40mkcnVXJdEVxm26E9OPAiUq7nBg==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-slot": "1.3.3"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-slot": {
++      "version": "1.3.3",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.3.3.tgz",
++      "integrity": "sha512-qx7oqnYbxnK9kYI9m317qmFmEgo6ywqWvbTogdj7cL9p3/yx4M48p7Rnw5z3H890cL/ow/EeWJsuTykeZVXP5Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-compose-refs": "1.1.5"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-use-controllable-state": {
++      "version": "1.2.6",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-controllable-state/-/react-use-controllable-state-1.2.6.tgz",
++      "integrity": "sha512-uEQJGT97ZA/TgP/Hydw47lHu+/vQj6z/0jA+WeTbK1o9Rx45GImjpD0tc3W5ad3D6XTSR6e1yEO0FvGq6WQfVQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/primitive": "1.1.7",
++        "@radix-ui/react-use-effect-event": "0.0.5",
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-use-effect-event": {
++      "version": "0.0.5",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-effect-event/-/react-use-effect-event-0.0.5.tgz",
++      "integrity": "sha512-7cshFL8HGS/7HEiHH+9kL9HBwp2sa9yX18Knwek6KYWmXwM7pegMgta2AXMQKI+rq3JnfSj9x8wYqFMTdG1Jgg==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-use-layout-effect": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-layout-effect/-/react-use-layout-effect-1.1.4.tgz",
++      "integrity": "sha512-K20DkRkUwDnxEYMBPcg3Y6voLkEy5p5QQmszZgLngKKiC7dzBR/aEuK3w1qlx2JWDUNH6FluahYdgR3BP+QbYw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-checkbox/node_modules/@radix-ui/react-use-size": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-size/-/react-use-size-1.1.4.tgz",
++      "integrity": "sha512-D3anSY15EJoxrihpsXI6SMrmmonnQtR2ni7arO+Lfdg3O95b9hNXxONk8jA5C8ANdF/h5HMAxejgs8PWJ6rlhw==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
+     "node_modules/@radix-ui/react-collection": {
+       "version": "1.1.12",
+       "resolved": "https://registry.npmjs.org/@radix-ui/react-collection/-/react-collection-1.1.12.tgz",
+       "integrity": "sha512-nb67INpE0IahJKN7EYPp9m9YGwYeKlnzxT3MwXVkgCskaSJia97kG4T0ywpjNUSSnoJk/uvk12V8vbrEHEj+/Q==",
+       "license": "MIT",
+       "dependencies": {
+         "@radix-ui/react-compose-refs": "1.1.3",
+         "@radix-ui/react-context": "1.2.0",
+@@ -1657,120 +1860,764 @@
+         "@types/react": {
+           "optional": true
+         },
+         "@types/react-dom": {
+           "optional": true
+         }
+       }
+     },
+-    "node_modules/@radix-ui/react-select": {
+-      "version": "2.3.3",
+-      "resolved": "https://registry.npmjs.org/@radix-ui/react-select/-/react-select-2.3.3.tgz",
+-      "integrity": "sha512-L5RQTXz6Anxsf9CCv+pTgiAsUpyVj7rJxsGtmhFaEOJ++cVfXucv4qWfsIO0AIB4NAhi3yovWGVMKKS1Xf1Wrg==",
++    "node_modules/@radix-ui/react-roving-focus": {
++      "version": "1.1.19",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-roving-focus/-/react-roving-focus-1.1.19.tgz",
++      "integrity": "sha512-V9jI6hDjT7l3jsCQD9bLNvDLM3tH/gdbOTp7Tefp3hbbgCGQoK7tUvrWiRlcoBHIZ809ElXwNQwVo0B98LuTXQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/primitive": "1.1.7",
++        "@radix-ui/react-collection": "1.1.15",
++        "@radix-ui/react-compose-refs": "1.1.5",
++        "@radix-ui/react-context": "1.2.2",
++        "@radix-ui/react-direction": "1.1.4",
++        "@radix-ui/react-id": "1.1.4",
++        "@radix-ui/react-primitive": "2.1.10",
++        "@radix-ui/react-use-callback-ref": "1.1.4",
++        "@radix-ui/react-use-controllable-state": "1.2.6",
++        "@radix-ui/react-use-is-hydrated": "0.1.3",
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/primitive": {
++      "version": "1.1.7",
++      "resolved": "https://registry.npmjs.org/@radix-ui/primitive/-/primitive-1.1.7.tgz",
++      "integrity": "sha512-rqWnm76nYT8HoNNqEjpgJ7Pw/DrBj5iBTrmEPo6HTX5+VJyBNOqTdv4g89G63HuR5g0AaENoAcH7Is5fF2kZ8Q==",
++      "license": "MIT"
++    },
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-collection": {
++      "version": "1.1.15",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-collection/-/react-collection-1.1.15.tgz",
++      "integrity": "sha512-9W+B9NPF0NaaPh/1NJd3+KqsnlLqU9H7T2rvww+fp+T/evVXdNAyYcnfRQZFOjkR1ajQp3yORlqnI8soawLvNA==",
+       "license": "MIT",
+       "dependencies": {
+-        "@radix-ui/number": "1.1.2",
+-        "@radix-ui/primitive": "1.1.5",
+-        "@radix-ui/react-collection": "1.1.12",
+-        "@radix-ui/react-compose-refs": "1.1.3",
+-        "@radix-ui/react-context": "1.2.0",
+-        "@radix-ui/react-direction": "1.1.2",
+-        "@radix-ui/react-dismissable-layer": "1.1.15",
+-        "@radix-ui/react-focus-guards": "1.1.4",
+-        "@radix-ui/react-focus-scope": "1.1.12",
+-        "@radix-ui/react-id": "1.1.2",
+-        "@radix-ui/react-popper": "1.3.3",
+-        "@radix-ui/react-portal": "1.1.13",
+-        "@radix-ui/react-presence": "1.1.7",
+-        "@radix-ui/react-primitive": "2.1.7",
+-        "@radix-ui/react-slot": "1.3.0",
+-        "@radix-ui/react-use-callback-ref": "1.1.2",
+-        "@radix-ui/react-use-controllable-state": "1.2.3",
+-        "@radix-ui/react-use-layout-effect": "1.1.2",
+-        "@radix-ui/react-use-previous": "1.1.2",
+-        "@radix-ui/react-visually-hidden": "1.2.7",
+-        "aria-hidden": "^1.2.4",
+-        "react-remove-scroll": "^2.7.2"
++        "@radix-ui/react-compose-refs": "1.1.5",
++        "@radix-ui/react-context": "1.2.2",
++        "@radix-ui/react-primitive": "2.1.10",
++        "@radix-ui/react-slot": "1.3.3"
+       },
+       "peerDependencies": {
+         "@types/react": "*",
+         "@types/react-dom": "*",
+         "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
+         "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+       },
+       "peerDependenciesMeta": {
+         "@types/react": {
+           "optional": true
+         },
+         "@types/react-dom": {
+           "optional": true
+         }
+       }
+     },
+-    "node_modules/@radix-ui/react-slot": {
+-      "version": "1.3.0",
+-      "resolved": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.3.0.tgz",
+-      "integrity": "sha512-MojKku4U/miO8Av4Dkb+ctMAQx7JmY96LmtDQlAarCRtd7rN52QCSzBF+XAvr5S6coSVj9HEPBgHAHKEJVk/WA==",
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-compose-refs": {
++      "version": "1.1.5",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-compose-refs/-/react-compose-refs-1.1.5.tgz",
++      "integrity": "sha512-+48PbAAbq3didjJxa+OaWY2ZwgAKsNiRGyeHKszblZMQ+kcpd9pAaT11cMkGEie0vsOi3QdeTE6d5Fe3Gn61kA==",
+       "license": "MIT",
+-      "dependencies": {
+-        "@radix-ui/react-compose-refs": "1.1.3"
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+       },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-context": {
++      "version": "1.2.2",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-context/-/react-context-1.2.2.tgz",
++      "integrity": "sha512-RHCUGwKHDr0hDGg4X7ma4JG4/+12qxw8rkh5QKdDldlCvtja6nUx1Ef/8HVrJze81lEsgLQlqjzjGNHantgnQA==",
++      "license": "MIT",
+       "peerDependencies": {
+         "@types/react": "*",
+         "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+       },
+       "peerDependenciesMeta": {
+         "@types/react": {
+           "optional": true
+         }
+       }
+     },
+-    "node_modules/@radix-ui/react-use-callback-ref": {
+-      "version": "1.1.2",
+-      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-callback-ref/-/react-use-callback-ref-1.1.2.tgz",
+-      "integrity": "sha512-xCso9j1/u8sEgP1RNHjFrXJLApL8LiqOkI1R4ywuN00rxWdYg4oQXuwKLS3i0j5NWLromUD27/4nlxj2UFVvIw==",
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-direction": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-direction/-/react-direction-1.1.4.tgz",
++      "integrity": "sha512-5pzg4FGQNpExhnhT2zlrP1wZFaYCd1K0nYWoFAdcYoYK868IEigqMX3B3f8yIoRlAhAeDWciLI6ZdCKHF9P4Vg==",
+       "license": "MIT",
+       "peerDependencies": {
+         "@types/react": "*",
+         "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+       },
+       "peerDependenciesMeta": {
+         "@types/react": {
+           "optional": true
+         }
+       }
+     },
+-    "node_modules/@radix-ui/react-use-controllable-state": {
+-      "version": "1.2.3",
+-      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-controllable-state/-/react-use-controllable-state-1.2.3.tgz",
+-      "integrity": "sha512-PLzC90MS+ReootmjC597dvopoelpZ8Q61HJkDXZSExitIq7PL55vHNnesAHwguHK0aPfBnpdNzQtv1uliaqQrA==",
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-id": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-id/-/react-id-1.1.4.tgz",
++      "integrity": "sha512-TMQp2llA+RYn7JcjnrMnz7wN4pcVttPZnRZo52PLQsoLVKzNlVwUeHmfePgTgRluXFvlD3GD5g5MOVVTJCO0qA==",
+       "license": "MIT",
+       "dependencies": {
+-        "@radix-ui/react-use-effect-event": "0.0.3",
+-        "@radix-ui/react-use-layout-effect": "1.1.2"
++        "@radix-ui/react-use-layout-effect": "1.1.4"
+       },
+       "peerDependencies": {
+         "@types/react": "*",
+         "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+       },
+       "peerDependenciesMeta": {
+         "@types/react": {
+           "optional": true
+         }
+       }
+     },
+-    "node_modules/@radix-ui/react-use-effect-event": {
+-      "version": "0.0.3",
+-      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-effect-event/-/react-use-effect-event-0.0.3.tgz",
+-      "integrity": "sha512-6c8ZqvPTWILEKnyVkP53EGRCcpnJiKTC21sS/6R1GF5xKyHJJWQEPfkqlcgUkdRQivd6tb23abUwe4ngWmY0JA==",
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-primitive": {
++      "version": "2.1.10",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-primitive/-/react-primitive-2.1.10.tgz",
++      "integrity": "sha512-MucOnzh6hR5mid6VpkbglRAMYMjKLqRnGBbjXkzjK52fuQDd1qbkx78a5P40mkcnVXJdEVxm26E9OPAiUq7nBg==",
+       "license": "MIT",
+       "dependencies": {
+-        "@radix-ui/react-use-layout-effect": "1.1.2"
++        "@radix-ui/react-slot": "1.3.3"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-slot": {
++      "version": "1.3.3",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.3.3.tgz",
++      "integrity": "sha512-qx7oqnYbxnK9kYI9m317qmFmEgo6ywqWvbTogdj7cL9p3/yx4M48p7Rnw5z3H890cL/ow/EeWJsuTykeZVXP5Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-compose-refs": "1.1.5"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+       },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-use-callback-ref": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-callback-ref/-/react-use-callback-ref-1.1.4.tgz",
++      "integrity": "sha512-R6OUY2e2fA6Yn6s+VSx5KBV6Nx8LQEhu+cz7LCej18rQ1HLyg9PSC9jP/ZNx0o6FAIK9c0F1kHylzSxKsdlkrQ==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-use-controllable-state": {
++      "version": "1.2.6",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-controllable-state/-/react-use-controllable-state-1.2.6.tgz",
++      "integrity": "sha512-uEQJGT97ZA/TgP/Hydw47lHu+/vQj6z/0jA+WeTbK1o9Rx45GImjpD0tc3W5ad3D6XTSR6e1yEO0FvGq6WQfVQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/primitive": "1.1.7",
++        "@radix-ui/react-use-effect-event": "0.0.5",
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-use-effect-event": {
++      "version": "0.0.5",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-effect-event/-/react-use-effect-event-0.0.5.tgz",
++      "integrity": "sha512-7cshFL8HGS/7HEiHH+9kL9HBwp2sa9yX18Knwek6KYWmXwM7pegMgta2AXMQKI+rq3JnfSj9x8wYqFMTdG1Jgg==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-roving-focus/node_modules/@radix-ui/react-use-layout-effect": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-layout-effect/-/react-use-layout-effect-1.1.4.tgz",
++      "integrity": "sha512-K20DkRkUwDnxEYMBPcg3Y6voLkEy5p5QQmszZgLngKKiC7dzBR/aEuK3w1qlx2JWDUNH6FluahYdgR3BP+QbYw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-select": {
++      "version": "2.3.3",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-select/-/react-select-2.3.3.tgz",
++      "integrity": "sha512-L5RQTXz6Anxsf9CCv+pTgiAsUpyVj7rJxsGtmhFaEOJ++cVfXucv4qWfsIO0AIB4NAhi3yovWGVMKKS1Xf1Wrg==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/number": "1.1.2",
++        "@radix-ui/primitive": "1.1.5",
++        "@radix-ui/react-collection": "1.1.12",
++        "@radix-ui/react-compose-refs": "1.1.3",
++        "@radix-ui/react-context": "1.2.0",
++        "@radix-ui/react-direction": "1.1.2",
++        "@radix-ui/react-dismissable-layer": "1.1.15",
++        "@radix-ui/react-focus-guards": "1.1.4",
++        "@radix-ui/react-focus-scope": "1.1.12",
++        "@radix-ui/react-id": "1.1.2",
++        "@radix-ui/react-popper": "1.3.3",
++        "@radix-ui/react-portal": "1.1.13",
++        "@radix-ui/react-presence": "1.1.7",
++        "@radix-ui/react-primitive": "2.1.7",
++        "@radix-ui/react-slot": "1.3.0",
++        "@radix-ui/react-use-callback-ref": "1.1.2",
++        "@radix-ui/react-use-controllable-state": "1.2.3",
++        "@radix-ui/react-use-layout-effect": "1.1.2",
++        "@radix-ui/react-use-previous": "1.1.2",
++        "@radix-ui/react-visually-hidden": "1.2.7",
++        "aria-hidden": "^1.2.4",
++        "react-remove-scroll": "^2.7.2"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-slot": {
++      "version": "1.3.0",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.3.0.tgz",
++      "integrity": "sha512-MojKku4U/miO8Av4Dkb+ctMAQx7JmY96LmtDQlAarCRtd7rN52QCSzBF+XAvr5S6coSVj9HEPBgHAHKEJVk/WA==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-compose-refs": "1.1.3"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch": {
++      "version": "1.3.7",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-switch/-/react-switch-1.3.7.tgz",
++      "integrity": "sha512-48tB/4dn2UVLBCYhTu9AuR63IHl73l/qLbLgxd86noTUor4/K4LFDAcYjK+isP5313qxaFpjPVogE7+Y0/V3Kw==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/primitive": "1.1.7",
++        "@radix-ui/react-compose-refs": "1.1.5",
++        "@radix-ui/react-context": "1.2.2",
++        "@radix-ui/react-primitive": "2.1.10",
++        "@radix-ui/react-use-controllable-state": "1.2.6",
++        "@radix-ui/react-use-size": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/primitive": {
++      "version": "1.1.7",
++      "resolved": "https://registry.npmjs.org/@radix-ui/primitive/-/primitive-1.1.7.tgz",
++      "integrity": "sha512-rqWnm76nYT8HoNNqEjpgJ7Pw/DrBj5iBTrmEPo6HTX5+VJyBNOqTdv4g89G63HuR5g0AaENoAcH7Is5fF2kZ8Q==",
++      "license": "MIT"
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/react-compose-refs": {
++      "version": "1.1.5",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-compose-refs/-/react-compose-refs-1.1.5.tgz",
++      "integrity": "sha512-+48PbAAbq3didjJxa+OaWY2ZwgAKsNiRGyeHKszblZMQ+kcpd9pAaT11cMkGEie0vsOi3QdeTE6d5Fe3Gn61kA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/react-context": {
++      "version": "1.2.2",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-context/-/react-context-1.2.2.tgz",
++      "integrity": "sha512-RHCUGwKHDr0hDGg4X7ma4JG4/+12qxw8rkh5QKdDldlCvtja6nUx1Ef/8HVrJze81lEsgLQlqjzjGNHantgnQA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/react-primitive": {
++      "version": "2.1.10",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-primitive/-/react-primitive-2.1.10.tgz",
++      "integrity": "sha512-MucOnzh6hR5mid6VpkbglRAMYMjKLqRnGBbjXkzjK52fuQDd1qbkx78a5P40mkcnVXJdEVxm26E9OPAiUq7nBg==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-slot": "1.3.3"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/react-slot": {
++      "version": "1.3.3",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.3.3.tgz",
++      "integrity": "sha512-qx7oqnYbxnK9kYI9m317qmFmEgo6ywqWvbTogdj7cL9p3/yx4M48p7Rnw5z3H890cL/ow/EeWJsuTykeZVXP5Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-compose-refs": "1.1.5"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/react-use-controllable-state": {
++      "version": "1.2.6",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-controllable-state/-/react-use-controllable-state-1.2.6.tgz",
++      "integrity": "sha512-uEQJGT97ZA/TgP/Hydw47lHu+/vQj6z/0jA+WeTbK1o9Rx45GImjpD0tc3W5ad3D6XTSR6e1yEO0FvGq6WQfVQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/primitive": "1.1.7",
++        "@radix-ui/react-use-effect-event": "0.0.5",
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/react-use-effect-event": {
++      "version": "0.0.5",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-effect-event/-/react-use-effect-event-0.0.5.tgz",
++      "integrity": "sha512-7cshFL8HGS/7HEiHH+9kL9HBwp2sa9yX18Knwek6KYWmXwM7pegMgta2AXMQKI+rq3JnfSj9x8wYqFMTdG1Jgg==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/react-use-layout-effect": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-layout-effect/-/react-use-layout-effect-1.1.4.tgz",
++      "integrity": "sha512-K20DkRkUwDnxEYMBPcg3Y6voLkEy5p5QQmszZgLngKKiC7dzBR/aEuK3w1qlx2JWDUNH6FluahYdgR3BP+QbYw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-switch/node_modules/@radix-ui/react-use-size": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-size/-/react-use-size-1.1.4.tgz",
++      "integrity": "sha512-D3anSY15EJoxrihpsXI6SMrmmonnQtR2ni7arO+Lfdg3O95b9hNXxONk8jA5C8ANdF/h5HMAxejgs8PWJ6rlhw==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs": {
++      "version": "1.1.21",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-tabs/-/react-tabs-1.1.21.tgz",
++      "integrity": "sha512-UKxJlZid7FVtsk/WTxj4i4uSEgj2Au+KBbS7SQyTlzMhhn+86Cz3tISZdTa87bfEfcuvZezf2ZsxD4xuEKtkog==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/primitive": "1.1.7",
++        "@radix-ui/react-context": "1.2.2",
++        "@radix-ui/react-direction": "1.1.4",
++        "@radix-ui/react-id": "1.1.4",
++        "@radix-ui/react-presence": "1.1.10",
++        "@radix-ui/react-primitive": "2.1.10",
++        "@radix-ui/react-roving-focus": "1.1.19",
++        "@radix-ui/react-use-controllable-state": "1.2.6"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/primitive": {
++      "version": "1.1.7",
++      "resolved": "https://registry.npmjs.org/@radix-ui/primitive/-/primitive-1.1.7.tgz",
++      "integrity": "sha512-rqWnm76nYT8HoNNqEjpgJ7Pw/DrBj5iBTrmEPo6HTX5+VJyBNOqTdv4g89G63HuR5g0AaENoAcH7Is5fF2kZ8Q==",
++      "license": "MIT"
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-compose-refs": {
++      "version": "1.1.5",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-compose-refs/-/react-compose-refs-1.1.5.tgz",
++      "integrity": "sha512-+48PbAAbq3didjJxa+OaWY2ZwgAKsNiRGyeHKszblZMQ+kcpd9pAaT11cMkGEie0vsOi3QdeTE6d5Fe3Gn61kA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-context": {
++      "version": "1.2.2",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-context/-/react-context-1.2.2.tgz",
++      "integrity": "sha512-RHCUGwKHDr0hDGg4X7ma4JG4/+12qxw8rkh5QKdDldlCvtja6nUx1Ef/8HVrJze81lEsgLQlqjzjGNHantgnQA==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-direction": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-direction/-/react-direction-1.1.4.tgz",
++      "integrity": "sha512-5pzg4FGQNpExhnhT2zlrP1wZFaYCd1K0nYWoFAdcYoYK868IEigqMX3B3f8yIoRlAhAeDWciLI6ZdCKHF9P4Vg==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-id": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-id/-/react-id-1.1.4.tgz",
++      "integrity": "sha512-TMQp2llA+RYn7JcjnrMnz7wN4pcVttPZnRZo52PLQsoLVKzNlVwUeHmfePgTgRluXFvlD3GD5g5MOVVTJCO0qA==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-presence": {
++      "version": "1.1.10",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-presence/-/react-presence-1.1.10.tgz",
++      "integrity": "sha512-3wyzCQ6+ubRA+D4uv9m95JYLXxmOHp05qjrkjeA7uKHHtjpPggQzc6DAb0URl7j67oR0K2foO4ip27TiX037Bw==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-primitive": {
++      "version": "2.1.10",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-primitive/-/react-primitive-2.1.10.tgz",
++      "integrity": "sha512-MucOnzh6hR5mid6VpkbglRAMYMjKLqRnGBbjXkzjK52fuQDd1qbkx78a5P40mkcnVXJdEVxm26E9OPAiUq7nBg==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-slot": "1.3.3"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "@types/react-dom": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc",
++        "react-dom": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        },
++        "@types/react-dom": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-slot": {
++      "version": "1.3.3",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.3.3.tgz",
++      "integrity": "sha512-qx7oqnYbxnK9kYI9m317qmFmEgo6ywqWvbTogdj7cL9p3/yx4M48p7Rnw5z3H890cL/ow/EeWJsuTykeZVXP5Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-compose-refs": "1.1.5"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-use-controllable-state": {
++      "version": "1.2.6",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-controllable-state/-/react-use-controllable-state-1.2.6.tgz",
++      "integrity": "sha512-uEQJGT97ZA/TgP/Hydw47lHu+/vQj6z/0jA+WeTbK1o9Rx45GImjpD0tc3W5ad3D6XTSR6e1yEO0FvGq6WQfVQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/primitive": "1.1.7",
++        "@radix-ui/react-use-effect-event": "0.0.5",
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-use-effect-event": {
++      "version": "0.0.5",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-effect-event/-/react-use-effect-event-0.0.5.tgz",
++      "integrity": "sha512-7cshFL8HGS/7HEiHH+9kL9HBwp2sa9yX18Knwek6KYWmXwM7pegMgta2AXMQKI+rq3JnfSj9x8wYqFMTdG1Jgg==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.4"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-tabs/node_modules/@radix-ui/react-use-layout-effect": {
++      "version": "1.1.4",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-layout-effect/-/react-use-layout-effect-1.1.4.tgz",
++      "integrity": "sha512-K20DkRkUwDnxEYMBPcg3Y6voLkEy5p5QQmszZgLngKKiC7dzBR/aEuK3w1qlx2JWDUNH6FluahYdgR3BP+QbYw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-use-callback-ref": {
++      "version": "1.1.2",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-callback-ref/-/react-use-callback-ref-1.1.2.tgz",
++      "integrity": "sha512-xCso9j1/u8sEgP1RNHjFrXJLApL8LiqOkI1R4ywuN00rxWdYg4oQXuwKLS3i0j5NWLromUD27/4nlxj2UFVvIw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-use-controllable-state": {
++      "version": "1.2.3",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-controllable-state/-/react-use-controllable-state-1.2.3.tgz",
++      "integrity": "sha512-PLzC90MS+ReootmjC597dvopoelpZ8Q61HJkDXZSExitIq7PL55vHNnesAHwguHK0aPfBnpdNzQtv1uliaqQrA==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-effect-event": "0.0.3",
++        "@radix-ui/react-use-layout-effect": "1.1.2"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-use-effect-event": {
++      "version": "0.0.3",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-effect-event/-/react-use-effect-event-0.0.3.tgz",
++      "integrity": "sha512-6c8ZqvPTWILEKnyVkP53EGRCcpnJiKTC21sS/6R1GF5xKyHJJWQEPfkqlcgUkdRQivd6tb23abUwe4ngWmY0JA==",
++      "license": "MIT",
++      "dependencies": {
++        "@radix-ui/react-use-layout-effect": "1.1.2"
++      },
++      "peerDependencies": {
++        "@types/react": "*",
++        "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@radix-ui/react-use-is-hydrated": {
++      "version": "0.1.3",
++      "resolved": "https://registry.npmjs.org/@radix-ui/react-use-is-hydrated/-/react-use-is-hydrated-0.1.3.tgz",
++      "integrity": "sha512-umO/aJ+82CpOnhDZUTbILCQf7kU/g0iv+oGs/Q8jw7IkhWBzaEP4sA268PhFAJTFetbwp3ICc6ktpI4TqtxcIw==",
++      "license": "MIT",
+       "peerDependencies": {
+         "@types/react": "*",
+         "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+       },
+       "peerDependenciesMeta": {
+         "@types/react": {
+           "optional": true
+         }
+diff --git a/package.json b/package.json
+index 82f5414..e861709 100644
+--- a/package.json
++++ b/package.json
+@@ -13,20 +13,23 @@
+     "test:coverage": "vitest run --coverage",
+     "typecheck:scripts": "tsc -p scripts/tsconfig.json --noEmit",
+     "seed:demo": "tsx scripts/seed-demo-salon.ts",
+     "seed:demo:check": "tsx scripts/seed-demo-salon.ts --check",
+     "teardown:demo": "tsx scripts/teardown-demo-salon.ts",
+     "teardown:demo:check": "tsx scripts/teardown-demo-salon.ts --check"
+   },
+   "dependencies": {
++    "@radix-ui/react-checkbox": "^1.3.11",
+     "@radix-ui/react-dialog": "^1.1.19",
+     "@radix-ui/react-label": "^2.1.0",
+     "@radix-ui/react-select": "^2.3.3",
+     "@radix-ui/react-slot": "^1.1.0",
++    "@radix-ui/react-switch": "^1.3.7",
++    "@radix-ui/react-tabs": "^1.1.21",
+     "@supabase/ssr": "^0.5.2",
+     "@supabase/supabase-js": "2.49.4",
+     "@tanstack/react-query": "^5.101.2",
+     "@zxing/browser": "^0.1.5",
+     "class-variance-authority": "^0.7.0",
+     "clsx": "^2.1.1",
+     "date-fns": "^3.6.0",
+     "lucide-react": "^0.446.0",
+diff --git a/src/app/(dashboard)/carta/carta-view.tsx b/src/app/(dashboard)/carta/carta-view.tsx
+new file mode 100644
+index 0000000..2bf49e2
+--- /dev/null
++++ b/src/app/(dashboard)/carta/carta-view.tsx
+@@ -0,0 +1,985 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Layers, Pencil, Plus, Trash2, UtensilsCrossed } from "lucide-react";
++
++import { ALLERGEN_LABELS, MenuItemForm } from "@/app/(dashboard)/carta/menu-item-form";
++import { CategoryForm } from "@/app/(dashboard)/carta/category-form";
++import { CsvImportDialog } from "@/app/(dashboard)/carta/csv-import-dialog";
++import { ModifierGroupForm } from "@/app/(dashboard)/carta/modifier-group-form";
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import { Card, CardContent } from "@/components/ui/card";
++import { Checkbox } from "@/components/ui/checkbox";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { Skeleton } from "@/components/ui/skeleton";
++import {
++  Table,
++  TableBody,
++  TableCell,
++  TableHead,
++  TableHeader,
++  TableRow,
++} from "@/components/ui/table";
++import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
++import {
++  useComboComponents,
++  useCreateCategory,
++  useCreateStation,
++  useDeleteCategory,
++  useDeleteMenuProduct,
++  useDeleteStation,
++  useMenuCategories,
++  useMenuProducts,
++  useModifierGroups,
++  useProductModifierGroups,
++  useSaveCombo,
++  useSetProductModifierGroups,
++  useStations,
++} from "@/hooks/use-menu";
++import { formatMoney } from "@/lib/format";
++import type { MenuCategory, ModifierGroup, Product, Station } from "@/types/database";
++
++interface CartaViewProps {
++  salonId: string;
++}
++
++/**
++ * Backoffice de la carta (restauración): 4 pestañas —Categorías, Productos,
++ * Modificadores, Combos— más el importador CSV. Cada pestaña lista con su
++ * hook de lectura de `@/hooks/use-menu` y abre el formulario correspondiente
++ * en un `Dialog`, siguiendo el mismo patrón (Table + Dialog crear/editar +
++ * Dialog de confirmación de borrado) que `products/products-view.tsx`.
++ */
++export function CartaView({ salonId }: CartaViewProps): React.ReactElement {
++  return (
++    <main className="container py-10">
++      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
++        <div>
++          <h1 className="text-3xl font-bold tracking-tight">Carta</h1>
++          <p className="text-muted-foreground">
++            Categorías, productos, modificadores y combos de tu carta.
++          </p>
++        </div>
++        <CsvImportDialog salonId={salonId} />
++      </div>
++
++      <Tabs defaultValue="categorias">
++        <TabsList>
++          <TabsTrigger value="categorias">Categorías</TabsTrigger>
++          <TabsTrigger value="productos">Productos</TabsTrigger>
++          <TabsTrigger value="modificadores">Modificadores</TabsTrigger>
++          <TabsTrigger value="combos">Combos</TabsTrigger>
++        </TabsList>
++
++        <TabsContent value="categorias">
++          <div className="grid gap-6 lg:grid-cols-2">
++            <CategoriesSection salonId={salonId} />
++            <StationsSection salonId={salonId} />
++          </div>
++        </TabsContent>
++
++        <TabsContent value="productos">
++          <ProductsSection salonId={salonId} />
++        </TabsContent>
++
++        <TabsContent value="modificadores">
++          <ModifiersSection salonId={salonId} />
++        </TabsContent>
++
++        <TabsContent value="combos">
++          <CombosSection salonId={salonId} />
++        </TabsContent>
++      </Tabs>
++    </main>
++  );
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Categorías / Estaciones — misma forma (nombre + orden), comparten
++// `CategoryForm`; cada sección es su propia tarjeta con lista + alta + borrado.
++// ─────────────────────────────────────────────────────────────────────────────
++
++function CategoriesSection({ salonId }: { salonId: string }): React.ReactElement {
++  const categoriesQuery = useMenuCategories(salonId);
++  const createMutation = useCreateCategory(salonId);
++  const deleteMutation = useDeleteCategory(salonId);
++  const [createOpen, setCreateOpen] = useState(false);
++  const [deleting, setDeleting] = useState<MenuCategory | null>(null);
++
++  const categories = categoriesQuery.data ?? [];
++
++  return (
++    <Card>
++      <CardContent className="pt-6">
++        <div className="mb-4 flex items-center justify-between">
++          <h2 className="text-lg font-semibold">Categorías</h2>
++          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
++            <Button size="sm" onClick={() => setCreateOpen(true)}>
++              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++              Nueva
++            </Button>
++            <DialogContent>
++              <DialogHeader>
++                <DialogTitle>Nueva categoría</DialogTitle>
++                <DialogDescription>Añade una categoría a la carta.</DialogDescription>
++              </DialogHeader>
++              <CategoryForm
++                idPrefix="category"
++                entityLabel="categoría"
++                submitLabel="Crear categoría"
++                pending={createMutation.isPending}
++                error={
++                  createMutation.error instanceof Error ? createMutation.error.message : null
++                }
++                onCancel={() => setCreateOpen(false)}
++                onSubmit={(input) =>
++                  createMutation.mutate(input, { onSuccess: () => setCreateOpen(false) })
++                }
++              />
++            </DialogContent>
++          </Dialog>
++        </div>
++
++        {categoriesQuery.isPending ? (
++          <Skeleton className="h-24 w-full" />
++        ) : categories.length === 0 ? (
++          <p className="text-sm text-muted-foreground">Aún no hay categorías.</p>
++        ) : (
++          <ul className="divide-y rounded-md border">
++            {categories.map((category) => (
++              <li
++                key={category.id}
++                className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
++              >
++                <span>{category.name}</span>
++                <Button
++                  variant="ghost"
++                  size="icon"
++                  aria-label={`Eliminar ${category.name}`}
++                  onClick={() => setDeleting(category)}
++                >
++                  <Trash2 className="h-4 w-4 text-destructive" />
++                </Button>
++              </li>
++            ))}
++          </ul>
++        )}
++      </CardContent>
++
++      <Dialog
++        open={deleting !== null}
++        onOpenChange={(open) => {
++          if (!open) {
++            setDeleting(null);
++            deleteMutation.reset();
++          }
++        }}
++      >
++        <DialogContent>
++          <DialogHeader>
++            <DialogTitle>Eliminar categoría</DialogTitle>
++            <DialogDescription>
++              ¿Seguro que quieres eliminar «{deleting?.name}»? Los productos de esta
++              categoría quedarán sin categoría.
++            </DialogDescription>
++          </DialogHeader>
++          {deleteMutation.error instanceof Error ? (
++            <p role="alert" className="text-sm text-destructive">
++              {deleteMutation.error.message}
++            </p>
++          ) : null}
++          <DialogFooter>
++            <Button
++              variant="outline"
++              onClick={() => setDeleting(null)}
++              disabled={deleteMutation.isPending}
++            >
++              Cancelar
++            </Button>
++            <Button
++              variant="destructive"
++              disabled={deleteMutation.isPending}
++              onClick={() => {
++                if (deleting === null) return;
++                deleteMutation.mutate(deleting.id, { onSuccess: () => setDeleting(null) });
++              }}
++            >
++              {deleteMutation.isPending ? "Eliminando…" : "Eliminar"}
++            </Button>
++          </DialogFooter>
++        </DialogContent>
++      </Dialog>
++    </Card>
++  );
++}
++
++function StationsSection({ salonId }: { salonId: string }): React.ReactElement {
++  const stationsQuery = useStations(salonId);
++  const createMutation = useCreateStation(salonId);
++  const deleteMutation = useDeleteStation(salonId);
++  const [createOpen, setCreateOpen] = useState(false);
++  const [deleting, setDeleting] = useState<Station | null>(null);
++
++  const stations = stationsQuery.data ?? [];
++
++  return (
++    <Card>
++      <CardContent className="pt-6">
++        <div className="mb-4 flex items-center justify-between">
++          <h2 className="text-lg font-semibold">Estaciones</h2>
++          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
++            <Button size="sm" onClick={() => setCreateOpen(true)}>
++              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++              Nueva
++            </Button>
++            <DialogContent>
++              <DialogHeader>
++                <DialogTitle>Nueva estación</DialogTitle>
++                <DialogDescription>
++                  Añade un punto de producción (cocina, barra, plancha…).
++                </DialogDescription>
++              </DialogHeader>
++              <CategoryForm
++                idPrefix="station"
++                entityLabel="estación"
++                submitLabel="Crear estación"
++                pending={createMutation.isPending}
++                error={
++                  createMutation.error instanceof Error ? createMutation.error.message : null
++                }
++                onCancel={() => setCreateOpen(false)}
++                onSubmit={(input) =>
++                  createMutation.mutate(input, { onSuccess: () => setCreateOpen(false) })
++                }
++              />
++            </DialogContent>
++          </Dialog>
++        </div>
++
++        {stationsQuery.isPending ? (
++          <Skeleton className="h-24 w-full" />
++        ) : stations.length === 0 ? (
++          <p className="text-sm text-muted-foreground">Aún no hay estaciones.</p>
++        ) : (
++          <ul className="divide-y rounded-md border">
++            {stations.map((station) => (
++              <li
++                key={station.id}
++                className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
++              >
++                <span>{station.name}</span>
++                <Button
++                  variant="ghost"
++                  size="icon"
++                  aria-label={`Eliminar ${station.name}`}
++                  onClick={() => setDeleting(station)}
++                >
++                  <Trash2 className="h-4 w-4 text-destructive" />
++                </Button>
++              </li>
++            ))}
++          </ul>
++        )}
++      </CardContent>
++
++      <Dialog
++        open={deleting !== null}
++        onOpenChange={(open) => {
++          if (!open) {
++            setDeleting(null);
++            deleteMutation.reset();
++          }
++        }}
++      >
++        <DialogContent>
++          <DialogHeader>
++            <DialogTitle>Eliminar estación</DialogTitle>
++            <DialogDescription>
++              ¿Seguro que quieres eliminar «{deleting?.name}»? Los productos de esta
++              estación quedarán sin estación.
++            </DialogDescription>
++          </DialogHeader>
++          {deleteMutation.error instanceof Error ? (
++            <p role="alert" className="text-sm text-destructive">
++              {deleteMutation.error.message}
++            </p>
++          ) : null}
++          <DialogFooter>
++            <Button
++              variant="outline"
++              onClick={() => setDeleting(null)}
++              disabled={deleteMutation.isPending}
++            >
++              Cancelar
++            </Button>
++            <Button
++              variant="destructive"
++              disabled={deleteMutation.isPending}
++              onClick={() => {
++                if (deleting === null) return;
++                deleteMutation.mutate(deleting.id, { onSuccess: () => setDeleting(null) });
++              }}
++            >
++              {deleteMutation.isPending ? "Eliminando…" : "Eliminar"}
++            </Button>
++          </DialogFooter>
++        </DialogContent>
++      </Dialog>
++    </Card>
++  );
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Productos — tabla con alta/edición (`MenuItemForm`), borrado y el selector
++// de grupos de modificadores por producto (`ProductModifierGroupsDialog`).
++// ─────────────────────────────────────────────────────────────────────────────
++
++function ProductsSection({ salonId }: { salonId: string }): React.ReactElement {
++  const productsQuery = useMenuProducts(salonId);
++  const categoriesQuery = useMenuCategories(salonId);
++  const stationsQuery = useStations(salonId);
++  const deleteMutation = useDeleteMenuProduct(salonId);
++
++  const [createOpen, setCreateOpen] = useState(false);
++  const [editing, setEditing] = useState<Product | null>(null);
++  const [deleting, setDeleting] = useState<Product | null>(null);
++  const [modifiersFor, setModifiersFor] = useState<Product | null>(null);
++
++  const products = productsQuery.data ?? [];
++  const categoryNameById = new Map(
++    (categoriesQuery.data ?? []).map((category) => [category.id, category.name]),
++  );
++  const stationNameById = new Map(
++    (stationsQuery.data ?? []).map((station) => [station.id, station.name]),
++  );
++
++  return (
++    <Card>
++      <CardContent className="pt-6">
++        <div className="mb-4 flex items-center justify-between">
++          <h2 className="text-lg font-semibold">Productos</h2>
++          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
++            <Button size="sm" onClick={() => setCreateOpen(true)}>
++              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++              Nuevo producto
++            </Button>
++            <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
++              <DialogHeader>
++                <DialogTitle>Nuevo producto</DialogTitle>
++                <DialogDescription>Añade un producto a la carta.</DialogDescription>
++              </DialogHeader>
++              <MenuItemForm salonId={salonId} onSaved={() => setCreateOpen(false)} />
++            </DialogContent>
++          </Dialog>
++        </div>
++
++        {productsQuery.isPending ? (
++          <Skeleton className="h-32 w-full" />
++        ) : products.length === 0 ? (
++          <div className="py-10 text-center">
++            <UtensilsCrossed className="mx-auto mb-2 h-8 w-8 text-muted-foreground" aria-hidden="true" />
++            <p className="text-sm text-muted-foreground">
++              Aún no hay productos. Crea el primero o importa un CSV.
++            </p>
++          </div>
++        ) : (
++          <Table>
++            <TableHeader>
++              <TableRow>
++                <TableHead>Nombre</TableHead>
++                <TableHead className="text-right">Precio</TableHead>
++                <TableHead className="text-right">IVA</TableHead>
++                <TableHead>Categoría</TableHead>
++                <TableHead>Estación</TableHead>
++                <TableHead>Tipo</TableHead>
++                <TableHead className="w-[1%] text-right">Acciones</TableHead>
++              </TableRow>
++            </TableHeader>
++            <TableBody>
++              {products.map((product) => (
++                <TableRow key={product.id}>
++                  <TableCell className="font-medium">
++                    {product.name}
++                    {product.allergens.length > 0 ? (
++                      <span className="block text-xs font-normal text-muted-foreground">
++                        {product.allergens.map((allergen) => ALLERGEN_LABELS[allergen]).join(", ")}
++                      </span>
++                    ) : null}
++                  </TableCell>
++                  <TableCell className="text-right tabular-nums">
++                    {formatMoney(product.price_cents)}
++                  </TableCell>
++                  <TableCell className="text-right tabular-nums text-muted-foreground">
++                    {product.vat_rate}%
++                  </TableCell>
++                  <TableCell className="text-muted-foreground">
++                    {product.category_id !== null
++                      ? categoryNameById.get(product.category_id) ?? "—"
++                      : "—"}
++                  </TableCell>
++                  <TableCell className="text-muted-foreground">
++                    {product.station_id !== null
++                      ? stationNameById.get(product.station_id) ?? "—"
++                      : "—"}
++                  </TableCell>
++                  <TableCell>
++                    {product.is_combo ? (
++                      <Badge variant="secondary">Combo</Badge>
++                    ) : (
++                      <Badge variant="outline">Simple</Badge>
++                    )}
++                  </TableCell>
++                  <TableCell className="text-right">
++                    <div className="flex justify-end gap-1">
++                      <Button
++                        variant="ghost"
++                        size="icon"
++                        aria-label={`Modificadores de ${product.name}`}
++                        onClick={() => setModifiersFor(product)}
++                      >
++                        <Layers className="h-4 w-4" />
++                      </Button>
++                      <Button
++                        variant="ghost"
++                        size="icon"
++                        aria-label={`Editar ${product.name}`}
++                        onClick={() => setEditing(product)}
++                      >
++                        <Pencil className="h-4 w-4" />
++                      </Button>
++                      <Button
++                        variant="ghost"
++                        size="icon"
++                        aria-label={`Eliminar ${product.name}`}
++                        onClick={() => setDeleting(product)}
++                      >
++                        <Trash2 className="h-4 w-4 text-destructive" />
++                      </Button>
++                    </div>
++                  </TableCell>
++                </TableRow>
++              ))}
++            </TableBody>
++          </Table>
++        )}
++      </CardContent>
++
++      <Dialog
++        open={editing !== null}
++        onOpenChange={(open) => {
++          if (!open) setEditing(null);
++        }}
++      >
++        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
++          <DialogHeader>
++            <DialogTitle>Editar producto</DialogTitle>
++            <DialogDescription>Actualiza los datos del producto.</DialogDescription>
++          </DialogHeader>
++          {editing !== null ? (
++            <MenuItemForm
++              key={editing.id}
++              salonId={salonId}
++              product={editing}
++              onSaved={() => setEditing(null)}
++            />
++          ) : null}
++        </DialogContent>
++      </Dialog>
++
++      <Dialog
++        open={deleting !== null}
++        onOpenChange={(open) => {
++          if (!open) {
++            setDeleting(null);
++            deleteMutation.reset();
++          }
++        }}
++      >
++        <DialogContent>
++          <DialogHeader>
++            <DialogTitle>Eliminar producto</DialogTitle>
++            <DialogDescription>
++              ¿Seguro que quieres eliminar «{deleting?.name}»? Esta acción no se puede
++              deshacer.
++            </DialogDescription>
++          </DialogHeader>
++          {deleteMutation.error instanceof Error ? (
++            <p role="alert" className="text-sm text-destructive">
++              {deleteMutation.error.message}
++            </p>
++          ) : null}
++          <DialogFooter>
++            <Button
++              variant="outline"
++              onClick={() => setDeleting(null)}
++              disabled={deleteMutation.isPending}
++            >
++              Cancelar
++            </Button>
++            <Button
++              variant="destructive"
++              disabled={deleteMutation.isPending}
++              onClick={() => {
++                if (deleting === null) return;
++                deleteMutation.mutate(deleting.id, { onSuccess: () => setDeleting(null) });
++              }}
++            >
++              {deleteMutation.isPending ? "Eliminando…" : "Eliminar"}
++            </Button>
++          </DialogFooter>
++        </DialogContent>
++      </Dialog>
++
++      <ProductModifierGroupsDialog
++        salonId={salonId}
++        product={modifiersFor}
++        onClose={() => setModifiersFor(null)}
++      />
++    </Card>
++  );
++}
++
++/**
++ * Selector de grupos de modificadores de UN producto. `setProductModifierGroups`
++ * (Server Action) SIEMPRE reemplaza la asignación completa — por eso precarga
++ * la asignación actual vía `useProductModifierGroups` antes de dejar guardar,
++ * igual que `ModifierGroupForm` precarga las opciones al editar un grupo.
++ */
++function ProductModifierGroupsDialog({
++  salonId,
++  product,
++  onClose,
++}: {
++  salonId: string;
++  product: Product | null;
++  onClose: () => void;
++}): React.ReactElement {
++  const groupsQuery = useModifierGroups(salonId);
++  const assignedQuery = useProductModifierGroups(salonId, product?.id ?? null);
++  const setMutation = useSetProductModifierGroups(salonId);
++  const [selected, setSelected] = useState<string[]>([]);
++  const [ready, setReady] = useState(false);
++
++  useEffect(() => {
++    if (product === null) {
++      setReady(false);
++      return;
++    }
++    if (assignedQuery.data !== undefined) {
++      setSelected(assignedQuery.data);
++      setReady(true);
++    }
++  }, [product, assignedQuery.data]);
++
++  const groups = groupsQuery.data ?? [];
++
++  function toggle(groupId: string, checked: boolean): void {
++    setSelected((prev) => (checked ? [...prev, groupId] : prev.filter((id) => id !== groupId)));
++  }
++
++  return (
++    <Dialog
++      open={product !== null}
++      onOpenChange={(open) => {
++        if (!open) onClose();
++      }}
++    >
++      <DialogContent>
++        <DialogHeader>
++          <DialogTitle>Modificadores de {product?.name}</DialogTitle>
++          <DialogDescription>
++            Elige los grupos de modificadores que se ofrecen con este producto.
++          </DialogDescription>
++        </DialogHeader>
++
++        {!ready ? (
++          <p className="text-sm text-muted-foreground">Cargando…</p>
++        ) : groups.length === 0 ? (
++          <p className="text-sm text-muted-foreground">
++            Todavía no hay grupos de modificadores. Créalos en la pestaña Modificadores.
++          </p>
++        ) : (
++          <ul className="grid gap-2">
++            {groups.map((group) => (
++              <li key={group.id}>
++                <label className="flex items-center gap-2 text-sm" htmlFor={`pmg-${group.id}`}>
++                  <Checkbox
++                    id={`pmg-${group.id}`}
++                    checked={selected.includes(group.id)}
++                    onCheckedChange={(checked) => toggle(group.id, checked === true)}
++                  />
++                  {group.name}
++                </label>
++              </li>
++            ))}
++          </ul>
++        )}
++
++        {setMutation.isError ? (
++          <p role="alert" className="text-sm text-destructive">
++            {setMutation.error.message}
++          </p>
++        ) : null}
++
++        <DialogFooter>
++          <Button type="button" variant="outline" onClick={onClose} disabled={setMutation.isPending}>
++            Cancelar
++          </Button>
++          <Button
++            type="button"
++            disabled={setMutation.isPending || !ready}
++            onClick={() => {
++              if (product === null) return;
++              setMutation.mutate(
++                { productId: product.id, groupIds: selected },
++                { onSuccess: onClose },
++              );
++            }}
++          >
++            {setMutation.isPending ? "Guardando…" : "Guardar"}
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Modificadores — lista de grupos con alta/edición (`ModifierGroupForm`). No
++// hay borrado de grupo: no existe todavía una Server Action `deleteModifierGroup`
++// (fuera del alcance de esta tarea de UI; ver informe).
++// ─────────────────────────────────────────────────────────────────────────────
++
++function ModifiersSection({ salonId }: { salonId: string }): React.ReactElement {
++  const groupsQuery = useModifierGroups(salonId);
++  const [createOpen, setCreateOpen] = useState(false);
++  const [editing, setEditing] = useState<ModifierGroup | null>(null);
++
++  const groups = groupsQuery.data ?? [];
++
++  return (
++    <Card>
++      <CardContent className="pt-6">
++        <div className="mb-4 flex items-center justify-between">
++          <h2 className="text-lg font-semibold">Grupos de modificadores</h2>
++          <Button size="sm" onClick={() => setCreateOpen(true)}>
++            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++            Nuevo grupo
++          </Button>
++        </div>
++
++        {groupsQuery.isPending ? (
++          <Skeleton className="h-24 w-full" />
++        ) : groups.length === 0 ? (
++          <p className="text-sm text-muted-foreground">Aún no hay grupos de modificadores.</p>
++        ) : (
++          <Table>
++            <TableHeader>
++              <TableRow>
++                <TableHead>Nombre</TableHead>
++                <TableHead className="text-right">Mín.</TableHead>
++                <TableHead className="text-right">Máx.</TableHead>
++                <TableHead>Obligatorio</TableHead>
++                <TableHead className="w-[1%] text-right">Acciones</TableHead>
++              </TableRow>
++            </TableHeader>
++            <TableBody>
++              {groups.map((group) => (
++                <TableRow key={group.id}>
++                  <TableCell className="font-medium">{group.name}</TableCell>
++                  <TableCell className="text-right tabular-nums">{group.min_select}</TableCell>
++                  <TableCell className="text-right tabular-nums">{group.max_select}</TableCell>
++                  <TableCell>
++                    {group.required ? (
++                      <Badge variant="secondary">Sí</Badge>
++                    ) : (
++                      <Badge variant="outline">No</Badge>
++                    )}
++                  </TableCell>
++                  <TableCell className="text-right">
++                    <Button
++                      variant="ghost"
++                      size="icon"
++                      aria-label={`Editar ${group.name}`}
++                      onClick={() => setEditing(group)}
++                    >
++                      <Pencil className="h-4 w-4" />
++                    </Button>
++                  </TableCell>
++                </TableRow>
++              ))}
++            </TableBody>
++          </Table>
++        )}
++      </CardContent>
++
++      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
++        <DialogContent className="max-h-[85vh] overflow-y-auto">
++          <DialogHeader>
++            <DialogTitle>Nuevo grupo de modificadores</DialogTitle>
++            <DialogDescription>
++              Define sus opciones y cuántas puede elegir el cliente.
++            </DialogDescription>
++          </DialogHeader>
++          <ModifierGroupForm
++            salonId={salonId}
++            onCancel={() => setCreateOpen(false)}
++            onSaved={() => setCreateOpen(false)}
++          />
++        </DialogContent>
++      </Dialog>
++
++      <Dialog
++        open={editing !== null}
++        onOpenChange={(open) => {
++          if (!open) setEditing(null);
++        }}
++      >
++        <DialogContent className="max-h-[85vh] overflow-y-auto">
++          <DialogHeader>
++            <DialogTitle>Editar grupo</DialogTitle>
++            <DialogDescription>
++              Guardar reemplaza TODAS las opciones del grupo por las de este formulario.
++            </DialogDescription>
++          </DialogHeader>
++          {editing !== null ? (
++            <ModifierGroupForm
++              key={editing.id}
++              salonId={salonId}
++              group={editing}
++              onCancel={() => setEditing(null)}
++              onSaved={() => setEditing(null)}
++            />
++          ) : null}
++        </DialogContent>
++      </Dialog>
++    </Card>
++  );
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Combos — elige un producto marcado como combo y define de qué piezas se
++// compone (`ComboEditor`), con ruteo por estación opcional por pieza.
++// ─────────────────────────────────────────────────────────────────────────────
++
++function CombosSection({ salonId }: { salonId: string }): React.ReactElement {
++  const productsQuery = useMenuProducts(salonId);
++  const [comboProductId, setComboProductId] = useState<string | null>(null);
++
++  const products = productsQuery.data ?? [];
++  const combos = products.filter((product) => product.is_combo);
++  const pieces = products.filter((product) => !product.is_combo);
++
++  return (
++    <Card>
++      <CardContent className="pt-6">
++        <h2 className="mb-2 text-lg font-semibold">Combos</h2>
++        <p className="mb-4 text-sm text-muted-foreground">
++          Marca un producto como combo desde la pestaña Productos y define aquí de qué
++          piezas se compone.
++        </p>
++
++        {productsQuery.isPending ? (
++          <Skeleton className="h-10 w-full max-w-sm" />
++        ) : combos.length === 0 ? (
++          <p className="text-sm text-muted-foreground">
++            Todavía no hay ningún producto marcado como combo.
++          </p>
++        ) : (
++          <div className="grid gap-2 sm:max-w-sm">
++            <Select value={comboProductId ?? ""} onValueChange={(value) => setComboProductId(value)}>
++              <SelectTrigger aria-label="Elige un combo">
++                <SelectValue placeholder="Elige un combo" />
++              </SelectTrigger>
++              <SelectContent>
++                {combos.map((combo) => (
++                  <SelectItem key={combo.id} value={combo.id}>
++                    {combo.name}
++                  </SelectItem>
++                ))}
++              </SelectContent>
++            </Select>
++          </div>
++        )}
++
++        {comboProductId !== null ? (
++          <ComboEditor
++            key={comboProductId}
++            salonId={salonId}
++            comboProductId={comboProductId}
++            pieces={pieces}
++          />
++        ) : null}
++      </CardContent>
++    </Card>
++  );
++}
++
++interface PieceRow {
++  componentProductId: string;
++  qty: string;
++  stationIdOverride: string;
++}
++
++/** Sentinela de "usar la estación por defecto del producto" para el override por pieza. */
++const COMBO_STATION_DEFAULT = "__default__";
++
++function ComboEditor({
++  salonId,
++  comboProductId,
++  pieces,
++}: {
++  salonId: string;
++  comboProductId: string;
++  pieces: Product[];
++}): React.ReactElement {
++  const componentsQuery = useComboComponents(salonId, comboProductId);
++  const stationsQuery = useStations(salonId);
++  const saveMutation = useSaveCombo(salonId);
++  const [rows, setRows] = useState<PieceRow[]>([]);
++  const [ready, setReady] = useState(false);
++
++  useEffect(() => {
++    if (ready || componentsQuery.data === undefined) return;
++    setRows(
++      componentsQuery.data.map((piece) => ({
++        componentProductId: piece.component_product_id,
++        qty: String(piece.qty),
++        stationIdOverride: piece.station_id_override ?? COMBO_STATION_DEFAULT,
++      })),
++    );
++    setReady(true);
++  }, [ready, componentsQuery.data]);
++
++  const stations = stationsQuery.data ?? [];
++
++  function updateRow(index: number, patch: Partial<PieceRow>): void {
++    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
++  }
++
++  function removeRow(index: number): void {
++    setRows((prev) => prev.filter((_, i) => i !== index));
++  }
++
++  function handleSave(): void {
++    const validPieces = rows
++      .filter((row) => row.componentProductId !== "")
++      .map((row) => ({
++        componentProductId: row.componentProductId,
++        qty: Math.max(1, Number.parseInt(row.qty, 10) || 1),
++        stationIdOverride:
++          row.stationIdOverride === COMBO_STATION_DEFAULT ? null : row.stationIdOverride,
++      }));
++    saveMutation.mutate({ comboProductId, pieces: validPieces });
++  }
++
++  if (!ready) {
++    return <p className="mt-4 text-sm text-muted-foreground">Cargando piezas…</p>;
++  }
++
++  return (
++    <div className="mt-4 grid gap-3">
++      {rows.length === 0 ? (
++        <p className="text-sm text-muted-foreground">Este combo no tiene piezas todavía.</p>
++      ) : (
++        <ul className="grid gap-2">
++          {rows.map((row, index) => (
++            <li key={index} className="grid grid-cols-[1fr_5rem_10rem_auto] items-center gap-2">
++              <Select
++                value={row.componentProductId}
++                onValueChange={(value) => updateRow(index, { componentProductId: value })}
++              >
++                <SelectTrigger aria-label={`Producto de la pieza ${index + 1}`}>
++                  <SelectValue placeholder="Producto" />
++                </SelectTrigger>
++                <SelectContent>
++                  {pieces.map((piece) => (
++                    <SelectItem key={piece.id} value={piece.id}>
++                      {piece.name}
++                    </SelectItem>
++                  ))}
++                </SelectContent>
++              </Select>
++              <Input
++                type="number"
++                inputMode="numeric"
++                min={1}
++                step={1}
++                value={row.qty}
++                onChange={(e) => updateRow(index, { qty: e.target.value })}
++                aria-label={`Cantidad de la pieza ${index + 1}`}
++              />
++              <Select
++                value={row.stationIdOverride}
++                onValueChange={(value) => updateRow(index, { stationIdOverride: value })}
++              >
++                <SelectTrigger aria-label={`Estación de la pieza ${index + 1}`}>
++                  <SelectValue placeholder="Estación por defecto" />
++                </SelectTrigger>
++                <SelectContent>
++                  <SelectItem value={COMBO_STATION_DEFAULT}>Estación por defecto</SelectItem>
++                  {stations.map((station) => (
++                    <SelectItem key={station.id} value={station.id}>
++                      {station.name}
++                    </SelectItem>
++                  ))}
++                </SelectContent>
++              </Select>
++              <Button
++                type="button"
++                variant="ghost"
++                size="icon"
++                aria-label={`Quitar la pieza ${index + 1}`}
++                onClick={() => removeRow(index)}
++              >
++                <Trash2 className="h-4 w-4 text-destructive" />
++              </Button>
++            </li>
++          ))}
++        </ul>
++      )}
++
++      <Button
++        type="button"
++        variant="outline"
++        onClick={() =>
++          setRows((prev) => [
++            ...prev,
++            { componentProductId: "", qty: "1", stationIdOverride: COMBO_STATION_DEFAULT },
++          ])
++        }
++      >
++        <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
++        Añadir pieza
++      </Button>
++
++      {saveMutation.isError ? (
++        <p role="alert" className="text-sm text-destructive">
++          {saveMutation.error.message}
++        </p>
++      ) : null}
++
++      <div className="flex justify-end">
++        <Button type="button" onClick={handleSave} disabled={saveMutation.isPending}>
++          {saveMutation.isPending ? "Guardando…" : "Guardar piezas"}
++        </Button>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/(dashboard)/carta/category-form.tsx b/src/app/(dashboard)/carta/category-form.tsx
+new file mode 100644
+index 0000000..7720b1d
+--- /dev/null
++++ b/src/app/(dashboard)/carta/category-form.tsx
+@@ -0,0 +1,111 @@
++"use client";
++
++import { useState, type FormEvent } from "react";
++
++import { Button } from "@/components/ui/button";
++import { DialogFooter } from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import type { CategoryInput } from "@/lib/validations/menu";
++
++export interface CategoryFormDefaults {
++  name: string;
++  /** Orden como cadena para casar con el estado de los inputs. */
++  sortOrder: string;
++}
++
++const EMPTY_DEFAULTS: CategoryFormDefaults = { name: "", sortOrder: "0" };
++
++interface CategoryFormProps {
++  /** Prefijo de `id` único — evita colisiones si categoría y estación coexisten en el DOM. */
++  idPrefix: string;
++  /** Nombre de la entidad para los textos ("categoría" | "estación"). */
++  entityLabel: string;
++  defaultValues?: CategoryFormDefaults;
++  submitLabel: string;
++  pending: boolean;
++  error: string | null;
++  onSubmit: (input: CategoryInput) => void;
++  onCancel: () => void;
++}
++
++/**
++ * Formulario reutilizable de categoría/estación (crear y editar).
++ *
++ * `menu_categories` y `stations` comparten la misma forma —nombre + orden—
++ * ({@link CategoryInput}, ver `stationSchema = categorySchema` en
++ * `lib/validations/menu.ts`), así que un único componente sirve para ambas
++ * pestañas de `carta-view.tsx` (parametrizado por `idPrefix`/`entityLabel`).
++ */
++export function CategoryForm({
++  idPrefix,
++  entityLabel,
++  defaultValues = EMPTY_DEFAULTS,
++  submitLabel,
++  pending,
++  error,
++  onSubmit,
++  onCancel,
++}: CategoryFormProps): React.ReactElement {
++  const [values, setValues] = useState<CategoryFormDefaults>(defaultValues);
++
++  function update<K extends keyof CategoryFormDefaults>(
++    key: K,
++    value: CategoryFormDefaults[K],
++  ): void {
++    setValues((prev) => ({ ...prev, [key]: value }));
++  }
++
++  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
++    event.preventDefault();
++    const parsedOrder = Number.parseInt(values.sortOrder, 10);
++    onSubmit({
++      name: values.name.trim(),
++      sortOrder: Number.isFinite(parsedOrder) ? parsedOrder : 0,
++    });
++  }
++
++  return (
++    <form onSubmit={handleSubmit} className="grid gap-4">
++      <div className="grid gap-2">
++        <Label htmlFor={`${idPrefix}-name`}>Nombre de la {entityLabel} *</Label>
++        <Input
++          id={`${idPrefix}-name`}
++          required
++          value={values.name}
++          onChange={(e) => update("name", e.target.value)}
++          placeholder={entityLabel === "estación" ? "Cocina, Barra…" : "Bebidas, Entrantes…"}
++          maxLength={120}
++        />
++      </div>
++
++      <div className="grid gap-2 sm:max-w-[10rem]">
++        <Label htmlFor={`${idPrefix}-sort-order`}>Orden</Label>
++        <Input
++          id={`${idPrefix}-sort-order`}
++          type="number"
++          inputMode="numeric"
++          min={0}
++          step={1}
++          value={values.sortOrder}
++          onChange={(e) => update("sortOrder", e.target.value)}
++        />
++      </div>
++
++      {error !== null ? (
++        <p role="alert" className="text-sm text-destructive">
++          {error}
++        </p>
++      ) : null}
++
++      <DialogFooter>
++        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
++          Cancelar
++        </Button>
++        <Button type="submit" disabled={pending}>
++          {pending ? "Guardando…" : submitLabel}
++        </Button>
++      </DialogFooter>
++    </form>
++  );
++}
+diff --git a/src/app/(dashboard)/carta/csv-import-dialog.tsx b/src/app/(dashboard)/carta/csv-import-dialog.tsx
+new file mode 100644
+index 0000000..55b8c54
+--- /dev/null
++++ b/src/app/(dashboard)/carta/csv-import-dialog.tsx
+@@ -0,0 +1,132 @@
++"use client";
++
++import { useState, useTransition } from "react";
++import { useQueryClient } from "@tanstack/react-query";
++import { CheckCircle2, Upload } from "lucide-react";
++
++import { importMenuCsv } from "@/app/(dashboard)/carta/actions";
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++  DialogTrigger,
++} from "@/components/ui/dialog";
++import { Textarea } from "@/components/ui/textarea";
++import { menuKeys } from "@/lib/queries/menu";
++
++const PLACEHOLDER = [
++  "categoria,producto,entero,decimales,iva,estacion,alergenos,es_combo",
++  "Bebidas,Caña,1,80,10,Barra,,no",
++  "Entrantes,Croquetas de jamón,6,50,10,Cocina,gluten;lacteos,no",
++].join("\n");
++
++interface CsvImportDialogProps {
++  salonId: string;
++}
++
++/**
++ * Importador CSV de la carta: pega el texto (formato de columnas fijas
++ * documentado en `lib/restauracion/csv-import.ts`), llama al Server Action
++ * `importMenuCsv` directamente (patrón de `delete-invoice-button.tsx`:
++ * `useTransition` + llamada async sin pasar por un hook de mutación) y
++ * muestra el resultado. Categorías/estaciones nuevas se crean solas; los
++ * errores de fila NO abortan el resto — se listan junto al recuento de lo
++ * importado.
++ */
++export function CsvImportDialog({ salonId }: CsvImportDialogProps): React.ReactElement {
++  const queryClient = useQueryClient();
++  const [open, setOpen] = useState(false);
++  const [csv, setCsv] = useState("");
++  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
++  const [pending, startTransition] = useTransition();
++
++  function handleImport(): void {
++    setResult(null);
++    startTransition(async () => {
++      const response = await importMenuCsv(csv);
++      if (response.ok) {
++        setResult({ ok: true, message: `${response.data.created} producto(s) importado(s).` });
++        void queryClient.invalidateQueries({ queryKey: menuKeys.all(salonId) });
++      } else {
++        setResult({ ok: false, message: response.error });
++      }
++    });
++  }
++
++  return (
++    <Dialog
++      open={open}
++      onOpenChange={(next) => {
++        setOpen(next);
++        if (!next) {
++          setResult(null);
++        }
++      }}
++    >
++      <DialogTrigger asChild>
++        <Button type="button" variant="outline">
++          <Upload className="mr-2 h-4 w-4" aria-hidden="true" />
++          Importar CSV
++        </Button>
++      </DialogTrigger>
++      <DialogContent className="sm:max-w-2xl">
++        <DialogHeader>
++          <DialogTitle>Importar carta desde CSV</DialogTitle>
++          <DialogDescription>
++            Columnas fijas: categoría, producto, euros, céntimos, IVA, estación,
++            alérgenos (separados por «;»), es combo («si»/«no»). La primera fila
++            (cabecera) se ignora. Las categorías y estaciones que no existan se
++            crean automáticamente.
++          </DialogDescription>
++        </DialogHeader>
++
++        <Textarea
++          value={csv}
++          onChange={(e) => setCsv(e.target.value)}
++          placeholder={PLACEHOLDER}
++          rows={10}
++          className="font-mono text-xs"
++          aria-label="Contenido CSV a importar"
++        />
++
++        {result !== null ? (
++          <p
++            role={result.ok ? "status" : "alert"}
++            className={
++              result.ok
++                ? "flex items-start gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm"
++                : "text-sm text-destructive"
++            }
++          >
++            {result.ok ? (
++              <CheckCircle2 className="mt-px h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
++            ) : null}
++            <span>{result.message}</span>
++          </p>
++        ) : null}
++
++        <DialogFooter>
++          <Button
++            type="button"
++            variant="outline"
++            onClick={() => setOpen(false)}
++            disabled={pending}
++          >
++            Cerrar
++          </Button>
++          <Button
++            type="button"
++            onClick={handleImport}
++            disabled={pending || csv.trim() === ""}
++          >
++            {pending ? "Importando…" : "Importar"}
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/app/(dashboard)/carta/layout.tsx b/src/app/(dashboard)/carta/layout.tsx
+new file mode 100644
+index 0000000..78a065d
+--- /dev/null
++++ b/src/app/(dashboard)/carta/layout.tsx
+@@ -0,0 +1,9 @@
++import { redirect } from "next/navigation";
++import { SectorGate } from "@/components/guards/sector-gate";
++import { canManageSettings, getActiveMembership } from "@/lib/salon";
++
++export default async function CartaLayout({ children }: { children: React.ReactNode }): Promise<React.ReactElement> {
++  const membership = await getActiveMembership();
++  if (!canManageSettings(membership?.role)) redirect("/dashboard");
++  return <SectorGate required="restauracion">{children}</SectorGate>;
++}
+diff --git a/src/app/(dashboard)/carta/menu-item-form.tsx b/src/app/(dashboard)/carta/menu-item-form.tsx
+new file mode 100644
+index 0000000..f4e7e2d
+--- /dev/null
++++ b/src/app/(dashboard)/carta/menu-item-form.tsx
+@@ -0,0 +1,266 @@
++"use client";
++
++import { useState, type FormEvent } from "react";
++
++import { Button } from "@/components/ui/button";
++import { Checkbox } from "@/components/ui/checkbox";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { Switch } from "@/components/ui/switch";
++import { useMenuCategories, useSaveMenuProduct, useStations } from "@/hooks/use-menu";
++import type { MenuProductInput } from "@/lib/validations/menu";
++import type { Allergen, Product } from "@/types/database";
++
++/** Tipos de IVA vigentes en España (porcentaje); orden pedido en el brief. */
++const VAT_RATES = [10, 21, 4, 0] as const;
++
++/**
++ * Los 14 alérgenos de declaración obligatoria (Reglamento UE 1169/2011).
++ * Exportado para que `carta-view.tsx` muestre el mismo texto en la tabla de
++ * productos, sin duplicar las 14 etiquetas.
++ */
++export const ALLERGEN_LABELS: Record<Allergen, string> = {
++  gluten: "Gluten",
++  crustaceos: "Crustáceos",
++  huevos: "Huevos",
++  pescado: "Pescado",
++  cacahuetes: "Cacahuetes",
++  soja: "Soja",
++  lacteos: "Lácteos",
++  frutos_cascara: "Frutos de cáscara",
++  apio: "Apio",
++  mostaza: "Mostaza",
++  sesamo: "Sésamo",
++  sulfitos: "Sulfitos",
++  altramuces: "Altramuces",
++  moluscos: "Moluscos",
++};
++const ALLERGEN_ORDER = Object.keys(ALLERGEN_LABELS) as Allergen[];
++
++/** Sentinela de "sin selección" — Radix `Select.Item` no admite `value=""`. */
++const NONE = "__none__";
++
++interface MenuItemFormProps {
++  salonId: string;
++  /** Producto a editar; `undefined`/`null` (por defecto) = alta de un producto nuevo. */
++  product?: Product | null;
++  /** Se invoca tras guardar con éxito (p. ej. para cerrar el diálogo contenedor). */
++  onSaved?: () => void;
++}
++
++/** Céntimos → cadena de euros con coma decimal, para precargar el campo de precio. */
++function centsToEuroString(cents: number): string {
++  return (cents / 100).toFixed(2).replace(".", ",");
++}
++
++/**
++ * Formulario de un producto de la carta (crear y editar).
++ *
++ * El precio se teclea en EUROS (con coma o punto decimal) y se convierte a
++ * céntimos justo antes de guardar — `Math.round(Number(valor.replace(",",
++ * ".")) * 100)`, la misma fórmula que fija el contrato de este formulario.
++ * El payload de `useSaveMenuProduct().mutate` es PLANO, con los nombres de
++ * `MenuProductInput` (name, priceCents, vatRate, categoryId, stationId,
++ * allergens, isCombo, imageUrl) más un `id` opcional que decide alta vs
++ * edición — igual que `ProductForm`/`ServiceForm` construyen su payload.
++ */
++export function MenuItemForm({
++  salonId,
++  product = null,
++  onSaved,
++}: MenuItemFormProps): React.ReactElement {
++  const [name, setName] = useState(product?.name ?? "");
++  const [price, setPrice] = useState(
++    product !== null ? centsToEuroString(product.price_cents) : "",
++  );
++  const [vatRate, setVatRate] = useState(String(product?.vat_rate ?? 10));
++  const [categoryId, setCategoryId] = useState(product?.category_id ?? NONE);
++  const [stationId, setStationId] = useState(product?.station_id ?? NONE);
++  const [allergens, setAllergens] = useState<Allergen[]>(product?.allergens ?? []);
++  const [isCombo, setIsCombo] = useState(product?.is_combo ?? false);
++  const [formError, setFormError] = useState<string | null>(null);
++
++  const categoriesQuery = useMenuCategories(salonId);
++  const stationsQuery = useStations(salonId);
++  const saveMutation = useSaveMenuProduct(salonId);
++
++  const categories = categoriesQuery.data ?? [];
++  const stations = stationsQuery.data ?? [];
++
++  function toggleAllergen(allergen: Allergen, checked: boolean): void {
++    setAllergens((prev) =>
++      checked ? [...prev, allergen] : prev.filter((a) => a !== allergen),
++    );
++  }
++
++  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
++    event.preventDefault();
++    setFormError(null);
++
++    const trimmedName = name.trim();
++    if (trimmedName === "") {
++      setFormError("El nombre es obligatorio.");
++      return;
++    }
++
++    const priceCents = Math.round(Number(price.replace(",", ".")) * 100);
++    if (!Number.isFinite(priceCents) || priceCents < 0) {
++      setFormError("Introduce un precio válido.");
++      return;
++    }
++
++    const payload: MenuProductInput & { id?: string } = {
++      name: trimmedName,
++      priceCents,
++      vatRate: Number(vatRate),
++      categoryId: categoryId === NONE ? null : categoryId,
++      stationId: stationId === NONE ? null : stationId,
++      allergens,
++      isCombo,
++      imageUrl: product?.image_url ?? null,
++    };
++    if (product !== null) {
++      payload.id = product.id;
++    }
++
++    saveMutation.mutate(payload, {
++      onSuccess: () => {
++        onSaved?.();
++      },
++    });
++  }
++
++  const errorMessage =
++    formError ?? (saveMutation.isError ? saveMutation.error.message : null);
++
++  return (
++    <form onSubmit={handleSubmit} className="grid gap-4">
++      <div className="grid gap-4 sm:grid-cols-2">
++        <div className="grid gap-2">
++          <Label htmlFor="menu-item-name">Nombre *</Label>
++          <Input
++            id="menu-item-name"
++            required
++            value={name}
++            onChange={(e) => setName(e.target.value)}
++            placeholder="Caña"
++            maxLength={200}
++          />
++        </div>
++        <div className="grid gap-2">
++          <Label htmlFor="menu-item-price">Precio (€) *</Label>
++          <Input
++            id="menu-item-price"
++            type="number"
++            inputMode="decimal"
++            step="0.01"
++            min="0"
++            required
++            value={price}
++            onChange={(e) => setPrice(e.target.value)}
++            placeholder="1,80"
++          />
++        </div>
++      </div>
++
++      <div className="grid gap-4 sm:grid-cols-3">
++        <div className="grid gap-2">
++          <Label htmlFor="menu-item-vat">IVA</Label>
++          <Select value={vatRate} onValueChange={(value) => setVatRate(value)}>
++            <SelectTrigger id="menu-item-vat">
++              <SelectValue placeholder="IVA" />
++            </SelectTrigger>
++            <SelectContent>
++              {VAT_RATES.map((rate) => (
++                <SelectItem key={rate} value={String(rate)}>
++                  {rate}%
++                </SelectItem>
++              ))}
++            </SelectContent>
++          </Select>
++        </div>
++        <div className="grid gap-2">
++          <Label htmlFor="menu-item-category">Categoría</Label>
++          <Select value={categoryId} onValueChange={(value) => setCategoryId(value)}>
++            <SelectTrigger id="menu-item-category">
++              <SelectValue placeholder="Sin categoría" />
++            </SelectTrigger>
++            <SelectContent>
++              <SelectItem value={NONE}>Sin categoría</SelectItem>
++              {categories.map((c) => (
++                <SelectItem key={c.id} value={c.id}>
++                  {c.name}
++                </SelectItem>
++              ))}
++            </SelectContent>
++          </Select>
++        </div>
++        <div className="grid gap-2">
++          <Label htmlFor="menu-item-station">Estación</Label>
++          <Select value={stationId} onValueChange={(value) => setStationId(value)}>
++            <SelectTrigger id="menu-item-station">
++              <SelectValue placeholder="Sin estación" />
++            </SelectTrigger>
++            <SelectContent>
++              <SelectItem value={NONE}>Sin estación</SelectItem>
++              {stations.map((s) => (
++                <SelectItem key={s.id} value={s.id}>
++                  {s.name}
++                </SelectItem>
++              ))}
++            </SelectContent>
++          </Select>
++        </div>
++      </div>
++
++      <fieldset className="grid gap-3 rounded-lg border border-border/70 p-4">
++        <legend className="px-1.5 text-sm font-medium">Alérgenos</legend>
++        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
++          {ALLERGEN_ORDER.map((allergen) => (
++            <label
++              key={allergen}
++              htmlFor={`allergen-${allergen}`}
++              className="flex items-center gap-2 text-sm"
++            >
++              <Checkbox
++                id={`allergen-${allergen}`}
++                checked={allergens.includes(allergen)}
++                onCheckedChange={(checked) => toggleAllergen(allergen, checked === true)}
++              />
++              {ALLERGEN_LABELS[allergen]}
++            </label>
++          ))}
++        </div>
++      </fieldset>
++
++      <label className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2.5 text-sm">
++        <span>
++          Es combo
++          <span className="block text-xs font-normal text-muted-foreground">
++            Se compone de otros productos (gestiona sus piezas en la pestaña Combos).
++          </span>
++        </span>
++        <Switch checked={isCombo} onCheckedChange={(checked) => setIsCombo(checked)} />
++      </label>
++
++      {errorMessage !== null ? (
++        <p role="alert" className="text-sm text-destructive">
++          {errorMessage}
++        </p>
++      ) : null}
++
++      <div className="flex justify-end">
++        <Button type="submit" disabled={saveMutation.isPending}>
++          {saveMutation.isPending ? "Guardando…" : "Guardar"}
++        </Button>
++      </div>
++    </form>
++  );
++}
+diff --git a/src/app/(dashboard)/carta/modifier-group-form.tsx b/src/app/(dashboard)/carta/modifier-group-form.tsx
+new file mode 100644
+index 0000000..8437225
+--- /dev/null
++++ b/src/app/(dashboard)/carta/modifier-group-form.tsx
+@@ -0,0 +1,246 @@
++"use client";
++
++import { useEffect, useState, type FormEvent } from "react";
++import { Plus, Trash2 } from "lucide-react";
++
++import { Button } from "@/components/ui/button";
++import { DialogFooter } from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import { Switch } from "@/components/ui/switch";
++import { useModifierOptions, useSaveModifierGroup } from "@/hooks/use-menu";
++import type { ModifierGroup } from "@/types/database";
++
++/** Una opción del grupo en edición local (precio en euros como texto, coma decimal). */
++interface OptionRow {
++  name: string;
++  priceDeltaEuros: string;
++}
++
++const EMPTY_OPTION: OptionRow = { name: "", priceDeltaEuros: "0" };
++
++interface ModifierGroupFormProps {
++  salonId: string;
++  /** Grupo a editar; `undefined`/`null` (por defecto) = alta de un grupo nuevo. */
++  group?: ModifierGroup | null;
++  onSaved?: () => void;
++  onCancel: () => void;
++}
++
++/** Céntimos → cadena de euros con coma decimal (mismo criterio que el precio del producto). */
++function centsToEuroString(cents: number): string {
++  return (cents / 100).toFixed(2).replace(".", ",");
++}
++
++/**
++ * Formulario de un grupo de modificadores (crear y editar) con su lista
++ * dinámica de opciones (añadir/quitar filas, sin `<form>` anidado — el botón
++ * "Añadir opción" es `type="button"`, igual que `ServiceMaterialSection` en
++ * `ajustes/servicios/service-form.tsx`).
++ *
++ * `saveModifierGroup` (Server Action) SIEMPRE reemplaza las opciones del
++ * grupo por las del payload — por eso, al EDITAR, este formulario precarga
++ * las opciones actuales vía `useModifierOptions` antes de dejar guardar: sin
++ * esa precarga, abrir "editar" y pulsar "Guardar" borraría todas las
++ * opciones existentes.
++ */
++export function ModifierGroupForm({
++  salonId,
++  group = null,
++  onSaved,
++  onCancel,
++}: ModifierGroupFormProps): React.ReactElement {
++  const [name, setName] = useState(group?.name ?? "");
++  const [minSelect, setMinSelect] = useState(String(group?.min_select ?? 0));
++  const [maxSelect, setMaxSelect] = useState(String(group?.max_select ?? 1));
++  const [required, setRequired] = useState(group?.required ?? false);
++  const [options, setOptions] = useState<OptionRow[]>([]);
++  const [optionsReady, setOptionsReady] = useState(group === null);
++  const [formError, setFormError] = useState<string | null>(null);
++
++  const optionsQuery = useModifierOptions(salonId, group?.id ?? null);
++  const saveMutation = useSaveModifierGroup(salonId);
++
++  // Precarga las opciones actuales del grupo en cuanto llegan (solo una vez,
++  // en edición); en alta `optionsReady` ya empieza en `true` (lista vacía).
++  useEffect(() => {
++    if (optionsReady || optionsQuery.data === undefined) return;
++    setOptions(
++      optionsQuery.data.map((m) => ({
++        name: m.name,
++        priceDeltaEuros: centsToEuroString(m.price_delta_cents),
++      })),
++    );
++    setOptionsReady(true);
++  }, [optionsReady, optionsQuery.data]);
++
++  function updateOption(index: number, patch: Partial<OptionRow>): void {
++    setOptions((prev) =>
++      prev.map((option, i) => (i === index ? { ...option, ...patch } : option)),
++    );
++  }
++
++  function removeOption(index: number): void {
++    setOptions((prev) => prev.filter((_, i) => i !== index));
++  }
++
++  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
++    event.preventDefault();
++    setFormError(null);
++
++    const trimmedName = name.trim();
++    if (trimmedName === "") {
++      setFormError("El nombre es obligatorio.");
++      return;
++    }
++
++    const min = Number.parseInt(minSelect, 10);
++    const max = Number.parseInt(maxSelect, 10);
++    const safeMin = Number.isFinite(min) && min >= 0 ? min : 0;
++    const safeMax = Number.isFinite(max) && max >= 1 ? max : 1;
++    if (safeMin > safeMax) {
++      setFormError("El mínimo no puede superar al máximo.");
++      return;
++    }
++
++    const parsedOptions = options
++      .map((option) => ({
++        name: option.name.trim(),
++        priceDeltaCents: Math.round(Number(option.priceDeltaEuros.replace(",", ".")) * 100),
++      }))
++      .filter((option) => option.name !== "");
++
++    saveMutation.mutate(
++      {
++        id: group?.id ?? null,
++        name: trimmedName,
++        minSelect: safeMin,
++        maxSelect: safeMax,
++        required,
++        modifiers: parsedOptions,
++      },
++      { onSuccess: () => onSaved?.() },
++    );
++  }
++
++  const errorMessage =
++    formError ?? (saveMutation.isError ? saveMutation.error.message : null);
++  const loadingOptions = group !== null && !optionsReady;
++
++  return (
++    <form onSubmit={handleSubmit} className="grid gap-4">
++      <div className="grid gap-2">
++        <Label htmlFor="modifier-group-name">Nombre *</Label>
++        <Input
++          id="modifier-group-name"
++          required
++          value={name}
++          onChange={(e) => setName(e.target.value)}
++          placeholder="Punto de la carne, Extras…"
++          maxLength={120}
++        />
++      </div>
++
++      <div className="grid gap-4 sm:grid-cols-3">
++        <div className="grid gap-2">
++          <Label htmlFor="modifier-group-min">Mínimo</Label>
++          <Input
++            id="modifier-group-min"
++            type="number"
++            inputMode="numeric"
++            min={0}
++            step={1}
++            value={minSelect}
++            onChange={(e) => setMinSelect(e.target.value)}
++          />
++        </div>
++        <div className="grid gap-2">
++          <Label htmlFor="modifier-group-max">Máximo</Label>
++          <Input
++            id="modifier-group-max"
++            type="number"
++            inputMode="numeric"
++            min={1}
++            step={1}
++            value={maxSelect}
++            onChange={(e) => setMaxSelect(e.target.value)}
++          />
++        </div>
++        <label className="flex items-center justify-between gap-2 rounded-lg border border-border/70 px-3 py-2.5 text-sm">
++          Obligatorio
++          <Switch checked={required} onCheckedChange={(checked) => setRequired(checked)} />
++        </label>
++      </div>
++
++      <fieldset className="grid gap-3 rounded-lg border border-border/70 p-4">
++        <legend className="px-1.5 text-sm font-medium">Opciones</legend>
++
++        {loadingOptions ? (
++          <p className="text-sm text-muted-foreground">Cargando opciones…</p>
++        ) : options.length === 0 ? (
++          <p className="text-sm text-muted-foreground">
++            Este grupo no tiene opciones todavía.
++          </p>
++        ) : (
++          <ul className="grid gap-2">
++            {options.map((option, index) => (
++              <li key={index} className="flex items-center gap-2">
++                <Input
++                  aria-label={`Nombre de la opción ${index + 1}`}
++                  value={option.name}
++                  onChange={(e) => updateOption(index, { name: e.target.value })}
++                  placeholder="Poco hecho"
++                  className="flex-1"
++                />
++                <Input
++                  type="number"
++                  inputMode="decimal"
++                  step="0.01"
++                  aria-label={`Suplemento de la opción ${index + 1} en euros`}
++                  value={option.priceDeltaEuros}
++                  onChange={(e) => updateOption(index, { priceDeltaEuros: e.target.value })}
++                  placeholder="0,00"
++                  className="w-24"
++                />
++                <Button
++                  type="button"
++                  variant="ghost"
++                  size="icon"
++                  aria-label={`Quitar la opción ${index + 1}`}
++                  onClick={() => removeOption(index)}
++                >
++                  <Trash2 className="h-4 w-4 text-destructive" />
++                </Button>
++              </li>
++            ))}
++          </ul>
++        )}
++
++        <Button
++          type="button"
++          variant="outline"
++          onClick={() => setOptions((prev) => [...prev, { ...EMPTY_OPTION }])}
++          disabled={loadingOptions}
++        >
++          <Plus className="mr-2 h-4 w-4" />
++          Añadir opción
++        </Button>
++      </fieldset>
++
++      {errorMessage !== null ? (
++        <p role="alert" className="text-sm text-destructive">
++          {errorMessage}
++        </p>
++      ) : null}
++
++      <DialogFooter>
++        <Button type="button" variant="outline" onClick={onCancel} disabled={saveMutation.isPending}>
++          Cancelar
++        </Button>
++        <Button type="submit" disabled={saveMutation.isPending || loadingOptions}>
++          {saveMutation.isPending ? "Guardando…" : "Guardar grupo"}
++        </Button>
++      </DialogFooter>
++    </form>
++  );
++}
+diff --git a/src/app/(dashboard)/carta/page.tsx b/src/app/(dashboard)/carta/page.tsx
+new file mode 100644
+index 0000000..9ac775c
+--- /dev/null
++++ b/src/app/(dashboard)/carta/page.tsx
+@@ -0,0 +1,36 @@
++import type { Metadata } from "next";
++import { redirect } from "next/navigation";
++
++import { CartaView } from "@/app/(dashboard)/carta/carta-view";
++import { getActiveSalonId } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++
++export const metadata: Metadata = {
++  title: "Carta",
++};
++
++export default async function CartaPage(): Promise<React.ReactElement> {
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  if (user === null) {
++    redirect("/login");
++  }
++
++  const salonId = await getActiveSalonId();
++
++  if (salonId === null) {
++    return (
++      <main className="container py-10">
++        <h1 className="text-3xl font-bold tracking-tight">Carta</h1>
++        <p className="mt-2 text-muted-foreground">
++          Tu usuario no está asociado a ningún salón todavía.
++        </p>
++      </main>
++    );
++  }
++
++  return <CartaView salonId={salonId} />;
++}
+diff --git a/src/components/ui/checkbox.tsx b/src/components/ui/checkbox.tsx
+new file mode 100644
+index 0000000..e1651b4
+--- /dev/null
++++ b/src/components/ui/checkbox.tsx
+@@ -0,0 +1,32 @@
++"use client";
++
++import * as React from "react";
++import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
++import { Check } from "lucide-react";
++
++import { cn } from "@/lib/utils";
++
++const Checkbox = React.forwardRef<
++  React.ElementRef<typeof CheckboxPrimitive.Root>,
++  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
++>(({ className, ...props }, ref) => (
++  <CheckboxPrimitive.Root
++    ref={ref}
++    className={cn(
++      // Cuadro coherente con el resto de controles (radio md, borde input) que
++      // se rellena de marca al marcarse, con transición de 150ms.
++      "peer h-4 w-4 shrink-0 rounded-sm border border-input shadow-xs transition-colors duration-150 ease-apple-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
++      className,
++    )}
++    {...props}
++  >
++    <CheckboxPrimitive.Indicator
++      className={cn("flex items-center justify-center text-current")}
++    >
++      <Check className="h-3.5 w-3.5" />
++    </CheckboxPrimitive.Indicator>
++  </CheckboxPrimitive.Root>
++));
++Checkbox.displayName = CheckboxPrimitive.Root.displayName;
++
++export { Checkbox };
+diff --git a/src/components/ui/switch.tsx b/src/components/ui/switch.tsx
+new file mode 100644
+index 0000000..d2edae2
+--- /dev/null
++++ b/src/components/ui/switch.tsx
+@@ -0,0 +1,32 @@
++"use client";
++
++import * as React from "react";
++import * as SwitchPrimitive from "@radix-ui/react-switch";
++
++import { cn } from "@/lib/utils";
++
++const Switch = React.forwardRef<
++  React.ElementRef<typeof SwitchPrimitive.Root>,
++  React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>
++>(({ className, ...props }, ref) => (
++  <SwitchPrimitive.Root
++    ref={ref}
++    className={cn(
++      // Pista con radio total (pill) que se tiñe de marca al activarse; el
++      // pomo se desliza con una transición de 150ms, igual que el resto de
++      // controles del panel.
++      "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-xs transition-colors duration-150 ease-apple-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
++      className,
++    )}
++    {...props}
++  >
++    <SwitchPrimitive.Thumb
++      className={cn(
++        "pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform duration-150 ease-apple-out data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0",
++      )}
++    />
++  </SwitchPrimitive.Root>
++));
++Switch.displayName = SwitchPrimitive.Root.displayName;
++
++export { Switch };
+diff --git a/src/components/ui/tabs.tsx b/src/components/ui/tabs.tsx
+new file mode 100644
+index 0000000..60078a5
+--- /dev/null
++++ b/src/components/ui/tabs.tsx
+@@ -0,0 +1,59 @@
++"use client";
++
++import * as React from "react";
++import * as TabsPrimitive from "@radix-ui/react-tabs";
++
++import { cn } from "@/lib/utils";
++
++const Tabs = TabsPrimitive.Root;
++
++const TabsList = React.forwardRef<
++  React.ElementRef<typeof TabsPrimitive.List>,
++  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
++>(({ className, ...props }, ref) => (
++  <TabsPrimitive.List
++    ref={ref}
++    className={cn(
++      // Pista de vidrio: fondo muted, radio consistente y padding interior
++      // para que la pestaña activa "flote" sobre el resto.
++      "inline-flex h-10 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
++      className,
++    )}
++    {...props}
++  />
++));
++TabsList.displayName = TabsPrimitive.List.displayName;
++
++const TabsTrigger = React.forwardRef<
++  React.ElementRef<typeof TabsPrimitive.Trigger>,
++  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
++>(({ className, ...props }, ref) => (
++  <TabsPrimitive.Trigger
++    ref={ref}
++    className={cn(
++      // Transición de 150ms coherente con el resto de controles; la pestaña
++      // activa se eleva sobre la pista con fondo + sombra suave.
++      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all duration-150 ease-apple-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
++      className,
++    )}
++    {...props}
++  />
++));
++TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
++
++const TabsContent = React.forwardRef<
++  React.ElementRef<typeof TabsPrimitive.Content>,
++  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
++>(({ className, ...props }, ref) => (
++  <TabsPrimitive.Content
++    ref={ref}
++    className={cn(
++      "mt-4 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
++      className,
++    )}
++    {...props}
++  />
++));
++TabsContent.displayName = TabsPrimitive.Content.displayName;
++
++export { Tabs, TabsList, TabsTrigger, TabsContent };
+diff --git a/src/hooks/use-menu.ts b/src/hooks/use-menu.ts
+index 40309c3..524b5b2 100644
+--- a/src/hooks/use-menu.ts
++++ b/src/hooks/use-menu.ts
+@@ -10,17 +10,26 @@ import {
+   saveCombo,
+   saveModifierGroup,
+   setProductModifierGroups,
+   updateCategory,
+   updateMenuProduct,
+   updateStation,
+   createMenuProduct as createMenuProductAction,
+ } from "@/app/(dashboard)/carta/actions";
+-import { fetchMenuCategories, fetchMenuProducts, fetchStations, menuKeys } from "@/lib/queries/menu";
++import {
++  fetchComboComponents,
++  fetchMenuCategories,
++  fetchMenuProducts,
++  fetchModifierGroups,
++  fetchModifierOptions,
++  fetchProductModifierGroups,
++  fetchStations,
++  menuKeys,
++} from "@/lib/queries/menu";
+ import type {
+   CategoryInput,
+   ComboPieceInput,
+   MenuProductInput,
+   SaveModifierGroupInput,
+   StationInput,
+ } from "@/lib/validations/menu";
+ import type { MenuCategory, ModifierGroup, Product, Station } from "@/types/database";
+@@ -29,16 +38,46 @@ export function useMenuCategories(salonId: string) {
+   return useQuery({ queryKey: menuKeys.categories(salonId), queryFn: () => fetchMenuCategories(salonId) });
+ }
+ export function useStations(salonId: string) {
+   return useQuery({ queryKey: menuKeys.stations(salonId), queryFn: () => fetchStations(salonId) });
+ }
+ export function useMenuProducts(salonId: string) {
+   return useQuery({ queryKey: menuKeys.products(salonId), queryFn: () => fetchMenuProducts(salonId) });
+ }
++export function useModifierGroups(salonId: string) {
++  return useQuery({
++    queryKey: menuKeys.modifierGroups(salonId),
++    queryFn: () => fetchModifierGroups(salonId),
++  });
++}
++/** Opciones de un grupo; `groupId: null` (alta de grupo nuevo) no consulta. */
++export function useModifierOptions(salonId: string, groupId: string | null) {
++  return useQuery({
++    queryKey: menuKeys.modifierOptions(salonId, groupId ?? ""),
++    queryFn: () => fetchModifierOptions(salonId, groupId as string),
++    enabled: groupId !== null,
++  });
++}
++/** Piezas de un combo; `comboProductId: null` (combo aún no elegido) no consulta. */
++export function useComboComponents(salonId: string, comboProductId: string | null) {
++  return useQuery({
++    queryKey: menuKeys.comboComponents(salonId, comboProductId ?? ""),
++    queryFn: () => fetchComboComponents(salonId, comboProductId as string),
++    enabled: comboProductId !== null,
++  });
++}
++/** Grupos de modificadores asignados a un producto; `productId: null` no consulta. */
++export function useProductModifierGroups(salonId: string, productId: string | null) {
++  return useQuery({
++    queryKey: menuKeys.productModifierGroups(salonId, productId ?? ""),
++    queryFn: () => fetchProductModifierGroups(salonId, productId as string),
++    enabled: productId !== null,
++  });
++}
+ 
+ /** Invalida todas las queries de carta del salón (categorías, estaciones, productos, grupos). */
+ function useInvalidateMenu(salonId: string) {
+   const queryClient = useQueryClient();
+   return () => queryClient.invalidateQueries({ queryKey: menuKeys.all(salonId) });
+ }
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+@@ -132,27 +171,33 @@ export function useDeleteStation(salonId: string) {
+     onSuccess: () => void invalidate(),
+   });
+ }
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+ // Productos de carta
+ // ─────────────────────────────────────────────────────────────────────────────
+ 
+-/** Crea o actualiza un producto de carta según se pase `id` o no. */
++/**
++ * Crea o actualiza un producto de carta según se pase `id` o no.
++ *
++ * El payload es PLANO — los campos de {@link MenuProductInput} (name,
++ * priceCents, vatRate, categoryId, stationId, allergens, isCombo, imageUrl)
++ * más un `id` opcional que decide alta (ausente) vs edición (presente) — en
++ * vez de anidar `{ id, input }`. Así el formulario (`menu-item-form.tsx`)
++ * pasa a `mutate()` el mismo objeto que ya construye para validar en
++ * cliente, sin tener que envolverlo.
++ */
+ export function useSaveMenuProduct(salonId: string) {
+   const invalidate = useInvalidateMenu(salonId);
+   return useMutation({
+     mutationFn: async ({
+       id,
+-      input,
+-    }: {
+-      id?: string;
+-      input: MenuProductInput;
+-    }): Promise<Product> => {
++      ...input
++    }: MenuProductInput & { id?: string }): Promise<Product> => {
+       const result =
+         id === undefined
+           ? await createMenuProductAction(input)
+           : await updateMenuProduct(id, input);
+       if (!result.ok) throw new Error(result.error);
+       return result.data;
+     },
+     onSuccess: () => void invalidate(),
+diff --git a/src/lib/queries/menu.ts b/src/lib/queries/menu.ts
+index 8295fe2..b218c85 100644
+--- a/src/lib/queries/menu.ts
++++ b/src/lib/queries/menu.ts
+@@ -1,17 +1,30 @@
+ import { createClient } from "@/lib/supabase/client";
+-import type { MenuCategory, Product, Station } from "@/types/database";
++import type {
++  ComboComponent,
++  MenuCategory,
++  Modifier,
++  ModifierGroup,
++  Product,
++  Station,
++} from "@/types/database";
+ 
+ export const menuKeys = {
+   all: (salonId: string) => ["menu", salonId] as const,
+   categories: (salonId: string) => [...menuKeys.all(salonId), "categories"] as const,
+   stations: (salonId: string) => [...menuKeys.all(salonId), "stations"] as const,
+   products: (salonId: string) => [...menuKeys.all(salonId), "products"] as const,
+   modifierGroups: (salonId: string) => [...menuKeys.all(salonId), "modifierGroups"] as const,
++  modifierOptions: (salonId: string, groupId: string) =>
++    [...menuKeys.all(salonId), "modifierOptions", groupId] as const,
++  comboComponents: (salonId: string, comboProductId: string) =>
++    [...menuKeys.all(salonId), "comboComponents", comboProductId] as const,
++  productModifierGroups: (salonId: string, productId: string) =>
++    [...menuKeys.all(salonId), "productModifierGroups", productId] as const,
+ };
+ 
+ export async function fetchMenuCategories(salonId: string): Promise<MenuCategory[]> {
+   const supabase = createClient();
+   const { data, error } = await supabase
+     .from("menu_categories").select("*")
+     .eq("salon_id", salonId).order("sort_order", { ascending: true });
+   if (error !== null) throw new Error(error.message);
+@@ -30,8 +43,59 @@ export async function fetchStations(salonId: string): Promise<Station[]> {
+ export async function fetchMenuProducts(salonId: string): Promise<Product[]> {
+   const supabase = createClient();
+   const { data, error } = await supabase
+     .from("products").select("*")
+     .eq("salon_id", salonId).order("name", { ascending: true });
+   if (error !== null) throw new Error(error.message);
+   return data;
+ }
++
++export async function fetchModifierGroups(salonId: string): Promise<ModifierGroup[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("modifier_groups").select("*")
++    .eq("salon_id", salonId).order("sort_order", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++/** Opciones (`modifiers`) de UN grupo — para precargar el formulario al editar. */
++export async function fetchModifierOptions(
++  salonId: string,
++  groupId: string,
++): Promise<Modifier[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("modifiers").select("*")
++    .eq("salon_id", salonId).eq("group_id", groupId)
++    .order("sort_order", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++/** Piezas (`combo_components`) de UN combo — para precargar el formulario al editar. */
++export async function fetchComboComponents(
++  salonId: string,
++  comboProductId: string,
++): Promise<ComboComponent[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("combo_components").select("*")
++    .eq("salon_id", salonId).eq("combo_product_id", comboProductId)
++    .order("sort_order", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++/** Ids de los grupos de modificadores asignados a UN producto — para precargar el selector. */
++export async function fetchProductModifierGroups(
++  salonId: string,
++  productId: string,
++): Promise<string[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("product_modifier_groups").select("group_id")
++    .eq("salon_id", salonId).eq("product_id", productId)
++    .order("sort_order", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data.map((row) => row.group_id);
++}
+diff --git a/src/tests/setup.ts b/src/tests/setup.ts
+index d0de870..261f63f 100644
+--- a/src/tests/setup.ts
++++ b/src/tests/setup.ts
+@@ -1 +1,18 @@
+ import "@testing-library/jest-dom";
++
++// Radix UI (Checkbox/Switch, vía su hook interno `useSize`) usa
++// `ResizeObserver` para medir el control y sincronizar el `<input>` oculto de
++// accesibilidad ("bubble input"). jsdom no lo implementa: sin este stub,
++// cualquier test que monte `Checkbox`/`Switch` (p. ej. `menu-item-form`)
++// lanza `ReferenceError: ResizeObserver is not defined` al montar. El stub no
++// necesita observar de verdad — ningún test depende de que se disparen los
++// callbacks de resize, solo de que la clase exista.
++class ResizeObserverStub {
++  observe(): void {}
++  unobserve(): void {}
++  disconnect(): void {}
++}
++
++if (typeof globalThis.ResizeObserver === "undefined") {
++  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
++}
+diff --git a/src/tests/unit/menu-item-form.test.tsx b/src/tests/unit/menu-item-form.test.tsx
+new file mode 100644
+index 0000000..28447c5
+--- /dev/null
++++ b/src/tests/unit/menu-item-form.test.tsx
+@@ -0,0 +1,31 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++const m = vi.hoisted(() => ({
++  save: { mutate: vi.fn(), isPending: false, isError: false, error: null as Error | null },
++  categories: { data: [{ id: "C1", name: "Bebidas" }], isPending: false },
++  stations: { data: [{ id: "S1", name: "Barra" }], isPending: false },
++}));
++vi.mock("@/hooks/use-menu", () => ({
++  useSaveMenuProduct: () => m.save,
++  useMenuCategories: () => m.categories,
++  useStations: () => m.stations,
++}));
++import { MenuItemForm } from "@/app/(dashboard)/carta/menu-item-form";
++
++beforeEach(() => { m.save.mutate = vi.fn(); });
++afterEach(() => cleanup());
++
++describe("MenuItemForm", () => {
++  it("no envía si el nombre está vacío y sí envía un producto válido", async () => {
++    const user = userEvent.setup();
++    render(createElement(MenuItemForm, { salonId: "SALON" }));
++    await user.type(screen.getByRole("textbox", { name: /nombre/i }), "Caña");
++    await user.type(screen.getByRole("spinbutton", { name: /precio/i }), "1.80");
++    await user.click(screen.getByRole("button", { name: /guardar/i }));
++    expect(m.save.mutate).toHaveBeenCalledTimes(1);
++    expect(m.save.mutate.mock.calls[0]![0]).toMatchObject({ name: "Caña", priceCents: 180 });
++  });
++});

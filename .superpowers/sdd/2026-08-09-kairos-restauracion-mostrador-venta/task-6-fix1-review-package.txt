@@ -1,0 +1,507 @@
+=== COMMITS (6f460c6..fc40223) ===
+fc40223 fix(restauracion): cobertura de pagos + idempotencia de cobro con respaldo en BD
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/actions.ts           |  96 +++++++++++++---
+ src/lib/validations/order.ts                       |   3 +-
+ src/tests/integration/restauracion-settle.test.ts  | 122 +++++++++++++++++----
+ src/tests/unit/pos-sales-order-unique-sql.test.ts  |  22 ++++
+ .../20260810110000_pos_sales_order_id_unique.sql   |   5 +
+ 5 files changed, 208 insertions(+), 40 deletions(-)
+
+=== DIFF -U12 ===
+diff --git a/src/app/(dashboard)/mostrador/actions.ts b/src/app/(dashboard)/mostrador/actions.ts
+index d81080d..3f0dc81 100644
+--- a/src/app/(dashboard)/mostrador/actions.ts
++++ b/src/app/(dashboard)/mostrador/actions.ts
+@@ -1,18 +1,18 @@
+ "use server";
+ import { randomUUID } from "node:crypto";
+ 
+ import { revalidatePath } from "next/cache";
+ 
+-import { computeLineTotals } from "@/lib/payments";
++import { computeLineTotals, sumTenders } from "@/lib/payments";
+ import { buildSettleLines, settleTotals } from "@/lib/restauracion/order";
+ import { getActiveSalonId } from "@/lib/salon";
+ import { createClient } from "@/lib/supabase/server";
+ import {
+   addOrderItemsSchema,
+   createOrderSchema,
+   sendOrderToStationsSchema,
+   setOrderItemStatusSchema,
+   settleOrderSchema,
+   voidOrderItemSchema,
+ } from "@/lib/validations/order";
+ import type { Order, OrderItem, OrderItemInsert, TablesInsert } from "@/types/database";
+@@ -302,35 +302,49 @@ export async function setOrderItemStatus(input: unknown): Promise<ActionResult<O
+ // settleOrder (Task 6): cobra un pedido de mostrador MATERIALIZANDO un
+ // `pos_sale` — es el puente entre "restauración" (pedidos/comandas) y "TPV"
+ // (caja/facturación): un pedido no se factura hasta que pasa por aquí. La
+ // estructura replica `createSale` (tpv/actions.ts) a propósito: misma cabecera
+ // `pos_sales` (status "completed", `session_id` de la caja abierta), mismas
+ // líneas `pos_sale_lines` y mismos pagos `pos_payments`, con el MISMO patrón
+ // de rollback manual — supabase-js no expone transacciones multi-sentencia
+ // desde el cliente, así que un fallo posterior a crear la cabecera se COMPENSA
+ // borrándola (el `on delete cascade` de las FKs arrastra líneas y pagos). La
+ // diferencia frente a `createSale`: aquí las líneas NO las teclea el cajero
+ // (vienen del pedido ya tomado) y el cobro no pasa por `getPaymentGateway` —
+ // los tenders ya vienen resueltos en céntimos desde el flujo de cobro de
+-// mostrador, se insertan tal cual en `pos_payments`.
++// mostrador, se insertan directo en `pos_payments`. SÍ se replica, a mano, la
++// validación de cobertura de la pasarela (`assertTendersCoverTotal`: Σ tenders
++// === totalCents EXACTO) justo después de calcular los totales — ver ese
++// bloque más abajo.
+ //
+-// ── Idempotencia ─────────────────────────────────────────────────────────────
++// ── Idempotencia (fast-path + backstop en BD) ─────────────────────────────────
+ // Cobrar el MISMO pedido dos veces (doble tap en el botón de cobrar, reintento
+-// de red) NO debe crear una segunda venta. La guarda comprueba, en este orden:
+-// (1) si YA existe un `pos_sales` con `order_id = orderId` en este salón, esa
+-// es la fuente autoritativa — se devuelve tal cual, sin volver a cobrar; (2) si
+-// no hay venta pero el pedido YA está `status = "cobrada"`, es un estado
+-// inconsistente (no debería poder pasar salvo un fallo entre el UPDATE de
+-// `orders` y la lectura) y se informa en vez de cobrar a ciegas una segunda
+-// vez. El caso normal (primera llamada) no entra en ninguna de las dos ramas.
++// de red) NO debe crear una segunda venta. La guarda de aplicación comprueba,
++// en este orden: (1) si YA existe un `pos_sales` con `order_id = orderId` en
++// este salón, esa es la fuente autoritativa — se devuelve tal cual, sin volver
++// a cobrar; (2) si no hay venta pero el pedido YA está `status = "cobrada"`,
++// es un estado inconsistente (no debería poder pasar salvo un fallo entre el
++// UPDATE de `orders` y la lectura) y se informa en vez de cobrar a ciegas una
++// segunda vez. El caso normal (primera llamada) no entra en ninguna de las dos
++// ramas. Solo se cobra un pedido `"abierta"`: si está `"cerrada"`/`"anulada"`
++// (o `"cobrada"` con venta encontrada arriba) no se llega a esta comprobación.
++//
++// Este fast-path es "select-luego-insert", NO atómico (mismo motivo que
++// `createOrder`, ver comentario de ese bloque): dos requests concurrentes para
++// el MISMO pedido pueden pasar AMBOS el select (ninguno ve todavía la fila del
++// otro) y el segundo `insert` de `pos_sales` choca con el índice único parcial
++// `pos_sales_order_id_unique` (migración 20260810110000, Postgres `23505`).
++// Ese caso se trata como BACKSTOP de idempotencia, no como fallo: se relee la
++// venta de ese `order_id` (el otro request ya la insertó) y se devuelve como
++// propia — ver el `catch` de `23505` más abajo, junto al insert de `pos_sales`.
+ // ─────────────────────────────────────────────────────────────────────────────
+ 
+ /** Fila de `pos_sales` mínima para responder en la rama idempotente. */
+ interface ExistingSaleRow {
+   id: string;
+   total_cents: number;
+ }
+ 
+ /** `order_items` con el join `products(name)` que pide `buildSettleLines`. */
+ interface SettleableOrderItemRow {
+   product_id: string;
+   qty: number;
+@@ -380,24 +394,31 @@ export async function settleOrder(
+     .maybeSingle();
+   if (existingSaleError !== null) return { ok: false, error: existingSaleError.message };
+   const existingSale = existingSaleData as ExistingSaleRow | null;
+   if (existingSale !== null) {
+     return { ok: true, data: { saleId: existingSale.id, totalCents: existingSale.total_cents } };
+   }
+   if (order.status === "cobrada") {
+     return {
+       ok: false,
+       error: "El pedido ya está cobrado pero no se encontró la venta asociada",
+     };
+   }
++  // Solo se cobra un pedido abierto: un pedido `"cerrada"`/`"anulada"` es un
++  // documento cerrado (mismo criterio que `assertOrderOpenInSalon`), no algo
++  // pendiente de facturar. `"cobrada"` ya se descartó arriba con su propio
++  // mensaje (más específico: venta esperada pero no encontrada).
++  if (order.status !== "abierta") {
++    return { ok: false, error: "El pedido no está abierto" };
++  }
+ 
+   // 3) Líneas a cobrar: NO anuladas (Task 4 marca el original `status:"anulado"`
+   //    al anular, así que basta este filtro — no hace falta excluir por `id`).
+   const { data: itemsData, error: itemsError } = await supabase
+     .from("order_items")
+     .select("*, products(name)")
+     .eq("order_id", orderId)
+     .eq("salon_id", salonId)
+     .is("void_of_item_id", null)
+     .neq("status", "anulado");
+   if (itemsError !== null) return { ok: false, error: itemsError.message };
+   const items = (itemsData ?? []) as unknown as SettleableOrderItemRow[];
+@@ -406,24 +427,35 @@ export async function settleOrder(
+   // 4) Líneas + totales — misma fuente única de verdad que el TPV (`@/lib/payments`).
+   const lines = buildSettleLines(
+     items.map((it) => ({
+       productName: it.products?.name ?? "Producto",
+       qty: it.qty,
+       unitPriceCents: it.unit_price_cents,
+       vatRate: it.vat_rate,
+       modifiersSnapshot: asModifiersSnapshot(it.modifiers_snapshot),
+     })),
+   );
+   const totals = settleTotals(lines);
+ 
++  // (Fix Critical) Los pagos deben cubrir el total EXACTO — mismo criterio que
++  // `createSale`/`assertTendersCoverTotal` (Σ tenders === totalCents, ni de
++  // menos ni de más; ver `@/lib/payments/gateway.ts`). Fail-fast ANTES de
++  // tocar la BD: en este punto no se ha escrito nada todavía (ni `pos_sales`
++  // ni nada más), así que no hace falta `rollback()`. Se usa `sumTenders`
++  // (reutilizada de `@/lib/payments`, la misma que usa la pasarela) en vez de
++  // sumar a mano.
++  if (sumTenders(tenders) !== totals.totalCents) {
++    return { ok: false, error: "Los pagos no cubren el total del pedido" };
++  }
++
+   // 5) Caja abierta del salón (si la hay) — mismo patrón que `createSale`.
+   const { data: openSession, error: openSessionError } = await supabase
+     .from("pos_sessions")
+     .select("id")
+     .eq("salon_id", salonId)
+     .eq("status", "open")
+     .limit(1)
+     .maybeSingle();
+   if (openSessionError !== null) return { ok: false, error: openSessionError.message };
+   const sessionId = (openSession as { id: string } | null)?.id ?? null;
+ 
+   // 6) Cabecera de la venta, enlazada al pedido de origen (`order_id`).
+@@ -435,26 +467,49 @@ export async function settleOrder(
+     subtotal_cents: totals.subtotalCents,
+     discount_cents: 0,
+     tax_cents: totals.taxCents,
+     total_cents: totals.totalCents,
+     currency: "EUR",
+     sold_by: user.id,
+   };
+   const { data: saleData, error: saleError } = await supabase
+     .from("pos_sales")
+     .insert(saleInsert)
+     .select("id")
+     .single();
+-  if (saleError !== null || saleData === null) {
+-    return { ok: false, error: saleError?.message ?? "No se pudo crear la venta" };
++  if (saleError !== null) {
++    // Backstop de idempotencia en BD (índice único parcial
++    // `pos_sales_order_id_unique`, migración 20260810110000): si el fast-path
++    // del paso 2 NO vio ninguna venta (carrera entre dos requests para el
++    // MISMO pedido) pero este INSERT choca con el índice único, NO es un
++    // fallo real — es la venta del OTRO request ganando la carrera. Se relee
++    // por `order_id`+`salon_id` (la fuente autoritativa) y se devuelve como
++    // propia, sin crear una segunda venta ni propagar el error.
++    if (saleError.code === "23505") {
++      const { data: raceSaleData, error: raceSaleError } = await supabase
++        .from("pos_sales")
++        .select("id,total_cents")
++        .eq("order_id", orderId)
++        .eq("salon_id", salonId)
++        .maybeSingle();
++      if (raceSaleError !== null) return { ok: false, error: raceSaleError.message };
++      const raceSale = raceSaleData as ExistingSaleRow | null;
++      if (raceSale !== null) {
++        return { ok: true, data: { saleId: raceSale.id, totalCents: raceSale.total_cents } };
++      }
++    }
++    return { ok: false, error: saleError.message };
++  }
++  if (saleData === null) {
++    return { ok: false, error: "No se pudo crear la venta" };
+   }
+   const saleId = (saleData as { id: string }).id;
+ 
+   // A partir de aquí, cualquier fallo compensa borrando la venta (cascade
+   // arrastra líneas y pagos) — mismo patrón que `createSale`.
+   async function rollback(): Promise<void> {
+     await supabase.from("pos_sales").delete().eq("id", saleId).eq("salon_id", salonId!);
+   }
+ 
+   // 7) Líneas del ticket (snapshot de importes por línea), 1:1 con `items`
+   //    (`buildSettleLines` preserva el orden) para poder anotar `product_id`.
+   const lineInserts: TablesInsert<"pos_sale_lines">[] = lines.map((line, i) => {
+@@ -492,34 +547,41 @@ export async function settleOrder(
+     method: tender.method,
+     payment_method_id: tender.paymentMethodId,
+     amount_cents: tender.amountCents,
+     reference: tender.reference ?? null,
+   }));
+   const { error: paymentsError } = await supabase.from("pos_payments").insert(paymentInserts);
+   if (paymentsError !== null) {
+     await rollback();
+     return { ok: false, error: `No se pudo registrar el cobro: ${paymentsError.message}` };
+   }
+ 
+   // 9) El pedido queda cerrado a facturación: un pedido cobrado es un
+-  //    documento cerrado (mismo criterio que `assertOrderOpenInSalon`). Este
+-  //    paso NO revierte la venta si falla — el cobro ya está firme (mismas
+-  //    filas en pos_sales/pos_sale_lines/pos_payments que si hubiera ido
+-  //    bien); revertirlo sería peor que dejar el pedido con el estado desfasado.
++  //    documento cerrado (mismo criterio que `assertOrderOpenInSalon`). Si
++  //    este UPDATE falla, TAMBIÉN se revierte la venta (`rollback()`, mismo
++  //    criterio que los pasos 7/8): dejar `pos_sales`/`pos_sale_lines`/
++  //    `pos_payments` creados con el pedido todavía `"abierta"` es peligroso —
++  //    la UI seguiría ofreciendo cobrarlo, y un segundo intento (esta vez SÍ
++  //    habría fila en `pos_sales`) quedaría bloqueado por el fast-path de
++  //    idempotencia del paso 2 sin que el pedido refleje que ya se cobró.
++  //    Mejor deshacer la venta entera y que el cajero reintente.
+   const { error: orderUpdateError } = await supabase
+     .from("orders")
+     .update({ status: "cobrada" })
+     .eq("id", orderId)
+     .eq("salon_id", salonId);
+-  if (orderUpdateError !== null) return { ok: false, error: orderUpdateError.message };
++  if (orderUpdateError !== null) {
++    await rollback();
++    return { ok: false, error: orderUpdateError.message };
++  }
+ 
+   // 10) "Pagar primero": si se pidió, las líneas `pendiente` que quedaran se
+   //     mandan a cocina/barra ahora que el cobro ya está firme (mismo UPDATE
+   //     que `sendOrderToStations`, inline). Best-effort: la venta ya está
+   //     cerrada — un fallo aquí no debe revertir ni bloquear la respuesta.
+   if (sendPending) {
+     await supabase
+       .from("order_items")
+       .update({ status: "enviado" })
+       .eq("salon_id", salonId)
+       .eq("order_id", orderId)
+       .eq("status", "pendiente");
+diff --git a/src/lib/validations/order.ts b/src/lib/validations/order.ts
+index bfa501a..7be07ea 100644
+--- a/src/lib/validations/order.ts
++++ b/src/lib/validations/order.ts
+@@ -70,25 +70,26 @@ export type SetOrderItemStatusInput = z.infer<typeof setOrderItemStatusSchema>;
+ 
+ /**
+  * Un medio de pago aplicado al cobro del pedido (Task 6, `settleOrder`).
+  * A diferencia de `tenderSchema` (lib/validations/sale.ts, TPV: `amount` llega
+  * como texto en euros desde un `<input>`), aquí `amountCents` ya llega como
+  * entero — el importe lo calcula el propio flujo de cobro de mostrador a
+  * partir de `settleTotals`, no lo teclea el cajero línea a línea. `method`
+  * reutiliza el mismo enum (`paymentMethodEnum`) que el TPV: es el mismo
+  * catálogo `pos_payment_method` de la BD, no tiene sentido duplicarlo.
+  */
+ export const settleTenderSchema = z.object({
+   method: paymentMethodEnum,
+-  amountCents: z.number().int().min(0),
++  /** Un tender de 0 no tiene sentido (no es un medio de pago real); debe ser > 0. */
++  amountCents: z.number().int().positive(),
+   /** Método concreto del catálogo del salón (opcional, para informes); `null` si no se eligió uno. */
+   paymentMethodId: z.string().uuid().nullable(),
+   reference: z.string().trim().max(120).optional(),
+ });
+ export type SettleTenderInput = z.infer<typeof settleTenderSchema>;
+ 
+ /**
+  * Payload de `settleOrder` (Task 6): liquida un pedido de mostrador,
+  * materializando un `pos_sale` (ver `mostrador/actions.ts`). `sendPending`
+  * cubre el flujo "pagar primero, comanda después" — si es `true`, las líneas
+  * `pendiente` del pedido se mandan a cocina/barra tras cobrar (mismo efecto
+  * que `sendOrderToStations`, pero encadenado al cobro).
+diff --git a/src/tests/integration/restauracion-settle.test.ts b/src/tests/integration/restauracion-settle.test.ts
+index ef71cd5..f8c8bc2 100644
+--- a/src/tests/integration/restauracion-settle.test.ts
++++ b/src/tests/integration/restauracion-settle.test.ts
+@@ -1,69 +1,147 @@
+ /**
+  * Test de integración de `settleOrder` (Task 6 del plan de restauración): la
+  * pieza que MATERIALIZA un `pos_sale` a partir de un pedido de mostrador,
+  * replicando el patrón de `createSale` (TPV) — cabecera + líneas + pagos, con
+  * rollback manual si un paso falla (ver `mostrador/actions.ts`).
++ *
++ * Ronda de fix (Critical + Important + Minor): además del happy-path, cubre
++ * el fail-fast de cobertura de pagos (Critical) y el backstop de idempotencia
++ * en BD ante una carrera de dos requests (Important, índice único parcial
++ * `pos_sales_order_id_unique`, migración 20260810110000).
+  */
+ import { beforeEach, describe, expect, it, vi } from "vitest";
+ 
+ const holder = vi.hoisted(() => ({ supabase: null as unknown }));
+ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+ vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
+ vi.mock("@/lib/salon", () => ({ getActiveSalonId: () => Promise.resolve("SALON") }));
+ 
+ import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
+ 
+ import { settleOrder } from "@/app/(dashboard)/mostrador/actions";
+ 
+ beforeEach(() => {
+   holder.supabase = null;
+ });
+ 
+ // `settleOrderSchema` exige `.uuid()` en `orderId` (transcrito verbatim del
+ // brief) — el id de ejemplo del brief ("O1") no es un uuid válido y no pasaría
+ // `safeParse`. Se usa un uuid real aquí, MISMA estructura/aserciones que el
+ // brief (precedente: `restauracion-order-actions.test.ts`, mismo motivo).
+ const ORDER_ID = "11111111-1111-4111-8111-111111111111";
+ 
++/** Pedido abierto con una línea: 2 × 880c (IVA 10%) = 1760c de total. */
++function orderTables() {
++  return {
++    orders: { data: [{ id: ORDER_ID, salon_id: "SALON", status: "abierta" }] },
++    order_items: {
++      data: [
++        {
++          id: "i1",
++          salon_id: "SALON",
++          order_id: ORDER_ID,
++          product_id: "p1",
++          qty: 2,
++          unit_price_cents: 880,
++          vat_rate: 10,
++          status: "enviado",
++          void_of_item_id: null,
++          modifiers_snapshot: [],
++          products: { name: "Hamburguesa" },
++        },
++      ],
++    },
++    pos_sessions: { data: [{ id: "SESS1" }] },
++  };
++}
++
+ describe("settleOrder", () => {
+   it("materializa un pos_sale desde el pedido", async () => {
+     holder.supabase = makeSupabaseMock({
+-      tables: {
+-        orders: { data: [{ id: ORDER_ID, salon_id: "SALON", status: "abierta" }] },
+-        order_items: {
+-          data: [
+-            {
+-              id: "i1",
+-              salon_id: "SALON",
+-              order_id: ORDER_ID,
+-              product_id: "p1",
+-              qty: 2,
+-              unit_price_cents: 880,
+-              vat_rate: 10,
+-              status: "enviado",
+-              void_of_item_id: null,
+-              modifiers_snapshot: [],
+-              products: { name: "Hamburguesa" },
+-            },
+-          ],
+-        },
+-        pos_sessions: { data: [{ id: "SESS1" }] },
+-        pos_sales: { data: [] },
+-      },
++      tables: { ...orderTables(), pos_sales: { data: [] } },
+       onWrite: (op: string, table: string) =>
+         op === "insert" && table === "pos_sales" ? { data: [{ id: "S1" }] } : {},
+     });
+ 
++    // Tenders suman EXACTO el total (1760c) — el fix Critical de cobertura no
++    // debe romper el happy-path.
+     const r = await settleOrder({
+       orderId: ORDER_ID,
+       tenders: [{ method: "efectivo", amountCents: 1760, paymentMethodId: null }],
+       sendPending: true,
+     });
+ 
+     expect(r.ok).toBe(true);
+     if (r.ok) {
+       expect(r.data.saleId).toBe("S1");
+       expect(r.data.totalCents).toBe(1760);
+     }
+   });
++
++  it("(Critical) rechaza el cobro si los pagos no cubren el total, sin crear la venta", async () => {
++    let saleInsertCalled = false;
++    holder.supabase = makeSupabaseMock({
++      tables: { ...orderTables(), pos_sales: { data: [] } },
++      onWrite: (op: string, table: string) => {
++        if (op === "insert" && table === "pos_sales") saleInsertCalled = true;
++        return {};
++      },
++    });
++
++    // El total del pedido es 1760c; se paga de menos (1000c) a propósito.
++    const r = await settleOrder({
++      orderId: ORDER_ID,
++      tenders: [{ method: "efectivo", amountCents: 1000, paymentMethodId: null }],
++      sendPending: false,
++    });
++
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toBe("Los pagos no cubren el total del pedido");
++    // Fail-fast: no se llegó a escribir nada en `pos_sales`.
++    expect(saleInsertCalled).toBe(false);
++  });
++
++  it("(Important) backstop 23505: si el insert de pos_sales choca con el índice único, relee la venta ganadora de la carrera", async () => {
++    // Simula la carrera: en el momento del INSERT no hay fila todavía (el
++    // fast-path del paso 2 no ve nada), pero el propio INSERT choca con
++    // `pos_sales_order_id_unique` porque OTRO request ya insertó la venta un
++    // instante antes. `posSalesData` es mutable: el `onWrite` del insert la
++    // "aterriza" en el momento del choque, y el getter de `tables.pos_sales`
++    // hace que la relectura posterior (dentro de `settleOrder`) SÍ la vea.
++    let posSalesData: Array<{ id: string; order_id: string; salon_id: string; total_cents: number }> = [];
++    holder.supabase = makeSupabaseMock({
++      tables: {
++        ...orderTables(),
++        get pos_sales() {
++          return { data: posSalesData };
++        },
++      },
++      onWrite: (op: string, table: string) => {
++        if (op === "insert" && table === "pos_sales") {
++          posSalesData = [
++            { id: "S-RACE", order_id: ORDER_ID, salon_id: "SALON", total_cents: 1760 },
++          ];
++          return {
++            error: {
++              code: "23505",
++              message: 'duplicate key value violates unique constraint "pos_sales_order_id_unique"',
++            },
++          };
++        }
++        return {};
++      },
++    });
++
++    const r = await settleOrder({
++      orderId: ORDER_ID,
++      tenders: [{ method: "efectivo", amountCents: 1760, paymentMethodId: null }],
++      sendPending: false,
++    });
++
++    expect(r.ok).toBe(true);
++    if (r.ok) {
++      expect(r.data.saleId).toBe("S-RACE");
++      expect(r.data.totalCents).toBe(1760);
++    }
++  });
+ });
+diff --git a/src/tests/unit/pos-sales-order-unique-sql.test.ts b/src/tests/unit/pos-sales-order-unique-sql.test.ts
+new file mode 100644
+index 0000000..a47848d
+--- /dev/null
++++ b/src/tests/unit/pos-sales-order-unique-sql.test.ts
+@@ -0,0 +1,22 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++/**
++ * sql-coherence de la migración de backstop de idempotencia (ronda de fix de
++ * Task 6): un índice único parcial en `pos_sales.order_id` garantiza en BD que
++ * no puede haber dos ventas para el mismo pedido, aunque una condición de
++ * carrera se colara por delante del fast-path de `settleOrder`.
++ */
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810110000_pos_sales_order_id_unique.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración pos_sales_order_id_unique", () => {
++  it("crea un índice único parcial en pos_sales.order_id", () => {
++    expect(SQL).toContain("create unique index");
++    expect(SQL).toContain("pos_sales_order_id_unique");
++    expect(SQL).toContain("where order_id is not null");
++  });
++});
+diff --git a/supabase/migrations/20260810110000_pos_sales_order_id_unique.sql b/supabase/migrations/20260810110000_pos_sales_order_id_unique.sql
+new file mode 100644
+index 0000000..c77d15d
+--- /dev/null
++++ b/supabase/migrations/20260810110000_pos_sales_order_id_unique.sql
+@@ -0,0 +1,5 @@
++-- Kairos — Restauración · Backstop de idempotencia: una sola venta por pedido.
++begin;
++create unique index if not exists pos_sales_order_id_unique
++  on public.pos_sales (order_id) where order_id is not null;
++commit;

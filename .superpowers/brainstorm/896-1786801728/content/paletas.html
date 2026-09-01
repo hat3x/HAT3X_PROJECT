@@ -1,0 +1,177 @@
+<h2>Liquid Glass — ¿qué color tiene el fondo?</h2>
+<p class="subtitle">Cinco paletas de aurora. Cada tarjeta está partida: <strong>izquierda el tema claro, derecha el oscuro</strong>, para que veas cómo se comporta la paleta en los dos, ya que vas a conmutar entre ellos. En todas hay una alerta roja de verdad — <strong>fíjate en si se distingue o si el fondo se la come</strong>.</p>
+
+<style>
+  .pl{display:flex;height:186px;overflow:hidden;font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .pl-h{flex:1;position:relative;padding:12px;display:flex;flex-direction:column;gap:8px;justify-content:center;overflow:hidden}
+  .pl-h.lt{background:var(--base-lt)} .pl-h.dk{background:var(--base-dk)}
+  .pl-h::before,.pl-h::after{content:'';position:absolute;border-radius:50%;filter:blur(40px);pointer-events:none}
+  .pl-h::before{width:170px;height:170px;top:-52px;left:-38px}
+  .pl-h::after{width:160px;height:160px;bottom:-58px;right:-30px}
+  .pl-h.lt::before{background:var(--a1-lt)} .pl-h.lt::after{background:var(--a2-lt)}
+  .pl-h.dk::before{background:var(--a1-dk)} .pl-h.dk::after{background:var(--a2-dk)}
+  .pl-mid{width:1px;background:rgba(128,128,128,.35);flex-shrink:0}
+
+  .pl-tag{position:absolute;top:7px;left:9px;font-size:7px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;z-index:3;opacity:.55}
+  .pl-h.lt .pl-tag{color:#1d1d1f} .pl-h.dk .pl-tag{color:#f5f5f7}
+
+  .gl{position:relative;border-radius:12px;backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);z-index:2}
+  .lt .gl{background:rgba(255,255,255,.58);border:1px solid rgba(255,255,255,.9);box-shadow:0 6px 22px rgba(20,30,60,.13),inset 0 1px 0 rgba(255,255,255,.95);color:#1d1d1f}
+  .dk .gl{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.18);color:#f5f5f7}
+  .lt .dim{color:#5f6470} .dk .dim{color:#9b9ba3}
+
+  .pl-bar{display:flex;gap:6px}
+  .pl-st{flex:1;padding:6px 8px}
+  .pl-st b{display:block;font-size:15px;line-height:1.1;letter-spacing:-.4px;font-variant-numeric:tabular-nums}
+  .pl-st span{font-size:6.5px;text-transform:uppercase;letter-spacing:.5px}
+  .pl-st.bad b{color:#ff453a}
+  .lt .pl-st.bad b{color:#e0271c}
+
+  .pl-card{padding:8px 10px;display:flex;align-items:center;gap:9px}
+  .pl-thumb{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#ff375f,#ff9f0a);flex-shrink:0}
+  .pl-card b{display:block;font-size:10px;font-weight:650;letter-spacing:-.1px}
+  .pl-card span{font-size:8px}
+  .pl-alert{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:8px;font-weight:700;letter-spacing:.4px;padding:3px 8px;border-radius:20px;background:rgba(255,69,58,.2);border:1px solid rgba(255,69,58,.55);color:#ff453a;white-space:nowrap}
+  .lt .pl-alert{background:rgba(224,39,28,.13);border-color:rgba(224,39,28,.45);color:#c81e14}
+  .pl-alert s{text-decoration:none;width:6px;height:6px;border-radius:50%;background:currentColor}
+
+  .pl-dots{display:flex;gap:5px;padding:6px 10px;align-items:center;font-size:8px}
+  .pl-dots i{font-style:normal;display:flex;align-items:center;gap:4px}
+  .pl-dots i s{text-decoration:none;width:6px;height:6px;border-radius:50%}
+  .okd{background:#30d158} .wnd{background:#ff9f0a} .dnd{background:#ff453a}
+
+  .zafiro{--base-lt:#eef2f8;--a1-lt:rgba(0,113,227,.32);--a2-lt:rgba(0,199,190,.28);
+          --base-dk:#050810;--a1-dk:rgba(0,113,227,.6);--a2-dk:rgba(0,199,190,.42)}
+  .nebulosa{--base-lt:#f1eef9;--a1-lt:rgba(94,92,230,.3);--a2-lt:rgba(191,90,242,.26);
+            --base-dk:#08060f;--a1-dk:rgba(94,92,230,.62);--a2-dk:rgba(191,90,242,.48)}
+  .oceano{--base-lt:#ebf3f5;--a1-lt:rgba(10,162,192,.3);--a2-lt:rgba(29,63,110,.24);
+          --base-dk:#03090d;--a1-dk:rgba(10,162,192,.55);--a2-dk:rgba(29,99,175,.45)}
+  .grafito{--base-lt:#f0f1f3;--a1-lt:rgba(58,74,99,.2);--a2-lt:rgba(120,132,150,.2);
+           --base-dk:#0a0b0d;--a1-dk:rgba(90,107,133,.42);--a2-dk:rgba(58,74,99,.5)}
+  .crepusculo{--base-lt:#faf0ec;--a1-lt:rgba(255,159,10,.3);--a2-lt:rgba(255,55,95,.26);
+              --base-dk:#0d0503;--a1-dk:rgba(255,159,10,.5);--a2-dk:rgba(255,55,95,.48)}
+
+  .cards .card-image{padding:0;background:transparent}
+  .pl-note{font-size:.75rem;color:var(--text-secondary);margin-top:.4rem}
+  .pl-swatch{display:inline-flex;gap:4px;vertical-align:middle;margin-left:6px}
+  .pl-swatch i{width:11px;height:11px;border-radius:3px;display:block}
+</style>
+
+<div class="cards">
+
+  <div class="card zafiro" data-choice="zafiro" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="pl zafiro">
+        <div class="pl-h lt"><span class="pl-tag">Claro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+        <div class="pl-mid"></div>
+        <div class="pl-h dk"><span class="pl-tag">Oscuro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>1 · Zafiro <span class="pl-swatch"><i style="background:#0071e3"></i><i style="background:#00c7be"></i></span></h3>
+      <p>Azul Apple + turquesa. Frío, limpio, corporativo sin ser aburrido. <strong>Cero conflicto con los semáforos</strong>: el rojo se ve desde la otra punta de la habitación.</p>
+      <p class="pl-note">La apuesta segura. Es la que mejor sostiene 12 horas de pantalla.</p>
+    </div>
+  </div>
+
+  <div class="card nebulosa" data-choice="nebulosa" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="pl nebulosa">
+        <div class="pl-h lt"><span class="pl-tag">Claro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+        <div class="pl-mid"></div>
+        <div class="pl-h dk"><span class="pl-tag">Oscuro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>2 · Nebulosa <span class="pl-swatch"><i style="background:#5e5ce6"></i><i style="background:#bf5af2"></i></span></h3>
+      <p>Índigo + violeta. Más personalidad y más «producto propio»: no se parece a ningún panel de administración que hayas visto. Sigue siendo frío, así que respeta las alertas.</p>
+      <p class="pl-note">La más distintiva. En oscuro es donde de verdad luce.</p>
+    </div>
+  </div>
+
+  <div class="card oceano" data-choice="oceano" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="pl oceano">
+        <div class="pl-h lt"><span class="pl-tag">Claro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+        <div class="pl-mid"></div>
+        <div class="pl-h dk"><span class="pl-tag">Oscuro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>3 · Océano <span class="pl-swatch"><i style="background:#0aa2c0"></i><i style="background:#1d3f6e"></i></span></h3>
+      <p>Cian profundo + azul marino. Más serio y más oscuro que Zafiro, con aire de sala técnica. Muy buen contraste con el verde de «operativo».</p>
+      <p class="pl-note">Si quieres que se note que es una herramienta de control y no un producto de marketing, esta.</p>
+    </div>
+  </div>
+
+  <div class="card grafito" data-choice="grafito" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="pl grafito">
+        <div class="pl-h lt"><span class="pl-tag">Claro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+        <div class="pl-mid"></div>
+        <div class="pl-h dk"><span class="pl-tag">Oscuro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>4 · Grafito <span class="pl-swatch"><i style="background:#3a4a63"></i><i style="background:#5a6b85"></i></span></h3>
+      <p>Casi monocromo, azul acero muy apagado. <strong>Todo el color de la pantalla pasa a ser información</strong>: lo único con tinte fuerte son las portadas de proyecto y los semáforos.</p>
+      <p class="pl-note">La más elegante y la más sobria. También la que menos «wow» tiene al abrirla por primera vez.</p>
+    </div>
+  </div>
+
+  <div class="card crepusculo" data-choice="crepusculo" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="pl crepusculo">
+        <div class="pl-h lt"><span class="pl-tag">Claro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+        <div class="pl-mid"></div>
+        <div class="pl-h dk"><span class="pl-tag">Oscuro</span>
+          <div class="pl-bar"><div class="gl pl-st"><b>12</b><span class="dim">Proy.</span></div><div class="gl pl-st"><b>10</b><span class="dim">OK</span></div><div class="gl pl-st bad"><b>1</b><span class="dim">Caído</span></div></div>
+          <div class="gl pl-card"><div class="pl-thumb"></div><div><b>Recep. Sara</b><span class="dim">Biodental</span></div><div class="pl-alert"><s></s>CAÍDO</div></div>
+          <div class="gl pl-dots"><i><s class="okd"></s>Retell</i><i><s class="wnd"></s>Bus</i><i><s class="dnd"></s>n8n</i></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>5 · Crepúsculo <span class="pl-swatch"><i style="background:#ff9f0a"></i><i style="background:#ff375f"></i></span></h3>
+      <p>Ámbar + coral. Cálida y muy bonita en abstracto — pero mírala con atención: <strong>el fondo ya es rojo y naranja, así que la alerta deja de destacar</strong>.</p>
+      <p class="pl-note">Te la enseño precisamente para que veas el problema. Si te enamora el color, se puede usar en la marca y dejar frío el fondo del panel.</p>
+    </div>
+  </div>
+
+</div>

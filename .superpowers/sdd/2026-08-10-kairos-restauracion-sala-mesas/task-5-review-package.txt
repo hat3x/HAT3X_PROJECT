@@ -1,0 +1,722 @@
+=== COMMITS 24bc11d..3eac19b ===
+3eac19b feat(restauracion): server actions de sala (abrir mesa, estado, layout)
+
+=== DIFF --stat ===
+ src/app/(dashboard)/sala/actions.ts                | 307 +++++++++++++++++++++
+ src/hooks/use-tables.ts                            | 157 ++++++++++-
+ src/lib/validations/table.ts                       |  68 +++++
+ .../integration/restauracion-sala-actions.test.ts  | 125 +++++++++
+ 4 files changed, 656 insertions(+), 1 deletion(-)
+
+=== DIFF -U12 ===
+diff --git a/src/app/(dashboard)/sala/actions.ts b/src/app/(dashboard)/sala/actions.ts
+new file mode 100644
+index 0000000..27ebb95
+--- /dev/null
++++ b/src/app/(dashboard)/sala/actions.ts
+@@ -0,0 +1,307 @@
++"use server";
++import { randomUUID } from "node:crypto";
++
++import { revalidatePath } from "next/cache";
++
++import { canTransition, clampPosition } from "@/lib/restauracion/tables";
++import { canManageSettings, getActiveMembership, getActiveSalonId } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++import {
++  openTableSchema,
++  saveTablePositionSchema,
++  setTableStatusSchema,
++  tableSchema,
++  zoneSchema,
++  type OpenTableInput,
++  type SaveTablePositionInput,
++  type SetTableStatusInput,
++  type TableInput,
++  type ZoneInput,
++} from "@/lib/validations/table";
++import type { DiningTable, DiningZone, Order } from "@/types/database";
++
++/**
++ * Server actions de sala (restauración, Task 5): apertura/estado/posición de
++ * mesa y CRUD de zonas/mesas del plano.
++ *
++ * Dos niveles de gate, igual criterio que `carta/actions.ts` (gestión) vs
++ * `mostrador/actions.ts` (operativa): `openTable`/`setTableStatus` son
++ * OPERATIVAS (cualquier miembro del salón — tomar/soltar una mesa es trabajo
++ * de sala del día a día, no configuración); `saveTablePosition` y el CRUD de
++ * zonas/mesas son GESTIÓN (editar el layout o el catálogo de mesas exige
++ * owner/manager, vía {@link assertManager}).
++ */
++export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
++
++/**
++ * Resuelve el salón activo SI el usuario tiene rol de gestión (owner/manager).
++ * Devuelve `null` cuando no hay permiso (rol insuficiente) o no hay salón
++ * asignado; en ambos casos la action responde con el mismo mensaje de
++ * "sin permiso" — no se distingue el motivo al cliente. Idéntico a
++ * `carta/actions.ts#assertManager`.
++ */
++async function assertManager(): Promise<string | null> {
++  const membership = await getActiveMembership();
++  if (!canManageSettings(membership?.role)) return null;
++  return getActiveSalonId();
++}
++
++function firstIssue(error: import("zod").ZodError): string {
++  return error.issues[0]?.message ?? "Datos inválidos";
++}
++
++const NO_PERMISSION = "No tienes permiso para gestionar la sala";
++const NO_SALON = "No tienes un salón asignado";
++
++// ─────────────────────────────────────────────────────────────────────────────
++// openTable: abre una mesa libre y crea su cuenta (orders, channel='mesa').
++//
++// Orden EXACTO por seguridad de concurrencia (dos camareros tocando la misma
++// mesa a la vez): (1) UPDATE CONDICIONADO `status='ocupada' WHERE ...
++// status='libre'` — si otro ya la abrió, el UPDATE afecta 0 filas y esa ES la
++// señal de conflicto, sin necesidad de un SELECT previo (misma técnica que
++// `setOrderItemStatus`/`setTableStatus`). Solo si afecta 1 fila se sigue.
++// (2) INSERT de `orders` con el `id` generado EN EL SERVIDOR (a diferencia de
++// `createOrder`/mostrador, que lo acepta del cliente para offline-first: abrir
++// mesa es una acción síncrona de sala, no necesita idempotencia offline) y
++// `label` = nombre de la mesa (tomado del propio `.select()` del paso 1, sin
++// una consulta aparte). (3) Si el INSERT falla, se COMPENSA revirtiendo la
++// mesa a `libre` (rollback manual — igual patrón que `settleOrder`/
++// `mostrador/actions.ts`: sin transacción multi-sentencia desde el cliente de
++// Supabase, un fallo a mitad de flujo se deshace a mano) y se propaga el
++// error; la mesa NO debe quedar `ocupada` sin una cuenta asociada.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function openTable(input: OpenTableInput): Promise<ActionResult<Order>> {
++  const parsed = openTableSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: NO_SALON };
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .update({ status: "ocupada" })
++    .eq("id", parsed.data.tableId)
++    .eq("salon_id", salonId)
++    .eq("status", "libre")
++    .select("*");
++  if (error !== null) return { ok: false, error: error.message };
++  const [table] = (data ?? []) as DiningTable[];
++  if (table === undefined) return { ok: false, error: "La mesa no está libre" };
++
++  const { data: order, error: orderError } = await supabase
++    .from("orders")
++    .insert({
++      id: randomUUID(),
++      salon_id: salonId,
++      channel: "mesa",
++      dining_table_id: parsed.data.tableId,
++      covers: parsed.data.covers,
++      label: table.name,
++      status: "abierta",
++    })
++    .select("*")
++    .single();
++  if (orderError !== null) {
++    // Compensación: la mesa no debe quedar `ocupada` sin cuenta. Se ignora el
++    // resultado de esta segunda escritura (best-effort, igual que el
++    // `rollback()` de `settleOrder`) — propagar el error ORIGINAL del insert
++    // es más útil al llamador que uno secundario de la reversión.
++    await supabase
++      .from("dining_tables")
++      .update({ status: "libre" })
++      .eq("id", parsed.data.tableId)
++      .eq("salon_id", salonId);
++    return { ok: false, error: orderError.message };
++  }
++  revalidatePath("/sala");
++  return { ok: true, data: order };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// setTableStatus: transición de estado de UNA mesa (p.ej. `ocupada` →
++// `cuenta_pedida` → `por_limpiar` → `libre`), operativa (cualquier miembro).
++//
++// `canTransition` (lib/restauracion/tables.ts, Task 3) se comprueba ANTES de
++// tocar la base — un salto no permitido (p.ej. `libre` → `por_limpiar`) ni
++// siquiera intenta el UPDATE. Igual que `openTable`, el UPDATE va CONDICIONADO
++// por `status = from`: si otra pantalla ya movió la mesa, afecta 0 filas ⇒
++// CONFLICTO (misma técnica que `setOrderItemStatus`, mostrador/actions.ts).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function setTableStatus(input: SetTableStatusInput): Promise<ActionResult<DiningTable>> {
++  const parsed = setTableStatusSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  if (!canTransition(parsed.data.from, parsed.data.to)) {
++    return { ok: false, error: "Transición no válida" };
++  }
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: NO_SALON };
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .update({ status: parsed.data.to })
++    .eq("id", parsed.data.tableId)
++    .eq("salon_id", salonId)
++    .eq("status", parsed.data.from)
++    .select("*");
++  if (error !== null) return { ok: false, error: error.message };
++  const [updated] = (data ?? []) as DiningTable[];
++  if (updated === undefined) return { ok: false, error: "CONFLICTO: el estado de la mesa ya cambió" };
++  revalidatePath("/sala");
++  return { ok: true, data: updated };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// saveTablePosition: gestión (editar el layout del plano exige owner/manager).
++// `clampPosition` (lib/restauracion/tables.ts) acota a [0,100] en servidor —
++// no basta con que el editor visual del plano ya limite el arrastre en
++// cliente, un payload manual fuera de rango no debe poder desplazar la mesa
++// fuera del plano.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function saveTablePosition(
++  input: SaveTablePositionInput,
++): Promise<ActionResult<DiningTable>> {
++  const parsed = saveTablePositionSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .update({ pos_x: clampPosition(parsed.data.posX), pos_y: clampPosition(parsed.data.posY) })
++    .eq("id", parsed.data.tableId)
++    .eq("salon_id", salonId)
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Zonas del plano de sala — gestión, mismo patrón EXACTO que
++// `carta/actions.ts#createCategory/updateCategory/deleteCategory` (misma
++// forma `{salon_id, name, sort_order}`).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createZone(input: ZoneInput): Promise<ActionResult<DiningZone>> {
++  const parsed = zoneSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_zones")
++    .insert({ salon_id: salonId, name: parsed.data.name, sort_order: parsed.data.sortOrder })
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++export async function updateZone(id: string, input: ZoneInput): Promise<ActionResult<DiningZone>> {
++  const parsed = zoneSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_zones")
++    .update({ name: parsed.data.name, sort_order: parsed.data.sortOrder })
++    .eq("id", id)
++    .eq("salon_id", salonId)
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++export async function deleteZone(id: string): Promise<ActionResult<null>> {
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error } = await supabase.from("dining_zones").delete().eq("id", id).eq("salon_id", salonId);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data: null };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Mesas del plano de sala — gestión, mismo patrón que las zonas de arriba.
++// El FK compuesto `dining_tables_zone_fkey` (zone_id, salon_id) ya garantiza
++// en la base que no se puede crear/editar una mesa apuntando a una zona de
++// otro salón — no hace falta una guarda de pertenencia aparte (paridad con el
++// razonamiento de `carta/actions.ts` sobre sus propios FKs compuestos).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createTable(input: TableInput): Promise<ActionResult<DiningTable>> {
++  const parsed = tableSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .insert({
++      salon_id: salonId,
++      zone_id: parsed.data.zoneId,
++      name: parsed.data.name,
++      capacity_min: parsed.data.capacityMin,
++      capacity_max: parsed.data.capacityMax,
++      shape: parsed.data.shape,
++      sort_order: parsed.data.sortOrder,
++    })
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++export async function updateTable(id: string, input: TableInput): Promise<ActionResult<DiningTable>> {
++  const parsed = tableSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("dining_tables")
++    .update({
++      zone_id: parsed.data.zoneId,
++      name: parsed.data.name,
++      capacity_min: parsed.data.capacityMin,
++      capacity_max: parsed.data.capacityMax,
++      shape: parsed.data.shape,
++      sort_order: parsed.data.sortOrder,
++    })
++    .eq("id", id)
++    .eq("salon_id", salonId)
++    .select("*")
++    .single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data };
++}
++
++export async function deleteTable(id: string): Promise<ActionResult<null>> {
++  const salonId = await assertManager();
++  if (salonId === null) return { ok: false, error: NO_PERMISSION };
++
++  const supabase = createClient();
++  const { error } = await supabase.from("dining_tables").delete().eq("id", id).eq("salon_id", salonId);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/sala");
++  return { ok: true, data: null };
++}
+diff --git a/src/hooks/use-tables.ts b/src/hooks/use-tables.ts
+index 33bf4f5..f84b14c 100644
+--- a/src/hooks/use-tables.ts
++++ b/src/hooks/use-tables.ts
+@@ -1,19 +1,38 @@
+ "use client";
+ 
+ import { useEffect, useRef, useState } from "react";
+-import { useQuery, useQueryClient } from "@tanstack/react-query";
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ 
++import {
++  createTable,
++  createZone,
++  deleteTable,
++  deleteZone,
++  openTable,
++  saveTablePosition,
++  setTableStatus,
++  updateTable,
++  updateZone,
++} from "@/app/(dashboard)/sala/actions";
+ import { createClient } from "@/lib/supabase/client";
+ import { fetchTableOrders, fetchTables, fetchZones, tableKeys } from "@/lib/queries/tables";
++import type {
++  OpenTableInput,
++  SaveTablePositionInput,
++  SetTableStatusInput,
++  TableInput,
++  ZoneInput,
++} from "@/lib/validations/table";
++import type { DiningTable, DiningZone, Order } from "@/types/database";
+ 
+ export function useZones(salonId: string) {
+   return useQuery({ queryKey: tableKeys.zones(salonId), queryFn: () => fetchZones(salonId) });
+ }
+ 
+ export function useTables(salonId: string) {
+   return useQuery({ queryKey: tableKeys.tables(salonId), queryFn: () => fetchTables(salonId) });
+ }
+ 
+ export function useTableOrders(salonId: string) {
+   return useQuery({
+     queryKey: tableKeys.openOrders(salonId),
+@@ -78,12 +97,148 @@ export function useTablesRealtime(salonId: string): RealtimeStatus {
+       });
+ 
+     channelRef.current = channel;
+ 
+     return () => {
+       void supabase.removeChannel(channel);
+       channelRef.current = null;
+     };
+   }, [salonId, queryClient]);
+ 
+   return status;
+ }
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Mutaciones (Task 5): cada una desempaqueta el `ActionResult` de la server
++// action (lanza si `ok:false`, TanStack Query lo expone como `error`) e
++// invalida TODO `tableKeys.all(salonId)` al terminar — más simple que
++// invalidar cada sub-key por separado y, a diferencia de `use-orders.ts`, aquí
++// no hay un detalle por id que sobreviva a una mutación (zonas/mesas se leen
++// siempre como listado completo). El plano también se refresca solo vía
++// `useTablesRealtime` cuando el cambio lo dispara OTRO cliente; esta
++// invalidación cubre el caso del propio autor de la mutación.
++// ─────────────────────────────────────────────────────────────────────────────
++
++function useInvalidateTables(salonId: string) {
++  const queryClient = useQueryClient();
++  return () => queryClient.invalidateQueries({ queryKey: tableKeys.all(salonId) });
++}
++
++/** Abre una mesa libre y crea su cuenta ({@link openTable}, operativa). */
++export function useOpenTable(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: OpenTableInput): Promise<Order> => {
++      const result = await openTable(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++/** Transiciona el estado de una mesa ({@link setTableStatus}, operativa). */
++export function useSetTableStatus(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: SetTableStatusInput): Promise<DiningTable> => {
++      const result = await setTableStatus(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++/** Guarda la posición de una mesa en el plano ({@link saveTablePosition}, gestión). */
++export function useSaveTablePosition(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: SaveTablePositionInput): Promise<DiningTable> => {
++      const result = await saveTablePosition(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Zonas — mismo patrón `{ id, input }` para editar que `use-menu.ts`
++// (useUpdateCategory/useUpdateStation).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export function useCreateZone(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: ZoneInput): Promise<DiningZone> => {
++      const result = await createZone(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useUpdateZone(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async ({ id, input }: { id: string; input: ZoneInput }): Promise<DiningZone> => {
++      const result = await updateZone(id, input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useDeleteZone(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (id: string): Promise<null> => {
++      const result = await deleteZone(id);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Mesas
++// ─────────────────────────────────────────────────────────────────────────────
++
++export function useCreateTable(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (input: TableInput): Promise<DiningTable> => {
++      const result = await createTable(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useUpdateTable(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async ({ id, input }: { id: string; input: TableInput }): Promise<DiningTable> => {
++      const result = await updateTable(id, input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useDeleteTable(salonId: string) {
++  const invalidate = useInvalidateTables(salonId);
++  return useMutation({
++    mutationFn: async (id: string): Promise<null> => {
++      const result = await deleteTable(id);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
+diff --git a/src/lib/validations/table.ts b/src/lib/validations/table.ts
+new file mode 100644
+index 0000000..50f5656
+--- /dev/null
++++ b/src/lib/validations/table.ts
+@@ -0,0 +1,68 @@
++import { z } from "zod";
++
++import { validCapacity } from "@/lib/restauracion/tables";
++
++/**
++ * Validaciones de las server actions de sala (restauración, Task 5):
++ * apertura/estado/posición de mesa (operativas) y CRUD de zonas/mesas
++ * (gestión). Espejo de `TableStatusValue` (lib/restauracion/tables.ts / enum
++ * `public.table_status`) y `TableShape` (types/database.ts / enum
++ * `public.table_shape`).
++ */
++
++export const tableStatusEnum = z.enum(["libre", "ocupada", "cuenta_pedida", "por_limpiar"]);
++export const tableShapeEnum = z.enum(["round", "square"]);
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Operativas: openTable, setTableStatus, saveTablePosition
++// ─────────────────────────────────────────────────────────────────────────────
++
++export const openTableSchema = z.object({
++  tableId: z.string().uuid(),
++  covers: z.number().int().min(1).max(99),
++});
++export type OpenTableInput = z.infer<typeof openTableSchema>;
++
++export const setTableStatusSchema = z.object({
++  tableId: z.string().uuid(),
++  from: tableStatusEnum,
++  to: tableStatusEnum,
++});
++export type SetTableStatusInput = z.infer<typeof setTableStatusSchema>;
++
++export const saveTablePositionSchema = z.object({
++  tableId: z.string().uuid(),
++  posX: z.number(),
++  posY: z.number(),
++});
++export type SaveTablePositionInput = z.infer<typeof saveTablePositionSchema>;
++
++// ─────────────────────────────────────────────────────────────────────────────
++// Gestión: CRUD de zonas y mesas del plano de sala
++// ─────────────────────────────────────────────────────────────────────────────
++
++export const zoneSchema = z.object({
++  name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
++  sortOrder: z.number().int().min(0).default(0),
++});
++export type ZoneInput = z.infer<typeof zoneSchema>;
++
++/**
++ * `capacityMin`/`capacityMax` reutilizan `validCapacity` (lib/restauracion/tables.ts,
++ * Task 3) en vez de repetir la regla a mano — misma fuente única de verdad
++ * que ya usa la UI del plano para pintar el rango de comensales de una mesa.
++ */
++export const tableSchema = z
++  .object({
++    name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
++    zoneId: z.string().uuid(),
++    capacityMin: z.number().int().min(1).default(2),
++    capacityMax: z.number().int().min(1).default(4),
++    shape: tableShapeEnum.default("round"),
++    sortOrder: z.number().int().min(0).default(0),
++  })
++  .refine((t) => validCapacity(t.capacityMin, t.capacityMax), {
++    message: "La capacidad máxima no puede ser menor que la mínima",
++    path: ["capacityMax"],
++  });
++export type TableInput = z.infer<typeof tableSchema>;
+diff --git a/src/tests/integration/restauracion-sala-actions.test.ts b/src/tests/integration/restauracion-sala-actions.test.ts
+new file mode 100644
+index 0000000..f7702aa
+--- /dev/null
++++ b/src/tests/integration/restauracion-sala-actions.test.ts
+@@ -0,0 +1,125 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++const holder = vi.hoisted(() => ({ supabase: null as unknown, membership: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({
++  getActiveSalonId: () => Promise.resolve("SALON"),
++  getActiveMembership: () => Promise.resolve(holder.membership),
++  canManageSettings: (r: string | null | undefined) => r === "owner" || r === "manager",
++}));
++
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++import { openTable, setTableStatus } from "@/app/(dashboard)/sala/actions";
++
++beforeEach(() => {
++  holder.membership = { salonId: "SALON", role: "staff" };
++  holder.supabase = null;
++});
++
++const TABLE_ID_1 = "11111111-1111-4111-8111-111111111111";
++
++// ─────────────────────────────────────────────────────────────────────────────
++// openTable: UPDATE-mesa-condicionado (libre→ocupada) → insert-order →
++// (si falla) revertir mesa. Ver contrato en el brief de la Task 5.
++// ─────────────────────────────────────────────────────────────────────────────
++
++describe("sala actions — openTable", () => {
++  it("rechaza si la mesa NO está libre (UPDATE condicionado afecta 0 filas), sin insertar order", async () => {
++    const onWrite = vi.fn((op: string) => (op === "update" ? { data: [] } : {}));
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await openTable({ tableId: TABLE_ID_1, covers: 2 });
++
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toContain("no está libre");
++    expect(onWrite).not.toHaveBeenCalledWith("insert", "orders", expect.anything());
++  });
++
++  it("abre la mesa y crea la cuenta cuando está libre", async () => {
++    const onWrite = vi.fn((op: string, table: string) => {
++      if (op === "update" && table === "dining_tables") {
++        return { data: [{ id: TABLE_ID_1, salon_id: "SALON", status: "ocupada", name: "Mesa 3" }] };
++      }
++      if (op === "insert" && table === "orders") {
++        return {
++          data: [
++            {
++              id: "99999999-9999-4999-8999-999999999999",
++              salon_id: "SALON",
++              channel: "mesa",
++              dining_table_id: TABLE_ID_1,
++              covers: 2,
++              label: "Mesa 3",
++              status: "abierta",
++            },
++          ],
++        };
++      }
++      return {};
++    });
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await openTable({ tableId: TABLE_ID_1, covers: 2 });
++
++    expect(r.ok).toBe(true);
++    if (r.ok) {
++      expect(r.data.status).toBe("abierta");
++      expect(r.data.dining_table_id).toBe(TABLE_ID_1);
++      expect(r.data.label).toBe("Mesa 3");
++    }
++    expect(onWrite).toHaveBeenCalledWith("update", "dining_tables", { status: "ocupada" });
++    expect(onWrite).toHaveBeenCalledWith(
++      "insert",
++      "orders",
++      expect.objectContaining({ channel: "mesa", dining_table_id: TABLE_ID_1, covers: 2, label: "Mesa 3" }),
++    );
++  });
++
++  it("revierte la mesa a libre si el insert del pedido falla (compensación manual)", async () => {
++    const onWrite = vi.fn((op: string, table: string) => {
++      if (op === "update" && table === "dining_tables") {
++        return { data: [{ id: TABLE_ID_1, salon_id: "SALON", status: "ocupada", name: "Mesa 3" }] };
++      }
++      if (op === "insert" && table === "orders") {
++        return { error: { message: "boom" } };
++      }
++      return {};
++    });
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await openTable({ tableId: TABLE_ID_1, covers: 2 });
++
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toBe("boom");
++    expect(onWrite).toHaveBeenCalledWith("update", "dining_tables", { status: "libre" });
++  });
++});
++
++// ─────────────────────────────────────────────────────────────────────────────
++// setTableStatus: canTransition ANTES de tocar BD; UPDATE condicionado por
++// status = from; 0 filas ⇒ CONFLICTO (misma seguridad de concurrencia que
++// `setOrderItemStatus`, mostrador/actions.ts).
++// ─────────────────────────────────────────────────────────────────────────────
++
++describe("sala actions — setTableStatus", () => {
++  it("da CONFLICTO cuando el UPDATE condicionado afecta 0 filas", async () => {
++    const onWrite = vi.fn(() => ({ data: [] }));
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await setTableStatus({ tableId: TABLE_ID_1, from: "ocupada", to: "por_limpiar" });
++
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error.toLowerCase()).toContain("conflicto");
++  });
++
++  it("rechaza transición inválida sin tocar BD", async () => {
++    const onWrite = vi.fn(() => ({}));
++    holder.supabase = makeSupabaseMock({ onWrite });
++
++    const r = await setTableStatus({ tableId: TABLE_ID_1, from: "libre", to: "por_limpiar" });
++
++    expect(r.ok).toBe(false);
++    expect(onWrite).not.toHaveBeenCalledWith("update", expect.anything(), expect.anything());
++  });
++});

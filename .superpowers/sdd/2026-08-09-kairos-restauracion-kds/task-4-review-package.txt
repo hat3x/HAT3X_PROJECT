@@ -1,0 +1,475 @@
+=== COMMITS (d037b8c..38b00d2) ===
+38b00d2 feat(restauracion): pantalla de cocina KDS (/cocina) en tiempo real
+
+=== DIFF --stat ===
+ src/app/(dashboard)/cocina/cocina-view.tsx       | 131 +++++++++++++++++++++++
+ src/app/(dashboard)/cocina/layout.tsx            |  16 +++
+ src/app/(dashboard)/cocina/order-ticket-card.tsx | 106 ++++++++++++++++++
+ src/app/(dashboard)/cocina/page.tsx              |  41 +++++++
+ src/app/(dashboard)/cocina/station-column.tsx    |  46 ++++++++
+ src/tests/unit/order-ticket-card.test.tsx        |  86 +++++++++++++++
+ 6 files changed, 426 insertions(+)
+
+=== DIFF -U8 ===
+diff --git a/src/app/(dashboard)/cocina/cocina-view.tsx b/src/app/(dashboard)/cocina/cocina-view.tsx
+new file mode 100644
+index 0000000..fec665b
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/cocina-view.tsx
+@@ -0,0 +1,131 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Loader2, WifiOff } from "lucide-react";
++
++import { StationColumn } from "@/app/(dashboard)/cocina/station-column";
++import { useKdsItems, useKdsRealtime } from "@/hooks/use-kds";
++import { groupKdsItemsByOrder, type KdsItem } from "@/lib/restauracion/kds";
++
++interface CocinaViewProps {
++  salonId: string;
++}
++
++/** Estación sentinela para líneas sin `stationId` asignado en la carta. */
++const UNASSIGNED_STATION = "Sin estación";
++
++/**
++ * Indicador "En directo" del estado de `useKdsRealtime` — mismo patrón
++ * visual que `RealtimeIndicator` de `day-panel-view.tsx` (punto pulsante en
++ * verde/conectado, icono de sin-conexión en error, spinner conectando),
++ * adaptado al copy de cocina.
++ */
++function LiveIndicator({
++  status,
++}: {
++  status: "connecting" | "connected" | "error";
++}): React.ReactElement {
++  const base =
++    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-150 ease-apple-out";
++
++  if (status === "connected") {
++    return (
++      <span
++        className={`${base} border-success/25 bg-success/10 text-success`}
++        title="Los cambios se reflejan al instante"
++      >
++        <span className="relative flex h-1.5 w-1.5">
++          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/70" />
++          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
++        </span>
++        En directo
++      </span>
++    );
++  }
++  if (status === "error") {
++    return (
++      <span className={`${base} border-destructive/25 bg-destructive/10 text-destructive`}>
++        <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
++        Sin conexión en tiempo real
++      </span>
++    );
++  }
++  return (
++    <span className={`${base} border-border bg-muted text-muted-foreground`}>
++      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++      Conectando…
++    </span>
++  );
++}
++
++/** Agrupa las líneas activas del KDS por nombre de estación. */
++function groupByStation(items: readonly KdsItem[]): Map<string, KdsItem[]> {
++  const byStation = new Map<string, KdsItem[]>();
++  for (const item of items) {
++    const key = item.stationName ?? UNASSIGNED_STATION;
++    const list = byStation.get(key) ?? [];
++    list.push(item);
++    byStation.set(key, list);
++  }
++  return byStation;
++}
++
++/**
++ * Pantalla de cocina (KDS, Task 4): columnas por estación con las comandas
++ * activas en tiempo real. `useKdsRealtime` invalida la query del KDS en
++ * cualquier cambio de `order_items`; `useKdsItems` la vuelve a pedir. El
++ * cronómetro de cada línea se refresca cada 30s con un `setInterval` que
++ * solo fuerza un re-render (`now` en estado) — la lógica pura de minutos
++ * transcurridos vive en `elapsedMinutes` (lib/restauracion/kds.ts) y NUNCA
++ * llama a `Date.now()` directamente.
++ */
++export function CocinaView({ salonId }: CocinaViewProps): React.ReactElement {
++  const realtimeStatus = useKdsRealtime(salonId);
++  const itemsQuery = useKdsItems(salonId);
++
++  const [now, setNow] = useState(() => new Date());
++  useEffect(() => {
++    const id = setInterval(() => setNow(new Date()), 30000);
++    return () => clearInterval(id);
++  }, []);
++
++  const items = itemsQuery.data ?? [];
++  const byStation = groupByStation(items);
++  const stationNames = [...byStation.keys()].sort((a, b) => a.localeCompare(b, "es"));
++
++  return (
++    <main className="container py-6 lg:py-8">
++      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
++        <div className="space-y-1">
++          <h1 className="text-3xl font-bold tracking-tight">Cocina</h1>
++          <p className="text-sm text-muted-foreground">Comandas activas agrupadas por estación.</p>
++        </div>
++        <LiveIndicator status={realtimeStatus} />
++      </div>
++
++      {itemsQuery.isPending ? (
++        <p className="text-sm text-muted-foreground">Cargando comandas…</p>
++      ) : itemsQuery.isError ? (
++        <p className="text-sm text-destructive">
++          No se pudieron cargar las comandas: {(itemsQuery.error as Error).message}
++        </p>
++      ) : stationNames.length === 0 ? (
++        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
++          <p className="text-sm text-muted-foreground">No hay comandas activas.</p>
++        </div>
++      ) : (
++        <div className="flex animate-fade-up gap-5 overflow-x-auto pb-2">
++          {stationNames.map((stationName) => (
++            <StationColumn
++              key={stationName}
++              salonId={salonId}
++              stationName={stationName}
++              groups={groupKdsItemsByOrder(byStation.get(stationName) ?? [])}
++              now={now}
++            />
++          ))}
++        </div>
++      )}
++    </main>
++  );
++}
+diff --git a/src/app/(dashboard)/cocina/layout.tsx b/src/app/(dashboard)/cocina/layout.tsx
+new file mode 100644
+index 0000000..1056b4a
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/layout.tsx
+@@ -0,0 +1,16 @@
++import { SectorGate } from "@/components/guards/sector-gate";
++
++/**
++ * Layout de cocina (KDS, restauración): SOLO gate de sector, SIN gate de
++ * rol — copia estructural de `mostrador/layout.tsx`. Igual que el
++ * mostrador, el KDS es un flujo operativo del día a día (despachar
++ * comandas) que usa cualquier miembro del equipo de cocina/barra, no solo
++ * quien gestiona ajustes.
++ */
++export default async function CocinaLayout({
++  children,
++}: {
++  children: React.ReactNode;
++}): Promise<React.ReactElement> {
++  return <SectorGate required="restauracion">{children}</SectorGate>;
++}
+diff --git a/src/app/(dashboard)/cocina/order-ticket-card.tsx b/src/app/(dashboard)/cocina/order-ticket-card.tsx
+new file mode 100644
+index 0000000..0c887ce
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/order-ticket-card.tsx
+@@ -0,0 +1,106 @@
++"use client";
++
++import { Timer } from "lucide-react";
++
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardHeader } from "@/components/ui/card";
++import { useSetOrderItemStatus } from "@/hooks/use-orders";
++import { elapsedMinutes, type KdsItem, type KdsOrderGroup } from "@/lib/restauracion/kds";
++import { cn } from "@/lib/utils";
++import type { OrderItemStatus } from "@/types/database";
++
++interface OrderTicketCardProps {
++  salonId: string;
++  group: KdsOrderGroup;
++  /** Reloj compartido de la vista (Task 4): refrescado cada 30s por
++   * `CocinaView`, NUNCA `Date.now()` calculado aquí — mantiene el
++   * cronómetro puro y testable con un `now` fijo. */
++  now: Date;
++}
++
++/**
++ * Franja de color del cronómetro por antigüedad de la línea: verde (<5 min),
++ * ámbar (5-10 min) y rojo (>10 min) — misma escala de urgencia visual que
++ * usa `day-panel-view.tsx` para el indicador de Realtime, aplicada aquí a
++ * tiempo de espera en cocina.
++ */
++function timerTone(minutes: number): string {
++  if (minutes > 10) return "border-destructive/25 bg-destructive/10 text-destructive";
++  if (minutes >= 5) return "border-warning/25 bg-warning/10 text-warning";
++  return "border-success/25 bg-success/10 text-success";
++}
++
++/**
++ * Tarjeta de comanda del KDS: una por pedido dentro de una columna de
++ * estación (`StationColumn`). Cada línea puede avanzar de estado con un
++ * botón — **Entregar** (enviado/preparando → listo) o **Entregado**
++ * (listo → entregado) — llamando a `useSetOrderItemStatus`, cuya mutation
++ * server-side condiciona el UPDATE por `status = from` (ver
++ * `mostrador/actions.ts`). Si el servidor rechaza por CONFLICTO (otro
++ * miembro del equipo ya cambió el estado de esa línea), no hace falta
++ * manejarlo aquí explícitamente: `useKdsRealtime` invalida la query del KDS
++ * en cualquier cambio de `order_items` y la lista se refresca sola.
++ */
++export function OrderTicketCard({ salonId, group, now }: OrderTicketCardProps): React.ReactElement {
++  const setStatus = useSetOrderItemStatus(salonId);
++
++  function advance(item: KdsItem, to: OrderItemStatus): void {
++    setStatus.mutate({ itemId: item.id, from: item.status as OrderItemStatus, to });
++  }
++
++  return (
++    <Card className="border-border/70">
++      <CardHeader className="flex flex-row items-baseline gap-2 space-y-0 p-4 pb-2">
++        <span className="text-2xl font-bold leading-none tabular-nums">#{group.orderNumber}</span>
++        {group.orderLabel !== null && group.orderLabel.trim() !== "" ? (
++          <span className="truncate text-sm font-medium text-muted-foreground">{group.orderLabel}</span>
++        ) : null}
++      </CardHeader>
++      <CardContent className="flex flex-col gap-2.5 p-4 pt-0">
++        {group.items.map((item) => {
++          const minutes = elapsedMinutes(item.createdAt, now);
++          return (
++            <div
++              key={item.id}
++              className="flex flex-wrap items-center gap-2.5 rounded-lg border border-border/60 bg-background/60 p-2.5"
++            >
++              <div className="min-w-0 flex-1">
++                <p className="truncate text-sm font-semibold text-foreground">
++                  <span className="tabular-nums">{item.qty}×</span> {item.productName}
++                </p>
++                {item.modifiers.length > 0 ? (
++                  <p className="truncate text-xs text-muted-foreground">{item.modifiers.join(", ")}</p>
++                ) : null}
++              </div>
++
++              <span
++                className={cn(
++                  "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums transition-colors duration-150 ease-apple-out",
++                  timerTone(minutes),
++                )}
++              >
++                <Timer className="h-3 w-3" aria-hidden="true" />
++                {minutes} min
++              </span>
++
++              {item.status !== "listo" ? (
++                <Button size="sm" onClick={() => advance(item, "listo")} disabled={setStatus.isPending}>
++                  Entregar
++                </Button>
++              ) : (
++                <Button
++                  size="sm"
++                  variant="secondary"
++                  onClick={() => advance(item, "entregado")}
++                  disabled={setStatus.isPending}
++                >
++                  Entregado
++                </Button>
++              )}
++            </div>
++          );
++        })}
++      </CardContent>
++    </Card>
++  );
++}
+diff --git a/src/app/(dashboard)/cocina/page.tsx b/src/app/(dashboard)/cocina/page.tsx
+new file mode 100644
+index 0000000..4b60080
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/page.tsx
+@@ -0,0 +1,41 @@
++import type { Metadata } from "next";
++import { redirect } from "next/navigation";
++
++import { CocinaView } from "@/app/(dashboard)/cocina/cocina-view";
++import { getActiveSalon } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++
++export const metadata: Metadata = {
++  title: "Cocina",
++};
++
++/**
++ * Resuelve el salón activo en SERVIDOR (mismo patrón que `mostrador/page.tsx`)
++ * y delega el resto en `CocinaView` (cliente): sesión sin usuario → `/login`;
++ * usuario sin salón asociado → aviso in-page (aún no ha completado alta).
++ */
++export default async function CocinaPage(): Promise<React.ReactElement> {
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  if (user === null) {
++    redirect("/login");
++  }
++
++  const salon = await getActiveSalon();
++
++  if (salon === null) {
++    return (
++      <main className="container py-10">
++        <h1 className="text-3xl font-bold tracking-tight">Cocina</h1>
++        <p className="mt-2 text-muted-foreground">
++          Tu usuario no está asociado a ningún salón todavía.
++        </p>
++      </main>
++    );
++  }
++
++  return <CocinaView salonId={salon.id} />;
++}
+diff --git a/src/app/(dashboard)/cocina/station-column.tsx b/src/app/(dashboard)/cocina/station-column.tsx
+new file mode 100644
+index 0000000..df1c89b
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/station-column.tsx
+@@ -0,0 +1,46 @@
++import { OrderTicketCard } from "@/app/(dashboard)/cocina/order-ticket-card";
++import type { KdsOrderGroup } from "@/lib/restauracion/kds";
++
++interface StationColumnProps {
++  salonId: string;
++  stationName: string;
++  groups: KdsOrderGroup[];
++  /** Reloj compartido de `CocinaView`, ver `OrderTicketCard`. */
++  now: Date;
++}
++
++/**
++ * Columna de una estación (cocina, barra…) del KDS: encabezado con el
++ * nombre y el nº de comandas activas, y la lista de tarjetas de pedido —ya
++ * ordenadas FIFO por `groupKdsItemsByOrder`, la más antigua primero, igual
++ * que despacharía la cocina en persona. Ancho fijo pensado para pantalla
++ * grande: varias columnas visibles a la vez, con scroll horizontal en la
++ * fila si no caben todas (ver `CocinaView`).
++ */
++export function StationColumn({
++  salonId,
++  stationName,
++  groups,
++  now,
++}: StationColumnProps): React.ReactElement {
++  return (
++    <section className="flex w-80 shrink-0 flex-col gap-3 rounded-xl border border-border/70 bg-muted/30 p-3">
++      <header className="flex items-center justify-between gap-2 px-1">
++        <h2 className="truncate text-lg font-bold tracking-tight">{stationName}</h2>
++        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
++          {groups.length}
++        </span>
++      </header>
++
++      {groups.length === 0 ? (
++        <p className="px-1 text-sm text-muted-foreground">Sin comandas activas.</p>
++      ) : (
++        <div className="flex flex-col gap-3">
++          {groups.map((group) => (
++            <OrderTicketCard key={group.orderId} salonId={salonId} group={group} now={now} />
++          ))}
++        </div>
++      )}
++    </section>
++  );
++}
+diff --git a/src/tests/unit/order-ticket-card.test.tsx b/src/tests/unit/order-ticket-card.test.tsx
+new file mode 100644
+index 0000000..d144e46
+--- /dev/null
++++ b/src/tests/unit/order-ticket-card.test.tsx
+@@ -0,0 +1,86 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++import type { KdsOrderGroup } from "@/lib/restauracion/kds";
++
++/**
++ * Mock de `@/hooks/use-orders` (patrón `order-panel.test.tsx` / `menu-item-form.test.tsx`,
++ * vi.hoisted + createElement + getByRole): `OrderTicketCard` llama a
++ * `useSetOrderItemStatus` directamente, así que el test no necesita
++ * `QueryClientProvider`.
++ */
++const m = vi.hoisted(() => ({
++  setOrderItemStatus: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++}));
++vi.mock("@/hooks/use-orders", () => ({
++  useSetOrderItemStatus: () => m.setOrderItemStatus,
++}));
++
++import { OrderTicketCard } from "@/app/(dashboard)/cocina/order-ticket-card";
++
++beforeEach(() => {
++  m.setOrderItemStatus.mutate = vi.fn();
++});
++afterEach(() => cleanup());
++
++const NOW = new Date("2026-08-09T12:10:00.000Z");
++
++/** Un pedido (#42, mesa "Mesa 3") con una única línea en el estado dado. */
++function groupWith(status: "enviado" | "listo"): KdsOrderGroup {
++  return {
++    orderId: "order-1",
++    orderNumber: 42,
++    orderLabel: "Mesa 3",
++    createdAt: "2026-08-09T12:00:00.000Z",
++    items: [
++      {
++        id: "item-1",
++        orderId: "order-1",
++        orderNumber: 42,
++        orderLabel: "Mesa 3",
++        stationId: "st-1",
++        stationName: "Cocina",
++        productName: "Hamburguesa",
++        qty: 2,
++        status,
++        modifiers: [],
++        createdAt: "2026-08-09T12:00:00.000Z",
++      },
++    ],
++  };
++}
++
++describe("OrderTicketCard", () => {
++  it("un ítem 'enviado' muestra Entregar y al pulsarlo pide pasar a 'listo'", async () => {
++    const user = userEvent.setup();
++    render(createElement(OrderTicketCard, { salonId: "SALON", group: groupWith("enviado"), now: NOW }));
++
++    expect(screen.getByText("#42")).toBeInTheDocument();
++    expect(screen.getByText(/hamburguesa/i)).toBeInTheDocument();
++
++    await user.click(screen.getByRole("button", { name: /entregar/i }));
++
++    expect(m.setOrderItemStatus.mutate).toHaveBeenCalledTimes(1);
++    expect(m.setOrderItemStatus.mutate.mock.calls[0]![0]).toMatchObject({
++      itemId: "item-1",
++      from: "enviado",
++      to: "listo",
++    });
++  });
++
++  it("un ítem 'listo' muestra Entregado y al pulsarlo pide pasar a 'entregado'", async () => {
++    const user = userEvent.setup();
++    render(createElement(OrderTicketCard, { salonId: "SALON", group: groupWith("listo"), now: NOW }));
++
++    await user.click(screen.getByRole("button", { name: /entregado/i }));
++
++    expect(m.setOrderItemStatus.mutate).toHaveBeenCalledTimes(1);
++    expect(m.setOrderItemStatus.mutate.mock.calls[0]![0]).toMatchObject({
++      itemId: "item-1",
++      from: "listo",
++      to: "entregado",
++    });
++  });
++});

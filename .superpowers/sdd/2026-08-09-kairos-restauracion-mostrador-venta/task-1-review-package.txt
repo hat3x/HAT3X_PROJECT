@@ -1,0 +1,546 @@
+=== COMMITS (52b86aa..ad2c14f) ===
+ad2c14f feat(restauracion): pedidos de mostrador (orders/order_items, append-only)
+
+=== DIFF --stat ===
+ src/tests/unit/restauracion-orders-sql.test.ts     |  47 +++++
+ src/types/database.ts                              | 201 +++++++++++++++++++++
+ .../20260810100000_restauracion_orders.sql         | 136 ++++++++++++++
+ 3 files changed, 384 insertions(+)
+
+=== DIFF -U8 ===
+diff --git a/src/tests/unit/restauracion-orders-sql.test.ts b/src/tests/unit/restauracion-orders-sql.test.ts
+new file mode 100644
+index 0000000..31c61bb
+--- /dev/null
++++ b/src/tests/unit/restauracion-orders-sql.test.ts
+@@ -0,0 +1,47 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810100000_restauracion_orders.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración orders", () => {
++  it("crea los enums de estado de pedido e ítem", () => {
++    expect(SQL).toContain("create type public.order_status as enum");
++    expect(SQL).toContain("'abierta'");
++    expect(SQL).toContain("create type public.order_item_status as enum");
++    expect(SQL).toContain("'enviado'");
++    expect(SQL).toContain("'anulado'");
++  });
++
++  it("orders con id de cliente, idempotency_key único por salón y clave compuesta", () => {
++    expect(SQL).toContain("create table if not exists public.orders");
++    expect(SQL).toContain("idempotency_key");
++    expect(SQL).toContain("unique (salon_id, idempotency_key)");
++    expect(SQL).toContain("orders_id_salon_key unique (id, salon_id)");
++  });
++
++  it("order_items append-only: void_of_item_id, unit_price_cents>=0, FKs compuestas", () => {
++    expect(SQL).toContain("create table if not exists public.order_items");
++    expect(SQL).toContain("void_of_item_id");
++    expect(SQL).toContain("check (unit_price_cents >= 0)");
++    expect(SQL).toContain("foreign key (order_id, salon_id)");
++    expect(SQL).toContain("foreign key (product_id, salon_id)");
++    expect(SQL).toContain("foreign key (station_id, salon_id)");
++    expect(SQL).toContain("modifiers_snapshot jsonb");
++  });
++
++  it("añade pos_sales.order_id con FK compuesta a orders", () => {
++    expect(SQL).toContain("alter table public.pos_sales");
++    expect(SQL).toContain("add column if not exists order_id uuid");
++    expect(SQL).toContain("references public.orders (id, salon_id)");
++  });
++
++  it("RLS: miembros crean/leen (operativa) y guardián", () => {
++    expect(SQL).toContain("salon_id in (select app.user_salon_ids())");
++    expect(SQL).toContain("members_insert_orders");
++    expect(SQL).toContain("do $guard$");
++  });
++});
+diff --git a/src/types/database.ts b/src/types/database.ts
+index d324ce4..8db5b90 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -61,16 +61,31 @@ export type PlanItemState =
+ 
+ /**
+  * Tipo de movimiento de stock (espejo del enum public.stock_movement_kind).
+  * Migración 20260801120000_stock_inventory. `entrada`/`salida` = flujo normal;
+  * `ajuste` = corrección manual (fija el total); `merma` = pérdida/rotura.
+  */
+ export type StockMovementKind = "entrada" | "salida" | "ajuste" | "merma";
+ 
++/**
++ * Estado del pedido de mostrador (espejo del enum public.order_status).
++ * Migración 20260810100000_restauracion_orders.
++ */
++export type OrderStatus = "abierta" | "cobrada" | "cerrada" | "anulada";
++
++/** Estado de una línea de pedido (espejo del enum public.order_item_status). */
++export type OrderItemStatus =
++  | "pendiente"
++  | "enviado"
++  | "preparando"
++  | "listo"
++  | "entregado"
++  | "anulado";
++
+ export type AppointmentStatus =
+   | "pending"
+   | "confirmed"
+   | "completed"
+   | "cancelled"
+   | "no_show";
+ 
+ export type HistoryAction = "INSERT" | "UPDATE" | "DELETE";
+@@ -1094,16 +1109,178 @@ export interface Database {
+             foreignKeyName: "combo_components_station_fkey";
+             columns: ["station_id_override", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "stations";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      // Pedidos de mostrador (restauración), append-only — migración
++      // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE
++      // (offline-ready): sin default en BD → REQUERIDO en Insert.
++      // `order_number` es correlativo por salón (trigger app.set_order_number,
++      // omitir en Insert). session_id es FK compuesta opcional hacia
++      // pos_sessions (orders_session_id_fkey, on delete set null).
++      // idempotency_key es único por salón (orders_idempotency_key) para que
++      // reintentos del cliente no dupliquen el pedido. Clave de apoyo
++      // orders_id_salon_key (id, salon_id) para las FKs compuestas de
++      // order_items y pos_sales.order_id.
++      orders: {
++        Row: {
++          id: string;
++          salon_id: string;
++          session_id: string | null;
++          order_number: number | null; // bigint — correlativo por salón (trigger)
++          channel: string;
++          status: OrderStatus;
++          label: string | null;
++          idempotency_key: string | null;
++          created_by: string | null;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id: string; // sin default en BD: generado en cliente
++          salon_id: string;
++          session_id?: string | null;
++          // order_number lo pone el trigger app.set_order_number: omitir
++          channel?: string;
++          status?: OrderStatus;
++          label?: string | null;
++          idempotency_key?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          session_id?: string | null;
++          order_number?: number | null;
++          channel?: string;
++          status?: OrderStatus;
++          label?: string | null;
++          idempotency_key?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "orders_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "orders_session_id_fkey";
++            columns: ["session_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "pos_sessions";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
++      // Líneas de pedido (restauración), append-only — migración
++      // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE: sin
++      // default en BD → REQUERIDO en Insert. `void_of_item_id` !== null marca
++      // una fila como anulación de otra (append-only: nunca se hace UPDATE del
++      // qty/precio, se inserta una anulación). `modifiers_snapshot` guarda los
++      // modificadores elegidos en el momento del pedido (el catálogo puede
++      // cambiar). station_id es FK compuesta opcional hacia stations
++      // (order_items_station_id_fkey, on delete set null) para el ruteo a
++      // cocina/barra. Clave de apoyo order_items_id_salon_key (id, salon_id).
++      order_items: {
++        Row: {
++          id: string;
++          salon_id: string;
++          order_id: string;
++          product_id: string;
++          qty: number;
++          unit_price_cents: number;
++          vat_rate: number;
++          station_id: string | null;
++          status: OrderItemStatus;
++          combo_group: string | null;
++          modifiers_snapshot: Json;
++          void_of_item_id: string | null;
++          void_reason: string | null;
++          created_by: string | null;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id: string; // sin default en BD: generado en cliente
++          salon_id: string;
++          order_id: string;
++          product_id: string;
++          qty?: number;
++          unit_price_cents?: number;
++          vat_rate?: number;
++          station_id?: string | null;
++          status?: OrderItemStatus;
++          combo_group?: string | null;
++          modifiers_snapshot?: Json;
++          void_of_item_id?: string | null;
++          void_reason?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          order_id?: string;
++          product_id?: string;
++          qty?: number;
++          unit_price_cents?: number;
++          vat_rate?: number;
++          station_id?: string | null;
++          status?: OrderItemStatus;
++          combo_group?: string | null;
++          modifiers_snapshot?: Json;
++          void_of_item_id?: string | null;
++          void_reason?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "order_items_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "order_items_order_id_fkey";
++            columns: ["order_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "orders";
++            referencedColumns: ["id", "salon_id"];
++          },
++          {
++            foreignKeyName: "order_items_product_id_fkey";
++            columns: ["product_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "products";
++            referencedColumns: ["id", "salon_id"];
++          },
++          {
++            foreignKeyName: "order_items_station_id_fkey";
++            columns: ["station_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "stations";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
+       // Movimientos de stock (libro de inventario) — migración
+       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
+       // aplicado al stock resultante (no la magnitud introducida por el
+       // usuario); ver `@/lib/stock` para la lógica pura de cálculo
+       // (`applyMovement`/`movementDelta`) y `products/stock-actions.ts` para la
+       // Server Action que persiste el movimiento Y actualiza `products.stock`.
+       // Lote/caducidad viajan en las ENTRADAS (trazabilidad de lotes).
+       stock_movement: {
+@@ -1855,16 +2032,20 @@ export interface Database {
+           tax_cents: number; // IVA total
+           total_cents: number; // total a cobrar
+           currency: string;
+           sold_by: string | null;
+           sold_at: string;
+           notes: string | null;
+           created_at: string;
+           updated_at: string;
++          // Enlace fiscal al pedido de origen (restauración) — migración
++          // 20260810100000_restauracion_orders. FK compuesta
++          // pos_sales_order_id_fkey (order_id, salon_id) → orders (id, salon_id).
++          order_id: string | null;
+         };
+         Insert: {
+           id?: string;
+           salon_id: string;
+           session_id?: string | null;
+           appointment_id?: string | null;
+           customer_id?: string | null;
+           professional_id?: string | null;
+@@ -1874,16 +2055,17 @@ export interface Database {
+           tax_cents?: number;
+           total_cents?: number;
+           currency?: string;
+           sold_by?: string | null;
+           sold_at?: string;
+           notes?: string | null;
+           created_at?: string;
+           updated_at?: string;
++          order_id?: string | null;
+         };
+         Update: {
+           id?: string;
+           salon_id?: string;
+           session_id?: string | null;
+           appointment_id?: string | null;
+           customer_id?: string | null;
+           professional_id?: string | null;
+@@ -1893,16 +2075,17 @@ export interface Database {
+           tax_cents?: number;
+           total_cents?: number;
+           currency?: string;
+           sold_by?: string | null;
+           sold_at?: string;
+           notes?: string | null;
+           created_at?: string;
+           updated_at?: string;
++          order_id?: string | null;
+         };
+         Relationships: [
+           {
+             foreignKeyName: "pos_sales_salon_id_fkey";
+             columns: ["salon_id"];
+             isOneToOne: false;
+             referencedRelation: "salons";
+             referencedColumns: ["id"];
+@@ -1930,16 +2113,23 @@ export interface Database {
+           },
+           {
+             foreignKeyName: "pos_sales_professional_id_fkey";
+             columns: ["professional_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "professionals";
+             referencedColumns: ["id", "salon_id"];
+           },
++          {
++            foreignKeyName: "pos_sales_order_id_fkey";
++            columns: ["order_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "orders";
++            referencedColumns: ["id", "salon_id"];
++          },
+         ];
+       };
+       pos_sale_lines: {
+         Row: {
+           id: string;
+           salon_id: string;
+           sale_id: string;
+           service_id: string | null;
+@@ -3586,16 +3776,18 @@ export interface Database {
+       reward_status: RewardStatus;
+       salon_feature: SalonFeature;
+       salon_sector: SalonSector;
+       allergen: Allergen;
+       consent_type: ConsentType;
+       consent_status: ConsentStatus;
+       image_modality: ImageModality;
+       stock_movement_kind: StockMovementKind;
++      order_status: OrderStatus;
++      order_item_status: OrderItemStatus;
+     };
+     CompositeTypes: Record<never, never>;
+   };
+ }
+ 
+ // Helpers de acceso tipado ------------------------------------------------------
+ 
+ type PublicSchema = Database["public"];
+@@ -3722,16 +3914,25 @@ export type Station = Tables<"stations">;
+ export type ModifierGroup = Tables<"modifier_groups">;
+ export type Modifier = Tables<"modifiers">;
+ export type ProductModifierGroup = Tables<"product_modifier_groups">;
+ 
+ // Combos (restauración) — piezas de un producto combo con ruteo por estación
+ // opcional. Ver migración 20260809122000_restauracion_combos.
+ export type ComboComponent = Tables<"combo_components">;
+ 
++// Pedidos de mostrador (restauración), append-only — cabecera (orders) y
++// líneas (order_items). IDs generados en cliente (offline-ready): `id` es
++// REQUERIDO en los Insert (sin default en BD). Ver migración
++// 20260810100000_restauracion_orders.
++export type Order = Tables<"orders">;
++export type OrderInsert = TablesInsert<"orders">;
++export type OrderItem = Tables<"order_items">;
++export type OrderItemInsert = TablesInsert<"order_items">;
++
+ // Phase helpers -----------------------------------------------------------------
+ 
+ /** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
+ export interface ServicePhaseRange {
+   label: "application" | "exposure" | "post_exposure";
+   /** Minutos desde el inicio de la cita en que comienza la fase. */
+   startMin: number;
+   /** Minutos desde el inicio de la cita en que termina la fase. */
+diff --git a/supabase/migrations/20260810100000_restauracion_orders.sql b/supabase/migrations/20260810100000_restauracion_orders.sql
+new file mode 100644
+index 0000000..4d81a6c
+--- /dev/null
++++ b/supabase/migrations/20260810100000_restauracion_orders.sql
+@@ -0,0 +1,136 @@
++-- =============================================================================
++-- Kairos — Restauración · Pedidos de mostrador (orders/order_items, append-only)
++-- IDs generados en cliente. RLS operativa (cualquier miembro). Dinero en céntimos.
++-- =============================================================================
++begin;
++
++do $$ begin
++  if not exists (select 1 from pg_type where typname = 'order_status') then
++    create type public.order_status as enum ('abierta','cobrada','cerrada','anulada');
++  end if;
++  if not exists (select 1 from pg_type where typname = 'order_item_status') then
++    create type public.order_item_status as enum
++      ('pendiente','enviado','preparando','listo','entregado','anulado');
++  end if;
++end $$;
++
++create table if not exists public.orders (
++  id            uuid primary key,                    -- generado en cliente (offline-ready)
++  salon_id      uuid not null references public.salons (id) on delete cascade,
++  session_id    uuid,
++  order_number  bigint,                              -- corto para cocina (trigger)
++  channel       text not null default 'mostrador',
++  status        public.order_status not null default 'abierta',
++  label         text,                                -- etiqueta de cuenta abierta
++  idempotency_key text,
++  created_by    uuid references auth.users (id) on delete set null,
++  created_at    timestamptz not null default now(),
++  updated_at    timestamptz not null default now(),
++  constraint orders_session_id_fkey
++    foreign key (session_id, salon_id)
++    references public.pos_sessions (id, salon_id) on delete set null (session_id),
++  constraint orders_idempotency_key unique (salon_id, idempotency_key),
++  constraint orders_id_salon_key unique (id, salon_id)
++);
++
++create table if not exists public.order_items (
++  id                 uuid primary key,               -- generado en cliente
++  salon_id           uuid not null references public.salons (id) on delete cascade,
++  order_id           uuid not null,
++  product_id         uuid not null,
++  qty                integer not null default 1 check (qty > 0),
++  unit_price_cents   integer not null default 0 check (unit_price_cents >= 0),
++  vat_rate           numeric(5,2) not null default 10.00 check (vat_rate >= 0 and vat_rate <= 100),
++  station_id         uuid,
++  status             public.order_item_status not null default 'pendiente',
++  combo_group        text,                           -- agrupa piezas de un combo
++  modifiers_snapshot jsonb not null default '[]'::jsonb,
++  void_of_item_id    uuid,                           -- si !=null, es una anulación append-only
++  void_reason        text,
++  created_by         uuid references auth.users (id) on delete set null,
++  created_at         timestamptz not null default now(),
++  updated_at         timestamptz not null default now(),
++  constraint order_items_order_id_fkey
++    foreign key (order_id, salon_id)
++    references public.orders (id, salon_id) on delete cascade,
++  constraint order_items_product_id_fkey
++    foreign key (product_id, salon_id)
++    references public.products (id, salon_id) on delete restrict,
++  constraint order_items_station_id_fkey
++    foreign key (station_id, salon_id)
++    references public.stations (id, salon_id) on delete set null (station_id),
++  constraint order_items_id_salon_key unique (id, salon_id)
++);
++
++-- Enlace fiscal: la venta apunta al pedido que la originó.
++alter table public.pos_sales
++  add column if not exists order_id uuid;
++alter table public.pos_sales
++  add constraint pos_sales_order_id_fkey
++    foreign key (order_id, salon_id)
++    references public.orders (id, salon_id) on delete set null (order_id);
++
++-- order_number correlativo por salón (trigger; concurrencia baja en mostrador).
++create or replace function app.set_order_number()
++returns trigger
++language plpgsql
++security definer
++set search_path = ''
++as $$
++begin
++  if new.order_number is null then
++    select coalesce(max(order_number), 0) + 1 into new.order_number
++    from public.orders where salon_id = new.salon_id;
++  end if;
++  return new;
++end;
++$$;
++
++create trigger trg_orders_set_number
++  before insert on public.orders
++  for each row execute function app.set_order_number();
++create trigger trg_orders_updated_at
++  before update on public.orders
++  for each row execute function app.set_updated_at();
++create trigger trg_order_items_updated_at
++  before update on public.order_items
++  for each row execute function app.set_updated_at();
++
++create index if not exists idx_order_items_order_id on public.order_items (order_id);
++create index if not exists idx_order_items_station_status on public.order_items (station_id, status);
++create index if not exists idx_orders_salon_status on public.orders (salon_id, status);
++
++-- RLS: operativa = cualquier miembro (SELECT/INSERT/UPDATE); sin DELETE (append-only).
++alter table public.orders enable row level security;
++create policy "members_select_orders" on public.orders
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "members_insert_orders" on public.orders
++  for insert to authenticated with check (salon_id in (select app.user_salon_ids()));
++create policy "members_update_orders" on public.orders
++  for update to authenticated
++  using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++
++alter table public.order_items enable row level security;
++create policy "members_select_order_items" on public.order_items
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "members_insert_order_items" on public.order_items
++  for insert to authenticated with check (salon_id in (select app.user_salon_ids()));
++create policy "members_update_order_items" on public.order_items
++  for update to authenticated
++  using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++
++do $guard$
++declare _cnt integer;
++begin
++  select count(*) into _cnt from pg_policies
++    where schemaname = 'public' and tablename in ('orders','order_items');
++  if _cnt < 6 then
++    raise exception 'GUARDIÁN ORDERS: faltan políticas (encontradas %)', _cnt using errcode = 'raise_exception';
++  end if;
++  raise notice 'GUARDIÁN ORDERS: orders/order_items verificadas';
++end;
++$guard$;
++
++commit;

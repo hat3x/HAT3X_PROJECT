@@ -1,0 +1,286 @@
+=== COMMITS (d122b04..71bfd9b) ===
+71bfd9b test(restauracion): actualizar tests preexistentes obsoletos por la activacion del sector
+18f8d9d feat(restauracion): activar sector y navegación de carta
+
+=== DIFF --stat ===
+ src/components/dashboard-nav-items.ts             | 55 ++++++++++++++++-------
+ src/lib/sector/registry.ts                        |  2 +-
+ src/tests/unit/dashboard-nav-items-sector.test.ts |  7 +--
+ src/tests/unit/dashboard-nav-items.test.ts        | 11 +++++
+ src/tests/unit/sector-registry.test.ts            |  4 +-
+ 5 files changed, 57 insertions(+), 22 deletions(-)
+
+=== DIFF -U12 ===
+diff --git a/src/components/dashboard-nav-items.ts b/src/components/dashboard-nav-items.ts
+index 5a7a9b1..20d5635 100644
+--- a/src/components/dashboard-nav-items.ts
++++ b/src/components/dashboard-nav-items.ts
+@@ -17,24 +17,25 @@ import {
+   BellRing,
+   CalendarClock,
+   CalendarDays,
+   ClipboardList,
+   Clock,
+   FileText,
+   FolderOpen,
+   LayoutDashboard,
+   Package,
+   Settings,
+   ShoppingBag,
+   Stethoscope,
++  UtensilsCrossed,
+   Users,
+   Wallet,
+   type LucideIcon,
+ } from "lucide-react";
+ 
+ import { SECTOR_REGISTRY } from "@/lib/sector/registry";
+ import type { SalonSector } from "@/types/database";
+ 
+ /** Una sección navegable del panel: destino, etiqueta e icono. */
+ export interface NavItem {
+   href: string;
+   label: string;
+@@ -136,24 +137,35 @@ export const PLANES_ITEM: NavItem = {
+  * Expediente clínico (consentimientos informados + imágenes/radiografías).
+  * Solo visible para el sector odontología, justo después de Planes: primero
+  * el mapa de dientes, la exploración periodontal y el presupuesto/plan, y por
+  * último el expediente (consentimientos firmados + imágenes) que documenta
+  * todo lo anterior.
+  */
+ export const EXPEDIENTE_ITEM: NavItem = {
+   href: "/expediente",
+   label: "Expediente",
+   icon: FolderOpen,
+ };
+ 
++/**
++ * Carta (backoffice de categorías/estaciones/productos/modificadores/combos).
++ * Solo visible para el sector restauración, y solo para gestión (owner/manager):
++ * es materia de gestión, igual que Odontograma lo es para odontología.
++ */
++export const CARTA_ITEM: NavItem = {
++  href: "/carta",
++  label: "Carta",
++  icon: UtensilsCrossed,
++};
++
+ /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
+ export interface NavGating {
+   /** El usuario puede ver materia de gestión (owner/manager). */
+   showSettings: boolean;
+   /** El salón tiene el add-on `pos` (TPV) contratado y activo. */
+   hasPos: boolean;
+   /** Sector del salón activo; determina labels y disponibilidad. Por defecto "peluqueria". */
+   sector?: SalonSector;
+ }
+ 
+ /**
+  * Compone la lista de secciones del panel según el rol y los add-ons contratados:
+@@ -163,25 +175,27 @@ export interface NavGating {
+  *   · Facturación                → owner/manager Y `pos`; sin TPV se OCULTA.
+  *
+  * Facturación se coloca entre Analítica y Ajustes (del «cómo va» al «papeleo»).
+  * Puro y determinista → testeable sin render (`dashboard-nav-items.test.ts`).
+  *
+  * ── Por sector ────────────────────────────────────────────────────────────────
+  * Sector no implementado (`SECTOR_REGISTRY[sector].implemented === false`) →
+  * cascarón: solo Panel + "Próximamente" (+ Ajustes si `showSettings`), ignorando
+  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
+  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
+  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
+  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
+- * (en ese orden) tras "Pacientes".
++ * (en ese orden) tras "Pacientes". Restauración inserta Carta (gestión de la carta:
++ * categorías/estaciones/productos/combos) justo tras "Panel", solo si `showSettings`
++ * (owner/manager); sin gestión no se añade (staff no ve Carta).
+  */
+ export function buildDashboardNavItems({
+   showSettings,
+   hasPos,
+   sector = "peluqueria",
+ }: NavGating): NavItem[] {
+   const items: NavItem[] = [...PRIMARY_NAV_ITEMS];
+ 
+   if (showSettings) {
+     items.push(ANALITICA_ITEM);
+     if (hasPos) {
+       items.push(FACTURACION_ITEM);
+@@ -202,28 +216,37 @@ export function buildDashboardNavItems({
+       ...(showSettings ? [SETTINGS_ITEM] : []),
+     ];
+   }
+ 
+   if (sector === "peluqueria") return items;
+ 
+   const withSectorLabels = items.map((item) =>
+     item.href === "/customers"
+       ? { ...item, label: config.terms.customerPlural }
+       : item,
+   );
+ 
+-  if (sector !== "odontologia") return withSectorLabels;
+-
+-  // Odontología: añadir Odontograma justo después de Pacientes, Periodontograma
+-  // justo después de Odontograma, Planes justo después de Periodontograma, y
+-  // Expediente justo después de Planes.
+-  const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
+-  const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
+-  return [
+-    ...withSectorLabels.slice(0, insertAt),
+-    ODONTOGRAMA_ITEM,
+-    PERIODONTOGRAMA_ITEM,
+-    PLANES_ITEM,
+-    EXPEDIENTE_ITEM,
+-    ...withSectorLabels.slice(insertAt),
+-  ];
++  if (sector === "odontologia") {
++    // Odontología: añadir Odontograma justo después de Pacientes, Periodontograma
++    // justo después de Odontograma, Planes justo después de Periodontograma, y
++    // Expediente justo después de Planes.
++    const patientsIdx = withSectorLabels.findIndex((i) => i.href === "/customers");
++    const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
++    return [
++      ...withSectorLabels.slice(0, insertAt),
++      ODONTOGRAMA_ITEM,
++      PERIODONTOGRAMA_ITEM,
++      PLANES_ITEM,
++      EXPEDIENTE_ITEM,
++      ...withSectorLabels.slice(insertAt),
++    ];
++  }
++
++  if (sector === "restauracion") {
++    // "Carta" es gestión (owner/manager): solo si showSettings.
++    return showSettings
++      ? [...withSectorLabels.slice(0, 1), CARTA_ITEM, ...withSectorLabels.slice(1)]
++      : withSectorLabels;
++  }
++
++  return withSectorLabels;
+ }
+diff --git a/src/lib/sector/registry.ts b/src/lib/sector/registry.ts
+index b593aee..05ed40d 100644
+--- a/src/lib/sector/registry.ts
++++ b/src/lib/sector/registry.ts
+@@ -58,25 +58,25 @@ export const SECTOR_REGISTRY: Record<SalonSector, SectorConfig> = {
+       customer: "Paciente", customerPlural: "Pacientes",
+       service: "Tratamiento", servicePlural: "Tratamientos",
+       professional: "Dentista", professionalPlural: "Equipo",
+       business: "clínica", businessCapitalized: "Clínica",
+     },
+     sampleService: { name: "Limpieza dental", priceCents: 4500 },
+   },
+   restauracion: {
+     key: "restauracion",
+     label: "Restauración",
+     brandName: "Kairos",
+     defaultPrimary: "#c2410c",
+-    implemented: false,
++    implemented: true,
+     terms: {
+       customer: "Cliente", customerPlural: "Clientes",
+       service: "Producto", servicePlural: "Carta",
+       professional: "Empleado", professionalPlural: "Equipo",
+       business: "restaurante", businessCapitalized: "Restaurante",
+     },
+     sampleService: { name: "Menú del día", priceCents: 1500 },
+   },
+ };
+ 
+ export const SECTOR_ORDER: readonly SalonSector[] = [
+   "peluqueria", "odontologia", "restauracion",
+diff --git a/src/tests/unit/dashboard-nav-items-sector.test.ts b/src/tests/unit/dashboard-nav-items-sector.test.ts
+index a593867..2b542c7 100644
+--- a/src/tests/unit/dashboard-nav-items-sector.test.ts
++++ b/src/tests/unit/dashboard-nav-items-sector.test.ts
+@@ -33,22 +33,23 @@ describe("buildDashboardNavItems — por sector", () => {
+     expect(peluqueria.some((i) => i.href === "/planes")).toBe(false);
+   });
+   it("odontologia: '/expediente' aparece justo después de '/planes'; en peluquería NO aparece", () => {
+     const dental = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "odontologia" });
+     expect(dental.some((i) => i.href === "/expediente")).toBe(true);
+     const planesIdx = dental.findIndex((i) => i.href === "/planes");
+     const expedienteIdx = dental.findIndex((i) => i.href === "/expediente");
+     expect(expedienteIdx).toBe(planesIdx + 1);
+ 
+     const peluqueria = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "peluqueria" });
+     expect(peluqueria.some((i) => i.href === "/expediente")).toBe(false);
+   });
+-  it("restauracion (cascaron): item 'Próximamente'", () => {
++  it("restauracion: ya no es cascarón; item 'Carta' visible y sin 'Próximamente'", () => {
+     const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
+-    expect(items.some((i) => i.label === "Próximamente")).toBe(true);
+-    expect(items.some((i) => i.href === "/proximamente")).toBe(true);
++    expect(items.some((i) => i.label === "Próximamente")).toBe(false);
++    expect(items.some((i) => i.href === "/proximamente")).toBe(false);
++    expect(items.some((i) => i.href === "/carta")).toBe(true);
+   });
+   it("sin sector = peluqueria", () => {
+     const items = buildDashboardNavItems({ showSettings: true, hasPos: true });
+     expect(items.some((i) => i.label === "Clientes")).toBe(true);
+   });
+ });
+diff --git a/src/tests/unit/dashboard-nav-items.test.ts b/src/tests/unit/dashboard-nav-items.test.ts
+index 4fe683b..037707c 100644
+--- a/src/tests/unit/dashboard-nav-items.test.ts
++++ b/src/tests/unit/dashboard-nav-items.test.ts
+@@ -71,13 +71,24 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
+     );
+     expect(items.indexOf(FACTURACION_ITEM.href)).toBeLessThan(
+       items.indexOf(SETTINGS_ITEM.href),
+     );
+   });
+ 
+   it("Recordatorios (recall de revisión) es operativa diaria: visible para staff, justo tras Citas", () => {
+     const items = hrefs(buildDashboardNavItems({ showSettings: false, hasPos: false }));
+ 
+     expect(items).toContain("/recordatorios");
+     expect(items.indexOf("/recordatorios")).toBe(items.indexOf("/appointments") + 1);
+   });
++
++  it("restauración: owner ve el item Carta y NO 'Próximamente'", () => {
++    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/carta");
++    expect(hrefs).not.toContain("/proximamente");
++  });
++  it("restauración: staff (sin settings) no cae en 'Próximamente'", () => {
++    const items = buildDashboardNavItems({ showSettings: false, hasPos: false, sector: "restauracion" });
++    expect(items.map((i) => i.href)).not.toContain("/proximamente");
++  });
+ });
+diff --git a/src/tests/unit/sector-registry.test.ts b/src/tests/unit/sector-registry.test.ts
+index 06d34e9..e622da4 100644
+--- a/src/tests/unit/sector-registry.test.ts
++++ b/src/tests/unit/sector-registry.test.ts
+@@ -39,27 +39,27 @@ describe("sector registry", () => {
+       name: "Corte y peinado",
+       priceCents: 2500,
+     });
+     expect(SECTOR_REGISTRY.odontologia.sampleService).toEqual({
+       name: "Limpieza dental",
+       priceCents: 4500,
+     });
+     expect(SECTOR_REGISTRY.restauracion.sampleService).toEqual({
+       name: "Menú del día",
+       priceCents: 1500,
+     });
+   });
+-  it("implemented: peluqueria y odontologia true, restauracion false", () => {
++  it("implemented: peluqueria, odontologia y restauracion true", () => {
+     expect(SECTOR_REGISTRY.peluqueria.implemented).toBe(true);
+     expect(SECTOR_REGISTRY.odontologia.implemented).toBe(true);
+-    expect(SECTOR_REGISTRY.restauracion.implemented).toBe(false);
++    expect(SECTOR_REGISTRY.restauracion.implemented).toBe(true);
+   });
+   it("SECTOR_ORDER lista los 3 sectores", () => {
+     expect([...SECTOR_ORDER].sort()).toEqual([...ALL].sort());
+   });
+   it("getSectorConfig devuelve la config", () => {
+     expect(getSectorConfig("odontologia").label).toBe("Odontología");
+   });
+   it("el masterbrand es «Kairos» en todos los sectores", () => {
+     for (const s of ALL) expect(SECTOR_REGISTRY[s].brandName).toBe("Kairos");
+   });
+ });

@@ -1,0 +1,167 @@
+=== COMMITS (0b1d270..d963ce7) ===
+d963ce7 feat(restauracion): item de navegación Mostrador (visible a staff)
+
+=== DIFF --stat ===
+ src/components/dashboard-nav-items.ts      | 30 ++++++++++++++++++++++++------
+ src/tests/unit/dashboard-nav-items.test.ts | 13 +++++++++++++
+ 2 files changed, 37 insertions(+), 6 deletions(-)
+
+=== DIFF -U12 ===
+diff --git a/src/components/dashboard-nav-items.ts b/src/components/dashboard-nav-items.ts
+index 20d5635..fa6a4c9 100644
+--- a/src/components/dashboard-nav-items.ts
++++ b/src/components/dashboard-nav-items.ts
+@@ -10,24 +10,25 @@
+  * que ya ocultan los KPIs y gráficas de ingresos sin `pos`). La analítica de gestión
+  * (citas, clientes, ocupación) NO depende de `pos` y permanece visible. Es gating de
+  * PRESENTACIÓN: el gate de datos vive en el servidor de cada dominio.
+  */
+ import {
+   Activity,
+   BarChart3,
+   BellRing,
+   CalendarClock,
+   CalendarDays,
+   ClipboardList,
+   Clock,
++  ConciergeBell,
+   FileText,
+   FolderOpen,
+   LayoutDashboard,
+   Package,
+   Settings,
+   ShoppingBag,
+   Stethoscope,
+   UtensilsCrossed,
+   Users,
+   Wallet,
+   type LucideIcon,
+ } from "lucide-react";
+@@ -148,24 +149,36 @@ export const EXPEDIENTE_ITEM: NavItem = {
+ 
+ /**
+  * Carta (backoffice de categorías/estaciones/productos/modificadores/combos).
+  * Solo visible para el sector restauración, y solo para gestión (owner/manager):
+  * es materia de gestión, igual que Odontograma lo es para odontología.
+  */
+ export const CARTA_ITEM: NavItem = {
+   href: "/carta",
+   label: "Carta",
+   icon: UtensilsCrossed,
+ };
+ 
++/**
++ * Mostrador (venta de mostrador: comanda + cobro). Solo visible para el
++ * sector restauración, y para TODOS los miembros (incluido staff): a
++ * diferencia de Carta (gestión), Mostrador es operativa de venta del día a día,
++ * como la Caja lo es para el resto de sectores.
++ */
++export const MOSTRADOR_ITEM: NavItem = {
++  href: "/mostrador",
++  label: "Mostrador",
++  icon: ConciergeBell,
++};
++
+ /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
+ export interface NavGating {
+   /** El usuario puede ver materia de gestión (owner/manager). */
+   showSettings: boolean;
+   /** El salón tiene el add-on `pos` (TPV) contratado y activo. */
+   hasPos: boolean;
+   /** Sector del salón activo; determina labels y disponibilidad. Por defecto "peluqueria". */
+   sector?: SalonSector;
+ }
+ 
+ /**
+  * Compone la lista de secciones del panel según el rol y los add-ons contratados:
+@@ -175,27 +188,30 @@ export interface NavGating {
+  *   · Facturación                → owner/manager Y `pos`; sin TPV se OCULTA.
+  *
+  * Facturación se coloca entre Analítica y Ajustes (del «cómo va» al «papeleo»).
+  * Puro y determinista → testeable sin render (`dashboard-nav-items.test.ts`).
+  *
+  * ── Por sector ────────────────────────────────────────────────────────────────
+  * Sector no implementado (`SECTOR_REGISTRY[sector].implemented === false`) →
+  * cascarón: solo Panel + "Próximamente" (+ Ajustes si `showSettings`), ignorando
+  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
+  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
+  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
+  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
+- * (en ese orden) tras "Pacientes". Restauración inserta Carta (gestión de la carta:
+- * categorías/estaciones/productos/combos) justo tras "Panel", solo si `showSettings`
+- * (owner/manager); sin gestión no se añade (staff no ve Carta).
++ * (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
++ * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
++ * staff incluido) — es operativa de venta del día a día, como la Caja. Justo
++ * detrás, Carta (gestión de la carta: categorías/estaciones/productos/combos)
++ * solo si `showSettings` (owner/manager); sin gestión no se añade (staff no ve
++ * Carta, pero sí Mostrador).
+  */
+ export function buildDashboardNavItems({
+   showSettings,
+   hasPos,
+   sector = "peluqueria",
+ }: NavGating): NavItem[] {
+   const items: NavItem[] = [...PRIMARY_NAV_ITEMS];
+ 
+   if (showSettings) {
+     items.push(ANALITICA_ITEM);
+     if (hasPos) {
+       items.push(FACTURACION_ITEM);
+@@ -233,20 +249,22 @@ export function buildDashboardNavItems({
+     const insertAt = patientsIdx === -1 ? withSectorLabels.length : patientsIdx + 1;
+     return [
+       ...withSectorLabels.slice(0, insertAt),
+       ODONTOGRAMA_ITEM,
+       PERIODONTOGRAMA_ITEM,
+       PLANES_ITEM,
+       EXPEDIENTE_ITEM,
+       ...withSectorLabels.slice(insertAt),
+     ];
+   }
+ 
+   if (sector === "restauracion") {
++    // "Mostrador" es operativa de venta: SIEMPRE (todos los miembros, staff incluido).
+     // "Carta" es gestión (owner/manager): solo si showSettings.
+-    return showSettings
+-      ? [...withSectorLabels.slice(0, 1), CARTA_ITEM, ...withSectorLabels.slice(1)]
+-      : withSectorLabels;
++    const base = withSectorLabels.slice(0, 1);
++    const rest = withSectorLabels.slice(1);
++    const extras = showSettings ? [MOSTRADOR_ITEM, CARTA_ITEM] : [MOSTRADOR_ITEM];
++    return [...base, ...extras, ...rest];
+   }
+ 
+   return withSectorLabels;
+ }
+diff --git a/src/tests/unit/dashboard-nav-items.test.ts b/src/tests/unit/dashboard-nav-items.test.ts
+index 037707c..e84459b 100644
+--- a/src/tests/unit/dashboard-nav-items.test.ts
++++ b/src/tests/unit/dashboard-nav-items.test.ts
+@@ -82,13 +82,26 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
+   });
+ 
+   it("restauración: owner ve el item Carta y NO 'Próximamente'", () => {
+     const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
+     const hrefs = items.map((i) => i.href);
+     expect(hrefs).toContain("/carta");
+     expect(hrefs).not.toContain("/proximamente");
+   });
+   it("restauración: staff (sin settings) no cae en 'Próximamente'", () => {
+     const items = buildDashboardNavItems({ showSettings: false, hasPos: false, sector: "restauracion" });
+     expect(items.map((i) => i.href)).not.toContain("/proximamente");
+   });
++
++  it("restauración: staff ve Mostrador pero NO Carta", () => {
++    const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/mostrador");
++    expect(hrefs).not.toContain("/carta");
++  });
++  it("restauración: owner ve Mostrador y Carta", () => {
++    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/mostrador");
++    expect(hrefs).toContain("/carta");
++  });
+ });

@@ -1,0 +1,970 @@
+=== PLAN C — commits (d3ccdbc..9e02d3f) ===
+9e02d3f feat(restauracion): item de navegación Cocina (KDS, staff)
+4958acb fix(restauracion): KDS refresca al instante + groupByStation puro + tipar status
+38b00d2 feat(restauracion): pantalla de cocina KDS (/cocina) en tiempo real
+d037b8c feat(restauracion): queries y hooks del KDS (lectura + Realtime)
+3289f72 feat(restauracion): lógica pura del KDS (agrupar por pedido + cronómetro)
+0adf4ce feat(restauracion): order_items en la publicación Realtime (KDS)
+
+=== DIFF --stat ===
+ src/app/(dashboard)/cocina/cocina-view.tsx         | 115 ++++++++++++++++++++
+ src/app/(dashboard)/cocina/layout.tsx              |  16 +++
+ src/app/(dashboard)/cocina/order-ticket-card.tsx   | 118 +++++++++++++++++++++
+ src/app/(dashboard)/cocina/page.tsx                |  41 +++++++
+ src/app/(dashboard)/cocina/station-column.tsx      |  46 ++++++++
+ src/components/dashboard-nav-items.ts              |  28 +++--
+ src/hooks/use-kds.ts                               |  76 +++++++++++++
+ src/lib/queries/kds.ts                             |  75 +++++++++++++
+ src/lib/restauracion/kds.ts                        |  74 +++++++++++++
+ src/tests/unit/dashboard-nav-items.test.ts         |   8 ++
+ src/tests/unit/kds-keys.test.ts                    |   9 ++
+ src/tests/unit/order-ticket-card.test.tsx          | 109 +++++++++++++++++++
+ src/tests/unit/realtime-order-items-sql.test.ts    |  16 +++
+ src/tests/unit/restauracion-kds.test.ts            |  49 +++++++++
+ .../20260810120000_realtime_order_items.sql        |  16 +++
+ 15 files changed, 790 insertions(+), 6 deletions(-)
+
+=== DIFF -U6 ===
+diff --git a/src/app/(dashboard)/cocina/cocina-view.tsx b/src/app/(dashboard)/cocina/cocina-view.tsx
+new file mode 100644
+index 0000000..19e20c2
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/cocina-view.tsx
+@@ -0,0 +1,115 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Loader2, WifiOff } from "lucide-react";
++
++import { StationColumn } from "@/app/(dashboard)/cocina/station-column";
++import { useKdsItems, useKdsRealtime } from "@/hooks/use-kds";
++import { groupKdsItemsByOrder, groupKdsItemsByStation } from "@/lib/restauracion/kds";
++
++interface CocinaViewProps {
++  salonId: string;
++}
++
++/**
++ * Indicador "En directo" del estado de `useKdsRealtime` — mismo patrón
++ * visual que `RealtimeIndicator` de `day-panel-view.tsx` (punto pulsante en
++ * verde/conectado, icono de sin-conexión en error, spinner conectando),
++ * adaptado al copy de cocina.
++ */
++function LiveIndicator({
++  status,
++}: {
++  status: "connecting" | "connected" | "error";
++}): React.ReactElement {
++  const base =
++    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-150 ease-apple-out";
++
++  if (status === "connected") {
++    return (
++      <span
++        className={`${base} border-success/25 bg-success/10 text-success`}
++        title="Los cambios se reflejan al instante"
++      >
++        <span className="relative flex h-1.5 w-1.5">
++          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/70" />
++          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
++        </span>
++        En directo
++      </span>
++    );
++  }
++  if (status === "error") {
++    return (
++      <span className={`${base} border-destructive/25 bg-destructive/10 text-destructive`}>
++        <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
++        Sin conexión en tiempo real
++      </span>
++    );
++  }
++  return (
++    <span className={`${base} border-border bg-muted text-muted-foreground`}>
++      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++      Conectando…
++    </span>
++  );
++}
++
++/**
++ * Pantalla de cocina (KDS, Task 4): columnas por estación con las comandas
++ * activas en tiempo real. `useKdsRealtime` invalida la query del KDS en
++ * cualquier cambio de `order_items`; `useKdsItems` la vuelve a pedir. El
++ * cronómetro de cada línea se refresca cada 30s con un `setInterval` que
++ * solo fuerza un re-render (`now` en estado) — la lógica pura de minutos
++ * transcurridos vive en `elapsedMinutes` (lib/restauracion/kds.ts) y NUNCA
++ * llama a `Date.now()` directamente.
++ */
++export function CocinaView({ salonId }: CocinaViewProps): React.ReactElement {
++  const realtimeStatus = useKdsRealtime(salonId);
++  const itemsQuery = useKdsItems(salonId);
++
++  const [now, setNow] = useState(() => new Date());
++  useEffect(() => {
++    const id = setInterval(() => setNow(new Date()), 30000);
++    return () => clearInterval(id);
++  }, []);
++
++  const items = itemsQuery.data ?? [];
++  const stationGroups = groupKdsItemsByStation(items);
++
++  return (
++    <main className="container py-6 lg:py-8">
++      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
++        <div className="space-y-1">
++          <h1 className="text-3xl font-bold tracking-tight">Cocina</h1>
++          <p className="text-sm text-muted-foreground">Comandas activas agrupadas por estación.</p>
++        </div>
++        <LiveIndicator status={realtimeStatus} />
++      </div>
++
++      {itemsQuery.isPending ? (
++        <p className="text-sm text-muted-foreground">Cargando comandas…</p>
++      ) : itemsQuery.isError ? (
++        <p className="text-sm text-destructive">
++          No se pudieron cargar las comandas: {(itemsQuery.error as Error).message}
++        </p>
++      ) : stationGroups.length === 0 ? (
++        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
++          <p className="text-sm text-muted-foreground">No hay comandas activas.</p>
++        </div>
++      ) : (
++        <div className="flex animate-fade-up gap-5 overflow-x-auto pb-2">
++          {stationGroups.map(({ stationName, items: stationItems }) => (
++            <StationColumn
++              key={stationName}
++              salonId={salonId}
++              stationName={stationName}
++              groups={groupKdsItemsByOrder(stationItems)}
++              now={now}
++            />
++          ))}
++        </div>
++      )}
++    </main>
++  );
++}
+diff --git a/src/app/(dashboard)/cocina/layout.tsx b/src/app/(dashboard)/cocina/layout.tsx
+new file mode 100644
+index 0000000..1056b4a
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/layout.tsx
+@@ -0,0 +1,16 @@
++import { SectorGate } from "@/components/guards/sector-gate";
++
++/**
++ * Layout de cocina (KDS, restauración): SOLO gate de sector, SIN gate de
++ * rol — copia estructural de `mostrador/layout.tsx`. Igual que el
++ * mostrador, el KDS es un flujo operativo del día a día (despachar
++ * comandas) que usa cualquier miembro del equipo de cocina/barra, no solo
++ * quien gestiona ajustes.
++ */
++export default async function CocinaLayout({
++  children,
++}: {
++  children: React.ReactNode;
++}): Promise<React.ReactElement> {
++  return <SectorGate required="restauracion">{children}</SectorGate>;
++}
+diff --git a/src/app/(dashboard)/cocina/order-ticket-card.tsx b/src/app/(dashboard)/cocina/order-ticket-card.tsx
+new file mode 100644
+index 0000000..323a259
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/order-ticket-card.tsx
+@@ -0,0 +1,118 @@
++"use client";
++
++import { useQueryClient } from "@tanstack/react-query";
++import { Timer } from "lucide-react";
++
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardHeader } from "@/components/ui/card";
++import { useSetOrderItemStatus } from "@/hooks/use-orders";
++import { kdsKeys } from "@/lib/queries/kds";
++import { elapsedMinutes, type KdsItem, type KdsOrderGroup } from "@/lib/restauracion/kds";
++import { cn } from "@/lib/utils";
++import type { OrderItemStatus } from "@/types/database";
++
++interface OrderTicketCardProps {
++  salonId: string;
++  group: KdsOrderGroup;
++  /** Reloj compartido de la vista (Task 4): refrescado cada 30s por
++   * `CocinaView`, NUNCA `Date.now()` calculado aquí — mantiene el
++   * cronómetro puro y testable con un `now` fijo. */
++  now: Date;
++}
++
++/**
++ * Franja de color del cronómetro por antigüedad de la línea: verde (<5 min),
++ * ámbar (5-10 min) y rojo (>10 min) — misma escala de urgencia visual que
++ * usa `day-panel-view.tsx` para el indicador de Realtime, aplicada aquí a
++ * tiempo de espera en cocina.
++ */
++function timerTone(minutes: number): string {
++  if (minutes > 10) return "border-destructive/25 bg-destructive/10 text-destructive";
++  if (minutes >= 5) return "border-warning/25 bg-warning/10 text-warning";
++  return "border-success/25 bg-success/10 text-success";
++}
++
++/**
++ * Tarjeta de comanda del KDS: una por pedido dentro de una columna de
++ * estación (`StationColumn`). Cada línea puede avanzar de estado con un
++ * botón — **Entregar** (enviado/preparando → listo) o **Entregado**
++ * (listo → entregado) — llamando a `useSetOrderItemStatus`, cuya mutation
++ * server-side condiciona el UPDATE por `status = from` (ver
++ * `mostrador/actions.ts`). Esa mutation (Plan B) invalida `orderKeys`, NO
++ * `kdsKeys` — no tiene forma de saber que esta pantalla existe — así que al
++ * éxito invalidamos `kdsKeys.all(salonId)` explícitamente aquí para que la
++ * tarjeta se actualice AL INSTANTE, sin depender del roundtrip de
++ * `useKdsRealtime` (que sigue activo como respaldo: si el evento Realtime
++ * llega igualmente, la invalidación es idempotente). Si el servidor rechaza
++ * por CONFLICTO (otro miembro del equipo ya cambió el estado de esa línea),
++ * no hace falta manejarlo aquí explícitamente: cualquiera de las dos vías
++ * (invalidación directa o Realtime) refresca la lista y la tarjeta se
++ * actualiza sola.
++ */
++export function OrderTicketCard({ salonId, group, now }: OrderTicketCardProps): React.ReactElement {
++  const setStatus = useSetOrderItemStatus(salonId);
++  const queryClient = useQueryClient();
++
++  function advance(item: KdsItem, to: OrderItemStatus): void {
++    setStatus.mutate(
++      { itemId: item.id, from: item.status, to },
++      { onSuccess: () => queryClient.invalidateQueries({ queryKey: kdsKeys.all(salonId) }) },
++    );
++  }
++
++  return (
++    <Card className="border-border/70">
++      <CardHeader className="flex flex-row items-baseline gap-2 space-y-0 p-4 pb-2">
++        <span className="text-2xl font-bold leading-none tabular-nums">#{group.orderNumber}</span>
++        {group.orderLabel !== null && group.orderLabel.trim() !== "" ? (
++          <span className="truncate text-sm font-medium text-muted-foreground">{group.orderLabel}</span>
++        ) : null}
++      </CardHeader>
++      <CardContent className="flex flex-col gap-2.5 p-4 pt-0">
++        {group.items.map((item) => {
++          const minutes = elapsedMinutes(item.createdAt, now);
++          return (
++            <div
++              key={item.id}
++              className="flex flex-wrap items-center gap-2.5 rounded-lg border border-border/60 bg-background/60 p-2.5"
++            >
++              <div className="min-w-0 flex-1">
++                <p className="truncate text-sm font-semibold text-foreground">
++                  <span className="tabular-nums">{item.qty}×</span> {item.productName}
++                </p>
++                {item.modifiers.length > 0 ? (
++                  <p className="truncate text-xs text-muted-foreground">{item.modifiers.join(", ")}</p>
++                ) : null}
++              </div>
++
++              <span
++                className={cn(
++                  "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums transition-colors duration-150 ease-apple-out",
++                  timerTone(minutes),
++                )}
++              >
++                <Timer className="h-3 w-3" aria-hidden="true" />
++                {minutes} min
++              </span>
++
++              {item.status !== "listo" ? (
++                <Button size="sm" onClick={() => advance(item, "listo")} disabled={setStatus.isPending}>
++                  Entregar
++                </Button>
++              ) : (
++                <Button
++                  size="sm"
++                  variant="secondary"
++                  onClick={() => advance(item, "entregado")}
++                  disabled={setStatus.isPending}
++                >
++                  Entregado
++                </Button>
++              )}
++            </div>
++          );
++        })}
++      </CardContent>
++    </Card>
++  );
++}
+diff --git a/src/app/(dashboard)/cocina/page.tsx b/src/app/(dashboard)/cocina/page.tsx
+new file mode 100644
+index 0000000..4b60080
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/page.tsx
+@@ -0,0 +1,41 @@
++import type { Metadata } from "next";
++import { redirect } from "next/navigation";
++
++import { CocinaView } from "@/app/(dashboard)/cocina/cocina-view";
++import { getActiveSalon } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++
++export const metadata: Metadata = {
++  title: "Cocina",
++};
++
++/**
++ * Resuelve el salón activo en SERVIDOR (mismo patrón que `mostrador/page.tsx`)
++ * y delega el resto en `CocinaView` (cliente): sesión sin usuario → `/login`;
++ * usuario sin salón asociado → aviso in-page (aún no ha completado alta).
++ */
++export default async function CocinaPage(): Promise<React.ReactElement> {
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  if (user === null) {
++    redirect("/login");
++  }
++
++  const salon = await getActiveSalon();
++
++  if (salon === null) {
++    return (
++      <main className="container py-10">
++        <h1 className="text-3xl font-bold tracking-tight">Cocina</h1>
++        <p className="mt-2 text-muted-foreground">
++          Tu usuario no está asociado a ningún salón todavía.
++        </p>
++      </main>
++    );
++  }
++
++  return <CocinaView salonId={salon.id} />;
++}
+diff --git a/src/app/(dashboard)/cocina/station-column.tsx b/src/app/(dashboard)/cocina/station-column.tsx
+new file mode 100644
+index 0000000..df1c89b
+--- /dev/null
++++ b/src/app/(dashboard)/cocina/station-column.tsx
+@@ -0,0 +1,46 @@
++import { OrderTicketCard } from "@/app/(dashboard)/cocina/order-ticket-card";
++import type { KdsOrderGroup } from "@/lib/restauracion/kds";
++
++interface StationColumnProps {
++  salonId: string;
++  stationName: string;
++  groups: KdsOrderGroup[];
++  /** Reloj compartido de `CocinaView`, ver `OrderTicketCard`. */
++  now: Date;
++}
++
++/**
++ * Columna de una estación (cocina, barra…) del KDS: encabezado con el
++ * nombre y el nº de comandas activas, y la lista de tarjetas de pedido —ya
++ * ordenadas FIFO por `groupKdsItemsByOrder`, la más antigua primero, igual
++ * que despacharía la cocina en persona. Ancho fijo pensado para pantalla
++ * grande: varias columnas visibles a la vez, con scroll horizontal en la
++ * fila si no caben todas (ver `CocinaView`).
++ */
++export function StationColumn({
++  salonId,
++  stationName,
++  groups,
++  now,
++}: StationColumnProps): React.ReactElement {
++  return (
++    <section className="flex w-80 shrink-0 flex-col gap-3 rounded-xl border border-border/70 bg-muted/30 p-3">
++      <header className="flex items-center justify-between gap-2 px-1">
++        <h2 className="truncate text-lg font-bold tracking-tight">{stationName}</h2>
++        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
++          {groups.length}
++        </span>
++      </header>
++
++      {groups.length === 0 ? (
++        <p className="px-1 text-sm text-muted-foreground">Sin comandas activas.</p>
++      ) : (
++        <div className="flex flex-col gap-3">
++          {groups.map((group) => (
++            <OrderTicketCard key={group.orderId} salonId={salonId} group={group} now={now} />
++          ))}
++        </div>
++      )}
++    </section>
++  );
++}
+diff --git a/src/components/dashboard-nav-items.ts b/src/components/dashboard-nav-items.ts
+index fa6a4c9..09ba4e3 100644
+--- a/src/components/dashboard-nav-items.ts
++++ b/src/components/dashboard-nav-items.ts
+@@ -14,12 +14,13 @@
+ import {
+   Activity,
+   BarChart3,
+   BellRing,
+   CalendarClock,
+   CalendarDays,
++  ChefHat,
+   ClipboardList,
+   Clock,
+   ConciergeBell,
+   FileText,
+   FolderOpen,
+   LayoutDashboard,
+@@ -167,12 +168,23 @@ export const CARTA_ITEM: NavItem = {
+ export const MOSTRADOR_ITEM: NavItem = {
+   href: "/mostrador",
+   label: "Mostrador",
+   icon: ConciergeBell,
+ };
+ 
++/**
++ * Cocina (KDS — Kitchen Display System: comandas por estación en tiempo real).
++ * Solo visible para el sector restauración, y para TODOS los miembros (incluido
++ * staff): igual que Mostrador, es operativa de venta del día a día, no gestión.
++ */
++export const COCINA_ITEM: NavItem = {
++  href: "/cocina",
++  label: "Cocina",
++  icon: ChefHat,
++};
++
+ /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
+ export interface NavGating {
+   /** El usuario puede ver materia de gestión (owner/manager). */
+   showSettings: boolean;
+   /** El salón tiene el add-on `pos` (TPV) contratado y activo. */
+   hasPos: boolean;
+@@ -197,15 +209,17 @@ export interface NavGating {
+  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
+  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
+  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
+  * (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
+  * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
+  * staff incluido) — es operativa de venta del día a día, como la Caja. Justo
+- * detrás, Carta (gestión de la carta: categorías/estaciones/productos/combos)
+- * solo si `showSettings` (owner/manager); sin gestión no se añade (staff no ve
+- * Carta, pero sí Mostrador).
++ * detrás, Cocina (KDS: comandas por estación en tiempo real) también SIEMPRE
++ * (todos los miembros, staff incluido) — misma naturaleza operativa que
++ * Mostrador. Por último, Carta (gestión de la carta: categorías/estaciones/
++ * productos/combos) solo si `showSettings` (owner/manager); sin gestión no se
++ * añade (staff no ve Carta, pero sí Mostrador y Cocina).
+  */
+ export function buildDashboardNavItems({
+   showSettings,
+   hasPos,
+   sector = "peluqueria",
+ }: NavGating): NavItem[] {
+@@ -255,16 +269,18 @@ export function buildDashboardNavItems({
+       EXPEDIENTE_ITEM,
+       ...withSectorLabels.slice(insertAt),
+     ];
+   }
+ 
+   if (sector === "restauracion") {
+-    // "Mostrador" es operativa de venta: SIEMPRE (todos los miembros, staff incluido).
+-    // "Carta" es gestión (owner/manager): solo si showSettings.
++    // "Mostrador" y "Cocina" son operativa de venta: SIEMPRE (todos los miembros,
++    // staff incluido). "Carta" es gestión (owner/manager): solo si showSettings.
+     const base = withSectorLabels.slice(0, 1);
+     const rest = withSectorLabels.slice(1);
+-    const extras = showSettings ? [MOSTRADOR_ITEM, CARTA_ITEM] : [MOSTRADOR_ITEM];
++    const extras = showSettings
++      ? [MOSTRADOR_ITEM, COCINA_ITEM, CARTA_ITEM]
++      : [MOSTRADOR_ITEM, COCINA_ITEM];
+     return [...base, ...extras, ...rest];
+   }
+ 
+   return withSectorLabels;
+ }
+diff --git a/src/hooks/use-kds.ts b/src/hooks/use-kds.ts
+new file mode 100644
+index 0000000..c2084db
+--- /dev/null
++++ b/src/hooks/use-kds.ts
+@@ -0,0 +1,76 @@
++"use client";
++
++import { useEffect, useRef, useState } from "react";
++import { useQuery, useQueryClient } from "@tanstack/react-query";
++
++import { createClient } from "@/lib/supabase/client";
++import { fetchKdsItems, kdsKeys } from "@/lib/queries/kds";
++
++/** Líneas de pedido activas del KDS para un salón. */
++export function useKdsItems(salonId: string) {
++  return useQuery({
++    queryKey: kdsKeys.items(salonId),
++    queryFn: () => fetchKdsItems(salonId),
++  });
++}
++
++type RealtimeStatus = "connecting" | "connected" | "error";
++
++/**
++ * Suscripción Supabase Realtime a cambios en `order_items` para un salón.
++ * Copia estructural de `useDayPanelRealtime` (mismo patrón de canal,
++ * cleanup y estado de conexión) cambiando la tabla escuchada y la query
++ * invalidada: cuando llega cualquier cambio (INSERT / UPDATE / DELETE)
++ * invalida `kdsKeys.all(salonId)`, lo que dispara un re-fetch automático
++ * del KDS.
++ *
++ * Devuelve el estado de la conexión para que la UI pueda mostrarlo.
++ */
++export function useKdsRealtime(salonId: string): RealtimeStatus {
++  const queryClient = useQueryClient();
++  const [status, setStatus] = useState<RealtimeStatus>("connecting");
++  // Ref para evitar que la limpieza de efectos doble-invoke en StrictMode
++  // suscriba dos canales.
++  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
++
++  useEffect(() => {
++    if (!salonId) return;
++
++    const supabase = createClient();
++
++    // Nombre único de canal para evitar colisiones si hay varios montajes.
++    const channelName = `kds-order-items-${salonId}`;
++
++    const channel = supabase
++      .channel(channelName)
++      .on(
++        "postgres_changes",
++        {
++          event: "*",
++          schema: "public",
++          table: "order_items",
++          filter: `salon_id=eq.${salonId}`,
++        },
++        () => {
++          // Invalida las líneas del KDS del salón; el re-fetch es
++          // automático gracias a TanStack Query.
++          void queryClient.invalidateQueries({
++            queryKey: kdsKeys.all(salonId),
++          });
++        },
++      )
++      .subscribe((s) => {
++        if (s === "SUBSCRIBED") setStatus("connected");
++        else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") setStatus("error");
++      });
++
++    channelRef.current = channel;
++
++    return () => {
++      void supabase.removeChannel(channel);
++      channelRef.current = null;
++    };
++  }, [salonId, queryClient]);
++
++  return status;
++}
+diff --git a/src/lib/queries/kds.ts b/src/lib/queries/kds.ts
+new file mode 100644
+index 0000000..0f7acf9
+--- /dev/null
++++ b/src/lib/queries/kds.ts
+@@ -0,0 +1,75 @@
++import { createClient } from "@/lib/supabase/client";
++import type { KdsItem } from "@/lib/restauracion/kds";
++import type { Json, OrderItemStatus } from "@/types/database";
++
++/** Factoría de query keys del KDS (scoped por salonId). */
++export const kdsKeys = {
++  all: (salonId: string) => ["kds", salonId] as const,
++  items: (salonId: string) => [...kdsKeys.all(salonId), "items"] as const,
++};
++
++const ACTIVE_STATUSES: OrderItemStatus[] = ["enviado", "preparando", "listo"];
++
++/**
++ * Fila de `order_items` con los joins embebidos (`products`, `stations`,
++ * `orders`) que consume el KDS. Solo declara las columnas realmente pedidas
++ * en el `.select()` de abajo — ver `.returns<KdsItemRow[]>()`, el patrón que
++ * ya usa `src/lib/queries/insurers.ts` para tipar joins de supabase-js.
++ */
++interface KdsItemRow {
++  id: string;
++  order_id: string;
++  station_id: string | null;
++  product_id: string;
++  qty: number;
++  status: OrderItemStatus;
++  modifiers_snapshot: Json;
++  created_at: string;
++  products: { name: string } | null;
++  stations: { name: string } | null;
++  orders: { order_number: number | null; label: string | null; created_at: string } | null;
++}
++
++/**
++ * Líneas de pedido "activas" (enviadas, en preparación o listas) para el
++ * Kitchen Display System. Acotada por `salon_id` (multi-tenant), ignora
++ * líneas anuladas (`void_of_item_id is null`) y ordena por antigüedad (FIFO)
++ * para que la cocina/barra despache en el orden en que entraron.
++ */
++export async function fetchKdsItems(salonId: string): Promise<KdsItem[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("order_items")
++    .select(
++      "id, order_id, station_id, product_id, qty, status, modifiers_snapshot, created_at, " +
++        "products(name), stations(name), orders(order_number, label, created_at)",
++    )
++    .eq("salon_id", salonId)
++    .is("void_of_item_id", null)
++    .in("status", ACTIVE_STATUSES)
++    .order("created_at", { ascending: true })
++    .returns<KdsItemRow[]>();
++
++  if (error !== null) throw new Error(error.message);
++
++  return (data ?? []).map((row): KdsItem => {
++    const mods = Array.isArray(row.modifiers_snapshot)
++      ? (row.modifiers_snapshot as Array<{ name?: string }>)
++          .map((m) => m.name ?? "")
++          .filter((n) => n.length > 0)
++      : [];
++    return {
++      id: row.id,
++      orderId: row.order_id,
++      orderNumber: row.orders?.order_number ?? 0,
++      orderLabel: row.orders?.label ?? null,
++      stationId: row.station_id,
++      stationName: row.stations?.name ?? null,
++      productName: row.products?.name ?? "Producto",
++      qty: row.qty,
++      status: row.status,
++      modifiers: mods,
++      createdAt: row.created_at,
++    };
++  });
++}
+diff --git a/src/lib/restauracion/kds.ts b/src/lib/restauracion/kds.ts
+new file mode 100644
+index 0000000..a3951f1
+--- /dev/null
++++ b/src/lib/restauracion/kds.ts
+@@ -0,0 +1,74 @@
++import type { OrderItemStatus } from "@/types/database";
++
++export interface KdsItem {
++  id: string;
++  orderId: string;
++  orderNumber: number;
++  orderLabel: string | null;
++  stationId: string | null;
++  stationName: string | null;
++  productName: string;
++  qty: number;
++  status: OrderItemStatus;
++  modifiers: string[];
++  createdAt: string;
++}
++
++export interface KdsOrderGroup {
++  orderId: string;
++  orderNumber: number;
++  orderLabel: string | null;
++  createdAt: string;
++  items: KdsItem[];
++}
++
++export function groupKdsItemsByOrder(items: readonly KdsItem[]): KdsOrderGroup[] {
++  const byOrder = new Map<string, KdsOrderGroup>();
++  for (const it of items) {
++    const existing = byOrder.get(it.orderId);
++    if (existing === undefined) {
++      byOrder.set(it.orderId, {
++        orderId: it.orderId, orderNumber: it.orderNumber, orderLabel: it.orderLabel,
++        createdAt: it.createdAt, items: [it],
++      });
++    } else {
++      existing.items.push(it);
++    }
++  }
++  return [...byOrder.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
++}
++
++/** Estación sentinela para líneas sin `stationId` asignado en la carta (o
++ * cuyo join no resolvió nombre): agrupa ahí en vez de perderlas
++ * silenciosamente de la vista de cocina. */
++export const UNASSIGNED_STATION = "Sin estación";
++
++export interface KdsStationGroup {
++  stationName: string;
++  items: KdsItem[];
++}
++
++/**
++ * Agrupa las líneas activas del KDS por nombre de estación (`stationName`),
++ * usando `UNASSIGNED_STATION` cuando la línea no tiene estación asociada.
++ * Ordena las estaciones alfabéticamente (locale "es") para un orden estable
++ * entre renders. Lógica pura subida desde `cocina-view.tsx` (Task 4 fix) para
++ * poder testearla sin montar componentes.
++ */
++export function groupKdsItemsByStation(items: readonly KdsItem[]): KdsStationGroup[] {
++  const byStation = new Map<string, KdsItem[]>();
++  for (const item of items) {
++    const key = item.stationName ?? UNASSIGNED_STATION;
++    const list = byStation.get(key) ?? [];
++    list.push(item);
++    byStation.set(key, list);
++  }
++  return [...byStation.entries()]
++    .map(([stationName, stationItems]) => ({ stationName, items: stationItems }))
++    .sort((a, b) => a.stationName.localeCompare(b.stationName, "es"));
++}
++
++export function elapsedMinutes(createdAtIso: string, now: Date): number {
++  const ms = now.getTime() - new Date(createdAtIso).getTime();
++  return Math.max(0, Math.floor(ms / 60000));
++}
+diff --git a/src/tests/unit/dashboard-nav-items.test.ts b/src/tests/unit/dashboard-nav-items.test.ts
+index e84459b..a2f09d0 100644
+--- a/src/tests/unit/dashboard-nav-items.test.ts
++++ b/src/tests/unit/dashboard-nav-items.test.ts
+@@ -101,7 +101,15 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
+   it("restauración: owner ve Mostrador y Carta", () => {
+     const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
+     const hrefs = items.map((i) => i.href);
+     expect(hrefs).toContain("/mostrador");
+     expect(hrefs).toContain("/carta");
+   });
++
++  it("restauración: staff ve Mostrador y Cocina, no Carta", () => {
++    const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/mostrador");
++    expect(hrefs).toContain("/cocina");
++    expect(hrefs).not.toContain("/carta");
++  });
+ });
+diff --git a/src/tests/unit/kds-keys.test.ts b/src/tests/unit/kds-keys.test.ts
+new file mode 100644
+index 0000000..fe67595
+--- /dev/null
++++ b/src/tests/unit/kds-keys.test.ts
+@@ -0,0 +1,9 @@
++import { describe, it, expect } from "vitest";
++import { kdsKeys } from "@/lib/queries/kds";
++
++describe("kdsKeys", () => {
++  it("deriva sub-keys del salón", () => {
++    expect(kdsKeys.all("s1")).toEqual(["kds", "s1"]);
++    expect(kdsKeys.items("s1")).toEqual(["kds", "s1", "items"]);
++  });
++});
+diff --git a/src/tests/unit/order-ticket-card.test.tsx b/src/tests/unit/order-ticket-card.test.tsx
+new file mode 100644
+index 0000000..a3d80f7
+--- /dev/null
++++ b/src/tests/unit/order-ticket-card.test.tsx
+@@ -0,0 +1,109 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++import { kdsKeys } from "@/lib/queries/kds";
++import type { KdsOrderGroup } from "@/lib/restauracion/kds";
++
++/**
++ * Mock de `@/hooks/use-orders` (patrón `order-panel.test.tsx` / `menu-item-form.test.tsx`,
++ * vi.hoisted + createElement + getByRole): `OrderTicketCard` llama a
++ * `useSetOrderItemStatus` directamente, así que el test no necesita
++ * `QueryClientProvider`. Mockeamos también `useQueryClient` de
++ * `@tanstack/react-query` (fix del refresco instantáneo del KDS): el
++ * componente lo llama para invalidar `kdsKeys.all(salonId)` en el
++ * `onSuccess` de la mutation — sin este mock, `useQueryClient` real lanzaría
++ * "No QueryClient set" al no haber `QueryClientProvider` en el árbol.
++ */
++const m = vi.hoisted(() => ({
++  setOrderItemStatus: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++  queryClient: { invalidateQueries: vi.fn() },
++}));
++vi.mock("@/hooks/use-orders", () => ({
++  useSetOrderItemStatus: () => m.setOrderItemStatus,
++}));
++vi.mock("@tanstack/react-query", () => ({
++  useQueryClient: () => m.queryClient,
++}));
++
++import { OrderTicketCard } from "@/app/(dashboard)/cocina/order-ticket-card";
++
++beforeEach(() => {
++  m.setOrderItemStatus.mutate = vi.fn();
++  m.queryClient.invalidateQueries = vi.fn();
++});
++afterEach(() => cleanup());
++
++const NOW = new Date("2026-08-09T12:10:00.000Z");
++
++/** Un pedido (#42, mesa "Mesa 3") con una única línea en el estado dado. */
++function groupWith(status: "enviado" | "listo"): KdsOrderGroup {
++  return {
++    orderId: "order-1",
++    orderNumber: 42,
++    orderLabel: "Mesa 3",
++    createdAt: "2026-08-09T12:00:00.000Z",
++    items: [
++      {
++        id: "item-1",
++        orderId: "order-1",
++        orderNumber: 42,
++        orderLabel: "Mesa 3",
++        stationId: "st-1",
++        stationName: "Cocina",
++        productName: "Hamburguesa",
++        qty: 2,
++        status,
++        modifiers: [],
++        createdAt: "2026-08-09T12:00:00.000Z",
++      },
++    ],
++  };
++}
++
++describe("OrderTicketCard", () => {
++  it("un ítem 'enviado' muestra Entregar y al pulsarlo pide pasar a 'listo'", async () => {
++    const user = userEvent.setup();
++    render(createElement(OrderTicketCard, { salonId: "SALON", group: groupWith("enviado"), now: NOW }));
++
++    expect(screen.getByText("#42")).toBeInTheDocument();
++    expect(screen.getByText(/hamburguesa/i)).toBeInTheDocument();
++
++    await user.click(screen.getByRole("button", { name: /entregar/i }));
++
++    expect(m.setOrderItemStatus.mutate).toHaveBeenCalledTimes(1);
++    expect(m.setOrderItemStatus.mutate.mock.calls[0]![0]).toMatchObject({
++      itemId: "item-1",
++      from: "enviado",
++      to: "listo",
++    });
++
++    // Fix "el KDS no se refresca al Entregar/Entregado": el segundo argumento
++    // de `mutate` es un `onSuccess` que invalida `kdsKeys.all(salonId)` para
++    // refrescar la pantalla al instante (sin depender del roundtrip de
++    // Realtime). Invocamos aquí el callback capturado, como haría react-query
++    // real al resolver la mutation.
++    const options = m.setOrderItemStatus.mutate.mock.calls[0]![1] as { onSuccess: () => void };
++    options.onSuccess();
++    expect(m.queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: kdsKeys.all("SALON") });
++  });
++
++  it("un ítem 'listo' muestra Entregado y al pulsarlo pide pasar a 'entregado'", async () => {
++    const user = userEvent.setup();
++    render(createElement(OrderTicketCard, { salonId: "SALON", group: groupWith("listo"), now: NOW }));
++
++    await user.click(screen.getByRole("button", { name: /entregado/i }));
++
++    expect(m.setOrderItemStatus.mutate).toHaveBeenCalledTimes(1);
++    expect(m.setOrderItemStatus.mutate.mock.calls[0]![0]).toMatchObject({
++      itemId: "item-1",
++      from: "listo",
++      to: "entregado",
++    });
++
++    const options = m.setOrderItemStatus.mutate.mock.calls[0]![1] as { onSuccess: () => void };
++    options.onSuccess();
++    expect(m.queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: kdsKeys.all("SALON") });
++  });
++});
+diff --git a/src/tests/unit/realtime-order-items-sql.test.ts b/src/tests/unit/realtime-order-items-sql.test.ts
+new file mode 100644
+index 0000000..62392dd
+--- /dev/null
++++ b/src/tests/unit/realtime-order-items-sql.test.ts
+@@ -0,0 +1,16 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810120000_realtime_order_items.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración realtime order_items", () => {
++  it("añade order_items a la publicación supabase_realtime de forma idempotente", () => {
++    expect(SQL).toContain("alter publication supabase_realtime add table public.order_items");
++    expect(SQL).toContain("pg_publication_tables");
++    expect(SQL).toContain("'order_items'");
++  });
++});
+diff --git a/src/tests/unit/restauracion-kds.test.ts b/src/tests/unit/restauracion-kds.test.ts
+new file mode 100644
+index 0000000..3b65a55
+--- /dev/null
++++ b/src/tests/unit/restauracion-kds.test.ts
+@@ -0,0 +1,49 @@
++import { describe, it, expect } from "vitest";
++import { elapsedMinutes, groupKdsItemsByOrder, groupKdsItemsByStation, type KdsItem } from "@/lib/restauracion/kds";
++
++function item(over: Partial<KdsItem>): KdsItem {
++  return {
++    id: "i", orderId: "o", orderNumber: 1, orderLabel: null, stationId: "s", stationName: "Cocina",
++    productName: "X", qty: 1, status: "enviado", modifiers: [], createdAt: "2026-08-10T12:00:00Z", ...over,
++  };
++}
++
++describe("groupKdsItemsByOrder", () => {
++  it("agrupa por pedido y ordena los grupos por createdAt ascendente", () => {
++    const groups = groupKdsItemsByOrder([
++      item({ id: "a", orderId: "o2", orderNumber: 2, createdAt: "2026-08-10T12:05:00Z" }),
++      item({ id: "b", orderId: "o1", orderNumber: 1, createdAt: "2026-08-10T12:00:00Z" }),
++      item({ id: "c", orderId: "o1", orderNumber: 1, createdAt: "2026-08-10T12:00:00Z" }),
++    ]);
++    expect(groups.map((g) => g.orderId)).toEqual(["o1", "o2"]);
++    expect(groups[0]!.items.map((i) => i.id)).toEqual(["b", "c"]);
++  });
++});
++
++describe("elapsedMinutes", () => {
++  it("cuenta minutos enteros transcurridos, nunca negativo", () => {
++    expect(elapsedMinutes("2026-08-10T12:00:00Z", new Date("2026-08-10T12:07:30Z"))).toBe(7);
++    expect(elapsedMinutes("2026-08-10T12:00:00Z", new Date("2026-08-10T11:59:00Z"))).toBe(0);
++  });
++});
++
++describe("groupKdsItemsByStation", () => {
++  it("agrupa por nombre de estación y ordena los grupos alfabéticamente", () => {
++    const groups = groupKdsItemsByStation([
++      item({ id: "a", stationName: "Barra" }),
++      item({ id: "b", stationName: "Cocina" }),
++      item({ id: "c", stationName: "Cocina" }),
++    ]);
++    expect(groups.map((g) => g.stationName)).toEqual(["Barra", "Cocina"]);
++    expect(groups.find((g) => g.stationName === "Cocina")!.items.map((i) => i.id)).toEqual(["b", "c"]);
++  });
++
++  it("mete las líneas sin stationName en 'Sin estación'", () => {
++    const groups = groupKdsItemsByStation([
++      item({ id: "a", stationName: null }),
++      item({ id: "b", stationName: "Cocina" }),
++    ]);
++    expect(groups.map((g) => g.stationName)).toEqual(["Cocina", "Sin estación"]);
++    expect(groups.find((g) => g.stationName === "Sin estación")!.items.map((i) => i.id)).toEqual(["a"]);
++  });
++});
+diff --git a/supabase/migrations/20260810120000_realtime_order_items.sql b/supabase/migrations/20260810120000_realtime_order_items.sql
+new file mode 100644
+index 0000000..66688be
+--- /dev/null
++++ b/supabase/migrations/20260810120000_realtime_order_items.sql
+@@ -0,0 +1,16 @@
++-- =============================================================================
++-- Kairos — Restauración · Realtime para order_items (KDS)
++-- La publicación supabase_realtime debe incluir order_items o el KDS no refresca.
++-- Idempotente: no falla si la tabla ya está publicada.
++-- =============================================================================
++do $$
++begin
++  if not exists (
++    select 1 from pg_publication_tables
++    where pubname = 'supabase_realtime'
++      and schemaname = 'public'
++      and tablename = 'order_items'
++  ) then
++    alter publication supabase_realtime add table public.order_items;
++  end if;
++end $$;

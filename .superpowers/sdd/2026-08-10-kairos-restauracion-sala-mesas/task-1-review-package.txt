@@ -1,0 +1,478 @@
+=== COMMITS 9e02d3f..eccf976 ===
+eccf976 feat(restauracion): sala — zonas, mesas y enlace de la cuenta con la mesa
+
+=== DIFF --stat ===
+ src/tests/unit/restauracion-sala-sql.test.ts       |  36 +++++
+ src/types/database.ts                              | 148 +++++++++++++++++++++
+ .../20260810130000_restauracion_sala.sql           | 108 +++++++++++++++
+ 3 files changed, 292 insertions(+)
+
+=== DIFF -U10 ===
+diff --git a/src/tests/unit/restauracion-sala-sql.test.ts b/src/tests/unit/restauracion-sala-sql.test.ts
+new file mode 100644
+index 0000000..923ebdc
+--- /dev/null
++++ b/src/tests/unit/restauracion-sala-sql.test.ts
+@@ -0,0 +1,36 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810130000_restauracion_sala.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración sala", () => {
++  it("crea los enums de forma y estado de mesa", () => {
++    expect(SQL).toContain("create type public.table_shape as enum");
++    expect(SQL).toContain("create type public.table_status as enum");
++    expect(SQL).toContain("'ocupada'");
++    expect(SQL).toContain("'por_limpiar'");
++  });
++  it("crea dining_zones y dining_tables con clave compuesta", () => {
++    expect(SQL).toContain("create table if not exists public.dining_zones");
++    expect(SQL).toContain("create table if not exists public.dining_tables");
++    expect(SQL).toContain("dining_zones_id_salon_key unique (id, salon_id)");
++    expect(SQL).toContain("dining_tables_id_salon_key unique (id, salon_id)");
++    expect(SQL).toContain("check (capacity_max >= capacity_min)");
++    expect(SQL).toContain("foreign key (zone_id, salon_id)");
++  });
++  it("enlaza orders con la mesa (dining_table_id + covers)", () => {
++    expect(SQL).toContain("add column if not exists dining_table_id uuid");
++    expect(SQL).toContain("add column if not exists covers integer");
++    expect(SQL).toContain("references public.dining_tables (id, salon_id)");
++  });
++  it("RLS: select miembros, gestion managers, update miembros en tables; guardián", () => {
++    expect(SQL).toContain("salon_id in (select app.user_salon_ids())");
++    expect(SQL).toContain("app.has_salon_role(salon_id, array['owner','manager']::public.member_role[])");
++    expect(SQL).toContain("members_update_dining_tables");
++    expect(SQL).toContain("do $guard$");
++  });
++});
+diff --git a/src/types/database.ts b/src/types/database.ts
+index 8db5b90..da5400a 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -74,20 +74,29 @@ export type OrderStatus = "abierta" | "cobrada" | "cerrada" | "anulada";
+ 
+ /** Estado de una línea de pedido (espejo del enum public.order_item_status). */
+ export type OrderItemStatus =
+   | "pendiente"
+   | "enviado"
+   | "preparando"
+   | "listo"
+   | "entregado"
+   | "anulado";
+ 
++/**
++ * Forma de la mesa en el plano de sala (espejo del enum public.table_shape).
++ * Migración 20260810130000_restauracion_sala.
++ */
++export type TableShape = "round" | "square";
++
++/** Estado de la mesa (espejo del enum public.table_status). */
++export type TableStatus = "libre" | "ocupada" | "cuenta_pedida" | "por_limpiar";
++
+ export type AppointmentStatus =
+   | "pending"
+   | "confirmed"
+   | "completed"
+   | "cancelled"
+   | "no_show";
+ 
+ export type HistoryAction = "INSERT" | "UPDATE" | "DELETE";
+ 
+ export type ReminderType =
+@@ -1117,75 +1126,92 @@ export interface Database {
+       // Pedidos de mostrador (restauración), append-only — migración
+       // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE
+       // (offline-ready): sin default en BD → REQUERIDO en Insert.
+       // `order_number` es correlativo por salón (trigger app.set_order_number,
+       // omitir en Insert). session_id es FK compuesta opcional hacia
+       // pos_sessions (orders_session_id_fkey, on delete set null).
+       // idempotency_key es único por salón (orders_idempotency_key) para que
+       // reintentos del cliente no dupliquen el pedido. Clave de apoyo
+       // orders_id_salon_key (id, salon_id) para las FKs compuestas de
+       // order_items y pos_sales.order_id.
++      // dining_table_id/covers — migración 20260810130000_restauracion_sala:
++      // enlace opcional con la mesa (channel='mesa'); dining_table_id es FK
++      // compuesta hacia dining_tables (orders_dining_table_id_fkey, on delete
++      // set null). covers = número de comensales.
+       orders: {
+         Row: {
+           id: string;
+           salon_id: string;
+           session_id: string | null;
+           order_number: number | null; // bigint — correlativo por salón (trigger)
+           channel: string;
+           status: OrderStatus;
+           label: string | null;
+           idempotency_key: string | null;
++          dining_table_id: string | null;
++          covers: number | null;
+           created_by: string | null;
+           created_at: string;
+           updated_at: string;
+         };
+         Insert: {
+           id: string; // sin default en BD: generado en cliente
+           salon_id: string;
+           session_id?: string | null;
+           // order_number lo pone el trigger app.set_order_number: omitir
+           channel?: string;
+           status?: OrderStatus;
+           label?: string | null;
+           idempotency_key?: string | null;
++          dining_table_id?: string | null;
++          covers?: number | null;
+           created_by?: string | null;
+           created_at?: string;
+           updated_at?: string;
+         };
+         Update: {
+           id?: string;
+           salon_id?: string;
+           session_id?: string | null;
+           order_number?: number | null;
+           channel?: string;
+           status?: OrderStatus;
+           label?: string | null;
+           idempotency_key?: string | null;
++          dining_table_id?: string | null;
++          covers?: number | null;
+           created_by?: string | null;
+           created_at?: string;
+           updated_at?: string;
+         };
+         Relationships: [
+           {
+             foreignKeyName: "orders_salon_id_fkey";
+             columns: ["salon_id"];
+             isOneToOne: false;
+             referencedRelation: "salons";
+             referencedColumns: ["id"];
+           },
+           {
+             foreignKeyName: "orders_session_id_fkey";
+             columns: ["session_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "pos_sessions";
+             referencedColumns: ["id", "salon_id"];
+           },
++          {
++            foreignKeyName: "orders_dining_table_id_fkey";
++            columns: ["dining_table_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "dining_tables";
++            referencedColumns: ["id", "salon_id"];
++          },
+         ];
+       };
+       // Líneas de pedido (restauración), append-only — migración
+       // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE: sin
+       // default en BD → REQUERIDO en Insert. `void_of_item_id` !== null marca
+       // una fila como anulación de otra (append-only: nunca se hace UPDATE del
+       // qty/precio, se inserta una anulación). `modifiers_snapshot` guarda los
+       // modificadores elegidos en el momento del pedido (el catálogo puede
+       // cambiar). station_id es FK compuesta opcional hacia stations
+       // (order_items_station_id_fkey, on delete set null) para el ruteo a
+@@ -1269,20 +1295,135 @@ export interface Database {
+           },
+           {
+             foreignKeyName: "order_items_station_id_fkey";
+             columns: ["station_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "stations";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      // Zonas de sala (restauración) — migración
++      // 20260810130000_restauracion_sala. Clave compuesta
++      // dining_zones_id_salon_key (id, salon_id) para permitir la FK compuesta
++      // de dominio desde dining_tables.zone_id.
++      dining_zones: {
++        Row: {
++          id: string;
++          salon_id: string;
++          name: string;
++          sort_order: number;
++          active: boolean;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          name: string;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          name?: string;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "dining_zones_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++        ];
++      };
++      // Mesas del plano de sala (restauración) — migración
++      // 20260810130000_restauracion_sala. zone_id es FK compuesta hacia
++      // dining_zones (dining_tables_zone_fkey, on delete cascade).
++      // capacity_max >= capacity_min (constraint dining_tables_capacity_order).
++      // pos_x/pos_y son coordenadas del plano visual (porcentaje 0-100). Clave
++      // de apoyo dining_tables_id_salon_key (id, salon_id) para la FK compuesta
++      // de dominio desde orders.dining_table_id.
++      dining_tables: {
++        Row: {
++          id: string;
++          salon_id: string;
++          zone_id: string;
++          name: string;
++          capacity_min: number;
++          capacity_max: number;
++          pos_x: number;
++          pos_y: number;
++          shape: TableShape;
++          status: TableStatus;
++          sort_order: number;
++          active: boolean;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          zone_id: string;
++          name: string;
++          capacity_min?: number;
++          capacity_max?: number;
++          pos_x?: number;
++          pos_y?: number;
++          shape?: TableShape;
++          status?: TableStatus;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          zone_id?: string;
++          name?: string;
++          capacity_min?: number;
++          capacity_max?: number;
++          pos_x?: number;
++          pos_y?: number;
++          shape?: TableShape;
++          status?: TableStatus;
++          sort_order?: number;
++          active?: boolean;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "dining_tables_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "dining_tables_zone_fkey";
++            columns: ["zone_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "dining_zones";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
+       // Movimientos de stock (libro de inventario) — migración
+       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
+       // aplicado al stock resultante (no la magnitud introducida por el
+       // usuario); ver `@/lib/stock` para la lógica pura de cálculo
+       // (`applyMovement`/`movementDelta`) y `products/stock-actions.ts` para la
+       // Server Action que persiste el movimiento Y actualiza `products.stock`.
+       // Lote/caducidad viajan en las ENTRADAS (trazabilidad de lotes).
+       stock_movement: {
+         Row: {
+           id: string;
+@@ -3776,20 +3917,22 @@ export interface Database {
+       reward_status: RewardStatus;
+       salon_feature: SalonFeature;
+       salon_sector: SalonSector;
+       allergen: Allergen;
+       consent_type: ConsentType;
+       consent_status: ConsentStatus;
+       image_modality: ImageModality;
+       stock_movement_kind: StockMovementKind;
+       order_status: OrderStatus;
+       order_item_status: OrderItemStatus;
++      table_shape: TableShape;
++      table_status: TableStatus;
+     };
+     CompositeTypes: Record<never, never>;
+   };
+ }
+ 
+ // Helpers de acceso tipado ------------------------------------------------------
+ 
+ type PublicSchema = Database["public"];
+ 
+ export type Tables<T extends keyof PublicSchema["Tables"]> =
+@@ -3921,20 +4064,25 @@ export type ComboComponent = Tables<"combo_components">;
+ 
+ // Pedidos de mostrador (restauración), append-only — cabecera (orders) y
+ // líneas (order_items). IDs generados en cliente (offline-ready): `id` es
+ // REQUERIDO en los Insert (sin default en BD). Ver migración
+ // 20260810100000_restauracion_orders.
+ export type Order = Tables<"orders">;
+ export type OrderInsert = TablesInsert<"orders">;
+ export type OrderItem = Tables<"order_items">;
+ export type OrderItemInsert = TablesInsert<"order_items">;
+ 
++// Sala (restauración) — zonas y mesas del plano, enlazadas con orders vía
++// dining_table_id/covers. Ver migración 20260810130000_restauracion_sala.
++export type DiningZone = Tables<"dining_zones">;
++export type DiningTable = Tables<"dining_tables">;
++
+ // Phase helpers -----------------------------------------------------------------
+ 
+ /** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
+ export interface ServicePhaseRange {
+   label: "application" | "exposure" | "post_exposure";
+   /** Minutos desde el inicio de la cita en que comienza la fase. */
+   startMin: number;
+   /** Minutos desde el inicio de la cita en que termina la fase. */
+   endMin: number;
+   /** Duración de la fase en minutos. */
+diff --git a/supabase/migrations/20260810130000_restauracion_sala.sql b/supabase/migrations/20260810130000_restauracion_sala.sql
+new file mode 100644
+index 0000000..7f10ec0
+--- /dev/null
++++ b/supabase/migrations/20260810130000_restauracion_sala.sql
+@@ -0,0 +1,108 @@
++-- =============================================================================
++-- Kairos — Restauración · Sala (zonas + mesas + enlace con la cuenta)
++-- =============================================================================
++begin;
++
++do $$ begin
++  if not exists (select 1 from pg_type where typname = 'table_shape') then
++    create type public.table_shape as enum ('round','square');
++  end if;
++  if not exists (select 1 from pg_type where typname = 'table_status') then
++    create type public.table_status as enum ('libre','ocupada','cuenta_pedida','por_limpiar');
++  end if;
++end $$;
++
++create table if not exists public.dining_zones (
++  id          uuid primary key default gen_random_uuid(),
++  salon_id    uuid not null references public.salons (id) on delete cascade,
++  name        varchar(120) not null,
++  sort_order  integer not null default 0,
++  active      boolean not null default true,
++  created_at  timestamptz not null default now(),
++  updated_at  timestamptz not null default now(),
++  unique (salon_id, name),
++  constraint dining_zones_id_salon_key unique (id, salon_id)
++);
++
++create table if not exists public.dining_tables (
++  id            uuid primary key default gen_random_uuid(),
++  salon_id      uuid not null references public.salons (id) on delete cascade,
++  zone_id       uuid not null,
++  name          varchar(60) not null,
++  capacity_min  integer not null default 1 check (capacity_min >= 1),
++  capacity_max  integer not null default 4 check (capacity_max >= 1),
++  pos_x         numeric not null default 50,
++  pos_y         numeric not null default 50,
++  shape         public.table_shape not null default 'square',
++  status        public.table_status not null default 'libre',
++  sort_order    integer not null default 0,
++  active        boolean not null default true,
++  created_at    timestamptz not null default now(),
++  updated_at    timestamptz not null default now(),
++  constraint dining_tables_capacity_order check (capacity_max >= capacity_min),
++  constraint dining_tables_zone_fkey
++    foreign key (zone_id, salon_id) references public.dining_zones (id, salon_id) on delete cascade,
++  unique (salon_id, name),
++  constraint dining_tables_id_salon_key unique (id, salon_id)
++);
++
++alter table public.orders
++  add column if not exists dining_table_id uuid,
++  add column if not exists covers integer;
++alter table public.orders
++  add constraint orders_dining_table_id_fkey
++    foreign key (dining_table_id, salon_id)
++    references public.dining_tables (id, salon_id) on delete set null (dining_table_id);
++
++create trigger trg_dining_zones_updated_at
++  before update on public.dining_zones for each row execute function app.set_updated_at();
++create trigger trg_dining_tables_updated_at
++  before update on public.dining_tables for each row execute function app.set_updated_at();
++
++create index if not exists idx_dining_tables_zone on public.dining_tables (zone_id);
++create index if not exists idx_orders_dining_table on public.orders (dining_table_id);
++
++alter table public.dining_zones  enable row level security;
++alter table public.dining_tables enable row level security;
++
++-- zonas: lectura miembros, gestión owner/manager
++create policy "members_select_dining_zones" on public.dining_zones
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "managers_insert_dining_zones" on public.dining_zones
++  for insert to authenticated
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_update_dining_zones" on public.dining_zones
++  for update to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "managers_delete_dining_zones" on public.dining_zones
++  for delete to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++-- mesas: lectura + UPDATE miembros (cambiar estado); INSERT/DELETE owner/manager (crear/quitar mesas)
++create policy "members_select_dining_tables" on public.dining_tables
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "managers_insert_dining_tables" on public.dining_tables
++  for insert to authenticated
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++create policy "members_update_dining_tables" on public.dining_tables
++  for update to authenticated
++  using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++create policy "managers_delete_dining_tables" on public.dining_tables
++  for delete to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++do $guard$
++declare _cnt integer;
++begin
++  select count(*) into _cnt from pg_policies
++    where schemaname = 'public' and tablename in ('dining_zones','dining_tables');
++  if _cnt < 8 then
++    raise exception 'GUARDIÁN SALA: faltan políticas (encontradas %)', _cnt using errcode = 'raise_exception';
++  end if;
++  raise notice 'GUARDIÁN SALA: dining_zones/dining_tables verificadas';
++end;
++$guard$;
++
++commit;

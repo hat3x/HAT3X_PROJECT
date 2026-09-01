@@ -11,6 +11,10 @@ dist/
 # Maquetas del companion visual de brainstorming
 .superpowers/*
 !.superpowers/sdd/
+!.superpowers/brainstorm/
+# ...pero nunca los tokens vivos que deja la herramienta
+.superpowers/brainstorm/.last-token
+.superpowers/brainstorm/.last-port
 
 # Exports y copias de seguridad de workflows de n8n.
 #

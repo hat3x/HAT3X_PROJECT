@@ -1,0 +1,235 @@
+<h2>Home de KAIZEN — ¿cómo conviven el Score y las calorías?</h2>
+<p class="subtitle">El problema: son dos números grandes compitiendo por la misma atención. Si los dos son un anillo, ninguno gana. Las tres opciones resuelven ese choque de forma distinta.</p>
+
+<style>
+  .kz-row { display:flex; gap:22px; flex-wrap:wrap; justify-content:center; margin:28px 0 8px; }
+  .kz-phone {
+    width:266px; background:#0A0B0B; border-radius:30px; padding:20px 18px 22px;
+    border:1px solid #222624; color:#F2F3F1;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    box-shadow:0 18px 40px rgba(0,0,0,.45);
+  }
+  .kz-greet { font-size:19px; font-weight:600; letter-spacing:-.3px; }
+  .kz-sub { font-size:12px; color:#7E847F; margin-top:3px; letter-spacing:.1px; }
+  .kz-card { background:#141616; border:1px solid #1F2321; border-radius:20px; padding:16px; margin-top:14px; }
+  .kz-label { font-size:10px; letter-spacing:1.3px; text-transform:uppercase; color:#7E847F; font-weight:600; }
+  .kz-big { font-size:56px; font-weight:640; letter-spacing:-2.5px; line-height:1; }
+  .kz-kcal { font-size:27px; font-weight:620; letter-spacing:-1px; }
+  .kz-dim { color:#7E847F; font-weight:500; }
+  .kz-note { font-size:12px; color:#9AA09B; margin-top:7px; line-height:1.4; }
+  .kz-bar { height:7px; border-radius:6px; background:#222624; overflow:hidden; margin-top:9px; }
+  .kz-bar > i { display:block; height:100%; border-radius:6px; }
+  .kz-macros { display:flex; gap:11px; margin-top:15px; }
+  .kz-macro { flex:1; }
+  .kz-macro .n { font-size:14px; font-weight:620; margin-top:5px; letter-spacing:-.2px; }
+  .kz-macro .l { font-size:9.5px; color:#7E847F; text-transform:uppercase; letter-spacing:.7px; }
+  .kz-mini { height:3px; border-radius:3px; background:#222624; overflow:hidden; margin-top:6px; }
+  .kz-mini > i { display:block; height:100%; }
+  .kz-flex { display:flex; align-items:center; justify-content:space-between; }
+  .kz-pill { background:#1C2A24; color:#4ECB9C; font-size:11px; font-weight:640; padding:5px 11px; border-radius:20px; }
+  .kz-btn { background:#1E2220; color:#DCE0DB; font-size:12px; font-weight:600; padding:7px 13px; border-radius:12px; }
+  .kz-mission { font-size:12.5px; line-height:2.05; color:#C8CDC7; }
+  .kz-mission .done { color:#5D635E; }
+  .kz-tick { color:#4ECB9C; }
+  .kz-caption { text-align:center; font-size:11px; color:#8A8F8C; margin-top:12px; font-style:italic; }
+</style>
+
+<div class="kz-row">
+
+  <!-- ================= A ================= -->
+  <div>
+    <div class="kz-phone">
+      <div class="kz-greet">Buenos días, Jota</div>
+      <div class="kz-sub">Día 24 · Fase Definición</div>
+
+      <div style="margin-top:26px; text-align:center;">
+        <div class="kz-label">Kaizen Score</div>
+        <div class="kz-big" style="margin-top:8px;">82</div>
+        <div class="kz-note" style="margin-top:8px;">Vas por muy buen camino.</div>
+      </div>
+
+      <div class="kz-card" style="margin-top:24px;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <svg width="76" height="76" viewBox="0 0 76 76" style="flex-shrink:0">
+            <circle cx="38" cy="38" r="32" fill="none" stroke="#222624" stroke-width="8"/>
+            <circle cx="38" cy="38" r="32" fill="none" stroke="#4ECB9C" stroke-width="8"
+                    stroke-linecap="round" stroke-dasharray="150 201" transform="rotate(-90 38 38)"/>
+          </svg>
+          <div>
+            <div class="kz-kcal">1.720<span class="kz-dim"> / 2.300</span></div>
+            <div class="kz-note" style="margin-top:2px;">580 kcal restantes</div>
+          </div>
+        </div>
+
+        <div class="kz-macros">
+          <div class="kz-macro">
+            <div class="l">Proteína</div>
+            <div class="n">132<span class="kz-dim">/170</span></div>
+            <div class="kz-mini"><i style="width:78%; background:#E8A87C"></i></div>
+          </div>
+          <div class="kz-macro">
+            <div class="l">Carbos</div>
+            <div class="n">164<span class="kz-dim">/220</span></div>
+            <div class="kz-mini"><i style="width:75%; background:#7EA8D9"></i></div>
+          </div>
+          <div class="kz-macro">
+            <div class="l">Grasas</div>
+            <div class="n">48<span class="kz-dim">/70</span></div>
+            <div class="kz-mini"><i style="width:69%; background:#D9B26F"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kz-card kz-flex">
+        <div>
+          <div class="kz-label">Agua</div>
+          <div class="kz-kcal" style="font-size:20px; margin-top:4px;">1,8<span class="kz-dim"> / 2,5 L</span></div>
+        </div>
+        <div class="kz-btn">+ 250 ml</div>
+      </div>
+    </div>
+    <div class="kz-caption">Score tipográfico · calorías en anillo</div>
+  </div>
+
+  <!-- ================= B ================= -->
+  <div>
+    <div class="kz-phone">
+      <div class="kz-greet">Buenos días, Jota</div>
+      <div class="kz-sub">Día 24 · Fase Definición</div>
+
+      <div style="margin-top:20px; display:flex; justify-content:center;">
+        <div style="position:relative; width:150px; height:150px;">
+          <svg width="150" height="150" viewBox="0 0 150 150">
+            <circle cx="75" cy="75" r="64" fill="none" stroke="#1B1F1D" stroke-width="10"/>
+            <circle cx="75" cy="75" r="64" fill="none" stroke="#4ECB9C" stroke-width="10"
+                    stroke-linecap="round" stroke-dasharray="330 402" transform="rotate(-90 75 75)"/>
+          </svg>
+          <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div class="kz-big" style="font-size:46px;">82</div>
+            <div class="kz-label" style="margin-top:5px;">Kaizen</div>
+          </div>
+        </div>
+      </div>
+      <div class="kz-note" style="text-align:center; margin-top:4px;">Vas por muy buen camino.</div>
+
+      <div class="kz-card">
+        <div class="kz-flex">
+          <div class="kz-kcal">1.720<span class="kz-dim"> / 2.300</span></div>
+          <div class="kz-note" style="margin:0;">580 restantes</div>
+        </div>
+        <div class="kz-bar"><i style="width:75%; background:#4ECB9C"></i></div>
+
+        <div class="kz-macros">
+          <div class="kz-macro">
+            <div class="l">Proteína</div>
+            <div class="n">132<span class="kz-dim">/170</span></div>
+            <div class="kz-mini"><i style="width:78%; background:#E8A87C"></i></div>
+          </div>
+          <div class="kz-macro">
+            <div class="l">Carbos</div>
+            <div class="n">164<span class="kz-dim">/220</span></div>
+            <div class="kz-mini"><i style="width:75%; background:#7EA8D9"></i></div>
+          </div>
+          <div class="kz-macro">
+            <div class="l">Grasas</div>
+            <div class="n">48<span class="kz-dim">/70</span></div>
+            <div class="kz-mini"><i style="width:69%; background:#D9B26F"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kz-card kz-flex">
+        <div>
+          <div class="kz-label">Agua</div>
+          <div class="kz-kcal" style="font-size:20px; margin-top:4px;">1,8<span class="kz-dim"> / 2,5 L</span></div>
+        </div>
+        <div class="kz-btn">+ 250 ml</div>
+      </div>
+    </div>
+    <div class="kz-caption">Score en anillo · calorías en barra</div>
+  </div>
+
+  <!-- ================= C ================= -->
+  <div>
+    <div class="kz-phone">
+      <div class="kz-flex">
+        <div>
+          <div class="kz-greet">Buenos días, Jota</div>
+          <div class="kz-sub">Día 24 · Fase Definición</div>
+        </div>
+        <div class="kz-pill">82</div>
+      </div>
+
+      <div style="margin-top:24px; display:flex; justify-content:center;">
+        <div style="position:relative; width:168px; height:168px;">
+          <svg width="168" height="168" viewBox="0 0 168 168">
+            <circle cx="84" cy="84" r="72" fill="none" stroke="#1B1F1D" stroke-width="11"/>
+            <circle cx="84" cy="84" r="72" fill="none" stroke="#4ECB9C" stroke-width="11"
+                    stroke-linecap="round" stroke-dasharray="339 452" transform="rotate(-90 84 84)"/>
+          </svg>
+          <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div class="kz-big" style="font-size:44px;">580</div>
+            <div class="kz-label" style="margin-top:6px;">kcal restantes</div>
+          </div>
+        </div>
+      </div>
+      <div class="kz-note" style="text-align:center;">1.720 de 2.300 consumidas</div>
+
+      <div class="kz-card">
+        <div class="kz-macros" style="margin-top:0;">
+          <div class="kz-macro">
+            <div class="l">Proteína</div>
+            <div class="n">132<span class="kz-dim">/170</span></div>
+            <div class="kz-mini"><i style="width:78%; background:#E8A87C"></i></div>
+          </div>
+          <div class="kz-macro">
+            <div class="l">Carbos</div>
+            <div class="n">164<span class="kz-dim">/220</span></div>
+            <div class="kz-mini"><i style="width:75%; background:#7EA8D9"></i></div>
+          </div>
+          <div class="kz-macro">
+            <div class="l">Grasas</div>
+            <div class="n">48<span class="kz-dim">/70</span></div>
+            <div class="kz-mini"><i style="width:69%; background:#D9B26F"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kz-card">
+        <div class="kz-label">Tu misión de hoy</div>
+        <div class="kz-mission" style="margin-top:8px;">
+          <div class="done"><span class="kz-tick">✓</span> Desayuno registrado</div>
+          <div class="done"><span class="kz-tick">✓</span> 1 L de agua</div>
+          <div>○ Llegar a 170 g de proteína</div>
+          <div>○ Entrenamiento</div>
+        </div>
+      </div>
+    </div>
+    <div class="kz-caption">Score discreto · calorías protagonistas</div>
+  </div>
+
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Score tipográfico, calorías en anillo</h3>
+      <p>El Score es un número grande y desnudo, sin gráfico. Las calorías se quedan el único anillo de la pantalla. Se diferencian por <strong>forma</strong>: uno es tipografía, el otro es geometría, así que no compiten. Es la más editorial de las tres y la que mejor encaja con «premium, minimal, atemporal».</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Score en anillo, calorías en barra</h3>
+      <p>Invierte los papeles: el Score se lleva el anillo grande (el lenguaje de WHOOP) y la nutrición pasa a barras lineales. Es la más impactante al abrir la app. Contra: el dato que consultas veinte veces al día —cuánto me queda por comer— queda relegado a una barra fina.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Score discreto, calorías protagonistas</h3>
+      <p>Va contra tu sección 6, así que júzgala con cuidado. El argumento: el Score es un <em>resumen</em>, y lo miras una vez al día; las kcal restantes son una <em>herramienta</em>, y las miras antes de cada comida. Aquí el anillo muestra lo que te queda, no lo que llevas, y el Score se reduce a una pastilla arriba. Es la más útil y la menos espectacular.</p>
+    </div>
+  </div>
+</div>

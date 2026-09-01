@@ -1,0 +1,204 @@
+<h2>Un dashboard, tres vistas</h2>
+<p class="subtitle"><strong>Sala de control</strong> por defecto (tu opción B) · <strong>Lista</strong> a un clic (tu opción C) · <strong>Oficina</strong> como tercera. Mismo dato, tres formas de mirarlo. Abajo, las tres maneras de entender «como en la oficina» — <strong>haz clic en la que tenías en la cabeza</strong>.</p>
+
+<style>
+  .ox{font-family:system-ui,-apple-system,sans-serif;color:var(--text-primary)}
+  .ox-shot{background:var(--bg-primary);display:flex;overflow:hidden}
+  .ox-side{width:60px;flex-shrink:0;background:var(--bg-secondary);border-right:1px solid var(--border);padding:10px 7px;display:flex;flex-direction:column;gap:6px}
+  .ox-logo{font-size:9px;font-weight:700;letter-spacing:.5px;margin-bottom:4px}
+  .ox-side em{font-style:normal;font-size:8px;color:var(--text-tertiary);padding:3.5px 5px;border-radius:5px;display:block}
+  .ox-side em.on{background:var(--accent);color:#fff}
+  .ox-main{flex:1;padding:10px;overflow:hidden;display:flex;flex-direction:column;gap:8px;min-width:0}
+
+  .ox-top{display:flex;align-items:center;gap:9px}
+  .ox-h{font-size:12px;font-weight:650;letter-spacing:-.2px;flex:1}
+  .ox-seg{display:flex;background:var(--bg-tertiary);border-radius:7px;padding:2px;gap:2px}
+  .ox-seg span{font-size:8px;padding:3px 8px;border-radius:5px;color:var(--text-secondary);white-space:nowrap}
+  .ox-seg span.on{background:var(--bg-secondary);color:var(--text-primary);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+  .ox-pill{font-size:8px;padding:3px 8px;border-radius:20px;background:rgba(255,59,48,.12);color:var(--error);font-weight:600;border:1px solid rgba(255,59,48,.28);white-space:nowrap}
+
+  .ox-bar{display:flex;gap:6px}
+  .ox-stat{flex:1;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:6px 8px}
+  .ox-stat b{display:block;font-size:16px;line-height:1.1;font-variant-numeric:tabular-nums}
+  .ox-stat span{font-size:7px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px}
+  .ox-stat.bad b{color:var(--error)} .ox-stat.warn b{color:var(--warning)}
+
+  .ox-inc{background:rgba(255,59,48,.09);border:1px solid rgba(255,59,48,.3);border-radius:8px;padding:6px 9px;font-size:8.5px;display:flex;align-items:center;gap:6px}
+  .ox-inc s{text-decoration:none;width:6px;height:6px;border-radius:50%;background:var(--error);flex-shrink:0}
+  .ox-inc u{text-decoration:none;margin-left:auto;font-size:7.5px;background:var(--bg-secondary);border:1px solid var(--border);padding:2px 7px;border-radius:5px;color:var(--text-secondary)}
+
+  .ox-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+  .ox-tile{background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .ox-tile.hot{border-color:rgba(255,59,48,.5)}
+  .ox-cov{height:36px;position:relative}
+  .ox-cov s{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;border:1.5px solid rgba(255,255,255,.92)}
+  .ox-mt{padding:5px 6px}
+  .ox-mt b{display:block;font-size:8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ox-mt span{font-size:7px;color:var(--text-secondary)}
+
+  .ox-list{background:var(--bg-secondary);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+  .ox-th{display:flex;align-items:center;gap:9px;padding:5px 10px;border-bottom:1px solid var(--border);font-size:7px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-tertiary);background:var(--bg-primary)}
+  .ox-r{display:flex;align-items:center;gap:9px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:9px}
+  .ox-r:last-child{border-bottom:0}
+  .ox-r.hot{background:rgba(255,59,48,.055)}
+  .ox-r s{text-decoration:none;width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .ox-nm{font-weight:600;width:112px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+  .ox-thumb{width:16px;height:16px;border-radius:4px;flex-shrink:0}
+  .ox-cli{color:var(--text-secondary);width:92px;font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ox-sv{flex:1;color:var(--text-secondary);font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ox-sp{display:flex;gap:1.5px;align-items:flex-end;height:13px;width:58px;flex-shrink:0}
+  .ox-sp i{background:var(--success);width:2.5px;border-radius:1px}
+  .ox-up{width:36px;text-align:right;color:var(--text-secondary);font-size:8.5px;font-variant-numeric:tabular-nums}
+  .ox-eur{width:42px;text-align:right;font-weight:650;font-size:8.5px;font-variant-numeric:tabular-nums}
+  .ok{background:var(--success)} .warn{background:var(--warning)} .down{background:var(--error)}
+  .g1{background:linear-gradient(135deg,#ff375f,#ff9f0a)} .g2{background:linear-gradient(135deg,#ff9f0a,#ff375f)}
+  .g3{background:linear-gradient(135deg,#0071e3,#5ac8fa)} .g4{background:linear-gradient(135deg,#30d158,#0aa2c0)}
+  .g5{background:linear-gradient(135deg,#bf5af2,#0071e3)} .g6{background:linear-gradient(135deg,#64d2ff,#5e5ce6)}
+  .g7{background:linear-gradient(135deg,#5ac8fa,#30d158)}
+
+  .of{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:9px;background:var(--bg-primary);height:192px}
+  .of-room{border:1.5px solid var(--border);border-radius:8px;padding:6px;background:var(--bg-secondary);display:flex;flex-direction:column;gap:5px;overflow:hidden}
+  .of-room h6{margin:0;font-size:7.5px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px;display:flex;justify-content:space-between;align-items:center;gap:4px}
+  .of-room.bad{border-color:var(--error);background:rgba(255,59,48,.07)}
+  .of-room.bad h6{color:var(--error)}
+  .of-room.meet{background:rgba(0,113,227,.07);border-color:rgba(0,113,227,.35)}
+  .of-av{display:flex;flex-wrap:wrap;gap:3px}
+  .of-av b{width:15px;height:15px;border-radius:50%;font-size:7px;font-weight:600;color:#fff;display:flex;align-items:center;justify-content:center}
+  .of-lamps{display:flex;flex-direction:column;gap:2px}
+  .of-lamps i{font-style:normal;font-size:6.5px;color:var(--text-secondary);display:flex;align-items:center;gap:3px}
+  .of-lamps i s{text-decoration:none;width:5px;height:5px;border-radius:50%;flex-shrink:0}
+
+  .cards .card-image{padding:0;background:var(--bg-tertiary)}
+  .ox-note{font-size:.75rem;color:var(--text-secondary);margin-top:.4rem}
+  .ox-warn{background:rgba(255,159,10,.1);border:1px solid rgba(255,159,10,.35);border-radius:8px;padding:.85rem 1.1rem;margin:1.2rem 0;font-size:.83rem;line-height:1.55}
+</style>
+
+<div class="mockup ox">
+  <div class="mockup-header">Vista 1 · SALA DE CONTROL — la de por defecto</div>
+  <div class="mockup-body" style="padding:0">
+    <div class="ox-shot">
+      <div class="ox-side">
+        <div class="ox-logo">HAT3X</div>
+        <em class="on">Resumen</em><em>Proyectos</em><em>Clientes</em><em>Alertas</em><em>Ajustes</em>
+      </div>
+      <div class="ox-main">
+        <div class="ox-top">
+          <div class="ox-h">Todo el sistema</div>
+          <span class="ox-pill">1 caído · 1 degradado</span>
+          <div class="ox-seg"><span class="on">Sala de control</span><span>Lista</span><span>Oficina</span></div>
+        </div>
+        <div class="ox-bar">
+          <div class="ox-stat"><b>12</b><span>Proyectos</span></div>
+          <div class="ox-stat"><b>10</b><span>Operativos</span></div>
+          <div class="ox-stat warn"><b>1</b><span>Degradado</span></div>
+          <div class="ox-stat bad"><b>1</b><span>Caído</span></div>
+          <div class="ox-stat"><b>99,4 %</b><span>Uptime medio</span></div>
+        </div>
+        <div class="ox-inc"><s></s><strong>Recepcionista Sara</strong> · n8n 02-crear-cita devuelve HTTP 500 desde hace 14 min · Biodental <u>Silenciar 1 h</u></div>
+        <div class="ox-grid">
+          <div class="ox-tile hot"><div class="ox-cov g1"><s class="down"></s></div><div class="ox-mt"><b>Recep. Sara</b><span>Biodental · 5/6</span></div></div>
+          <div class="ox-tile hot"><div class="ox-cov g2"><s class="warn"></s></div><div class="ox-mt"><b>Oficina Virtual</b><span>HAT3X · lenta</span></div></div>
+          <div class="ox-tile"><div class="ox-cov g3"><s class="ok"></s></div><div class="ox-mt"><b>Kairos</b><span>2 clientes · 7/7</span></div></div>
+          <div class="ox-tile"><div class="ox-cov g4"><s class="ok"></s></div><div class="ox-mt"><b>100M Dashboard</b><span>3 locales · 5/5</span></div></div>
+          <div class="ox-tile"><div class="ox-cov g5"><s class="ok"></s></div><div class="ox-mt"><b>denueveanueve</b><span>App + Staff · 6/6</span></div></div>
+          <div class="ox-tile"><div class="ox-cov g6"><s class="ok"></s></div><div class="ox-mt"><b>Web J. Peralta</b><span>NNJBARBERS · 2/2</span></div></div>
+          <div class="ox-tile"><div class="ox-cov g7"><s class="ok"></s></div><div class="ox-mt"><b>Llamadas perdidas</b><span>Club BioSpa · 3/3</span></div></div>
+          <div class="ox-tile"><div class="ox-cov g3"><s class="ok"></s></div><div class="ox-mt"><b>Obratech</b><span>App obra · 4/4</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup ox" style="margin-top:1.4rem">
+  <div class="mockup-header">Vista 2 · LISTA — mismo dato, denso, a un clic del conmutador</div>
+  <div class="mockup-body" style="padding:0">
+    <div class="ox-shot">
+      <div class="ox-side">
+        <div class="ox-logo">HAT3X</div>
+        <em class="on">Resumen</em><em>Proyectos</em><em>Clientes</em><em>Alertas</em><em>Ajustes</em>
+      </div>
+      <div class="ox-main">
+        <div class="ox-top">
+          <div class="ox-h">Todo el sistema</div>
+          <span class="ox-pill">1 caído · 1 degradado</span>
+          <div class="ox-seg"><span>Sala de control</span><span class="on">Lista</span><span>Oficina</span></div>
+        </div>
+        <div class="ox-list">
+          <div class="ox-th"><s style="visibility:hidden"></s><span class="ox-nm">Proyecto</span><span class="ox-cli">Cliente</span><span class="ox-sv">Servicios</span><span class="ox-sp"></span><span class="ox-up">30 d</span><span class="ox-eur">Cuota</span></div>
+          <div class="ox-r hot"><s class="down"></s><span class="ox-nm"><span class="ox-thumb g1"></span>Recep. Sara</span><span class="ox-cli">Biodental</span><span class="ox-sv">5/6 · n8n 02-crear-cita HTTP 500</span><span class="ox-sp"><i style="height:11px"></i><i style="height:12px"></i><i style="height:10px"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:4px;background:var(--error)"></i><i style="height:3px;background:var(--error)"></i></span><span class="ox-up">97,2%</span><span class="ox-eur">290 €</span></div>
+          <div class="ox-r hot"><s class="warn"></s><span class="ox-nm"><span class="ox-thumb g2"></span>Oficina Virtual</span><span class="ox-cli">HAT3X</span><span class="ox-sv">4/4 · latencia alta 1,8 s</span><span class="ox-sp"><i style="height:12px"></i><i style="height:11px"></i><i style="height:7px;background:var(--warning)"></i><i style="height:8px;background:var(--warning)"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i></span><span class="ox-up">99,1%</span><span class="ox-eur">—</span></div>
+          <div class="ox-r"><s class="ok"></s><span class="ox-nm"><span class="ox-thumb g3"></span>Kairos</span><span class="ox-cli">2 clientes</span><span class="ox-sv">7/7 · web, API, edge functions, cron</span><span class="ox-sp"><i style="height:12px"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i></span><span class="ox-up">99,9%</span><span class="ox-eur">120 €</span></div>
+          <div class="ox-r"><s class="ok"></s><span class="ox-nm"><span class="ox-thumb g4"></span>100M Dashboard</span><span class="ox-cli">100 Montaditos</span><span class="ox-sv">5/5 · web, Supabase, 3 locales</span><span class="ox-sp"><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i><i style="height:12px"></i></span><span class="ox-up">100%</span><span class="ox-eur">—</span></div>
+          <div class="ox-r"><s class="ok"></s><span class="ox-nm"><span class="ox-thumb g5"></span>denueveanueve</span><span class="ox-cli">De Nueve a Nueve</span><span class="ox-sv">6/6 · app cliente, staff, Noa</span><span class="ox-sp"><i style="height:11px"></i><i style="height:12px"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i><i style="height:12px"></i><i style="height:11px"></i></span><span class="ox-up">99,8%</span><span class="ox-eur">—</span></div>
+          <div class="ox-r"><s class="ok"></s><span class="ox-nm"><span class="ox-thumb g6"></span>Web J. Peralta</span><span class="ox-cli">NNJBARBERS</span><span class="ox-sv">2/2 · web, dominio</span><span class="ox-sp"><i style="height:12px"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i><i style="height:12px"></i><i style="height:12px"></i><i style="height:11px"></i></span><span class="ox-up">100%</span><span class="ox-eur">300 €</span></div>
+          <div class="ox-r"><s class="ok"></s><span class="ox-nm"><span class="ox-thumb g7"></span>Llamadas perdidas</span><span class="ox-cli">Club BioSpa</span><span class="ox-sv">3/3 · n8n, Retell, Twilio</span><span class="ox-sp"><i style="height:11px"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i><i style="height:12px"></i><i style="height:11px"></i><i style="height:12px"></i></span><span class="ox-up">99,7%</span><span class="ox-eur">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:1.7rem">Vista 3 · OFICINA — ¿cuál de estas tres tenías en la cabeza?</h3>
+
+<div class="cards">
+
+  <div class="card" data-choice="agentes" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="of">
+        <div class="of-room meet"><h6>Sala de reuniones</h6><div class="of-av"><b style="background:#0071e3">PM</b><b style="background:#bf5af2">DS</b><b style="background:#30d158">QA</b></div></div>
+        <div class="of-room"><h6>Dev</h6><div class="of-av"><b style="background:#0071e3">BE</b><b style="background:#0071e3">FE</b><b style="background:#5ac8fa">DB</b><b style="background:#5e5ce6">OP</b></div></div>
+        <div class="of-room"><h6>Diseño</h6><div class="of-av"><b style="background:#bf5af2">UI</b><b style="background:#bf5af2">UX</b></div></div>
+        <div class="of-room"><h6>QA</h6><div class="of-av"><b style="background:#30d158">TS</b><b style="background:#ff9f0a">SE</b></div></div>
+        <div class="of-room"><h6>Operaciones</h6><div class="of-av"><b style="background:#ff375f">VZ</b><b style="background:#ff9f0a">N8</b><b style="background:#64d2ff">CR</b></div></div>
+        <div class="of-room"><h6>Descanso</h6><div class="of-av"><b style="background:#aeaeb2">+18</b></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>1 · La Oficina Virtual, tal cual</h3>
+      <p>Las 6 zonas que ya tienes en <code>/oficina</code>, traídas al panel nuevo. Aquí ves <strong>a tus agentes</strong> trabajando en tiempo real — no tus proyectos.</p>
+      <p class="ox-note">La más barata con diferencia: ya está construida, solo cambia de casa.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="plano" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="of">
+        <div class="of-room bad"><h6>Recep. Sara</h6><div class="of-lamps"><i><s class="down"></s>02-crear-cita</i><i><s class="ok"></s>01-verificar</i><i><s class="ok"></s>Retell</i><i><s class="ok"></s>Twilio</i></div></div>
+        <div class="of-room"><h6>Kairos</h6><div class="of-lamps"><i><s class="ok"></s>Web</i><i><s class="ok"></s>API</i><i><s class="ok"></s>Edge fn</i><i><s class="ok"></s>Cron</i></div></div>
+        <div class="of-room"><h6>100M</h6><div class="of-lamps"><i><s class="ok"></s>Web</i><i><s class="ok"></s>Supabase</i><i><s class="ok"></s>3 locales</i></div></div>
+        <div class="of-room"><h6>denueveanueve</h6><div class="of-lamps"><i><s class="ok"></s>App cliente</i><i><s class="ok"></s>App staff</i><i><s class="ok"></s>Noa</i></div></div>
+        <div class="of-room" style="border-color:var(--warning);background:rgba(255,159,10,.07)"><h6 style="color:var(--warning)">Oficina Virtual</h6><div class="of-lamps"><i><s class="warn"></s>Supervisor</i><i><s class="ok"></s>Bus</i><i><s class="ok"></s>Telegram</i></div></div>
+        <div class="of-room"><h6>Club BioSpa</h6><div class="of-lamps"><i><s class="ok"></s>n8n</i><i><s class="ok"></s>Retell</i><i><s class="ok"></s>Twilio</i></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>2 · Plano de planta por proyectos</h3>
+      <p>Mismo lenguaje visual, pero <strong>cada sala es un proyecto</strong> y las luces de dentro son sus servicios. El despacho entero se pone rojo cuando algo se rompe.</p>
+      <p class="ox-note">Un dashboard espacial: ves toda tu operación de un vistazo, sin leer ninguna tabla.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="hibrida" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="of">
+        <div class="of-room bad"><h6>Recep. Sara</h6><div class="of-av"><b style="background:#0071e3">BE</b><b style="background:#ff9f0a">N8</b></div><div class="of-lamps"><i><s class="down"></s>02-crear-cita</i><i><s class="ok"></s>Retell</i></div></div>
+        <div class="of-room"><h6>Kairos</h6><div class="of-av"><b style="background:#bf5af2">UI</b></div><div class="of-lamps"><i><s class="ok"></s>Web · API · Cron</i></div></div>
+        <div class="of-room"><h6>100M</h6><div class="of-lamps"><i><s class="ok"></s>Web · Supabase</i></div></div>
+        <div class="of-room meet"><h6>Sala de reuniones</h6><div class="of-av"><b style="background:#0071e3">PM</b><b style="background:#30d158">QA</b></div></div>
+        <div class="of-room"><h6>denueveanueve</h6><div class="of-lamps"><i><s class="ok"></s>App · Staff · Noa</i></div></div>
+        <div class="of-room"><h6>Descanso</h6><div class="of-av"><b style="background:#aeaeb2">+18</b></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>3 · Híbrida — agentes dentro de los proyectos</h3>
+      <p>Las salas son tus proyectos y <strong>los agentes se mueven al proyecto en el que están trabajando</strong>. Un agente arreglando el workflow de Sara aparece dentro del despacho de Sara.</p>
+      <p class="ox-note">La más ambiciosa: une monitorización y Oficina Virtual en una sola imagen. También la que más trabajo lleva.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="ox-warn">
+  <strong>Recordatorio de una conversación tuya anterior, porque aplica justo aquí:</strong> cuando hablamos de que la Oficina evolucionara a algo estilo tycoon isométrico con vida propia, la conclusión fue <em>no construir un motor de juego real (Phaser/PixiJS con sprites, pathing y animaciones) sin evaluar antes coste/beneficio — son días de trabajo, no horas</em>. El punto medio propuesto entonces: fondo isométrico estático con los avatares colocados en la sala correcta, sin movimiento autónomo — <strong>el 80 % del efecto por una fracción del esfuerzo</strong>. Cualquiera de las tres se puede hacer así primero y darle vida más adelante.
+</div>

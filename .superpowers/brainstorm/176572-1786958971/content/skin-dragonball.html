@@ -1,0 +1,278 @@
+<h2>Mismo Home, dos pieles</h2>
+<p class="subtitle">Estructura D1 exacta en las dos: mismo orden, mismos bloques, mismos datos, mismo código. Lo único que cambia entre izquierda y derecha son <strong>tokens</strong> — color, radios, grosor tipográfico, brillo y etiquetas. Ese es el punto de la pantalla: si el skin exige tocar la estructura, la arquitectura está mal; si sale con tokens, sale con un cambio de fichero.</p>
+
+<style>
+  .sk-row { display:flex; gap:32px; flex-wrap:wrap; justify-content:center; margin:28px 0 8px; align-items:flex-start; }
+  .sk-phone {
+    position:relative; width:282px; border-radius:36px;
+    padding:22px 16px 96px; overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    box-shadow:0 22px 50px rgba(0,0,0,.55);
+  }
+  .sk-aurora { position:absolute; inset:0; overflow:hidden; }
+  .sk-aurora i { position:absolute; display:block; border-radius:50%; filter:blur(46px); }
+  .sk-in { position:relative; z-index:1; }
+  .sk-flex { display:flex; align-items:center; justify-content:space-between; }
+  .sk-caption { text-align:center; font-size:11px; color:#8A8F8C; margin-top:13px; font-style:italic; }
+  .sk-tabs { position:absolute; left:16px; right:16px; bottom:18px; z-index:2;
+             display:flex; align-items:center; justify-content:space-between; padding:11px 18px; }
+  .sk-plus { width:36px; height:36px; border-radius:50%; display:flex; align-items:center;
+             justify-content:center; font-size:21px; font-weight:600; line-height:1; }
+
+  /* ============ TEMA POR DEFECTO ============ */
+  .t-def { background:#060807; border:1px solid #1A1E1C; color:#F4F5F2; }
+  .t-def .b1 { width:230px;height:230px;top:-70px;left:-60px; background:rgba(78,203,156,.30); }
+  .t-def .b2 { width:200px;height:200px;top:200px;right:-80px; background:rgba(86,142,214,.22); }
+  .t-def .b3 { width:220px;height:220px;bottom:-40px;left:-40px; background:rgba(232,168,124,.14); }
+  .t-def .g {
+    background:linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.038));
+    -webkit-backdrop-filter:blur(22px) saturate(170%); backdrop-filter:blur(22px) saturate(170%);
+    border:1px solid rgba(255,255,255,.10);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 10px 30px rgba(0,0,0,.30);
+    border-radius:22px;
+  }
+  .t-def .greet { font-size:19px; font-weight:600; letter-spacing:-.3px; }
+  .t-def .sub { font-size:12px; color:#9AA29C; margin-top:3px; }
+  .t-def .lab { font-size:10px; letter-spacing:1.3px; text-transform:uppercase; color:#98A09A; font-weight:600; }
+  .t-def .hero { font-size:50px; font-weight:640; letter-spacing:-2.2px; line-height:1; }
+  .t-def .dim { color:#8C948E; font-weight:500; }
+  .t-def .note { font-size:12px; color:#A8AFA9; line-height:1.45; }
+  .t-def .num { font-size:20px; font-weight:640; letter-spacing:-.7px; }
+  .t-def .btn { background:rgba(255,255,255,.10); color:#E6EAE4; border:1px solid rgba(255,255,255,.12);
+                box-shadow:inset 0 1px 0 rgba(255,255,255,.15); border-radius:13px; }
+  .t-def .cta { background:rgba(78,203,156,.88); color:#04120C; border-radius:13px;
+                box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 4px 14px rgba(78,203,156,.25); }
+  .t-def .tick { color:#7FE3BB; }
+  .t-def .on { color:#7FE3BB; }
+  .t-def .off { color:#8C948E; }
+  .t-def .sk-plus { background:rgba(78,203,156,.92); color:#04120C;
+                    box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 5px 16px rgba(78,203,156,.35); }
+  .t-def .ringtrack { stroke:rgba(255,255,255,.10); }
+  .t-def .ringfill { stroke:#4ECB9C; }
+  .t-def .track { background:rgba(255,255,255,.10); }
+  .t-def .sep { background:rgba(255,255,255,.09); }
+  .t-def .m1 { background:#E8A87C } .t-def .m2 { background:#7EA8D9 } .t-def .m3 { background:#D9B26F }
+
+  /* ============ SKIN ============ */
+  .t-db { background:#06060C; border:1px solid #1B1726; color:#FFF6EC; }
+  .t-db .b1 { width:250px;height:250px;top:-80px;left:-70px; background:rgba(255,138,31,.34); }
+  .t-db .b2 { width:220px;height:220px;top:210px;right:-90px; background:rgba(61,123,224,.30); }
+  .t-db .b3 { width:200px;height:200px;bottom:-50px;left:-30px; background:rgba(255,210,63,.14); }
+  .t-db .g {
+    background:linear-gradient(180deg, rgba(255,138,31,.11), rgba(255,255,255,.028));
+    -webkit-backdrop-filter:blur(18px) saturate(190%); backdrop-filter:blur(18px) saturate(190%);
+    border:1px solid rgba(255,168,74,.24);
+    box-shadow:inset 0 1px 0 rgba(255,198,133,.26), 0 10px 30px rgba(0,0,0,.45);
+    border-radius:7px;
+  }
+  .t-db .greet { font-size:19px; font-weight:800; letter-spacing:.2px; text-transform:uppercase; }
+  .t-db .sub { font-size:11px; color:#C79A6A; margin-top:4px; letter-spacing:1.2px; text-transform:uppercase; font-weight:600; }
+  .t-db .lab { font-size:9.5px; letter-spacing:2.2px; text-transform:uppercase; color:#FFB86B; font-weight:800; }
+  .t-db .hero { font-size:52px; font-weight:850; letter-spacing:-1.4px; line-height:1;
+                text-shadow:0 0 18px rgba(255,138,31,.55); }
+  .t-db .dim { color:#9B8C7C; font-weight:600; }
+  .t-db .note { font-size:12px; color:#C6B6A6; line-height:1.45; }
+  .t-db .num { font-size:20px; font-weight:800; letter-spacing:-.4px; }
+  .t-db .btn { background:rgba(255,168,74,.14); color:#FFD9AE; border:1px solid rgba(255,168,74,.30);
+               box-shadow:inset 0 1px 0 rgba(255,210,150,.22); border-radius:5px; font-weight:700; }
+  .t-db .cta { background:linear-gradient(180deg,#FF9A2E,#F0780F); color:#2A1000; border-radius:5px; font-weight:800;
+               box-shadow:inset 0 1px 0 rgba(255,225,180,.55), 0 4px 16px rgba(255,138,31,.42); }
+  .t-db .tick { color:#FFD23F; }
+  .t-db .on { color:#FF9A2E; }
+  .t-db .off { color:#7A6A5C; }
+  .t-db .sk-plus { background:linear-gradient(180deg,#FF9A2E,#EE7208); color:#2A1000;
+                   box-shadow:inset 0 1px 0 rgba(255,230,190,.6), 0 5px 20px rgba(255,138,31,.5); }
+  .t-db .ringtrack { stroke:rgba(255,255,255,.09); }
+  .t-db .ringfill { stroke:#FF8A1F; filter:drop-shadow(0 0 7px rgba(255,138,31,.85)); }
+  .t-db .track { background:rgba(255,255,255,.09); }
+  .t-db .sep { background:rgba(255,168,74,.18); }
+  .t-db .m1 { background:#FFD23F } .t-db .m2 { background:#3D7BE0 } .t-db .m3 { background:#E2574C }
+
+  /* comunes de layout */
+  .sk-card { padding:15px 16px; margin-top:12px; }
+  .sk-bar { height:7px; border-radius:6px; overflow:hidden; margin-top:9px; }
+  .sk-bar > i { display:block; height:100%; border-radius:6px; }
+  .sk-mini { height:3px; border-radius:3px; overflow:hidden; margin-top:6px; }
+  .sk-mini > i { display:block; height:100%; }
+  .sk-macros { display:flex; gap:11px; margin-top:14px; }
+  .sk-macro { flex:1; }
+  .sk-macro .n { font-size:14px; font-weight:700; margin-top:5px; letter-spacing:-.2px; }
+  .sk-sep { height:1px; margin:14px -16px 0; }
+  .sk-mis { font-size:12.5px; line-height:2.1; }
+  .t-def .sk-mis { color:#D2D7CF } .t-def .sk-mis .done { color:#6C736D }
+  .t-db .sk-mis { color:#E4D6C6 } .t-db .sk-mis .done { color:#7A6A5C }
+  .sk-btnpad { font-size:12px; padding:7px 12px; white-space:nowrap; }
+  .sk-tab { font-size:16px; }
+</style>
+
+<div class="sk-row">
+
+  <!-- ============== POR DEFECTO ============== -->
+  <div>
+    <div class="sk-phone t-def">
+      <div class="sk-aurora"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
+      <div class="sk-in">
+        <div class="greet">Buenos días, Jota</div>
+        <div class="sub">Día 24 · Fase Definición</div>
+
+        <div style="margin-top:18px; display:flex; justify-content:center;">
+          <div style="position:relative; width:168px; height:168px;">
+            <svg width="168" height="168" viewBox="0 0 168 168">
+              <circle class="ringtrack" cx="84" cy="84" r="72" fill="none" stroke-width="12"/>
+              <circle class="ringfill" cx="84" cy="84" r="72" fill="none" stroke-width="12"
+                      stroke-linecap="round" stroke-dasharray="371 452" transform="rotate(-90 84 84)"/>
+            </svg>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+              <div class="hero">82</div>
+              <div class="lab" style="margin-top:7px;">Kaizen Score</div>
+            </div>
+          </div>
+        </div>
+        <div class="note" style="text-align:center; margin-top:8px;">Vas por muy buen camino.</div>
+
+        <div class="g sk-card" style="margin-top:16px;">
+          <div class="sk-flex" style="align-items:baseline;">
+            <div class="num">1.720<span class="dim"> / 2.300</span></div>
+            <div class="note">580 restantes</div>
+          </div>
+          <div class="sk-bar track"><i style="width:75%; background:#4ECB9C"></i></div>
+          <div class="sk-sep sep"></div>
+          <div class="sk-macros">
+            <div class="sk-macro"><div class="lab">Proteína</div><div class="n">132<span class="dim">/170</span></div>
+              <div class="sk-mini track"><i class="m1" style="width:78%"></i></div></div>
+            <div class="sk-macro"><div class="lab">Carbos</div><div class="n">164<span class="dim">/220</span></div>
+              <div class="sk-mini track"><i class="m2" style="width:75%"></i></div></div>
+            <div class="sk-macro"><div class="lab">Grasas</div><div class="n">48<span class="dim">/70</span></div>
+              <div class="sk-mini track"><i class="m3" style="width:69%"></i></div></div>
+          </div>
+        </div>
+
+        <div class="g sk-card sk-flex">
+          <div><div class="lab">Agua</div><div class="num" style="margin-top:4px;">1,8<span class="dim"> / 2,5 L</span></div></div>
+          <div style="display:flex; gap:7px;">
+            <div class="btn sk-btnpad">+250</div><div class="btn sk-btnpad">+500</div></div>
+        </div>
+
+        <div class="g sk-card sk-flex">
+          <div><div class="lab">Entrenamiento</div><div class="note" style="margin-top:5px;">Pendiente hoy</div></div>
+          <div class="cta sk-btnpad">Registrar</div>
+        </div>
+
+        <div class="g sk-card">
+          <div class="lab">Tu misión de hoy</div>
+          <div class="sk-mis" style="margin-top:8px;">
+            <div class="done"><span class="tick">✓</span> Desayuno registrado</div>
+            <div class="done"><span class="tick">✓</span> 1 L de agua</div>
+            <div>○ Llegar a 170 g de proteína</div>
+            <div>○ Entrenamiento</div>
+          </div>
+        </div>
+      </div>
+      <div class="sk-tabs g">
+        <div class="sk-tab on">◉</div><div class="sk-tab off">◍</div>
+        <div class="sk-plus">+</div>
+        <div class="sk-tab off">◌</div><div class="sk-tab off">◇</div>
+      </div>
+    </div>
+    <div class="sk-caption">Tema por defecto · el que sube a las tiendas</div>
+  </div>
+
+  <!-- ============== SKIN ============== -->
+  <div>
+    <div class="sk-phone t-db">
+      <div class="sk-aurora"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
+      <div class="sk-in">
+        <div class="greet">Buenos días, Jota</div>
+        <div class="sub">Día 24 · Fase Definición</div>
+
+        <div style="margin-top:18px; display:flex; justify-content:center;">
+          <div style="position:relative; width:168px; height:168px;">
+            <svg width="168" height="168" viewBox="0 0 168 168">
+              <circle class="ringtrack" cx="84" cy="84" r="72" fill="none" stroke-width="12"/>
+              <circle class="ringfill" cx="84" cy="84" r="72" fill="none" stroke-width="12"
+                      stroke-linecap="round" stroke-dasharray="371 452" transform="rotate(-90 84 84)"/>
+            </svg>
+            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+              <div class="hero">82</div>
+              <div class="lab" style="margin-top:7px;">Nivel de poder</div>
+            </div>
+          </div>
+        </div>
+        <div class="note" style="text-align:center; margin-top:8px;">Vas por muy buen camino.</div>
+
+        <div class="g sk-card" style="margin-top:16px;">
+          <div class="sk-flex" style="align-items:baseline;">
+            <div class="num">1.720<span class="dim"> / 2.300</span></div>
+            <div class="note">580 restantes</div>
+          </div>
+          <div class="sk-bar track"><i style="width:75%; background:linear-gradient(90deg,#FFB443,#FF8A1F)"></i></div>
+          <div class="sk-sep sep"></div>
+          <div class="sk-macros">
+            <div class="sk-macro"><div class="lab">Proteína</div><div class="n">132<span class="dim">/170</span></div>
+              <div class="sk-mini track"><i class="m1" style="width:78%"></i></div></div>
+            <div class="sk-macro"><div class="lab">Carbos</div><div class="n">164<span class="dim">/220</span></div>
+              <div class="sk-mini track"><i class="m2" style="width:75%"></i></div></div>
+            <div class="sk-macro"><div class="lab">Grasas</div><div class="n">48<span class="dim">/70</span></div>
+              <div class="sk-mini track"><i class="m3" style="width:69%"></i></div></div>
+          </div>
+        </div>
+
+        <div class="g sk-card sk-flex">
+          <div><div class="lab">Agua</div><div class="num" style="margin-top:4px;">1,8<span class="dim"> / 2,5 L</span></div></div>
+          <div style="display:flex; gap:7px;">
+            <div class="btn sk-btnpad">+250</div><div class="btn sk-btnpad">+500</div></div>
+        </div>
+
+        <div class="g sk-card sk-flex">
+          <div><div class="lab">Entrenamiento</div><div class="note" style="margin-top:5px;">Pendiente hoy</div></div>
+          <div class="cta sk-btnpad">Registrar</div>
+        </div>
+
+        <div class="g sk-card">
+          <div class="lab">Misión de hoy</div>
+          <div class="sk-mis" style="margin-top:8px;">
+            <div class="done"><span class="tick">✓</span> Desayuno registrado</div>
+            <div class="done"><span class="tick">✓</span> 1 L de agua</div>
+            <div>○ Llegar a 170 g de proteína</div>
+            <div>○ Entrenamiento</div>
+          </div>
+        </div>
+      </div>
+      <div class="sk-tabs g">
+        <div class="sk-tab on">◉</div><div class="sk-tab off">◍</div>
+        <div class="sk-plus">+</div>
+        <div class="sk-tab off">◌</div><div class="sk-tab off">◇</div>
+      </div>
+    </div>
+    <div class="sk-caption">Skin personal · solo en tu compilación</div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:26px;">
+  <h3>Qué ha cambiado, exactamente</h3>
+  <p class="subtitle" style="margin-bottom:14px;">Ni una línea de estructura. Solo estos tokens:</p>
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Tokens tocados</h4>
+      <ul>
+        <li><strong>Color</strong> — acento verde menta → naranja; macros → amarillo, azul y rojo</li>
+        <li><strong>Radios</strong> — 22 px redondeados → 7 px angulares</li>
+        <li><strong>Tipografía</strong> — peso 600 → 800, mayúsculas y más espaciado en etiquetas</li>
+        <li><strong>Brillo</strong> — sin resplandor → halo naranja en el anillo y en el número</li>
+        <li><strong>Fondo</strong> — campo verde y azul frío → naranja y azul saturados</li>
+        <li><strong>Etiquetas</strong> — «Kaizen Score» → «Nivel de poder»</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Sin tocar</h4>
+      <ul>
+        <li>Orden y jerarquía de los bloques</li>
+        <li>Componentes y su comportamiento</li>
+        <li>Datos, cálculos y lógica</li>
+        <li>Textos funcionales y accesibilidad</li>
+        <li>Cero imágenes con derechos: todo es color, forma y tipografía</li>
+      </ul>
+    </div>
+  </div>
+</div>

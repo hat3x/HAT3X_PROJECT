@@ -1,0 +1,80 @@
+=== COMMITS (80d3874..a9c110d) ===
+a9c110d feat(restauracion): queries y hooks de pedidos
+
+=== DIFF --stat ===
+ src/hooks/use-orders.ts           | 14 ++++++++++++++
+ src/lib/queries/orders.ts         | 28 ++++++++++++++++++++++++++++
+ src/tests/unit/order-keys.test.ts | 10 ++++++++++
+ 3 files changed, 52 insertions(+)
+
+=== DIFF -U10 ===
+diff --git a/src/hooks/use-orders.ts b/src/hooks/use-orders.ts
+new file mode 100644
+index 0000000..7814c70
+--- /dev/null
++++ b/src/hooks/use-orders.ts
+@@ -0,0 +1,14 @@
++"use client";
++import { useQuery } from "@tanstack/react-query";
++import { fetchOpenOrders, fetchOrderItems, orderKeys } from "@/lib/queries/orders";
++
++export function useOpenOrders(salonId: string) {
++  return useQuery({ queryKey: orderKeys.open(salonId), queryFn: () => fetchOpenOrders(salonId) });
++}
++export function useOrderItems(salonId: string, orderId: string | null) {
++  return useQuery({
++    queryKey: orderKeys.detail(salonId, orderId ?? "none"),
++    queryFn: () => fetchOrderItems(salonId, orderId as string),
++    enabled: orderId !== null,
++  });
++}
+diff --git a/src/lib/queries/orders.ts b/src/lib/queries/orders.ts
+new file mode 100644
+index 0000000..86bf80e
+--- /dev/null
++++ b/src/lib/queries/orders.ts
+@@ -0,0 +1,28 @@
++import { createClient } from "@/lib/supabase/client";
++import type { Order, OrderItem } from "@/types/database";
++
++export const orderKeys = {
++  all: (salonId: string) => ["orders", salonId] as const,
++  open: (salonId: string) => [...orderKeys.all(salonId), "open"] as const,
++  detail: (salonId: string, orderId: string) => [...orderKeys.all(salonId), "detail", orderId] as const,
++};
++
++export async function fetchOpenOrders(salonId: string): Promise<Order[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("orders").select("*")
++    .eq("salon_id", salonId).eq("status", "abierta")
++    .order("created_at", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++export async function fetchOrderItems(salonId: string, orderId: string): Promise<OrderItem[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("order_items").select("*")
++    .eq("salon_id", salonId).eq("order_id", orderId)
++    .order("created_at", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
+diff --git a/src/tests/unit/order-keys.test.ts b/src/tests/unit/order-keys.test.ts
+new file mode 100644
+index 0000000..9c89871
+--- /dev/null
++++ b/src/tests/unit/order-keys.test.ts
+@@ -0,0 +1,10 @@
++import { describe, it, expect } from "vitest";
++import { orderKeys } from "@/lib/queries/orders";
++
++describe("orderKeys", () => {
++  it("deriva sub-keys del salón", () => {
++    expect(orderKeys.all("s1")).toEqual(["orders", "s1"]);
++    expect(orderKeys.open("s1")).toEqual(["orders", "s1", "open"]);
++    expect(orderKeys.detail("s1", "o1")).toEqual(["orders", "s1", "detail", "o1"]);
++  });
++});

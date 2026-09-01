@@ -1,0 +1,102 @@
+=== COMMITS (d963ce7..d3ccdbc) ===
+d3ccdbc fix(restauracion): 'anulado' es terminal en setOrderItemStatus (no re-cobrar lineas anuladas)
+
+=== DIFF -U12 ===
+diff --git a/src/app/(dashboard)/mostrador/actions.ts b/src/app/(dashboard)/mostrador/actions.ts
+index 3f0dc81..aacc14a 100644
+--- a/src/app/(dashboard)/mostrador/actions.ts
++++ b/src/app/(dashboard)/mostrador/actions.ts
+@@ -265,29 +265,47 @@ export async function sendOrderToStations(input: unknown): Promise<ActionResult<
+ // la vez. La seguridad no viene de leer-y-luego-escribir (eso tiene ventana
+ // de carrera) sino de condicionar el UPDATE por `status = from` EN LA MISMA
+ // query: si otra pantalla ya movió la línea (o si `from` no coincide con el
+ // estado real por cualquier otro motivo), el UPDATE afecta 0 filas y eso ES
+ // la señal de conflicto — no hace falta un SELECT previo para detectarlo.
+ //
+ // `data.length === 0` tras el UPDATE condicionado ⇒ CONFLICTO: alguien más ya
+ // cambió el estado (o la pantalla tenía una copia obsoleta). La UI debe
+ // recargar y no reintentar ciegamente. Cuando SÍ afecta una fila, `data[0]`
+ // es la línea ya actualizada — se devuelve completa (`select("*")`) porque el
+ // caller (kanban de cocina/barra) necesita pintarla tal cual quedó, no solo
+ // confirmar el cambio.
++//
++// `'anulado'` es TERMINAL — fix de la revisión final del Plan B (Important,
++// financiero). Solo `voidOrderItem` puede fijarlo (append-only: UPDATE del
++// original a `anulado` + INSERT de la fila de auditoría con
++// `void_of_item_id`). Sin esta guarda, `setOrderItemStatus({ from:'anulado',
++// to:'pendiente' })` casaría con una línea ya anulada (el UPDATE condicionado
++// por `status = from` no distingue "anulado por buena razón" de cualquier
++// otro estado), le quitaría `status:'anulado'` dejando `void_of_item_id` sin
++// tocar (huérfano, apuntando a una línea que ya no dice estar anulada), y
++// `settleOrder` (que filtra `status != 'anulado'`) la re-incluiría y la
++// COBRARÍA otra vez — doble cobro de una línea que el mostrador ya anuló.
++// Se rechaza ANTES de tocar la BD (ni siquiera se llega al UPDATE) tanto para
++// `from:'anulado'` (reanimar una anulación) como para `to:'anulado'`
++// (anular por esta vía, saltándose el registro de auditoría de
++// `voidOrderItem`) — ambos sentidos abren el mismo agujero financiero.
+ // ─────────────────────────────────────────────────────────────────────────────
+ 
+ export async function setOrderItemStatus(input: unknown): Promise<ActionResult<OrderItem>> {
+   const parsed = setOrderItemStatusSchema.safeParse(input);
+   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  if (parsed.data.from === "anulado" || parsed.data.to === "anulado") {
++    return { ok: false, error: "No se puede transicionar hacia/desde 'anulado' (usa anular la línea)" };
++  }
+   const salonId = await getActiveSalonId();
+   if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+   const supabase = createClient();
+ 
+   const { data, error } = await supabase
+     .from("order_items")
+     .update({ status: parsed.data.to })
+     .eq("id", parsed.data.itemId).eq("salon_id", salonId).eq("status", parsed.data.from)
+     .select("*");
+   if (error !== null) return { ok: false, error: error.message };
+   // Destructuring (no `data[0]`) para que TS narrowe sin `!`: con
+   // `noUncheckedIndexedAccess`, `data[0]` seguiría tipando `T | undefined`
+diff --git a/src/tests/integration/restauracion-order-status.test.ts b/src/tests/integration/restauracion-order-status.test.ts
+index 9223f1a..4420fd2 100644
+--- a/src/tests/integration/restauracion-order-status.test.ts
++++ b/src/tests/integration/restauracion-order-status.test.ts
+@@ -44,13 +44,41 @@ describe("order status actions", () => {
+     });
+     const r = await sendOrderToStations({ orderId: ORDER_ID_1 });
+     expect(r.ok).toBe(true);
+     if (r.ok) expect(r.data.sent).toBe(2);
+   });
+ 
+   it("sendOrderToStations devuelve 0 si no había líneas pendientes", async () => {
+     holder.supabase = makeSupabaseMock({ onWrite: (op: string) => (op === "update" ? { data: [] } : {}) });
+     const r = await sendOrderToStations({ orderId: ORDER_ID_1 });
+     expect(r.ok).toBe(true);
+     if (r.ok) expect(r.data.sent).toBe(0);
+   });
++
++  // Ronda de fix (revisión final del Plan B, Important financiero): 'anulado'
++  // es TERMINAL — solo `voidOrderItem` lo fija (append-only, con fila de
++  // auditoría). Sin esta guarda, `from:'anulado'` reanimaría una línea ya
++  // anulada (quitándole `status:'anulado'` sin tocar `void_of_item_id`, que
++  // quedaría huérfano) y `settleOrder` la volvería a cobrar. Se rechaza ANTES
++  // de tocar la BD: `onWrite` no debe recibir ninguna llamada de tipo
++  // "update".
++  it("setOrderItemStatus rechaza from:'anulado' sin tocar la BD (no se puede reanimar una línea anulada)", async () => {
++    const onWrite = vi.fn(() => ({ data: [] }));
++    holder.supabase = makeSupabaseMock({ onWrite });
++    const r = await setOrderItemStatus({ itemId: ITEM_ID_1, from: "anulado", to: "pendiente" });
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toContain("anulado");
++    expect(onWrite).not.toHaveBeenCalledWith("update", expect.anything(), expect.anything());
++  });
++
++  // Simétrico: tampoco se puede anular POR ESTA VÍA (to:'anulado') —
++  // saltaría el registro de auditoría de `voidOrderItem` (sin `void_reason`
++  // ni fila `void_of_item_id`).
++  it("setOrderItemStatus rechaza to:'anulado' sin tocar la BD (anular pasa por voidOrderItem)", async () => {
++    const onWrite = vi.fn(() => ({ data: [] }));
++    holder.supabase = makeSupabaseMock({ onWrite });
++    const r = await setOrderItemStatus({ itemId: ITEM_ID_1, from: "listo", to: "anulado" });
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toContain("anulado");
++    expect(onWrite).not.toHaveBeenCalledWith("update", expect.anything(), expect.anything());
++  });
+ });

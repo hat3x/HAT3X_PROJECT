@@ -1,0 +1,185 @@
+<h2>El lenguaje visual</h2>
+<p class="subtitle">Cuatro combinaciones del mismo trozo de interfaz — franja de estado, una tarjeta de proyecto y una fila de la lista — para que compares <strong>de verdad</strong>, no de palabra. El tema claro/oscuro será conmutable en cualquier caso; lo que eliges aquí es <strong>cuánto cristal</strong> y <strong>cuál es el de por defecto</strong>.</p>
+
+<style>
+  .sx{font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;padding:14px;height:238px;overflow:hidden;position:relative}
+
+  .sx-lightsoft{background:#f5f5f7}
+  .sx-darksoft{background:#0b0b0d}
+  .sx-darkglass{background:#07070a}
+  .sx-lightglass{background:#eef1f7}
+
+  .sx-aur{position:absolute;inset:0;pointer-events:none}
+  .sx-aur::before,.sx-aur::after{content:'';position:absolute;border-radius:50%;filter:blur(46px)}
+  .sx-aur::before{width:230px;height:230px;top:-70px;left:-40px;background:rgba(0,113,227,.55)}
+  .sx-aur::after{width:210px;height:210px;bottom:-80px;right:-30px;background:rgba(255,55,95,.45)}
+  .sx-lightglass .sx-aur::before{background:rgba(0,113,227,.34)}
+  .sx-lightglass .sx-aur::after{background:rgba(255,55,95,.28)}
+
+  .sx-in{position:relative;display:flex;flex-direction:column;gap:9px;height:100%}
+
+  .sf{border-radius:12px}
+  .sx-lightsoft .sf{background:#fff;border:1px solid #d8d8dd;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .sx-darksoft .sf{background:#1a1a1d;border:1px solid #2e2e33;box-shadow:0 1px 2px rgba(0,0,0,.4)}
+  .sx-darkglass .sf{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);box-shadow:0 6px 26px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.16)}
+  .sx-lightglass .sf{background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.85);backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);box-shadow:0 6px 24px rgba(31,45,80,.13),inset 0 1px 0 rgba(255,255,255,.9)}
+
+  .sx-lightsoft,.sx-lightglass{color:#1d1d1f} .sx-lightsoft .dim,.sx-lightglass .dim{color:#6e6e73}
+  .sx-darksoft,.sx-darkglass{color:#f5f5f7} .sx-darksoft .dim,.sx-darkglass .dim{color:#98989d}
+
+  .sx-bar{display:flex;gap:7px}
+  .sx-st{flex:1;padding:7px 9px}
+  .sx-st b{display:block;font-size:17px;line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:-.4px}
+  .sx-st span{font-size:7px;text-transform:uppercase;letter-spacing:.5px}
+  .sx-st.bad b{color:#ff453a} .sx-st.warn b{color:#ff9f0a}
+
+  .sx-two{display:flex;gap:9px;flex:1;min-height:0}
+  .sx-card{width:132px;overflow:hidden;flex-shrink:0;display:flex;flex-direction:column}
+  .sx-cov{height:52px;background:linear-gradient(135deg,#ff375f,#ff9f0a);position:relative;flex-shrink:0}
+  .sx-cov s{position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;background:#ff453a;border:2px solid rgba(255,255,255,.95);box-shadow:0 0 0 3px rgba(255,69,58,.35)}
+  .sx-cb{padding:7px 9px}
+  .sx-cb b{display:block;font-size:10px;font-weight:650;letter-spacing:-.1px}
+  .sx-cb span{font-size:8px}
+
+  .sx-right{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}
+  .sx-rowbox{overflow:hidden}
+  .sx-row{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:9px}
+  .sx-lightsoft .sx-row+.sx-row{border-top:1px solid #e8e8ed}
+  .sx-darksoft .sx-row+.sx-row{border-top:1px solid #2a2a2f}
+  .sx-darkglass .sx-row+.sx-row{border-top:1px solid rgba(255,255,255,.09)}
+  .sx-lightglass .sx-row+.sx-row{border-top:1px solid rgba(31,45,80,.09)}
+  .sx-row s{text-decoration:none;width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .sx-row b{font-weight:600;width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sx-row i{font-style:normal;flex:1;font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sx-row u{text-decoration:none;font-size:8px;font-variant-numeric:tabular-nums}
+  .dn{background:#ff453a} .wn{background:#ff9f0a} .okd{background:#30d158}
+
+  .sx-btn{align-self:flex-start;font-size:8.5px;font-weight:600;padding:5px 12px;border-radius:8px}
+  .sx-lightsoft .sx-btn{background:#0071e3;color:#fff}
+  .sx-darksoft .sx-btn{background:#0a84ff;color:#fff}
+  .sx-darkglass .sx-btn{background:rgba(10,132,255,.85);color:#fff;border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(12px);box-shadow:0 3px 14px rgba(10,132,255,.4)}
+  .sx-lightglass .sx-btn{background:rgba(0,113,227,.9);color:#fff;border:1px solid rgba(255,255,255,.5);backdrop-filter:blur(12px);box-shadow:0 3px 14px rgba(0,113,227,.3)}
+
+  .cards .card-image{padding:0;background:transparent}
+  .sx-note{font-size:.75rem;color:var(--text-secondary);margin-top:.4rem}
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="light-soft" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="sx sx-lightsoft"><div class="sx-in">
+        <div class="sx-bar">
+          <div class="sf sx-st"><b>12</b><span class="dim">Proyectos</span></div>
+          <div class="sf sx-st"><b>10</b><span class="dim">Operativos</span></div>
+          <div class="sf sx-st bad"><b>1</b><span class="dim">Caído</span></div>
+        </div>
+        <div class="sx-two">
+          <div class="sf sx-card"><div class="sx-cov"><s></s></div><div class="sx-cb"><b>Recep. Sara</b><span class="dim">Biodental · 5/6</span></div></div>
+          <div class="sx-right">
+            <div class="sf sx-rowbox">
+              <div class="sx-row"><s class="dn"></s><b>Recep. Sara</b><i class="dim">n8n · HTTP 500</i><u class="dim">97,2 %</u></div>
+              <div class="sx-row"><s class="wn"></s><b>Oficina Virtual</b><i class="dim">latencia alta</i><u class="dim">99,1 %</u></div>
+              <div class="sx-row"><s class="okd"></s><b>Kairos</b><i class="dim">7/7 servicios</i><u class="dim">99,9 %</u></div>
+              <div class="sx-row"><s class="okd"></s><b>100M Dashboard</b><i class="dim">5/5 servicios</i><u class="dim">100 %</u></div>
+            </div>
+            <div class="sx-btn">Ver incidencia</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <div class="card-body">
+      <h3>A · Claro + cristal suave</h3>
+      <p>Apple de escritorio actual: fondo sólido, tarjetas blancas nítidas, translucidez reservada a barras y modales. <strong>La más legible con tablas densas</strong> y la que mejor envejece.</p>
+      <p class="sx-note">Riesgo: puede parecer «otro panel más» si no lo rematas con buenas portadas y buen espaciado.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="dark-soft" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="sx sx-darksoft"><div class="sx-in">
+        <div class="sx-bar">
+          <div class="sf sx-st"><b>12</b><span class="dim">Proyectos</span></div>
+          <div class="sf sx-st"><b>10</b><span class="dim">Operativos</span></div>
+          <div class="sf sx-st bad"><b>1</b><span class="dim">Caído</span></div>
+        </div>
+        <div class="sx-two">
+          <div class="sf sx-card"><div class="sx-cov"><s></s></div><div class="sx-cb"><b>Recep. Sara</b><span class="dim">Biodental · 5/6</span></div></div>
+          <div class="sx-right">
+            <div class="sf sx-rowbox">
+              <div class="sx-row"><s class="dn"></s><b>Recep. Sara</b><i class="dim">n8n · HTTP 500</i><u class="dim">97,2 %</u></div>
+              <div class="sx-row"><s class="wn"></s><b>Oficina Virtual</b><i class="dim">latencia alta</i><u class="dim">99,1 %</u></div>
+              <div class="sx-row"><s class="okd"></s><b>Kairos</b><i class="dim">7/7 servicios</i><u class="dim">99,9 %</u></div>
+              <div class="sx-row"><s class="okd"></s><b>100M Dashboard</b><i class="dim">5/5 servicios</i><u class="dim">100 %</u></div>
+            </div>
+            <div class="sx-btn">Ver incidencia</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <div class="card-body">
+      <h3>B · Oscuro + cristal suave</h3>
+      <p>Sala de control de verdad. El rojo y el ámbar <strong>gritan</strong> sobre fondo oscuro, que es justo lo que quieres de un panel de vigilancia que miras muchas veces al día.</p>
+      <p class="sx-note">Es la que mejor funciona si acabas dejándolo abierto en una pantalla fija.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="dark-glass" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="sx sx-darkglass"><div class="sx-aur"></div><div class="sx-in">
+        <div class="sx-bar">
+          <div class="sf sx-st"><b>12</b><span class="dim">Proyectos</span></div>
+          <div class="sf sx-st"><b>10</b><span class="dim">Operativos</span></div>
+          <div class="sf sx-st bad"><b>1</b><span class="dim">Caído</span></div>
+        </div>
+        <div class="sx-two">
+          <div class="sf sx-card"><div class="sx-cov"><s></s></div><div class="sx-cb"><b>Recep. Sara</b><span class="dim">Biodental · 5/6</span></div></div>
+          <div class="sx-right">
+            <div class="sf sx-rowbox">
+              <div class="sx-row"><s class="dn"></s><b>Recep. Sara</b><i class="dim">n8n · HTTP 500</i><u class="dim">97,2 %</u></div>
+              <div class="sx-row"><s class="wn"></s><b>Oficina Virtual</b><i class="dim">latencia alta</i><u class="dim">99,1 %</u></div>
+              <div class="sx-row"><s class="okd"></s><b>Kairos</b><i class="dim">7/7 servicios</i><u class="dim">99,9 %</u></div>
+              <div class="sx-row"><s class="okd"></s><b>100M Dashboard</b><i class="dim">5/5 servicios</i><u class="dim">100 %</u></div>
+            </div>
+            <div class="sx-btn">Ver incidencia</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <div class="card-body">
+      <h3>C · Oscuro + Liquid Glass</h3>
+      <p>Cristal de verdad: superficies translúcidas con desenfoque y saturación sobre un fondo con auroras de color, bordes luminosos. <strong>Es el lenguaje que ya elegiste para el kiosko de Salón OS.</strong></p>
+      <p class="sx-note">Espectacular. Contra: el texto pequeño sobre cristal pierde contraste — hay que cuidar mucho la accesibilidad en las tablas densas.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="light-glass" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="sx sx-lightglass"><div class="sx-aur"></div><div class="sx-in">
+        <div class="sx-bar">
+          <div class="sf sx-st"><b>12</b><span class="dim">Proyectos</span></div>
+          <div class="sf sx-st"><b>10</b><span class="dim">Operativos</span></div>
+          <div class="sf sx-st bad"><b>1</b><span class="dim">Caído</span></div>
+        </div>
+        <div class="sx-two">
+          <div class="sf sx-card"><div class="sx-cov"><s></s></div><div class="sx-cb"><b>Recep. Sara</b><span class="dim">Biodental · 5/6</span></div></div>
+          <div class="sx-right">
+            <div class="sf sx-rowbox">
+              <div class="sx-row"><s class="dn"></s><b>Recep. Sara</b><i class="dim">n8n · HTTP 500</i><u class="dim">97,2 %</u></div>
+              <div class="sx-row"><s class="wn"></s><b>Oficina Virtual</b><i class="dim">latencia alta</i><u class="dim">99,1 %</u></div>
+              <div class="sx-row"><s class="okd"></s><b>Kairos</b><i class="dim">7/7 servicios</i><u class="dim">99,9 %</u></div>
+              <div class="sx-row"><s class="okd"></s><b>100M Dashboard</b><i class="dim">5/5 servicios</i><u class="dim">100 %</u></div>
+            </div>
+            <div class="sx-btn">Ver incidencia</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <div class="card-body">
+      <h3>D · Claro + Liquid Glass</h3>
+      <p>El mismo cristal pero en claro, tipo visionOS de día: perla, luz, superficies lechosas. Elegante y menos agresivo que el oscuro.</p>
+      <p class="sx-note">Es lo más cerca de la dirección «Perla» que ya usaste. Contra: el rojo de alerta pega menos fuerte que sobre fondo oscuro.</p>
+    </div>
+  </div>
+
+</div>

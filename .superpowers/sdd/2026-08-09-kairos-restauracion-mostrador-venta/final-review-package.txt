@@ -1,0 +1,4336 @@
+=== PLAN B — commits (52b86aa..d963ce7) ===
+d963ce7 feat(restauracion): item de navegación Mostrador (visible a staff)
+0b1d270 fix(restauracion): evitar cargo cruzado al cambiar de cuenta + tender fantasma en el cobro
+f3b8098 feat(restauracion): rejilla de mostrador (/mostrador) con dos flujos y comanda
+8fa60a6 feat(restauracion): comanda de cocina (builder térmico sin precios + impresión)
+fc40223 fix(restauracion): cobertura de pagos + idempotencia de cobro con respaldo en BD
+6f460c6 feat(restauracion): settleOrder — materializa pos_sale desde el pedido (patrón createSale)
+75787bd feat(restauracion): mandar a estaciones + transición de estado segura
+31cee5b fix(restauracion): marcar el item original como anulado al anular (excluir del cobro)
+69a89b8 fix(restauracion): gate de anulacion por estado + idempotencia robusta en createOrder
+e263ac1 feat(restauracion): actions de pedido (crear/añadir/anular, append-only + idempotencia)
+a9c110d feat(restauracion): queries y hooks de pedidos
+80d3874 feat(restauracion): lógica pura de pedido (drafts de ítems + líneas de cobro)
+ad2c14f feat(restauracion): pedidos de mostrador (orders/order_items, append-only)
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/actions.ts           | 592 +++++++++++++++++++++
+ src/app/(dashboard)/mostrador/layout.tsx           |  16 +
+ .../mostrador/modifier-picker-dialog.tsx           | 244 +++++++++
+ src/app/(dashboard)/mostrador/mostrador-view.tsx   | 217 ++++++++
+ src/app/(dashboard)/mostrador/open-orders-bar.tsx  |  92 ++++
+ src/app/(dashboard)/mostrador/order-panel.tsx      | 350 ++++++++++++
+ src/app/(dashboard)/mostrador/page.tsx             |  36 ++
+ src/app/(dashboard)/mostrador/payment-sheet.tsx    | 340 ++++++++++++
+ src/app/(dashboard)/mostrador/product-grid.tsx     | 169 ++++++
+ src/components/dashboard-nav-items.ts              |  30 +-
+ src/hooks/use-menu.ts                              |  28 +
+ src/hooks/use-orders.ts                            | 115 ++++
+ src/lib/queries/menu.ts                            |  45 ++
+ src/lib/queries/orders.ts                          |  28 +
+ src/lib/restauracion/kitchen-comanda.ts            | 281 ++++++++++
+ src/lib/restauracion/order.ts                      |  71 +++
+ src/lib/validations/order.ts                       | 102 ++++
+ src/tests/helpers/supabase-mock.ts                 |  26 +-
+ .../integration/restauracion-order-actions.test.ts | 151 ++++++
+ .../integration/restauracion-order-status.test.ts  |  56 ++
+ src/tests/integration/restauracion-settle.test.ts  | 147 +++++
+ src/tests/unit/dashboard-nav-items.test.ts         |  13 +
+ src/tests/unit/kitchen-comanda.test.ts             |  15 +
+ src/tests/unit/order-keys.test.ts                  |  10 +
+ src/tests/unit/order-panel.test.tsx                | 140 +++++
+ src/tests/unit/payment-sheet.test.tsx              | 128 +++++
+ src/tests/unit/pos-sales-order-unique-sql.test.ts  |  22 +
+ src/tests/unit/restauracion-order.test.ts          |  51 ++
+ src/tests/unit/restauracion-orders-sql.test.ts     |  47 ++
+ src/types/database.ts                              | 201 +++++++
+ .../20260810100000_restauracion_orders.sql         | 136 +++++
+ .../20260810110000_pos_sales_order_id_unique.sql   |   5 +
+ 32 files changed, 3897 insertions(+), 7 deletions(-)
+
+=== DIFF -U5 ===
+diff --git a/src/app/(dashboard)/mostrador/actions.ts b/src/app/(dashboard)/mostrador/actions.ts
+new file mode 100644
+index 0000000..3f0dc81
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/actions.ts
+@@ -0,0 +1,592 @@
++"use server";
++import { randomUUID } from "node:crypto";
++
++import { revalidatePath } from "next/cache";
++
++import { computeLineTotals, sumTenders } from "@/lib/payments";
++import { buildSettleLines, settleTotals } from "@/lib/restauracion/order";
++import { getActiveSalonId } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++import {
++  addOrderItemsSchema,
++  createOrderSchema,
++  sendOrderToStationsSchema,
++  setOrderItemStatusSchema,
++  settleOrderSchema,
++  voidOrderItemSchema,
++} from "@/lib/validations/order";
++import type { Order, OrderItem, OrderItemInsert, TablesInsert } from "@/types/database";
++
++/**
++ * Server actions de pedido de mostrador (restauración, Task 4): crear pedido
++ * (idempotente por `idempotencyKey`), añadir líneas y anular una línea.
++ *
++ * A diferencia de `carta/actions.ts` (gate de rol vía `assertManager`), aquí
++ * solo se exige salón activo (`getActiveSalonId`) — no rol de gestión: es el
++ * flujo operativo del día a día (tomar pedidos, añadir líneas, anular una
++ * línea mal tecleada), no configuración de carta. La restricción real de
++ * quién puede tocar `/mostrador` vive en la navegación/gate de esa ruta, no
++ * en estas actions.
++ */
++export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
++
++/** Cliente de Supabase con el tipo `Database` (para pasar entre helpers de guarda). */
++type SupabaseServerClient = ReturnType<typeof createClient>;
++
++const ORDER_NOT_OPEN_ERROR = "El pedido no existe, no pertenece a tu salón o no está abierto";
++
++/**
++ * Guarda de pertenencia + estado, compartida por `addOrderItems` y
++ * `voidOrderItem`: el pedido debe existir EN ESTE salón y estar `abierta`.
++ * Ni se pueden añadir líneas ni anular líneas de un pedido de otro salón
++ * (aislamiento multi-tenant en profundidad, además de RLS) ni de uno ya
++ * cobrado/cerrado/anulado — un pedido cobrado es un documento cerrado para
++ * caja/fiscalidad, no se toca. Devuelve `null` si el pedido está abierto y
++ * pertenece al salón; si no, el mensaje de error a propagar.
++ */
++async function assertOrderOpenInSalon(
++  supabase: SupabaseServerClient,
++  salonId: string,
++  orderId: string,
++): Promise<string | null> {
++  const { data: order, error } = await supabase
++    .from("orders").select("id,status")
++    .eq("id", orderId).eq("salon_id", salonId).maybeSingle();
++  if (error !== null) return error.message;
++  if (order === null || order.status !== "abierta") return ORDER_NOT_OPEN_ERROR;
++  return null;
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// createOrder: idempotente por `idempotencyKey` — si YA existe una fila con
++// esa key en el salón, se devuelve tal cual (no reinserta, no actualiza). El
++// `id` lo genera el CLIENTE (offline-ready, ver migración
++// 20260810100000_restauracion_orders): se inserta tal cual llega, ya validado
++// como uuid por el schema. Reintentos de red del cliente (mismo `idempotencyKey`,
++// `id` distinto si genera uno nuevo) no duplican el pedido.
++//
++// El select previo (`existing`) es un fast-path, NO la garantía de idempotencia
++// — es "select-luego-insert", no atómico: dos requests concurrentes con la
++// misma `idempotencyKey` pueden pasar AMBOS el select (ninguno ve todavía la
++// fila del otro) y el segundo `insert` choca con el índice único
++// `orders_idempotency_key` (Postgres `23505`). En ese caso NO se trata como un
++// fallo: se relee la fila por `(salon_id, idempotency_key)` — el otro request
++// ya la insertó — y se devuelve como propia. Así `createOrder` es idempotente
++// de verdad ante condiciones de carrera, no solo en el caso sin carrera.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function createOrder(input: unknown): Promise<ActionResult<Order>> {
++  const parsed = createOrderSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  if (parsed.data.idempotencyKey !== null) {
++    const { data: existing } = await supabase.from("orders").select("*")
++      .eq("salon_id", salonId).eq("idempotency_key", parsed.data.idempotencyKey).maybeSingle();
++    if (existing) return { ok: true, data: existing };
++  }
++  const { data, error } = await supabase.from("orders").insert({
++    id: parsed.data.id, salon_id: salonId, label: parsed.data.label,
++    idempotency_key: parsed.data.idempotencyKey, channel: "mostrador", status: "abierta",
++  }).select("*").single();
++  if (error !== null) {
++    if (error.code === "23505" && parsed.data.idempotencyKey !== null) {
++      const { data: existing, error: refetchError } = await supabase.from("orders").select("*")
++        .eq("salon_id", salonId).eq("idempotency_key", parsed.data.idempotencyKey).maybeSingle();
++      if (refetchError !== null) return { ok: false, error: refetchError.message };
++      if (existing) return { ok: true, data: existing };
++    }
++    return { ok: false, error: error.message };
++  }
++  revalidatePath("/mostrador");
++  return { ok: true, data };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// addOrderItems: ver `assertOrderOpenInSalon`. El lote completo se inserta en
++// un único `insert` (todas las líneas o ninguna: si Postgres rechaza una
++// fila, ninguna del lote queda a medias) con ids de cliente ya validados
++// como uuid por `orderItemDraftSchema`.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function addOrderItems(input: unknown): Promise<ActionResult<{ added: number }>> {
++  const parsed = addOrderItemsSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  const orderError = await assertOrderOpenInSalon(supabase, salonId, parsed.data.orderId);
++  if (orderError !== null) return { ok: false, error: orderError };
++
++  const rows: OrderItemInsert[] = parsed.data.items.map((item) => ({
++    id: item.id,
++    salon_id: salonId,
++    order_id: parsed.data.orderId,
++    product_id: item.productId,
++    qty: item.qty,
++    unit_price_cents: item.unitPriceCents,
++    vat_rate: item.vatRate,
++    station_id: item.stationId,
++    combo_group: item.comboGroup,
++    modifiers_snapshot: item.modifiersSnapshot,
++    status: "pendiente",
++  }));
++  const { error } = await supabase.from("order_items").insert(rows);
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/mostrador");
++  return { ok: true, data: { added: rows.length } };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// voidOrderItem: append-only para el HISTÓRICO — NUNCA se hace DELETE de la
++// línea original. Primero pasa la MISMA guarda que `addOrderItems`
++// (`assertOrderOpenInSalon`): no tiene sentido anular una línea de un pedido
++// ya cobrado/cerrado (el ticket ya salió) ni de un pedido que no pertenece a
++// este salón. Luego se lee el ítem original acotado por `order_id` +
++// `salon_id` (garantiza que pertenece AL PEDIDO y AL SALÓN indicados, aunque
++// el `itemId` sea arbitrario) y se rechaza si esa línea YA es una anulación
++// (no tiene sentido anular una anulación).
++//
++// Dos escrituras, no una: (1) UPDATE del ítem ORIGINAL a `status: "anulado"`
++// (+ `void_reason`) — necesario para que `settleOrder` (task futura, filtra
++// `status != 'anulado'` al cargar líneas a cobrar) EXCLUYA esta línea del
++// cobro. Sin este update, el original seguiría `pendiente`/`enviado`/…  y se
++// cobraría igual pese a estar anulada — el bug que corrige este cambio. (2)
++// INSERT de una fila NUEVA de auditoría que referencia la original vía
++// `void_of_item_id`, con un `id` de cliente NUEVO generado en el SERVIDOR
++// (`randomUUID` — a diferencia de createOrder/addOrderItems, esta fila no la
++// propone el cliente porque nace de una acción de servidor, no de
++// composición offline).
++//
++// El UPDATE va ANTES del INSERT (no al revés): sin transacción explícita
++// entre ambas escrituras, si UNA de las dos fallara preferimos que sea el
++// registro de auditoría el que falte, no la exclusión del cobro — la
++// garantía financiera (no cobrar una línea anulada) importa más que la
++// completitud del histórico. Si el UPDATE fallara, se aborta antes de tocar
++// nada más (no queda una fila de auditoría "huérfana" sobre un original que
++// en realidad no cambió de estado).
++//
++// El propio UPDATE (marca `status: "anulado"` en el original) es también lo
++// que hace que la guarda de arriba ("no anular una anulación") bloquee
++// anular DOS VECES el mismo ítem: la segunda llamada lee el original ya
++// marcado `anulado` por la primera y lo rechaza antes de llegar aquí.
++//
++// La fila de auditoría copia solo los campos que importan para el
++// histórico/cocina/caja (product_id/qty/station_id/order_id/salon_id/
++// unit_price_cents/vat_rate), tal como pide el brief. `combo_group` y
++// `modifiers_snapshot` NO se copian: es un registro de cantidad/importe, no
++// una réplica visual — el modificador/combo ya quedó registrado en la línea
++// original, que sigue existiendo (nunca se borra, solo se actualiza su
++// `status`).
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function voidOrderItem(input: unknown): Promise<ActionResult<OrderItem>> {
++  const parsed = voidOrderItemSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  const orderError = await assertOrderOpenInSalon(supabase, salonId, parsed.data.orderId);
++  if (orderError !== null) return { ok: false, error: orderError };
++
++  const { data: original, error: fetchError } = await supabase
++    .from("order_items").select("*")
++    .eq("id", parsed.data.itemId).eq("order_id", parsed.data.orderId).eq("salon_id", salonId)
++    .maybeSingle();
++  if (fetchError !== null) return { ok: false, error: fetchError.message };
++  if (original === null) return { ok: false, error: "El ítem no pertenece a tu salón o a ese pedido" };
++  if (original.status === "anulado" || original.void_of_item_id !== null) {
++    return { ok: false, error: "Esta línea ya está anulada" };
++  }
++
++  const { error: updateError } = await supabase
++    .from("order_items")
++    .update({ status: "anulado", void_reason: parsed.data.reason })
++    .eq("id", parsed.data.itemId).eq("salon_id", salonId);
++  if (updateError !== null) return { ok: false, error: updateError.message };
++
++  const payload: OrderItemInsert = {
++    id: randomUUID(),
++    salon_id: original.salon_id,
++    order_id: original.order_id,
++    product_id: original.product_id,
++    qty: original.qty,
++    unit_price_cents: original.unit_price_cents,
++    vat_rate: original.vat_rate,
++    station_id: original.station_id,
++    status: "anulado",
++    void_of_item_id: parsed.data.itemId,
++    void_reason: parsed.data.reason,
++  };
++  const { data, error } = await supabase.from("order_items").insert(payload).select("*").single();
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/mostrador");
++  return { ok: true, data };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// sendOrderToStations (Task 5): manda a cocina/barra las líneas `pendiente` de
++// un pedido — es el "enviar comanda" del mostrador. Un único UPDATE acotado
++// por `salon_id` + `order_id` + `status = "pendiente"`: solo mueve las líneas
++// que TODAVÍA no se enviaron (si se llama dos veces seguidas, la segunda no
++// vuelve a mover nada — `sent` da 0, no es un error). No hay guarda de
++// `assertOrderOpenInSalon` explícita porque el propio filtro por `salon_id`
++// ya impide tocar líneas de otro salón, y el pedido sigue `abierta`: este
++// paso NO cierra ni cobra el pedido, solo adelanta el estado de sus líneas
++// para que cocina/barra las vean. `select("id")` es lo mínimo necesario para
++// contar cuántas filas afectó el UPDATE — no se necesita la fila completa.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function sendOrderToStations(input: unknown): Promise<ActionResult<{ sent: number }>> {
++  const parsed = sendOrderToStationsSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("order_items")
++    .update({ status: "enviado" })
++    .eq("salon_id", salonId).eq("order_id", parsed.data.orderId).eq("status", "pendiente")
++    .select("id");
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/mostrador");
++  return { ok: true, data: { sent: (data ?? []).length } };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// setOrderItemStatus (Task 5): transición de estado de UNA línea (p.ej.
++// cocina marca "preparando"→"listo") SEGURA frente a concurrencia — varias
++// pantallas (cocina, barra, mostrador) pueden estar mirando el mismo pedido a
++// la vez. La seguridad no viene de leer-y-luego-escribir (eso tiene ventana
++// de carrera) sino de condicionar el UPDATE por `status = from` EN LA MISMA
++// query: si otra pantalla ya movió la línea (o si `from` no coincide con el
++// estado real por cualquier otro motivo), el UPDATE afecta 0 filas y eso ES
++// la señal de conflicto — no hace falta un SELECT previo para detectarlo.
++//
++// `data.length === 0` tras el UPDATE condicionado ⇒ CONFLICTO: alguien más ya
++// cambió el estado (o la pantalla tenía una copia obsoleta). La UI debe
++// recargar y no reintentar ciegamente. Cuando SÍ afecta una fila, `data[0]`
++// es la línea ya actualizada — se devuelve completa (`select("*")`) porque el
++// caller (kanban de cocina/barra) necesita pintarla tal cual quedó, no solo
++// confirmar el cambio.
++// ─────────────────────────────────────────────────────────────────────────────
++
++export async function setOrderItemStatus(input: unknown): Promise<ActionResult<OrderItem>> {
++  const parsed = setOrderItemStatusSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("order_items")
++    .update({ status: parsed.data.to })
++    .eq("id", parsed.data.itemId).eq("salon_id", salonId).eq("status", parsed.data.from)
++    .select("*");
++  if (error !== null) return { ok: false, error: error.message };
++  // Destructuring (no `data[0]`) para que TS narrowe sin `!`: con
++  // `noUncheckedIndexedAccess`, `data[0]` seguiría tipando `T | undefined`
++  // aunque ya hubiéramos comprobado `data.length > 0` en la línea de arriba.
++  const [updated] = data ?? [];
++  if (updated === undefined) return { ok: false, error: "CONFLICTO: el estado ya cambió" };
++  revalidatePath("/mostrador");
++  return { ok: true, data: updated };
++}
++
++// ─────────────────────────────────────────────────────────────────────────────
++// settleOrder (Task 6): cobra un pedido de mostrador MATERIALIZANDO un
++// `pos_sale` — es el puente entre "restauración" (pedidos/comandas) y "TPV"
++// (caja/facturación): un pedido no se factura hasta que pasa por aquí. La
++// estructura replica `createSale` (tpv/actions.ts) a propósito: misma cabecera
++// `pos_sales` (status "completed", `session_id` de la caja abierta), mismas
++// líneas `pos_sale_lines` y mismos pagos `pos_payments`, con el MISMO patrón
++// de rollback manual — supabase-js no expone transacciones multi-sentencia
++// desde el cliente, así que un fallo posterior a crear la cabecera se COMPENSA
++// borrándola (el `on delete cascade` de las FKs arrastra líneas y pagos). La
++// diferencia frente a `createSale`: aquí las líneas NO las teclea el cajero
++// (vienen del pedido ya tomado) y el cobro no pasa por `getPaymentGateway` —
++// los tenders ya vienen resueltos en céntimos desde el flujo de cobro de
++// mostrador, se insertan directo en `pos_payments`. SÍ se replica, a mano, la
++// validación de cobertura de la pasarela (`assertTendersCoverTotal`: Σ tenders
++// === totalCents EXACTO) justo después de calcular los totales — ver ese
++// bloque más abajo.
++//
++// ── Idempotencia (fast-path + backstop en BD) ─────────────────────────────────
++// Cobrar el MISMO pedido dos veces (doble tap en el botón de cobrar, reintento
++// de red) NO debe crear una segunda venta. La guarda de aplicación comprueba,
++// en este orden: (1) si YA existe un `pos_sales` con `order_id = orderId` en
++// este salón, esa es la fuente autoritativa — se devuelve tal cual, sin volver
++// a cobrar; (2) si no hay venta pero el pedido YA está `status = "cobrada"`,
++// es un estado inconsistente (no debería poder pasar salvo un fallo entre el
++// UPDATE de `orders` y la lectura) y se informa en vez de cobrar a ciegas una
++// segunda vez. El caso normal (primera llamada) no entra en ninguna de las dos
++// ramas. Solo se cobra un pedido `"abierta"`: si está `"cerrada"`/`"anulada"`
++// (o `"cobrada"` con venta encontrada arriba) no se llega a esta comprobación.
++//
++// Este fast-path es "select-luego-insert", NO atómico (mismo motivo que
++// `createOrder`, ver comentario de ese bloque): dos requests concurrentes para
++// el MISMO pedido pueden pasar AMBOS el select (ninguno ve todavía la fila del
++// otro) y el segundo `insert` de `pos_sales` choca con el índice único parcial
++// `pos_sales_order_id_unique` (migración 20260810110000, Postgres `23505`).
++// Ese caso se trata como BACKSTOP de idempotencia, no como fallo: se relee la
++// venta de ese `order_id` (el otro request ya la insertó) y se devuelve como
++// propia — ver el `catch` de `23505` más abajo, junto al insert de `pos_sales`.
++// ─────────────────────────────────────────────────────────────────────────────
++
++/** Fila de `pos_sales` mínima para responder en la rama idempotente. */
++interface ExistingSaleRow {
++  id: string;
++  total_cents: number;
++}
++
++/** `order_items` con el join `products(name)` que pide `buildSettleLines`. */
++interface SettleableOrderItemRow {
++  product_id: string;
++  qty: number;
++  unit_price_cents: number;
++  vat_rate: number;
++  modifiers_snapshot: unknown;
++  products: { name: string } | null;
++}
++
++/** `modifiers_snapshot` es `Json` en la BD; en la práctica siempre es esta forma (la escribe `addOrderItems`). */
++function asModifiersSnapshot(value: unknown): Array<{ name: string; priceDeltaCents: number }> {
++  return Array.isArray(value) ? (value as Array<{ name: string; priceDeltaCents: number }>) : [];
++}
++
++export async function settleOrder(
++  input: unknown,
++): Promise<ActionResult<{ saleId: string; totalCents: number }>> {
++  const parsed = settleOrderSchema.safeParse(input);
++  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
++  const { orderId, tenders, sendPending } = parsed.data;
++
++  const salonId = await getActiveSalonId();
++  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
++
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++  if (user === null) return { ok: false, error: "Sesión no válida" };
++
++  // 1) El pedido debe existir EN ESTE salón (aislamiento multi-tenant, además de RLS).
++  const { data: order, error: orderError } = await supabase
++    .from("orders")
++    .select("id,status")
++    .eq("id", orderId)
++    .eq("salon_id", salonId)
++    .maybeSingle();
++  if (orderError !== null) return { ok: false, error: orderError.message };
++  if (order === null) return { ok: false, error: "El pedido no existe o no pertenece a tu salón" };
++
++  // 2) Idempotencia — ver comentario de bloque arriba.
++  const { data: existingSaleData, error: existingSaleError } = await supabase
++    .from("pos_sales")
++    .select("id,total_cents")
++    .eq("order_id", orderId)
++    .eq("salon_id", salonId)
++    .maybeSingle();
++  if (existingSaleError !== null) return { ok: false, error: existingSaleError.message };
++  const existingSale = existingSaleData as ExistingSaleRow | null;
++  if (existingSale !== null) {
++    return { ok: true, data: { saleId: existingSale.id, totalCents: existingSale.total_cents } };
++  }
++  if (order.status === "cobrada") {
++    return {
++      ok: false,
++      error: "El pedido ya está cobrado pero no se encontró la venta asociada",
++    };
++  }
++  // Solo se cobra un pedido abierto: un pedido `"cerrada"`/`"anulada"` es un
++  // documento cerrado (mismo criterio que `assertOrderOpenInSalon`), no algo
++  // pendiente de facturar. `"cobrada"` ya se descartó arriba con su propio
++  // mensaje (más específico: venta esperada pero no encontrada).
++  if (order.status !== "abierta") {
++    return { ok: false, error: "El pedido no está abierto" };
++  }
++
++  // 3) Líneas a cobrar: NO anuladas (Task 4 marca el original `status:"anulado"`
++  //    al anular, así que basta este filtro — no hace falta excluir por `id`).
++  const { data: itemsData, error: itemsError } = await supabase
++    .from("order_items")
++    .select("*, products(name)")
++    .eq("order_id", orderId)
++    .eq("salon_id", salonId)
++    .is("void_of_item_id", null)
++    .neq("status", "anulado");
++  if (itemsError !== null) return { ok: false, error: itemsError.message };
++  const items = (itemsData ?? []) as unknown as SettleableOrderItemRow[];
++  if (items.length === 0) return { ok: false, error: "El pedido no tiene líneas para cobrar" };
++
++  // 4) Líneas + totales — misma fuente única de verdad que el TPV (`@/lib/payments`).
++  const lines = buildSettleLines(
++    items.map((it) => ({
++      productName: it.products?.name ?? "Producto",
++      qty: it.qty,
++      unitPriceCents: it.unit_price_cents,
++      vatRate: it.vat_rate,
++      modifiersSnapshot: asModifiersSnapshot(it.modifiers_snapshot),
++    })),
++  );
++  const totals = settleTotals(lines);
++
++  // (Fix Critical) Los pagos deben cubrir el total EXACTO — mismo criterio que
++  // `createSale`/`assertTendersCoverTotal` (Σ tenders === totalCents, ni de
++  // menos ni de más; ver `@/lib/payments/gateway.ts`). Fail-fast ANTES de
++  // tocar la BD: en este punto no se ha escrito nada todavía (ni `pos_sales`
++  // ni nada más), así que no hace falta `rollback()`. Se usa `sumTenders`
++  // (reutilizada de `@/lib/payments`, la misma que usa la pasarela) en vez de
++  // sumar a mano.
++  if (sumTenders(tenders) !== totals.totalCents) {
++    return { ok: false, error: "Los pagos no cubren el total del pedido" };
++  }
++
++  // 5) Caja abierta del salón (si la hay) — mismo patrón que `createSale`.
++  const { data: openSession, error: openSessionError } = await supabase
++    .from("pos_sessions")
++    .select("id")
++    .eq("salon_id", salonId)
++    .eq("status", "open")
++    .limit(1)
++    .maybeSingle();
++  if (openSessionError !== null) return { ok: false, error: openSessionError.message };
++  const sessionId = (openSession as { id: string } | null)?.id ?? null;
++
++  // 6) Cabecera de la venta, enlazada al pedido de origen (`order_id`).
++  const saleInsert: TablesInsert<"pos_sales"> = {
++    salon_id: salonId,
++    order_id: orderId,
++    session_id: sessionId,
++    status: "completed",
++    subtotal_cents: totals.subtotalCents,
++    discount_cents: 0,
++    tax_cents: totals.taxCents,
++    total_cents: totals.totalCents,
++    currency: "EUR",
++    sold_by: user.id,
++  };
++  const { data: saleData, error: saleError } = await supabase
++    .from("pos_sales")
++    .insert(saleInsert)
++    .select("id")
++    .single();
++  if (saleError !== null) {
++    // Backstop de idempotencia en BD (índice único parcial
++    // `pos_sales_order_id_unique`, migración 20260810110000): si el fast-path
++    // del paso 2 NO vio ninguna venta (carrera entre dos requests para el
++    // MISMO pedido) pero este INSERT choca con el índice único, NO es un
++    // fallo real — es la venta del OTRO request ganando la carrera. Se relee
++    // por `order_id`+`salon_id` (la fuente autoritativa) y se devuelve como
++    // propia, sin crear una segunda venta ni propagar el error.
++    if (saleError.code === "23505") {
++      const { data: raceSaleData, error: raceSaleError } = await supabase
++        .from("pos_sales")
++        .select("id,total_cents")
++        .eq("order_id", orderId)
++        .eq("salon_id", salonId)
++        .maybeSingle();
++      if (raceSaleError !== null) return { ok: false, error: raceSaleError.message };
++      const raceSale = raceSaleData as ExistingSaleRow | null;
++      if (raceSale !== null) {
++        return { ok: true, data: { saleId: raceSale.id, totalCents: raceSale.total_cents } };
++      }
++    }
++    return { ok: false, error: saleError.message };
++  }
++  if (saleData === null) {
++    return { ok: false, error: "No se pudo crear la venta" };
++  }
++  const saleId = (saleData as { id: string }).id;
++
++  // A partir de aquí, cualquier fallo compensa borrando la venta (cascade
++  // arrastra líneas y pagos) — mismo patrón que `createSale`.
++  async function rollback(): Promise<void> {
++    await supabase.from("pos_sales").delete().eq("id", saleId).eq("salon_id", salonId!);
++  }
++
++  // 7) Líneas del ticket (snapshot de importes por línea), 1:1 con `items`
++  //    (`buildSettleLines` preserva el orden) para poder anotar `product_id`.
++  const lineInserts: TablesInsert<"pos_sale_lines">[] = lines.map((line, i) => {
++    const sourceItem = items[i]!;
++    const lineTotals = computeLineTotals({
++      quantity: line.qty,
++      unitPriceCents: line.unitPriceCents,
++      vatRate: line.vatRate,
++    });
++    return {
++      salon_id: salonId,
++      sale_id: saleId,
++      product_id: sourceItem.product_id,
++      description: line.description,
++      quantity: line.qty,
++      unit_price_cents: line.unitPriceCents,
++      vat_rate: line.vatRate,
++      line_total_cents: lineTotals.grossCents,
++    };
++  });
++  const { error: linesError } = await supabase.from("pos_sale_lines").insert(lineInserts);
++  if (linesError !== null) {
++    await rollback();
++    return { ok: false, error: `No se pudieron guardar las líneas: ${linesError.message}` };
++  }
++
++  // 8) Cobro — a diferencia de `createSale`, aquí NO se pasa por
++  //    `getPaymentGateway`: los tenders ya vienen resueltos en céntimos desde
++  //    el flujo de cobro de mostrador (validados por `settleTenderSchema`), se
++  //    insertan directo en `pos_payments` (una fila por tender = pago mixto).
++  const paymentInserts: TablesInsert<"pos_payments">[] = tenders.map((tender) => ({
++    salon_id: salonId,
++    sale_id: saleId,
++    session_id: sessionId,
++    method: tender.method,
++    payment_method_id: tender.paymentMethodId,
++    amount_cents: tender.amountCents,
++    reference: tender.reference ?? null,
++  }));
++  const { error: paymentsError } = await supabase.from("pos_payments").insert(paymentInserts);
++  if (paymentsError !== null) {
++    await rollback();
++    return { ok: false, error: `No se pudo registrar el cobro: ${paymentsError.message}` };
++  }
++
++  // 9) El pedido queda cerrado a facturación: un pedido cobrado es un
++  //    documento cerrado (mismo criterio que `assertOrderOpenInSalon`). Si
++  //    este UPDATE falla, TAMBIÉN se revierte la venta (`rollback()`, mismo
++  //    criterio que los pasos 7/8): dejar `pos_sales`/`pos_sale_lines`/
++  //    `pos_payments` creados con el pedido todavía `"abierta"` es peligroso —
++  //    la UI seguiría ofreciendo cobrarlo, y un segundo intento (esta vez SÍ
++  //    habría fila en `pos_sales`) quedaría bloqueado por el fast-path de
++  //    idempotencia del paso 2 sin que el pedido refleje que ya se cobró.
++  //    Mejor deshacer la venta entera y que el cajero reintente.
++  const { error: orderUpdateError } = await supabase
++    .from("orders")
++    .update({ status: "cobrada" })
++    .eq("id", orderId)
++    .eq("salon_id", salonId);
++  if (orderUpdateError !== null) {
++    await rollback();
++    return { ok: false, error: orderUpdateError.message };
++  }
++
++  // 10) "Pagar primero": si se pidió, las líneas `pendiente` que quedaran se
++  //     mandan a cocina/barra ahora que el cobro ya está firme (mismo UPDATE
++  //     que `sendOrderToStations`, inline). Best-effort: la venta ya está
++  //     cerrada — un fallo aquí no debe revertir ni bloquear la respuesta.
++  if (sendPending) {
++    await supabase
++      .from("order_items")
++      .update({ status: "enviado" })
++      .eq("salon_id", salonId)
++      .eq("order_id", orderId)
++      .eq("status", "pendiente");
++  }
++
++  revalidatePath("/mostrador");
++  return { ok: true, data: { saleId, totalCents: totals.totalCents } };
++}
+diff --git a/src/app/(dashboard)/mostrador/layout.tsx b/src/app/(dashboard)/mostrador/layout.tsx
+new file mode 100644
+index 0000000..0565676
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/layout.tsx
+@@ -0,0 +1,16 @@
++import { SectorGate } from "@/components/guards/sector-gate";
++
++/**
++ * Layout del mostrador (restauración): SOLO gate de sector, SIN gate de rol.
++ * A diferencia de `carta/layout.tsx` (gestión de la carta, exige
++ * `canManageSettings`), el mostrador es el flujo operativo del día a día
++ * —tomar pedidos y cobrar— y lo usa CUALQUIER miembro del equipo (staff
++ * incluido), igual que `tpv/page.tsx` no exige rol para cobrar.
++ */
++export default async function MostradorLayout({
++  children,
++}: {
++  children: React.ReactNode;
++}): Promise<React.ReactElement> {
++  return <SectorGate required="restauracion">{children}</SectorGate>;
++}
+diff --git a/src/app/(dashboard)/mostrador/modifier-picker-dialog.tsx b/src/app/(dashboard)/mostrador/modifier-picker-dialog.tsx
+new file mode 100644
+index 0000000..3b684cb
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/modifier-picker-dialog.tsx
+@@ -0,0 +1,244 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Minus, Plus } from "lucide-react";
++
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Skeleton } from "@/components/ui/skeleton";
++import { useComboComponents, useModifierOptionsForGroups } from "@/hooks/use-menu";
++import { formatMoney } from "@/lib/format";
++import type { ComboPiece } from "@/lib/restauracion/menu";
++import type { MenuSelection } from "@/lib/restauracion/order";
++import type { ModifierGroup, Product } from "@/types/database";
++
++interface ModifierPickerDialogProps {
++  salonId: string;
++  /** Producto a configurar, o `null` si el diálogo está cerrado. */
++  product: Product | null;
++  /** Grupos de modificadores asignados a `product` (ya resueltos). */
++  groups: ModifierGroup[];
++  /** Catálogo completo, para resolver nombre/estación de las piezas de combo. */
++  productsById: Map<string, Product>;
++  onClose: () => void;
++  onConfirm: (selection: MenuSelection) => void;
++}
++
++/**
++ * Diálogo para configurar UNA unidad de un producto antes de añadirlo al
++ * pedido: cantidad + opciones de cada grupo de modificadores (respetando
++ * `min_select`/`max_select`) y, si el producto es un combo, la lista de
++ * piezas que lo componen (informativa: el combo se ordena entero, sin elegir
++ * piezas alternativas). Al confirmar entrega una {@link MenuSelection} que
++ * `mostrador-view.tsx` pasa a `buildOrderItemDrafts`.
++ */
++export function ModifierPickerDialog({
++  salonId,
++  product,
++  groups,
++  productsById,
++  onClose,
++  onConfirm,
++}: ModifierPickerDialogProps): React.ReactElement {
++  const [qty, setQty] = useState(1);
++  const [selected, setSelected] = useState<Record<string, string[]>>({});
++
++  // Reinicia cantidad/selección cada vez que se abre para un producto distinto.
++  useEffect(() => {
++    setQty(1);
++    setSelected({});
++  }, [product?.id]);
++
++  const groupIds = groups.map((g) => g.id);
++  const optionsQuery = useModifierOptionsForGroups(salonId, product !== null ? groupIds : []);
++  const comboQuery = useComboComponents(
++    salonId,
++    product?.is_combo === true ? product.id : null,
++  );
++
++  const options = optionsQuery.data ?? [];
++  const optionsLoading = product !== null && groupIds.length > 0 && optionsQuery.isPending;
++  const comboLoading = product?.is_combo === true && comboQuery.isPending;
++
++  function toggleOption(group: ModifierGroup, optionId: string): void {
++    setSelected((prev) => {
++      const current = prev[group.id] ?? [];
++      const already = current.includes(optionId);
++      if (group.max_select <= 1) {
++        // Selección única (tipo radio): un segundo toque la quita.
++        return { ...prev, [group.id]: already ? [] : [optionId] };
++      }
++      if (already) {
++        return { ...prev, [group.id]: current.filter((id) => id !== optionId) };
++      }
++      if (current.length >= group.max_select) return prev; // respeta el máximo
++      return { ...prev, [group.id]: [...current, optionId] };
++    });
++  }
++
++  const allRequiredMet = groups.every(
++    (g) => (selected[g.id]?.length ?? 0) >= g.min_select,
++  );
++  const canConfirm = allRequiredMet && qty >= 1 && !optionsLoading && !comboLoading;
++
++  function handleConfirm(): void {
++    if (product === null || !canConfirm) return;
++    const modifiers = groups.flatMap((g) =>
++      (selected[g.id] ?? []).map((optionId) => {
++        const opt = options.find((o) => o.id === optionId);
++        return { name: opt?.name ?? "", priceDeltaCents: opt?.price_delta_cents ?? 0 };
++      }),
++    );
++    const comboPieces: ComboPiece[] = product.is_combo
++      ? (comboQuery.data ?? []).map((piece) => ({
++          componentProductId: piece.component_product_id,
++          qty: piece.qty,
++          stationId: productsById.get(piece.component_product_id)?.station_id ?? null,
++          stationOverrideId: piece.station_id_override,
++        }))
++      : [];
++    onConfirm({
++      productId: product.id,
++      name: product.name,
++      basePriceCents: product.price_cents,
++      vatRate: product.vat_rate,
++      stationId: product.station_id,
++      isCombo: product.is_combo,
++      qty,
++      modifiers,
++      comboPieces,
++    });
++  }
++
++  return (
++    <Dialog
++      open={product !== null}
++      onOpenChange={(open) => {
++        if (!open) onClose();
++      }}
++    >
++      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
++        <DialogHeader>
++          <DialogTitle>{product?.name}</DialogTitle>
++          <DialogDescription>
++            {product !== null ? formatMoney(product.price_cents) : ""}
++            {product?.is_combo === true ? " · combo" : ""}
++          </DialogDescription>
++        </DialogHeader>
++
++        {/* Cantidad */}
++        <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 p-3">
++          <span className="text-sm font-medium text-foreground">Cantidad</span>
++          <div className="inline-flex items-center rounded-lg border border-border/70 bg-background">
++            <Button
++              type="button"
++              variant="ghost"
++              size="icon"
++              className="h-10 w-10 rounded-r-none"
++              aria-label="Restar una unidad"
++              onClick={() => setQty((q) => Math.max(1, q - 1))}
++            >
++              <Minus className="h-4 w-4" />
++            </Button>
++            <span className="w-10 text-center text-sm font-semibold tabular-nums">{qty}</span>
++            <Button
++              type="button"
++              variant="ghost"
++              size="icon"
++              className="h-10 w-10 rounded-l-none"
++              aria-label="Sumar una unidad"
++              onClick={() => setQty((q) => q + 1)}
++            >
++              <Plus className="h-4 w-4" />
++            </Button>
++          </div>
++        </div>
++
++        {/* Piezas del combo (informativo) */}
++        {product?.is_combo === true ? (
++          comboLoading ? (
++            <Skeleton className="h-16 w-full" />
++          ) : (
++            <div className="rounded-xl border border-border/70 bg-muted/30 p-3">
++              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
++                Incluye
++              </p>
++              <ul className="grid gap-1 text-sm text-foreground">
++                {(comboQuery.data ?? []).map((piece) => (
++                  <li key={piece.id}>
++                    {piece.qty}× {productsById.get(piece.component_product_id)?.name ?? "Pieza"}
++                  </li>
++                ))}
++              </ul>
++            </div>
++          )
++        ) : null}
++
++        {/* Grupos de modificadores */}
++        {optionsLoading ? (
++          <Skeleton className="h-24 w-full" />
++        ) : (
++          groups.map((group) => (
++            <fieldset key={group.id} className="grid gap-2 rounded-xl border border-border/70 p-3">
++              <legend className="flex items-center gap-2 px-1 text-sm font-semibold text-foreground">
++                {group.name}
++                {group.required ? (
++                  <span className="text-xs font-normal text-destructive">obligatorio</span>
++                ) : null}
++                <span className="text-xs font-normal text-muted-foreground">
++                  (elige {group.min_select}
++                  {group.max_select !== group.min_select ? `–${group.max_select}` : ""})
++                </span>
++              </legend>
++              <div className="grid gap-1.5">
++                {options
++                  .filter((option) => option.group_id === group.id)
++                  .map((option) => {
++                    const isSelected = (selected[group.id] ?? []).includes(option.id);
++                    return (
++                      <button
++                        key={option.id}
++                        type="button"
++                        aria-pressed={isSelected}
++                        onClick={() => toggleOption(group, option.id)}
++                        className={[
++                          "flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors",
++                          isSelected
++                            ? "border-primary/40 bg-primary/10 text-primary"
++                            : "border-border/70 bg-background text-foreground hover:bg-accent",
++                        ].join(" ")}
++                      >
++                        <span>{option.name}</span>
++                        {option.price_delta_cents !== 0 ? (
++                          <span className="tabular-nums">
++                            {option.price_delta_cents > 0 ? "+" : ""}
++                            {formatMoney(option.price_delta_cents)}
++                          </span>
++                        ) : null}
++                      </button>
++                    );
++                  })}
++              </div>
++            </fieldset>
++          ))
++        )}
++
++        <DialogFooter>
++          <Button type="button" variant="outline" onClick={onClose}>
++            Cancelar
++          </Button>
++          <Button type="button" disabled={!canConfirm} onClick={handleConfirm}>
++            Añadir al pedido
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/mostrador-view.tsx b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+new file mode 100644
+index 0000000..56976d1
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+@@ -0,0 +1,217 @@
++"use client";
++
++import { useEffect, useMemo, useRef, useState } from "react";
++
++import { ModifierPickerDialog } from "@/app/(dashboard)/mostrador/modifier-picker-dialog";
++import { OpenOrdersBar } from "@/app/(dashboard)/mostrador/open-orders-bar";
++import { OrderPanel, type OrderPanelItem } from "@/app/(dashboard)/mostrador/order-panel";
++import { ProductGrid } from "@/app/(dashboard)/mostrador/product-grid";
++import {
++  useAllProductModifierGroups,
++  useMenuProducts,
++  useModifierGroups,
++  useStations,
++} from "@/hooks/use-menu";
++import { useOrderItems } from "@/hooks/use-orders";
++import { useSalePaymentMethods } from "@/hooks/use-tpv";
++import { buildOrderItemDrafts, type MenuSelection } from "@/lib/restauracion/order";
++import type { Order, OrderItem, Product } from "@/types/database";
++
++interface MostradorViewProps {
++  salonId: string;
++  /** Nombre comercial del salón; cabecera del ticket impreso. */
++  salonName: string;
++}
++
++/** `order_items.modifiers_snapshot` es `Json` en la BD; en la práctica siempre
++ * tiene esta forma (la escribe `addOrderItems`, ver `mostrador/actions.ts`). */
++function asModifiersSnapshot(value: unknown): Array<{ name: string; priceDeltaCents: number }> {
++  return Array.isArray(value) ? (value as Array<{ name: string; priceDeltaCents: number }>) : [];
++}
++
++/** Una línea persistida cuenta para el pedido si no es una anulación ni está
++ * anulada — mismo criterio que `settleOrder` al cargar líneas a cobrar. */
++function isActiveOrderItem(row: OrderItem): boolean {
++  return row.void_of_item_id === null && row.status !== "anulado";
++}
++
++/**
++ * Pantalla de mostrador (restauración): rejilla de carta a la izquierda,
++ * panel de pedido a la derecha, con la barra de cuentas abiertas arriba.
++ * Mantiene en estado LOCAL las líneas del pedido en curso (drafts con
++ * `crypto.randomUUID()`, patrón de `tpv-view.tsx`); es `OrderPanel` quien
++ * decide CUÁNDO persistirlas (Mandar/Cobrar). Al reabrir una cuenta desde
++ * `OpenOrdersBar`, las líneas ya persistidas se cargan una única vez con
++ * `useOrderItems`.
++ */
++export function MostradorView({ salonId, salonName }: MostradorViewProps): React.ReactElement {
++  const products = useMenuProducts(salonId);
++  const stations = useStations(salonId);
++  const modifierGroups = useModifierGroups(salonId);
++  const productModifierGroups = useAllProductModifierGroups(salonId);
++  const paymentMethods = useSalePaymentMethods(salonId);
++
++  const [order, setOrder] = useState<Order | null>(null);
++  const [items, setItems] = useState<OrderPanelItem[]>([]);
++  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
++  const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
++
++  const orderItemsQuery = useOrderItems(salonId, order?.id ?? null);
++  // Evita recargar las líneas del mismo pedido dos veces: solo se leen de BD
++  // al REABRIR una cuenta desde `OpenOrdersBar`; cuando `OrderPanel` crea el
++  // pedido en el primer Mandar/Cobrar, las líneas ya están en `items` (son la
++  // fuente de verdad que se está empujando HACIA el servidor, no al revés).
++  const loadedOrderIdRef = useRef<string | null>(null);
++
++  const productsById = useMemo(
++    () => new Map((products.data ?? []).map((p) => [p.id, p])),
++    [products.data],
++  );
++  const groupsByProduct = useMemo(() => {
++    const map = new Map<string, string[]>();
++    for (const link of productModifierGroups.data ?? []) {
++      const list = map.get(link.product_id) ?? [];
++      list.push(link.group_id);
++      map.set(link.product_id, list);
++    }
++    return map;
++  }, [productModifierGroups.data]);
++
++  useEffect(() => {
++    if (order === null || orderItemsQuery.data === undefined) return;
++    if (loadedOrderIdRef.current === order.id) return;
++    loadedOrderIdRef.current = order.id;
++    const loaded: OrderPanelItem[] = orderItemsQuery.data.filter(isActiveOrderItem).map((row) => ({
++      id: row.id,
++      productId: row.product_id,
++      qty: row.qty,
++      unitPriceCents: row.unit_price_cents,
++      vatRate: row.vat_rate,
++      stationId: row.station_id,
++      comboGroup: row.combo_group,
++      modifiersSnapshot: asModifiersSnapshot(row.modifiers_snapshot),
++      name: productsById.get(row.product_id)?.name ?? "Producto",
++    }));
++    setItems(loaded);
++    setPendingIds(new Set());
++  }, [order, orderItemsQuery.data, productsById]);
++
++  function addSelection(selection: MenuSelection): void {
++    const drafts = buildOrderItemDrafts(selection, () => crypto.randomUUID());
++    const withNames: OrderPanelItem[] = drafts.map((draft) => ({
++      ...draft,
++      name: productsById.get(draft.productId)?.name ?? selection.name,
++    }));
++    setItems((prev) => [...prev, ...withNames]);
++    setPendingIds((prev) => {
++      const next = new Set(prev);
++      for (const draft of withNames) next.add(draft.id);
++      return next;
++    });
++  }
++
++  function handleAddDirect(product: Product): void {
++    addSelection({
++      productId: product.id,
++      name: product.name,
++      basePriceCents: product.price_cents,
++      vatRate: product.vat_rate,
++      stationId: product.station_id,
++      isCombo: false,
++      qty: 1,
++      modifiers: [],
++      comboPieces: [],
++    });
++  }
++
++  function handleSelectOrder(selected: Order): void {
++    // Fuerza la recarga de líneas de la cuenta elegida (distinta a la actual).
++    loadedOrderIdRef.current = null;
++    // Limpieza SÍNCRONA de las líneas de la cuenta anterior — sin esto, hay
++    // una ventana entre `setOrder(selected)` (order.id ya apunta a la cuenta
++    // B) y a que `useOrderItems` resuelva sus líneas (el `useEffect` de
++    // arriba las carga) en la que `items`/`pendingIds` siguen siendo los de
++    // la cuenta A. Si en esa ventana se pulsa Mandar/Cobrar, se enviarían
++    // líneas de A contra el `orderId` de B (cargo/comanda cruzados). Mismo
++    // criterio que `handleNewOrder`.
++    setItems([]);
++    setPendingIds(new Set());
++    setOrder(selected);
++  }
++
++  function handleNewOrder(): void {
++    loadedOrderIdRef.current = null;
++    setOrder(null);
++    setItems([]);
++    setPendingIds(new Set());
++    setPickerProduct(null);
++  }
++
++  const assignedGroupIds = pickerProduct !== null
++    ? groupsByProduct.get(pickerProduct.id) ?? []
++    : [];
++  const assignedGroups = (modifierGroups.data ?? []).filter((g) =>
++    assignedGroupIds.includes(g.id),
++  );
++
++  return (
++    <main className="container py-6 lg:py-8">
++      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
++        <div className="space-y-1">
++          <h1 className="text-3xl font-bold tracking-tight">Mostrador</h1>
++          <p className="text-sm text-muted-foreground">
++            Toma pedidos, manda la comanda a cocina/barra y cobra.
++          </p>
++        </div>
++      </div>
++
++      <div className="mb-5">
++        <OpenOrdersBar
++          salonId={salonId}
++          activeOrderId={order?.id ?? null}
++          onSelect={handleSelectOrder}
++          onNew={handleNewOrder}
++        />
++      </div>
++
++      <div className="grid animate-fade-up gap-5 lg:grid-cols-[1fr_26rem] lg:gap-6">
++        <ProductGrid
++          salonId={salonId}
++          productModifierGroupsByProduct={groupsByProduct}
++          onAddDirect={handleAddDirect}
++          onOpenPicker={setPickerProduct}
++        />
++
++        <OrderPanel
++          salonId={salonId}
++          salonName={salonName}
++          order={order}
++          items={items}
++          pendingIds={pendingIds}
++          stations={stations.data ?? []}
++          paymentMethods={paymentMethods.data ?? []}
++          onOrderPersisted={(created) => {
++            // Ya tenemos las líneas en local state (son las que se están
++            // mandando AL servidor); no dispares la recarga de arriba.
++            loadedOrderIdRef.current = created.id;
++            setOrder(created);
++          }}
++          onItemsSent={() => setPendingIds(new Set())}
++          onSettled={handleNewOrder}
++        />
++      </div>
++
++      <ModifierPickerDialog
++        salonId={salonId}
++        product={pickerProduct}
++        groups={assignedGroups}
++        productsById={productsById}
++        onClose={() => setPickerProduct(null)}
++        onConfirm={(selection) => {
++          addSelection(selection);
++          setPickerProduct(null);
++        }}
++      />
++    </main>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/open-orders-bar.tsx b/src/app/(dashboard)/mostrador/open-orders-bar.tsx
+new file mode 100644
+index 0000000..5551643
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/open-orders-bar.tsx
+@@ -0,0 +1,92 @@
++"use client";
++
++import { Plus, Receipt } from "lucide-react";
++
++import { Skeleton } from "@/components/ui/skeleton";
++import { useOpenOrders } from "@/hooks/use-orders";
++import type { Order } from "@/types/database";
++
++interface OpenOrdersBarProps {
++  salonId: string;
++  /** Id del pedido que se está trabajando ahora mismo, o `null` (cuenta nueva). */
++  activeOrderId: string | null;
++  /** Reabre una cuenta abierta: carga sus líneas en el panel. */
++  onSelect: (order: Order) => void;
++  /** Empieza una cuenta nueva (descarta el trabajo en curso sin persistir). */
++  onNew: () => void;
++}
++
++/**
++ * Barra de cuentas abiertas del salón: permite retomar un pedido `abierta`
++ * (mandado a cocina pero aún no cobrado) o empezar uno nuevo. Mismo patrón
++ * visual que el `AppointmentPicker` de `tpv/tpv-view.tsx` (fila de chips con
++ * `aria-pressed` para la selección activa).
++ */
++export function OpenOrdersBar({
++  salonId,
++  activeOrderId,
++  onSelect,
++  onNew,
++}: OpenOrdersBarProps): React.ReactElement {
++  const openOrders = useOpenOrders(salonId);
++
++  if (openOrders.isPending) {
++    return <Skeleton className="h-11 w-full max-w-md rounded-xl" />;
++  }
++
++  const orders = openOrders.data ?? [];
++
++  return (
++    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-card p-3 shadow-xs">
++      <span className="inline-flex items-center gap-1.5 pl-1 pr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
++        <Receipt className="h-3.5 w-3.5" />
++        Cuentas abiertas
++      </span>
++
++      <button
++        type="button"
++        onClick={onNew}
++        aria-pressed={activeOrderId === null}
++        className={[
++          "inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-all duration-200 ease-apple-out active:scale-[0.98]",
++          activeOrderId === null
++            ? "border-primary/40 bg-primary/10 text-primary"
++            : "border-border/70 bg-background text-foreground hover:border-primary/30 hover:bg-accent",
++        ].join(" ")}
++      >
++        <Plus className="h-3.5 w-3.5" />
++        Cuenta nueva
++      </button>
++
++      {orders.length === 0 ? (
++        <span className="text-sm text-muted-foreground">No hay cuentas abiertas.</span>
++      ) : (
++        orders.map((order) => {
++          const active = activeOrderId === order.id;
++          return (
++            <button
++              key={order.id}
++              type="button"
++              onClick={() => onSelect(order)}
++              aria-pressed={active}
++              className={[
++                "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all duration-200 ease-apple-out active:scale-[0.98]",
++                active
++                  ? "border-primary/40 bg-primary/10 text-primary"
++                  : "border-border/70 bg-background text-foreground hover:border-primary/30 hover:bg-accent",
++              ].join(" ")}
++            >
++              <span className="tabular-nums">#{order.order_number ?? "—"}</span>
++              {order.label !== null && order.label.trim() !== "" ? (
++                <>
++                  <span className="text-muted-foreground">·</span>
++                  <span className="max-w-[9rem] truncate">{order.label}</span>
++                </>
++              ) : null}
++            </button>
++          );
++        })
++      )}
++    </div>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/order-panel.tsx b/src/app/(dashboard)/mostrador/order-panel.tsx
+new file mode 100644
+index 0000000..3b85646
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/order-panel.tsx
+@@ -0,0 +1,350 @@
++"use client";
++
++import { useState } from "react";
++import { AlertCircle, CreditCard, Send, ShoppingBag } from "lucide-react";
++
++import { centsToEuroInput, type TicketLine, type TicketTotals } from "@/app/(dashboard)/tpv/cart";
++import { PaymentSheet } from "@/app/(dashboard)/mostrador/payment-sheet";
++import {
++  buildTicketData,
++  PAYMENT_METHOD_LABELS,
++  printTicketDocument,
++} from "@/app/(dashboard)/tpv/print-ticket";
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import { Card, CardContent } from "@/components/ui/card";
++import {
++  useAddOrderItems,
++  useCreateOrder,
++  useSendOrderToStations,
++  useSettleOrder,
++} from "@/hooks/use-orders";
++import { formatMoney } from "@/lib/format";
++import { printKitchenComanda } from "@/lib/restauracion/kitchen-comanda";
++import {
++  buildSettleLines,
++  settleTotals,
++  type OrderItemDraft,
++} from "@/lib/restauracion/order";
++import type { SettleTenderInput } from "@/lib/validations/order";
++import type { Order, PosPaymentMethodRow, Station } from "@/types/database";
++
++/** Una línea del pedido con el nombre ya resuelto (cabecera de producto o
++ * pieza de combo) para poder pintarla e imprimirla sin volver a consultar
++ * el catálogo. */
++export interface OrderPanelItem extends OrderItemDraft {
++  name: string;
++}
++
++interface OrderPanelProps {
++  salonId: string;
++  /** Nombre comercial del salón; cabecera del ticket impreso. */
++  salonName: string;
++  /** Pedido actual (ya persistido), o `null` si todavía no se ha creado. */
++  order: Order | null;
++  /** TODAS las líneas del pedido en curso (ya enviadas + pendientes de mandar). */
++  items: OrderPanelItem[];
++  /** Ids de `items` que TODAVÍA no están en base de datos. */
++  pendingIds: ReadonlySet<string>;
++  stations: Station[];
++  paymentMethods: PosPaymentMethodRow[];
++  /** El pedido se creó (primer Mandar/Cobrar): el padre debe recordar su id. */
++  onOrderPersisted: (order: Order) => void;
++  /** Mandar terminó con éxito: el padre debe vaciar `pendingIds`. */
++  onItemsSent: () => void;
++  /** Cobro registrado: el padre debe resetear a un pedido nuevo/vacío. */
++  onSettled: () => void;
++}
++
++/**
++ * Panel de líneas + totales del mostrador, con las dos acciones del flujo:
++ * Mandar (abre cuenta / envía comanda sin cobrar) y Cobrar (abre el diálogo
++ * de pago y liquida el pedido). Sigue el patrón de `tpv-view.tsx`: el propio
++ * panel orquesta las mutaciones de `@/hooks/use-orders` y la impresión, en
++ * vez de delegar en el padre — así `mostrador-view.tsx` solo mantiene el
++ * ESTADO del pedido en curso (líneas locales) y este componente decide CUÁNDO
++ * persistirlo.
++ */
++export function OrderPanel({
++  salonId,
++  salonName,
++  order,
++  items,
++  pendingIds,
++  stations,
++  paymentMethods,
++  onOrderPersisted,
++  onItemsSent,
++  onSettled,
++}: OrderPanelProps): React.ReactElement {
++  const [paying, setPaying] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  const createOrder = useCreateOrder(salonId);
++  const addOrderItems = useAddOrderItems(salonId);
++  const sendOrderToStations = useSendOrderToStations(salonId);
++  const settleOrder = useSettleOrder(salonId);
++
++  const displayLines = buildSettleLines(
++    items.map((it) => ({
++      productName: it.name,
++      qty: it.qty,
++      unitPriceCents: it.unitPriceCents,
++      vatRate: it.vatRate,
++      modifiersSnapshot: it.modifiersSnapshot,
++    })),
++  );
++  const totals = settleTotals(displayLines);
++  const pendingItems = items.filter((it) => pendingIds.has(it.id));
++
++  const busy =
++    createOrder.isPending ||
++    addOrderItems.isPending ||
++    sendOrderToStations.isPending ||
++    settleOrder.isPending;
++
++  function stationName(stationId: string | null): string {
++    if (stationId === null) return "Sin estación";
++    return stations.find((s) => s.id === stationId)?.name ?? "Estación";
++  }
++
++  /** Crea el pedido si todavía no existe (primer Mandar/Cobrar de la cuenta). */
++  async function ensureOrder(): Promise<Order> {
++    if (order !== null) return order;
++    const id = crypto.randomUUID();
++    const created = await createOrder.mutateAsync({ id, label: null, idempotencyKey: id });
++    onOrderPersisted(created);
++    return created;
++  }
++
++  /** Imprime una comanda por estación, agrupando las líneas recién mandadas. */
++  function printComandas(current: Order, mandados: OrderPanelItem[]): void {
++    const groups = new Map<string, OrderPanelItem[]>();
++    for (const item of mandados) {
++      const key = item.stationId ?? "__none__";
++      const list = groups.get(key) ?? [];
++      list.push(item);
++      groups.set(key, list);
++    }
++    for (const [key, groupItems] of groups) {
++      printKitchenComanda({
++        orderNumber: current.order_number ?? 0,
++        stationName: stationName(key === "__none__" ? null : key),
++        label: current.label,
++        issuedAt: new Date(),
++        lines: groupItems.map((item) => ({
++          qty: item.qty,
++          name: item.name,
++          modifiers: item.modifiersSnapshot.map((mod) => mod.name),
++        })),
++      });
++    }
++  }
++
++  /** Ticket de cliente para el pedido cobrado (adapta las líneas resueltas al
++   * formato de `buildTicketData`, que reutiliza el documento térmico del TPV). */
++  function printTicket(saleId: string, tenders: SettleTenderInput[]): void {
++    const ticketLines: TicketLine[] = displayLines.map((line, i) => ({
++      localId: items[i]!.id,
++      kind: "manual",
++      refId: null,
++      description: line.description,
++      quantity: String(line.qty),
++      unitPrice: centsToEuroInput(line.unitPriceCents),
++      vatRate: String(line.vatRate),
++    }));
++    const ticketTotals: TicketTotals = {
++      ...totals,
++      couponPercentOff: null,
++      couponDiscountCents: 0,
++      grossTotalCents: totals.totalCents,
++    };
++    const ticketTenders = tenders.map((t) => ({
++      label:
++        (t.paymentMethodId !== null
++          ? paymentMethods.find((m) => m.id === t.paymentMethodId)?.name
++          : undefined) ?? PAYMENT_METHOD_LABELS[t.method],
++      amountCents: t.amountCents,
++    }));
++    printTicketDocument(
++      buildTicketData({
++        salonName,
++        ticketRef: saleId.slice(0, 8).toUpperCase(),
++        issuedAt: new Date(),
++        lines: ticketLines,
++        totals: ticketTotals,
++        tenders: ticketTenders,
++        loyalty: null,
++        notes: null,
++      }),
++    );
++  }
++
++  async function handleSend(): Promise<void> {
++    if (pendingItems.length === 0) return;
++    setError(null);
++    try {
++      const current = await ensureOrder();
++      await addOrderItems.mutateAsync({ orderId: current.id, items: pendingItems });
++      await sendOrderToStations.mutateAsync({ orderId: current.id });
++      printComandas(current, pendingItems);
++      onItemsSent();
++    } catch (e) {
++      setError(e instanceof Error ? e.message : "No se pudo mandar el pedido");
++    }
++  }
++
++  async function handleConfirmPayment(tenders: SettleTenderInput[]): Promise<void> {
++    setError(null);
++    try {
++      const current = await ensureOrder();
++      // "Pagar primero": si quedan líneas sin mandar, se añaden ahora; el
++      // propio `settleOrder` con `sendPending: true` las manda a estación
++      // tras cobrar (mismo criterio que `mostrador/actions.ts`, §10).
++      const payFirst = pendingItems.length > 0;
++      if (payFirst) {
++        await addOrderItems.mutateAsync({ orderId: current.id, items: pendingItems });
++      }
++      const result = await settleOrder.mutateAsync({
++        orderId: current.id,
++        tenders,
++        sendPending: true,
++      });
++      printTicket(result.saleId, tenders);
++      if (payFirst) {
++        printComandas(current, pendingItems);
++      }
++      setPaying(false);
++      onSettled();
++    } catch (e) {
++      setError(e instanceof Error ? e.message : "No se pudo cobrar el pedido");
++    }
++  }
++
++  return (
++    <Card className="flex flex-col overflow-hidden lg:sticky lg:top-6 lg:h-fit lg:max-h-[calc(100vh-3rem)]">
++      <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-muted/30 px-5 py-4">
++        <div className="flex items-center gap-2.5">
++          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
++            <ShoppingBag className="h-[1.15rem] w-[1.15rem]" />
++          </span>
++          <div className="leading-tight">
++            <p className="text-sm font-semibold text-foreground">Pedido</p>
++            <p className="text-xs text-muted-foreground">
++              {items.length > 0
++                ? `${items.length} línea${items.length !== 1 ? "s" : ""}`
++                : "Vacío"}
++            </p>
++          </div>
++        </div>
++        {order !== null ? (
++          <Badge variant="secondary" className="tabular-nums">
++            Pedido #{order.order_number ?? "—"}
++          </Badge>
++        ) : null}
++      </div>
++
++      <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
++        {displayLines.length === 0 ? (
++          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 px-4 py-10 text-center">
++            <p className="max-w-[16rem] text-sm text-muted-foreground">
++              Toca un producto de la carta para empezar el pedido.
++            </p>
++          </div>
++        ) : (
++          <ul className="flex flex-col gap-2">
++            {displayLines.map((line, i) => (
++              <li
++                key={items[i]!.id}
++                className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card p-3 text-sm shadow-xs"
++              >
++                <span className="min-w-0 flex-1">
++                  <span className="font-medium tabular-nums text-foreground">
++                    {line.qty}×
++                  </span>{" "}
++                  <span className="text-foreground">{line.description}</span>
++                  {pendingIds.has(items[i]!.id) ? (
++                    <Badge variant="outline" className="ml-2 align-middle text-[10px]">
++                      Sin mandar
++                    </Badge>
++                  ) : null}
++                </span>
++                <span className="shrink-0 font-semibold tabular-nums text-foreground">
++                  {formatMoney(line.unitPriceCents * line.qty)}
++                </span>
++              </li>
++            ))}
++          </ul>
++        )}
++      </CardContent>
++
++      <div className="border-t border-border/70 bg-muted/30 p-5">
++        <dl className="grid gap-1.5 text-sm">
++          <div className="flex justify-between text-muted-foreground">
++            <dt>Base imponible</dt>
++            <dd className="tabular-nums">{formatMoney(totals.subtotalCents)}</dd>
++          </div>
++          {totals.vatBreakdown.map((entry) => (
++            <div key={entry.vatRate} className="flex justify-between text-muted-foreground">
++              <dt>IVA {entry.vatRate}%</dt>
++              <dd className="tabular-nums">{formatMoney(entry.taxCents)}</dd>
++            </div>
++          ))}
++          <div className="mt-1.5 flex items-baseline justify-between border-t border-border/70 pt-3">
++            <dt className="text-base font-semibold">Total</dt>
++            <dd className="text-2xl font-bold tabular-nums tracking-tight">
++              {formatMoney(totals.totalCents)}
++            </dd>
++          </div>
++        </dl>
++
++        {error !== null ? (
++          <p
++            role="alert"
++            className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++          >
++            <AlertCircle className="h-4 w-4 shrink-0" />
++            {error}
++          </p>
++        ) : null}
++
++        <div className="mt-4 grid grid-cols-2 gap-2.5">
++          <Button
++            size="lg"
++            variant="outline"
++            className="h-14 rounded-xl text-base font-semibold"
++            disabled={pendingItems.length === 0 || busy}
++            onClick={() => void handleSend()}
++          >
++            <Send className="mr-2 h-4 w-4" />
++            Mandar
++          </Button>
++          <Button
++            size="lg"
++            className="h-14 rounded-xl text-base font-semibold"
++            disabled={items.length === 0 || busy}
++            onClick={() => setPaying(true)}
++          >
++            <CreditCard className="mr-2 h-4 w-4" />
++            Cobrar {items.length > 0 ? formatMoney(totals.totalCents) : ""}
++          </Button>
++        </div>
++      </div>
++
++      {paying ? (
++        <PaymentSheet
++          open={paying}
++          onOpenChange={(open) => {
++            setPaying(open);
++            if (!open) settleOrder.reset();
++          }}
++          totalCents={totals.totalCents}
++          paymentMethods={paymentMethods}
++          pending={settleOrder.isPending || addOrderItems.isPending || createOrder.isPending}
++          error={error}
++          onConfirm={(tenders) => void handleConfirmPayment(tenders)}
++        />
++      ) : null}
++    </Card>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/page.tsx b/src/app/(dashboard)/mostrador/page.tsx
+new file mode 100644
+index 0000000..4aceabc
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/page.tsx
+@@ -0,0 +1,36 @@
++import type { Metadata } from "next";
++import { redirect } from "next/navigation";
++
++import { MostradorView } from "@/app/(dashboard)/mostrador/mostrador-view";
++import { getActiveSalon } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++
++export const metadata: Metadata = {
++  title: "Mostrador",
++};
++
++export default async function MostradorPage(): Promise<React.ReactElement> {
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  if (user === null) {
++    redirect("/login");
++  }
++
++  const salon = await getActiveSalon();
++
++  if (salon === null) {
++    return (
++      <main className="container py-10">
++        <h1 className="text-3xl font-bold tracking-tight">Mostrador</h1>
++        <p className="mt-2 text-muted-foreground">
++          Tu usuario no está asociado a ningún salón todavía.
++        </p>
++      </main>
++    );
++  }
++
++  return <MostradorView salonId={salon.id} salonName={salon.name} />;
++}
+diff --git a/src/app/(dashboard)/mostrador/payment-sheet.tsx b/src/app/(dashboard)/mostrador/payment-sheet.tsx
+new file mode 100644
+index 0000000..3d3da29
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/payment-sheet.tsx
+@@ -0,0 +1,340 @@
++"use client";
++
++import { useMemo, useState } from "react";
++import { AlertCircle, CheckCircle2, Coins, Plus, Trash2 } from "lucide-react";
++
++import { centsToEuroInput, parseEuroToCents } from "@/app/(dashboard)/tpv/cart";
++import { Button } from "@/components/ui/button";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { formatMoney } from "@/lib/format";
++import type { SettleTenderInput } from "@/lib/validations/order";
++import type { PosPaymentMethod, PosPaymentMethodRow } from "@/types/database";
++
++/**
++ * Diálogo de cobro del mostrador (restauración): reparte el TOTAL del pedido
++ * en uno o varios medios de pago, igual que `tpv/payment-dialog.tsx`. La
++ * diferencia clave está en el EFECTIVO: `settleOrder` exige que
++ * `Σ tenders.amountCents === totalCents` EXACTO (ver `mostrador/actions.ts`,
++ * §8), así que aquí cada fila de efectivo separa "lo que entrega el cliente"
++ * (`amount`, para poder calcular el cambio) de "lo que se APLICA al cobro"
++ * (`amountCents` que sale hacia `onConfirm`, topado al importe pendiente). El
++ * resto de medios (tarjeta, bizum…) no tienen concepto de cambio: lo tecleado
++ * ES lo aplicado, igual que en el TPV.
++ */
++
++/** Métodos base cuando el salón no tiene catálogo `pos_payment_methods`. */
++const BASE_METHODS: { method: PosPaymentMethod; label: string }[] = [
++  { method: "efectivo", label: "Efectivo" },
++  { method: "tarjeta", label: "Tarjeta" },
++  { method: "bizum", label: "Bizum" },
++  { method: "transferencia", label: "Transferencia" },
++  { method: "otro", label: "Otro" },
++];
++
++interface MethodOption {
++  value: string;
++  label: string;
++  method: PosPaymentMethod;
++  paymentMethodId: string | null;
++}
++
++/** Una fila de cobro en edición. `amount` es lo tecleado (euros); para
++ * efectivo es "lo que entrega el cliente", para el resto es lo aplicado. */
++interface TenderRow {
++  optionValue: string;
++  method: PosPaymentMethod;
++  paymentMethodId: string | null;
++  amount: string;
++}
++
++interface AppliedRow {
++  appliedCents: number;
++  changeCents: number;
++}
++
++/**
++ * Aplica cada fila, en orden, contra el importe pendiente. Para efectivo la
++ * fila se topa al pendiente (el resto es cambio); para el resto, lo tecleado
++ * se aplica tal cual (sin concepto de cambio, como en el TPV).
++ */
++function computeApplied(rows: readonly TenderRow[], totalCents: number): AppliedRow[] {
++  let remaining = totalCents;
++  return rows.map((row) => {
++    const entered = parseEuroToCents(row.amount) ?? 0;
++    if (row.method !== "efectivo") {
++      remaining -= entered;
++      return { appliedCents: entered, changeCents: 0 };
++    }
++    const applied = Math.max(0, Math.min(entered, Math.max(remaining, 0)));
++    remaining -= applied;
++    return { appliedCents: applied, changeCents: Math.max(0, entered - applied) };
++  });
++}
++
++interface PaymentSheetProps {
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++  totalCents: number;
++  paymentMethods: PosPaymentMethodRow[];
++  pending: boolean;
++  error: string | null;
++  onConfirm: (tenders: SettleTenderInput[]) => void;
++}
++
++export function PaymentSheet({
++  open,
++  onOpenChange,
++  totalCents,
++  paymentMethods,
++  pending,
++  error,
++  onConfirm,
++}: PaymentSheetProps): React.ReactElement {
++  const options = useMemo<MethodOption[]>(() => {
++    if (paymentMethods.length > 0) {
++      return paymentMethods.map((m) => ({
++        value: m.id,
++        label: m.name,
++        method: m.kind,
++        paymentMethodId: m.id,
++      }));
++    }
++    return BASE_METHODS.map((m) => ({
++      value: m.method,
++      label: m.label,
++      method: m.method,
++      paymentMethodId: null,
++    }));
++  }, [paymentMethods]);
++
++  const firstOption = options[0]!;
++
++  // Arranca con un único tender de efectivo que cubre todo el total: el caso
++  // más común (pagar justo) queda a un solo toque en "Confirmar cobro".
++  const [rows, setRows] = useState<TenderRow[]>(() => [
++    {
++      optionValue: firstOption.value,
++      method: firstOption.method,
++      paymentMethodId: firstOption.paymentMethodId,
++      amount: centsToEuroInput(totalCents),
++    },
++  ]);
++
++  const applied = computeApplied(rows, totalCents);
++  const appliedTotalCents = applied.reduce((acc, a) => acc + a.appliedCents, 0);
++  const remainingCents = totalCents - appliedTotalCents;
++  const covered = remainingCents === 0 && totalCents > 0;
++
++  function updateRow(index: number, patch: Partial<TenderRow>): void {
++    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
++  }
++
++  function chooseMethod(index: number, optionValue: string): void {
++    const option = options.find((o) => o.value === optionValue);
++    if (option === undefined) return;
++    updateRow(index, {
++      optionValue,
++      method: option.method,
++      paymentMethodId: option.paymentMethodId,
++    });
++  }
++
++  function addRow(): void {
++    const pendingAmount = remainingCents > 0 ? centsToEuroInput(remainingCents) : "";
++    setRows((prev) => [
++      ...prev,
++      {
++        optionValue: firstOption.value,
++        method: firstOption.method,
++        paymentMethodId: firstOption.paymentMethodId,
++        amount: pendingAmount,
++      },
++    ]);
++  }
++
++  function removeRow(index: number): void {
++    setRows((prev) => prev.filter((_, i) => i !== index));
++  }
++
++  function handleConfirm(): void {
++    // Filtra filas con importe aplicado <= 0 (p. ej. una fila que `addRow`
++    // sembró vacía porque el resto YA estaba cubierto, o un tender a 0€
++    // tecleado por error): `settleTenderSchema` exige `amountCents > 0` — un
++    // tender fantasma haría que el servidor rechazase el cobro aunque el
++    // AGREGADO (que es lo que vigila `covered`) sí cuadre con el total.
++    const tenders: SettleTenderInput[] = rows
++      .map((row, i) => ({
++        method: row.method,
++        amountCents: applied[i]!.appliedCents,
++        paymentMethodId: row.paymentMethodId,
++      }))
++      .filter((tender) => tender.amountCents > 0);
++    onConfirm(tenders);
++  }
++
++  const status: "settled" | "due" | "excess" =
++    remainingCents === 0 ? "settled" : remainingCents > 0 ? "due" : "excess";
++  const totalChangeCents = applied.reduce((acc, a) => acc + a.changeCents, 0);
++
++  return (
++    <Dialog open={open} onOpenChange={onOpenChange}>
++      <DialogContent className="sm:max-w-md">
++        <DialogHeader>
++          <DialogDescription className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
++            Importe a cobrar
++          </DialogDescription>
++          <DialogTitle className="text-3xl font-bold tabular-nums tracking-tight">
++            {formatMoney(totalCents)}
++          </DialogTitle>
++          <DialogDescription>
++            Reparte el total en uno o varios medios de pago.
++          </DialogDescription>
++        </DialogHeader>
++
++        <div className="grid gap-3">
++          {rows.map((row, index) => (
++            <div
++              key={index}
++              className="grid gap-2 rounded-xl border border-border/70 bg-muted/30 p-3"
++            >
++              <div className="flex items-end gap-2">
++                <div className="grid flex-1 gap-1.5">
++                  <Label htmlFor={`ms-method-${index}`} className="text-xs">
++                    Medio de pago
++                  </Label>
++                  <Select
++                    value={row.optionValue}
++                    onValueChange={(value) => chooseMethod(index, value)}
++                  >
++                    <SelectTrigger id={`ms-method-${index}`} className="h-11">
++                      <SelectValue />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {options.map((option) => (
++                        <SelectItem key={option.value} value={option.value}>
++                          {option.label}
++                        </SelectItem>
++                      ))}
++                    </SelectContent>
++                  </Select>
++                </div>
++                <div className="grid w-28 gap-1.5">
++                  <Label htmlFor={`ms-amount-${index}`} className="text-xs">
++                    {row.method === "efectivo" ? "Entrega (€)" : "Importe (€)"}
++                  </Label>
++                  <Input
++                    id={`ms-amount-${index}`}
++                    inputMode="decimal"
++                    value={row.amount}
++                    onChange={(e) => updateRow(index, { amount: e.target.value })}
++                    placeholder="0,00"
++                    className="h-11 text-right text-base tabular-nums"
++                  />
++                </div>
++                <Button
++                  type="button"
++                  variant="ghost"
++                  size="icon"
++                  className="h-11 w-11 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
++                  aria-label={`Quitar medio de pago ${index + 1}`}
++                  disabled={rows.length === 1}
++                  onClick={() => removeRow(index)}
++                >
++                  <Trash2 className="h-4 w-4" />
++                </Button>
++              </div>
++              {row.method === "efectivo" && applied[index]!.changeCents > 0 ? (
++                <p className="flex items-center gap-1.5 text-xs font-medium text-info">
++                  <Coins className="h-3.5 w-3.5" />
++                  Cambio: {formatMoney(applied[index]!.changeCents)}
++                </p>
++              ) : null}
++            </div>
++          ))}
++
++          <Button
++            type="button"
++            variant="outline"
++            className="h-10 justify-start rounded-lg"
++            onClick={addRow}
++          >
++            <Plus className="mr-2 h-4 w-4" />
++            Añadir otro medio de pago
++          </Button>
++
++          <div
++            className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition-colors ${
++              status === "settled"
++                ? "border-success/25 bg-success/10 text-success"
++                : "border-warning/30 bg-warning/10 text-warning"
++            }`}
++          >
++            <span className="inline-flex items-center gap-2 font-medium">
++              {status === "settled" ? (
++                <CheckCircle2 className="h-4 w-4" />
++              ) : (
++                <AlertCircle className="h-4 w-4" />
++              )}
++              {status === "settled"
++                ? totalChangeCents > 0
++                  ? `Cobro cuadrado · cambio ${formatMoney(totalChangeCents)}`
++                  : "Cobro cuadrado"
++                : status === "due"
++                  ? "Falta por cobrar"
++                  : "Sobra por revisar"}
++            </span>
++            <span className="text-base font-bold tabular-nums">
++              {formatMoney(Math.abs(remainingCents))}
++            </span>
++          </div>
++        </div>
++
++        {error !== null ? (
++          <p
++            role="alert"
++            className="flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++          >
++            <AlertCircle className="h-4 w-4 shrink-0" />
++            {error}
++          </p>
++        ) : null}
++
++        <DialogFooter>
++          <Button
++            type="button"
++            variant="outline"
++            className="h-11"
++            onClick={() => onOpenChange(false)}
++            disabled={pending}
++          >
++            Cancelar
++          </Button>
++          <Button
++            type="button"
++            className="h-11 font-semibold"
++            disabled={!covered || pending}
++            onClick={handleConfirm}
++          >
++            {pending ? "Registrando…" : "Confirmar cobro"}
++          </Button>
++        </DialogFooter>
++      </DialogContent>
++    </Dialog>
++  );
++}
+diff --git a/src/app/(dashboard)/mostrador/product-grid.tsx b/src/app/(dashboard)/mostrador/product-grid.tsx
+new file mode 100644
+index 0000000..9121089
+--- /dev/null
++++ b/src/app/(dashboard)/mostrador/product-grid.tsx
+@@ -0,0 +1,169 @@
++"use client";
++
++import { useState } from "react";
++import { Package, UtensilsCrossed } from "lucide-react";
++
++import { Input } from "@/components/ui/input";
++import { Skeleton } from "@/components/ui/skeleton";
++import { useMenuCategories, useMenuProducts } from "@/hooks/use-menu";
++import { formatMoney } from "@/lib/format";
++import type { Product } from "@/types/database";
++
++/** Sentinela de la pestaña "Todas" (sin filtrar por categoría). */
++const ALL_CATEGORIES = "__all__";
++
++interface ProductGridProps {
++  salonId: string;
++  /** productId → ids de los grupos de modificadores asignados. */
++  productModifierGroupsByProduct: Map<string, string[]>;
++  /** Producto SIN modificadores y sin combo: se añade directo (qty 1). */
++  onAddDirect: (product: Product) => void;
++  /** Producto CON modificadores o combo: abre el selector. */
++  onOpenPicker: (product: Product) => void;
++}
++
++/**
++ * Rejilla táctil de la carta: pestañas de categoría + botones grandes de
++ * producto, filtrable por texto. Decide, por producto, si tocarlo añade
++ * directo al pedido (sin grupos de modificadores y no es combo) o abre
++ * `ModifierPickerDialog` — mismo patrón de botonera que `tpv/tpv-view.tsx`
++ * (`CatalogButton`), adaptado a categorías de carta en vez de
++ * servicios/productos.
++ */
++export function ProductGrid({
++  salonId,
++  productModifierGroupsByProduct,
++  onAddDirect,
++  onOpenPicker,
++}: ProductGridProps): React.ReactElement {
++  const categories = useMenuCategories(salonId);
++  const products = useMenuProducts(salonId);
++  const [activeCategory, setActiveCategory] = useState<string>(ALL_CATEGORIES);
++  const [search, setSearch] = useState("");
++
++  const allProducts = products.data ?? [];
++  const filtered = allProducts.filter((product) => {
++    const matchesCategory =
++      activeCategory === ALL_CATEGORIES || product.category_id === activeCategory;
++    const matchesSearch =
++      search.trim() === "" || product.name.toLowerCase().includes(search.trim().toLowerCase());
++    return matchesCategory && matchesSearch;
++  });
++
++  function handleTap(product: Product): void {
++    const groupIds = productModifierGroupsByProduct.get(product.id) ?? [];
++    if (!product.is_combo && groupIds.length === 0) {
++      onAddDirect(product);
++    } else {
++      onOpenPicker(product);
++    }
++  }
++
++  return (
++    <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card p-4 shadow-xs sm:p-5">
++      <Input
++        value={search}
++        onChange={(e) => setSearch(e.target.value)}
++        placeholder="Buscar producto…"
++        className="h-11 rounded-xl text-base"
++        aria-label="Buscar en la carta"
++      />
++
++      {categories.isPending ? (
++        <Skeleton className="h-10 w-full max-w-md rounded-lg" />
++      ) : (
++        <div className="flex flex-wrap gap-1.5 rounded-lg border border-border/70 bg-muted/50 p-1">
++          <CategoryTab
++            active={activeCategory === ALL_CATEGORIES}
++            label="Todas"
++            onClick={() => setActiveCategory(ALL_CATEGORIES)}
++          />
++          {(categories.data ?? []).map((category) => (
++            <CategoryTab
++              key={category.id}
++              active={activeCategory === category.id}
++              label={category.name}
++              onClick={() => setActiveCategory(category.id)}
++            />
++          ))}
++        </div>
++      )}
++
++      <div className="grid max-h-[32rem] grid-cols-2 gap-2.5 overflow-y-auto pr-0.5 sm:grid-cols-3 xl:grid-cols-4">
++        {products.isPending ? (
++          Array.from({ length: 8 }).map((_, i) => (
++            <Skeleton key={i} className="h-24 w-full rounded-xl" />
++          ))
++        ) : filtered.length === 0 ? (
++          <div className="col-span-full flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-card/40 py-12 text-center">
++            <UtensilsCrossed className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
++            <p className="text-sm text-muted-foreground">No hay productos en esta categoría.</p>
++          </div>
++        ) : (
++          filtered.map((product) => (
++            <ProductButton key={product.id} product={product} onClick={() => handleTap(product)} />
++          ))
++        )}
++      </div>
++    </div>
++  );
++}
++
++function CategoryTab({
++  active,
++  label,
++  onClick,
++}: {
++  active: boolean;
++  label: string;
++  onClick: () => void;
++}): React.ReactElement {
++  return (
++    <button
++      type="button"
++      onClick={onClick}
++      aria-pressed={active}
++      className={[
++        "inline-flex h-9 items-center rounded-md px-3 text-sm font-medium transition-all duration-150 ease-apple-out",
++        active
++          ? "bg-background text-foreground shadow-sm"
++          : "text-muted-foreground hover:text-foreground",
++      ].join(" ")}
++    >
++      {label}
++    </button>
++  );
++}
++
++function ProductButton({
++  product,
++  onClick,
++}: {
++  product: Product;
++  onClick: () => void;
++}): React.ReactElement {
++  return (
++    <button
++      type="button"
++      onClick={onClick}
++      className="group relative flex h-24 flex-col items-start justify-between overflow-hidden rounded-xl border border-border/70 bg-card p-3 text-left shadow-xs transition-all duration-200 ease-apple-out hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.98]"
++    >
++      <span className="flex w-full items-start justify-between gap-1.5">
++        <Package className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
++        {product.is_combo ? (
++          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
++            Combo
++          </span>
++        ) : null}
++      </span>
++      <span className="w-full space-y-0.5">
++        <span className="line-clamp-2 text-xs font-medium leading-tight text-foreground">
++          {product.name}
++        </span>
++        <span className="block text-sm font-semibold tabular-nums text-foreground">
++          {formatMoney(product.price_cents)}
++        </span>
++      </span>
++    </button>
++  );
++}
+diff --git a/src/components/dashboard-nav-items.ts b/src/components/dashboard-nav-items.ts
+index 20d5635..fa6a4c9 100644
+--- a/src/components/dashboard-nav-items.ts
++++ b/src/components/dashboard-nav-items.ts
+@@ -17,10 +17,11 @@ import {
+   BellRing,
+   CalendarClock,
+   CalendarDays,
+   ClipboardList,
+   Clock,
++  ConciergeBell,
+   FileText,
+   FolderOpen,
+   LayoutDashboard,
+   Package,
+   Settings,
+@@ -155,10 +156,22 @@ export const CARTA_ITEM: NavItem = {
+   href: "/carta",
+   label: "Carta",
+   icon: UtensilsCrossed,
+ };
+ 
++/**
++ * Mostrador (venta de mostrador: comanda + cobro). Solo visible para el
++ * sector restauración, y para TODOS los miembros (incluido staff): a
++ * diferencia de Carta (gestión), Mostrador es operativa de venta del día a día,
++ * como la Caja lo es para el resto de sectores.
++ */
++export const MOSTRADOR_ITEM: NavItem = {
++  href: "/mostrador",
++  label: "Mostrador",
++  icon: ConciergeBell,
++};
++
+ /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
+ export interface NavGating {
+   /** El usuario puede ver materia de gestión (owner/manager). */
+   showSettings: boolean;
+   /** El salón tiene el add-on `pos` (TPV) contratado y activo. */
+@@ -182,13 +195,16 @@ export interface NavGating {
+  * cascarón: solo Panel + "Próximamente" (+ Ajustes si `showSettings`), ignorando
+  * el resto del gating. Peluquería (o sin `sector`) devuelve la lista de siempre,
+  * byte-idéntica. Otros sectores implementados relabelan "Clientes" al término
+  * propio del sector (`config.terms.customerPlural`), p. ej. "Pacientes". Odontología
+  * además inserta Odontograma y, justo detrás, Periodontograma, Planes y Expediente
+- * (en ese orden) tras "Pacientes". Restauración inserta Carta (gestión de la carta:
+- * categorías/estaciones/productos/combos) justo tras "Panel", solo si `showSettings`
+- * (owner/manager); sin gestión no se añade (staff no ve Carta).
++ * (en ese orden) tras "Pacientes". Restauración inserta Mostrador (venta de
++ * mostrador: comanda + cobro) justo tras "Panel", SIEMPRE (todos los miembros,
++ * staff incluido) — es operativa de venta del día a día, como la Caja. Justo
++ * detrás, Carta (gestión de la carta: categorías/estaciones/productos/combos)
++ * solo si `showSettings` (owner/manager); sin gestión no se añade (staff no ve
++ * Carta, pero sí Mostrador).
+  */
+ export function buildDashboardNavItems({
+   showSettings,
+   hasPos,
+   sector = "peluqueria",
+@@ -240,13 +256,15 @@ export function buildDashboardNavItems({
+       ...withSectorLabels.slice(insertAt),
+     ];
+   }
+ 
+   if (sector === "restauracion") {
++    // "Mostrador" es operativa de venta: SIEMPRE (todos los miembros, staff incluido).
+     // "Carta" es gestión (owner/manager): solo si showSettings.
+-    return showSettings
+-      ? [...withSectorLabels.slice(0, 1), CARTA_ITEM, ...withSectorLabels.slice(1)]
+-      : withSectorLabels;
++    const base = withSectorLabels.slice(0, 1);
++    const rest = withSectorLabels.slice(1);
++    const extras = showSettings ? [MOSTRADOR_ITEM, CARTA_ITEM] : [MOSTRADOR_ITEM];
++    return [...base, ...extras, ...rest];
+   }
+ 
+   return withSectorLabels;
+ }
+diff --git a/src/hooks/use-menu.ts b/src/hooks/use-menu.ts
+index 524b5b2..a910cb7 100644
+--- a/src/hooks/use-menu.ts
++++ b/src/hooks/use-menu.ts
+@@ -14,15 +14,17 @@ import {
+   updateMenuProduct,
+   updateStation,
+   createMenuProduct as createMenuProductAction,
+ } from "@/app/(dashboard)/carta/actions";
+ import {
++  fetchAllProductModifierGroups,
+   fetchComboComponents,
+   fetchMenuCategories,
+   fetchMenuProducts,
+   fetchModifierGroups,
+   fetchModifierOptions,
++  fetchModifierOptionsForGroups,
+   fetchProductModifierGroups,
+   fetchStations,
+   menuKeys,
+ } from "@/lib/queries/menu";
+ import type {
+@@ -72,10 +74,36 @@ export function useProductModifierGroups(salonId: string, productId: string | nu
+     queryFn: () => fetchProductModifierGroups(salonId, productId as string),
+     enabled: productId !== null,
+   });
+ }
+ 
++/**
++ * TODAS las asignaciones producto↔grupo del salón (Task 8, mostrador): permite
++ * construir en un único mapa qué productos tienen modificadores, sin una
++ * consulta por botón de la rejilla. Ver {@link fetchAllProductModifierGroups}.
++ */
++export function useAllProductModifierGroups(salonId: string) {
++  return useQuery({
++    queryKey: [...menuKeys.all(salonId), "productModifierGroupsAll"] as const,
++    queryFn: () => fetchAllProductModifierGroups(salonId),
++  });
++}
++
++/**
++ * Opciones de VARIOS grupos de modificadores a la vez (Task 8, selector de
++ * mostrador). `groupIds: []` (producto sin grupos, o diálogo cerrado) no
++ * consulta. Ver {@link fetchModifierOptionsForGroups}.
++ */
++export function useModifierOptionsForGroups(salonId: string, groupIds: string[]) {
++  const key = [...groupIds].sort().join(",");
++  return useQuery({
++    queryKey: [...menuKeys.all(salonId), "modifierOptionsForGroups", key] as const,
++    queryFn: () => fetchModifierOptionsForGroups(salonId, groupIds),
++    enabled: groupIds.length > 0,
++  });
++}
++
+ /** Invalida todas las queries de carta del salón (categorías, estaciones, productos, grupos). */
+ function useInvalidateMenu(salonId: string) {
+   const queryClient = useQueryClient();
+   return () => queryClient.invalidateQueries({ queryKey: menuKeys.all(salonId) });
+ }
+diff --git a/src/hooks/use-orders.ts b/src/hooks/use-orders.ts
+new file mode 100644
+index 0000000..08fea0f
+--- /dev/null
++++ b/src/hooks/use-orders.ts
+@@ -0,0 +1,115 @@
++"use client";
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++
++import {
++  addOrderItems,
++  createOrder,
++  sendOrderToStations,
++  settleOrder,
++  setOrderItemStatus,
++  voidOrderItem,
++} from "@/app/(dashboard)/mostrador/actions";
++import { fetchOpenOrders, fetchOrderItems, orderKeys } from "@/lib/queries/orders";
++import type {
++  AddOrderItemsInput,
++  CreateOrderInput,
++  SendOrderToStationsInput,
++  SettleOrderInput,
++  SetOrderItemStatusInput,
++  VoidOrderItemInput,
++} from "@/lib/validations/order";
++import type { Order, OrderItem } from "@/types/database";
++
++export function useOpenOrders(salonId: string) {
++  return useQuery({ queryKey: orderKeys.open(salonId), queryFn: () => fetchOpenOrders(salonId) });
++}
++export function useOrderItems(salonId: string, orderId: string | null) {
++  return useQuery({
++    queryKey: orderKeys.detail(salonId, orderId ?? "none"),
++    queryFn: () => fetchOrderItems(salonId, orderId as string),
++    enabled: orderId !== null,
++  });
++}
++
++/** Invalida todas las queries de pedidos del salón (abiertos + detalle de cada uno). */
++function useInvalidateOrders(salonId: string) {
++  const queryClient = useQueryClient();
++  return () => queryClient.invalidateQueries({ queryKey: orderKeys.all(salonId) });
++}
++
++export function useCreateOrder(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: CreateOrderInput): Promise<Order> => {
++      const result = await createOrder(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useAddOrderItems(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: AddOrderItemsInput): Promise<{ added: number }> => {
++      const result = await addOrderItems(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useVoidOrderItem(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: VoidOrderItemInput): Promise<OrderItem> => {
++      const result = await voidOrderItem(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useSendOrderToStations(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: SendOrderToStationsInput): Promise<{ sent: number }> => {
++      const result = await sendOrderToStations(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++export function useSetOrderItemStatus(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: SetOrderItemStatusInput): Promise<OrderItem> => {
++      const result = await setOrderItemStatus(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
++
++/**
++ * Cobra un pedido de mostrador (Task 6): materializa el `pos_sale` vía
++ * `settleOrder`. Invalida los pedidos abiertos del salón al terminar —el
++ * pedido cobrado deja de aparecer entre los abiertos (`status: "cobrada"`).
++ */
++export function useSettleOrder(salonId: string) {
++  const invalidate = useInvalidateOrders(salonId);
++  return useMutation({
++    mutationFn: async (input: SettleOrderInput): Promise<{ saleId: string; totalCents: number }> => {
++      const result = await settleOrder(input);
++      if (!result.ok) throw new Error(result.error);
++      return result.data;
++    },
++    onSuccess: () => void invalidate(),
++  });
++}
+diff --git a/src/lib/queries/menu.ts b/src/lib/queries/menu.ts
+index b218c85..37f2a34 100644
+--- a/src/lib/queries/menu.ts
++++ b/src/lib/queries/menu.ts
+@@ -97,5 +97,50 @@ export async function fetchProductModifierGroups(
+     .eq("salon_id", salonId).eq("product_id", productId)
+     .order("sort_order", { ascending: true });
+   if (error !== null) throw new Error(error.message);
+   return data.map((row) => row.group_id);
+ }
++
++/** Un enlace producto↔grupo de modificadores (fila cruda de `product_modifier_groups`). */
++export interface ProductModifierGroupLink {
++  product_id: string;
++  group_id: string;
++}
++
++/**
++ * TODAS las asignaciones producto↔grupo del salón en una sola consulta (Task 8,
++ * mostrador). A diferencia de {@link fetchProductModifierGroups} (un producto,
++ * para precargar su formulario de edición), esta trae el salón entero de una
++ * vez: el mostrador necesita decidir, para CADA botón de la rejilla, si el
++ * producto tiene grupos asignados (abre el selector de modificadores) o no
++ * (se añade directo) — una consulta por producto no escalaría.
++ */
++export async function fetchAllProductModifierGroups(
++  salonId: string,
++): Promise<ProductModifierGroupLink[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("product_modifier_groups").select("product_id,group_id")
++    .eq("salon_id", salonId);
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++/**
++ * Opciones (`modifiers`) de VARIOS grupos a la vez — para el selector de
++ * modificadores del mostrador (Task 8), que muestra todos los grupos
++ * asignados a un producto de golpe. A diferencia de {@link fetchModifierOptions}
++ * (un grupo, para precargar el formulario de edición de carta), agrupar la
++ * consulta evita un hook por cada grupo del producto.
++ */
++export async function fetchModifierOptionsForGroups(
++  salonId: string,
++  groupIds: string[],
++): Promise<Modifier[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("modifiers").select("*")
++    .eq("salon_id", salonId).in("group_id", groupIds)
++    .order("sort_order", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
+diff --git a/src/lib/queries/orders.ts b/src/lib/queries/orders.ts
+new file mode 100644
+index 0000000..86bf80e
+--- /dev/null
++++ b/src/lib/queries/orders.ts
+@@ -0,0 +1,28 @@
++import { createClient } from "@/lib/supabase/client";
++import type { Order, OrderItem } from "@/types/database";
++
++export const orderKeys = {
++  all: (salonId: string) => ["orders", salonId] as const,
++  open: (salonId: string) => [...orderKeys.all(salonId), "open"] as const,
++  detail: (salonId: string, orderId: string) => [...orderKeys.all(salonId), "detail", orderId] as const,
++};
++
++export async function fetchOpenOrders(salonId: string): Promise<Order[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("orders").select("*")
++    .eq("salon_id", salonId).eq("status", "abierta")
++    .order("created_at", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
++
++export async function fetchOrderItems(salonId: string, orderId: string): Promise<OrderItem[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("order_items").select("*")
++    .eq("salon_id", salonId).eq("order_id", orderId)
++    .order("created_at", { ascending: true });
++  if (error !== null) throw new Error(error.message);
++  return data;
++}
+diff --git a/src/lib/restauracion/kitchen-comanda.ts b/src/lib/restauracion/kitchen-comanda.ts
+new file mode 100644
+index 0000000..ae44bfb
+--- /dev/null
++++ b/src/lib/restauracion/kitchen-comanda.ts
+@@ -0,0 +1,281 @@
++/**
++ * Comanda de cocina imprimible (HTML autónomo) para impresora TÉRMICA de rollo.
++ *
++ * ── Qué produce ──────────────────────────────────────────────────────────────
++ * A partir de un pedido de venta de mostrador (restauración) genera una página
++ * HTML COMPLETA y AUTÓNOMA — estilos en línea, sin recursos externos — dimensionada
++ * para un rollo térmico de 58 o 80 mm. Es la comanda que va a la estación de
++ * preparación (cocina, barra…), NO el ticket de compra: por eso NO lleva precios
++ * ni importes, solo lo que hay que preparar.
++ *
++ * Incluye: número de pedido en tamaño grande (para localizarlo de un vistazo),
++ * la estación destino, la etiqueta/mesa (si la hay), fecha-hora de emisión y las
++ * líneas `cantidad × nombre` con sus modificadores debajo.
++ *
++ * ── Por qué "documento térmico" propio (y no reutilizar el ticket) ────────────
++ * Mismo patrón que `@/lib/tpv/ticket-document`: un documento HTML propio con su
++ * `@page { size: 58mm/80mm }`, aislado del tamaño de página de la app, impreso
++ * mediante iframe oculto + `window.print()` (ver `printKitchenComanda`).
++ *
++ * Es una función PURA: no lee la BD ni el reloj (la fecha llega como `Date`), de
++ * modo que es determinista y testeable.
++ */
++
++/** Una línea de la comanda: lo que hay que preparar, sin precio. */
++export interface KitchenComandaLine {
++  /** Cantidad de unidades a preparar. */
++  qty: number;
++  /** Nombre del producto/plato. */
++  name: string;
++  /** Modificadores aplicados a la línea (p. ej. "Extra bacon", "Sin cebolla"). */
++  modifiers: string[];
++}
++
++/** Datos normalizados de un pedido, listos para imprimir su comanda de cocina. */
++export interface KitchenComandaData {
++  /** Número de pedido (se imprime en tamaño grande). */
++  orderNumber: number;
++  /** Estación destino de la comanda (p. ej. "Cocina", "Barra"). */
++  stationName: string;
++  /** Etiqueta o mesa asociada al pedido, o `null` si no aplica. */
++  label: string | null;
++  /** Fecha-hora de emisión de la comanda. */
++  issuedAt: Date;
++  /** Líneas a preparar. */
++  lines: KitchenComandaLine[];
++}
++
++/** Anchos de rollo térmico soportados (mm). */
++export type KitchenComandaRollWidth = 58 | 80;
++
++/** Opciones de render de la comanda. */
++export interface KitchenComandaOptions {
++  /** Ancho del rollo en mm. Por defecto 80. */
++  rollWidthMm?: KitchenComandaRollWidth;
++  /** Zona horaria para la fecha. Por defecto Europe/Madrid. */
++  timezone?: string;
++}
++
++/** Escapa texto para insertarlo con seguridad en HTML. */
++function escapeHtml(value: string): string {
++  return value
++    .replace(/&/g, "&amp;")
++    .replace(/</g, "&lt;")
++    .replace(/>/g, "&gt;")
++    .replace(/"/g, "&quot;")
++    .replace(/'/g, "&#39;");
++}
++
++/**
++ * Hora en la zona indicada, formato 24h `HH:MM` (dos puntos, no coma: el
++ * separador decimal es-ES usa coma y la comanda no debe llevar ningún número
++ * con pinta de importe).
++ */
++function formatTime(date: Date, timezone: string): string {
++  return new Intl.DateTimeFormat("es-ES", {
++    timeZone: timezone,
++    hour: "2-digit",
++    minute: "2-digit",
++    hourCycle: "h23",
++  }).format(date);
++}
++
++/** Fecha (sin hora) en la zona indicada, formato dd/mm/aaaa. */
++function formatDate(date: Date, timezone: string): string {
++  return new Intl.DateTimeFormat("es-ES", {
++    timeZone: timezone,
++    day: "2-digit",
++    month: "2-digit",
++    year: "numeric",
++  }).format(date);
++}
++
++/** Fija el ancho del rollo a uno de los soportados (defensa ante valores raros). */
++function normalizeRollWidth(width: number | undefined): KitchenComandaRollWidth {
++  return width === 58 ? 58 : 80;
++}
++
++/** Los modificadores de una línea, uno por fila, indentados debajo del nombre. */
++function renderModifiers(modifiers: string[]): string {
++  if (modifiers.length === 0) return "";
++  return `
++        <div class="modifiers">
++          ${modifiers.map((modifier) => `<div class="modifier">— ${escapeHtml(modifier)}</div>`).join("")}
++        </div>`;
++}
++
++/** Las líneas de la comanda: `cant × nombre` y, debajo, sus modificadores. */
++function renderLines(lines: KitchenComandaLine[]): string {
++  return lines
++    .map(
++      (line) => `
++        <div class="item">
++          <div class="item-name"><span class="qty">${line.qty}×</span> ${escapeHtml(line.name)}</div>
++          ${renderModifiers(line.modifiers)}
++        </div>`,
++    )
++    .join("");
++}
++
++/**
++ * Construye el documento HTML imprimible de la comanda de cocina.
++ *
++ * SIN precios ni importes: es una comanda de preparación, no un ticket de venta.
++ * Todo el texto dinámico se escapa para evitar inyección de HTML.
++ */
++export function buildKitchenComandaHtml(
++  data: KitchenComandaData,
++  options: KitchenComandaOptions = {},
++): string {
++  const rollWidthMm = normalizeRollWidth(options.rollWidthMm);
++  const timezone = options.timezone ?? "Europe/Madrid";
++
++  // Tipografía y padding se ajustan al ancho de rollo: 58 mm aprieta un poco más.
++  const baseFontPx = rollWidthMm === 58 ? 11 : 12.5;
++
++  const labelBlock =
++    data.label !== null && data.label.trim() !== ""
++      ? `<div class="label">${escapeHtml(data.label)}</div>`
++      : "";
++
++  const title = `Comanda ${data.orderNumber}`;
++
++  return `<!DOCTYPE html>
++<html lang="es">
++<head>
++<meta charset="utf-8" />
++<meta name="viewport" content="width=device-width, initial-scale=1" />
++<title>${escapeHtml(title)}</title>
++<style>
++  * { box-sizing: border-box; }
++  html, body { margin: 0; padding: 0; background: #f1f5f9; }
++  body {
++    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
++    color: #000;
++    font-size: ${baseFontPx}px;
++    line-height: 1.35;
++  }
++  .comanda {
++    width: ${rollWidthMm}mm;
++    margin: 16px auto;
++    padding: 4mm 3mm 5mm;
++    background: #fff;
++    color: #000;
++    /* Sombra solo para la vista en pantalla; se quita al imprimir. */
++    box-shadow: 0 1px 3px rgb(0 0 0 / 0.12), 0 8px 24px rgb(0 0 0 / 0.08);
++  }
++  .center { text-align: center; }
++  .muted { color: #333; }
++
++  header.head { text-align: center; margin-bottom: 6px; }
++  .doc-kind { letter-spacing: 0.18em; text-transform: uppercase; font-size: ${baseFontPx - 1}px; }
++  .order-number {
++    font-size: ${baseFontPx + 22}px; font-weight: 800; line-height: 1;
++    margin: 4px 0;
++  }
++  .station {
++    font-size: ${baseFontPx + 4}px; font-weight: 700;
++    text-transform: uppercase; letter-spacing: 0.06em;
++  }
++  .label { margin-top: 2px; font-size: ${baseFontPx + 1}px; font-weight: 700; }
++  .meta { margin-top: 4px; font-size: ${baseFontPx - 1}px; }
++
++  hr.rule { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
++
++  .item + .item { margin-top: 8px; }
++  .item-name { font-weight: 700; overflow-wrap: anywhere; font-size: ${baseFontPx + 1.5}px; }
++  .qty { font-weight: 800; }
++  .modifiers { margin-top: 2px; padding-left: 10px; }
++  .modifier { overflow-wrap: anywhere; }
++
++  footer.foot { margin-top: 10px; text-align: center; }
++  .foot .flourish { letter-spacing: 0.35em; }
++
++  @media print {
++    html, body { background: #fff; }
++    .comanda { width: auto; margin: 0; padding: 0 1mm; box-shadow: none; }
++  }
++  @page { size: ${rollWidthMm}mm auto; margin: 3mm 0; }
++</style>
++</head>
++<body>
++  <main class="comanda">
++    <header class="head">
++      <div class="doc-kind">Comanda</div>
++      <div class="order-number">${data.orderNumber}</div>
++      <div class="station">${escapeHtml(data.stationName)}</div>
++      ${labelBlock}
++      <div class="meta muted">${formatDate(data.issuedAt, timezone)} · ${formatTime(data.issuedAt, timezone)}</div>
++    </header>
++
++    <hr class="rule" />
++
++    <section class="items">
++      ${renderLines(data.lines)}
++    </section>
++
++    <footer class="foot">
++      <div class="flourish muted">* * *</div>
++    </footer>
++  </main>
++</body>
++</html>`;
++}
++
++/**
++ * Imprime la comanda: genera el documento HTML térmico y lo lanza a la impresora
++ * del sistema mediante un iframe oculto. No-op en servidor (sin `document`).
++ *
++ * Copia la estructura de `printTicketDocument` (`@/app/(dashboard)/tpv/print-ticket`):
++ * el `srcdoc` se fija ANTES de insertar el iframe para que su primer evento `load`
++ * sea el de la comanda (no el `about:blank` inicial), y el iframe se retira tras
++ * `afterprint` (con un respaldo por timeout para navegadores que no lo emiten).
++ */
++export function printKitchenComanda(
++  data: KitchenComandaData,
++  options: KitchenComandaOptions = {},
++): void {
++  if (typeof document === "undefined") return;
++
++  const html = buildKitchenComandaHtml(data, options);
++
++  const iframe = document.createElement("iframe");
++  iframe.setAttribute("aria-hidden", "true");
++  iframe.title = "Comanda de cocina";
++  iframe.style.position = "fixed";
++  iframe.style.right = "0";
++  iframe.style.bottom = "0";
++  iframe.style.width = "0";
++  iframe.style.height = "0";
++  iframe.style.border = "0";
++  iframe.style.visibility = "hidden";
++
++  let done = false;
++  const cleanup = (): void => {
++    if (done) return;
++    done = true;
++    // Aplaza la retirada para no cancelar el diálogo de impresión aún abierto.
++    window.setTimeout(() => iframe.remove(), 0);
++  };
++
++  iframe.onload = (): void => {
++    const frameWindow = iframe.contentWindow;
++    if (frameWindow === null) {
++      cleanup();
++      return;
++    }
++    frameWindow.onafterprint = cleanup;
++    try {
++      frameWindow.focus();
++      frameWindow.print();
++    } catch {
++      cleanup();
++      return;
++    }
++    // Respaldo: algunos navegadores no emiten `afterprint`.
++    window.setTimeout(cleanup, 60_000);
++  };
++
++  iframe.srcdoc = html;
++  document.body.appendChild(iframe);
++}
+diff --git a/src/lib/restauracion/order.ts b/src/lib/restauracion/order.ts
+new file mode 100644
+index 0000000..c8d4e28
+--- /dev/null
++++ b/src/lib/restauracion/order.ts
+@@ -0,0 +1,71 @@
++import { computeSaleTotals, type SaleTotals } from "@/lib/payments";
++import { effectiveUnitPriceCents, expandCombo, type ComboPiece } from "@/lib/restauracion/menu";
++
++export interface MenuSelection {
++  productId: string;
++  name: string;
++  basePriceCents: number;
++  vatRate: number;
++  stationId: string | null;
++  isCombo: boolean;
++  qty: number;
++  modifiers: Array<{ name: string; priceDeltaCents: number }>;
++  comboPieces: ComboPiece[];
++}
++
++export interface OrderItemDraft {
++  id: string;
++  productId: string;
++  qty: number;
++  unitPriceCents: number;
++  vatRate: number;
++  stationId: string | null;
++  comboGroup: string | null;
++  modifiersSnapshot: Array<{ name: string; priceDeltaCents: number }>;
++}
++
++export function buildOrderItemDrafts(sel: MenuSelection, newId: () => string): OrderItemDraft[] {
++  const headPrice = effectiveUnitPriceCents(sel.basePriceCents, sel.modifiers);
++  if (!sel.isCombo || sel.comboPieces.length === 0) {
++    return [{
++      id: newId(), productId: sel.productId, qty: sel.qty, unitPriceCents: headPrice,
++      vatRate: sel.vatRate, stationId: sel.stationId, comboGroup: null, modifiersSnapshot: sel.modifiers,
++    }];
++  }
++  const comboGroup = newId();
++  const head: OrderItemDraft = {
++    id: newId(), productId: sel.productId, qty: sel.qty, unitPriceCents: headPrice,
++    vatRate: sel.vatRate, stationId: sel.stationId, comboGroup, modifiersSnapshot: sel.modifiers,
++  };
++  const pieces = expandCombo(sel.qty, sel.comboPieces).map((line): OrderItemDraft => ({
++    id: newId(), productId: line.productId, qty: line.qty, unitPriceCents: 0,
++    vatRate: sel.vatRate, stationId: line.stationId, comboGroup, modifiersSnapshot: [],
++  }));
++  return [head, ...pieces];
++}
++
++export interface SettleLineInput {
++  description: string;
++  qty: number;
++  unitPriceCents: number;
++  vatRate: number;
++}
++
++export function buildSettleLines(
++  items: Array<{ productName: string; qty: number; unitPriceCents: number; vatRate: number;
++                 modifiersSnapshot: Array<{ name: string }> }>,
++): SettleLineInput[] {
++  return items.map((it) => {
++    const mods = it.modifiersSnapshot.map((m) => m.name).join(", ");
++    return {
++      description: mods.length > 0 ? `${it.productName} (${mods})` : it.productName,
++      qty: it.qty, unitPriceCents: it.unitPriceCents, vatRate: it.vatRate,
++    };
++  });
++}
++
++export function settleTotals(lines: SettleLineInput[]): SaleTotals {
++  return computeSaleTotals(lines.map((l) => ({
++    quantity: l.qty, unitPriceCents: l.unitPriceCents, vatRate: l.vatRate,
++  })));
++}
+diff --git a/src/lib/validations/order.ts b/src/lib/validations/order.ts
+new file mode 100644
+index 0000000..7be07ea
+--- /dev/null
++++ b/src/lib/validations/order.ts
+@@ -0,0 +1,102 @@
++import { z } from "zod";
++
++import { paymentMethodEnum } from "@/lib/validations/sale";
++
++/**
++ * Validaciones de las server actions de pedido de mostrador (restauración,
++ * Task 4). Los nombres de campo replican `OrderItemDraft`
++ * (lib/restauracion/order.ts, lógica pura de Task 2) para que el payload que
++ * construye el cliente pase directo por `safeParse` sin mapeo intermedio.
++ */
++
++export const orderItemDraftSchema = z.object({
++  id: z.string().uuid(),
++  productId: z.string().uuid(),
++  qty: z.number().int().positive(),
++  unitPriceCents: z.number().int().min(0),
++  vatRate: z.number().min(0).max(100).default(10),
++  stationId: z.string().uuid().nullable(),
++  comboGroup: z.string().nullable(),
++  modifiersSnapshot: z.array(z.object({ name: z.string(), priceDeltaCents: z.number().int() })).default([]),
++});
++export type OrderItemDraftInput = z.infer<typeof orderItemDraftSchema>;
++
++export const createOrderSchema = z.object({
++  id: z.string().uuid(),
++  label: z.string().trim().max(120).nullable(),
++  idempotencyKey: z.string().max(200).nullable(),
++});
++export type CreateOrderInput = z.infer<typeof createOrderSchema>;
++
++export const addOrderItemsSchema = z.object({
++  orderId: z.string().uuid(),
++  items: z.array(orderItemDraftSchema).min(1),
++});
++export type AddOrderItemsInput = z.infer<typeof addOrderItemsSchema>;
++
++export const voidOrderItemSchema = z.object({
++  orderId: z.string().uuid(),
++  itemId: z.string().uuid(),
++  reason: z.string().trim().min(1).max(200),
++});
++export type VoidOrderItemInput = z.infer<typeof voidOrderItemSchema>;
++
++/** Espejo de `OrderItemStatus` (types/database.ts / enum public.order_item_status). */
++export const orderItemStatusEnum = z.enum([
++  "pendiente",
++  "enviado",
++  "preparando",
++  "listo",
++  "entregado",
++  "anulado",
++]);
++
++export const sendOrderToStationsSchema = z.object({
++  orderId: z.string().uuid(),
++});
++export type SendOrderToStationsInput = z.infer<typeof sendOrderToStationsSchema>;
++
++/**
++ * `from`/`to` acotan la transición que la UI espera aplicar; la action
++ * (`setOrderItemStatus`) es quien la hace SEGURA de verdad al condicionar el
++ * UPDATE por `status = from` en la propia query (ver `mostrador/actions.ts`).
++ */
++export const setOrderItemStatusSchema = z.object({
++  itemId: z.string().uuid(),
++  from: orderItemStatusEnum,
++  to: orderItemStatusEnum,
++});
++export type SetOrderItemStatusInput = z.infer<typeof setOrderItemStatusSchema>;
++
++/**
++ * Un medio de pago aplicado al cobro del pedido (Task 6, `settleOrder`).
++ * A diferencia de `tenderSchema` (lib/validations/sale.ts, TPV: `amount` llega
++ * como texto en euros desde un `<input>`), aquí `amountCents` ya llega como
++ * entero — el importe lo calcula el propio flujo de cobro de mostrador a
++ * partir de `settleTotals`, no lo teclea el cajero línea a línea. `method`
++ * reutiliza el mismo enum (`paymentMethodEnum`) que el TPV: es el mismo
++ * catálogo `pos_payment_method` de la BD, no tiene sentido duplicarlo.
++ */
++export const settleTenderSchema = z.object({
++  method: paymentMethodEnum,
++  /** Un tender de 0 no tiene sentido (no es un medio de pago real); debe ser > 0. */
++  amountCents: z.number().int().positive(),
++  /** Método concreto del catálogo del salón (opcional, para informes); `null` si no se eligió uno. */
++  paymentMethodId: z.string().uuid().nullable(),
++  reference: z.string().trim().max(120).optional(),
++});
++export type SettleTenderInput = z.infer<typeof settleTenderSchema>;
++
++/**
++ * Payload de `settleOrder` (Task 6): liquida un pedido de mostrador,
++ * materializando un `pos_sale` (ver `mostrador/actions.ts`). `sendPending`
++ * cubre el flujo "pagar primero, comanda después" — si es `true`, las líneas
++ * `pendiente` del pedido se mandan a cocina/barra tras cobrar (mismo efecto
++ * que `sendOrderToStations`, pero encadenado al cobro).
++ */
++export const settleOrderSchema = z.object({
++  orderId: z.string().uuid(),
++  tenders: z.array(settleTenderSchema).min(1, "Selecciona al menos un medio de pago"),
++  sendPending: z.boolean(),
++});
++export type SettleOrderInput = z.infer<typeof settleOrderSchema>;
+diff --git a/src/tests/helpers/supabase-mock.ts b/src/tests/helpers/supabase-mock.ts
+index b0bfa2e..b90cb5d 100644
+--- a/src/tests/helpers/supabase-mock.ts
++++ b/src/tests/helpers/supabase-mock.ts
+@@ -20,10 +20,17 @@ export interface MockConfig {
+   onWrite?: (
+     op: "insert" | "update" | "delete",
+     table: string,
+     payload: unknown,
+   ) => TableResult;
++  /**
++   * Usuario de `supabase.auth.getUser()` (Task 6, `settleOrder`: necesita
++   * `user.id` para `pos_sales.sold_by`, igual que `createSale`). Por defecto
++   * resuelve a un usuario fijo — los tests que no ejercitan ninguna ruta con
++   * `auth.getUser()` pueden ignorar esta opción sin más.
++   */
++  auth?: { user: { id: string } | null; error?: { message: string } | null };
+ }
+ 
+ export function makeSupabaseMock(config: MockConfig) {
+   function builder(table: string) {
+     let pending: { op: "insert" | "update" | "delete"; payload: unknown } | null =
+@@ -52,10 +59,17 @@ export function makeSupabaseMock(config: MockConfig) {
+ 
+     const b = {
+       select: () => b,
+       eq: () => b,
+       in: () => b,
++      // `is`/`neq` (Task 6, `settleOrder`: filtra `order_items` no anulados vía
++      // `.is("void_of_item_id", null).neq("status","anulado")`) son, como el
++      // resto de filtros de este doble, no-ops encadenables: el mock no filtra
++      // de verdad — `tables[table].data` ya llega preparado por el test —, solo
++      // necesitan EXISTIR para que la cadena de filtros no reviente.
++      is: () => b,
++      neq: () => b,
+       order: () => b,
+       limit: () => b,
+       insert: (payload: unknown) => {
+         pending = { op: "insert", payload };
+         return b;
+@@ -74,7 +88,17 @@ export function makeSupabaseMock(config: MockConfig) {
+         onFulfilled(resolveList()),
+     };
+     return b;
+   }
+ 
+-  return { from: (table: string) => builder(table) };
++  return {
++    from: (table: string) => builder(table),
++    // `auth.getUser()` (Task 6, `settleOrder`): ver `MockConfig.auth` arriba.
++    auth: {
++      getUser: () =>
++        Promise.resolve({
++          data: { user: config.auth?.user ?? { id: "mock-user" } },
++          error: config.auth?.error ?? null,
++        }),
++    },
++  };
+ }
+diff --git a/src/tests/integration/restauracion-order-actions.test.ts b/src/tests/integration/restauracion-order-actions.test.ts
+new file mode 100644
+index 0000000..e889c8b
+--- /dev/null
++++ b/src/tests/integration/restauracion-order-actions.test.ts
+@@ -0,0 +1,151 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++const holder = vi.hoisted(() => ({ supabase: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({ getActiveSalonId: () => Promise.resolve("SALON") }));
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++import { createOrder, addOrderItems, voidOrderItem } from "@/app/(dashboard)/mostrador/actions";
++
++beforeEach(() => { holder.supabase = null; });
++
++// `createOrderSchema`/`addOrderItemsSchema` exigen `.uuid()` en id/orderId/
++// itemId/productId (transcritos verbatim del brief) — los ids de ejemplo del
++// brief ("O1", "OX", "i1"...) no son UUIDs válidos y no pasarían `safeParse`.
++// Se usan uuids reales aquí, con la MISMA estructura/aserciones que el brief.
++const ORDER_ID_1 = "11111111-1111-4111-8111-111111111111";
++const ORDER_ID_2 = "22222222-2222-4222-8222-222222222222";
++const ORDER_ID_X = "33333333-3333-4333-8333-333333333333";
++const ITEM_ID_1 = "44444444-4444-4444-8444-444444444444";
++const PRODUCT_ID_1 = "55555555-5555-4555-8555-555555555555";
++
++describe("order actions", () => {
++  it("createOrder inserta con id de cliente", async () => {
++    holder.supabase = makeSupabaseMock({
++      tables: { orders: { data: [] } },
++      onWrite: (op: string, table: string) =>
++        op === "insert" && table === "orders"
++          ? { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "abierta" }] } : {},
++    });
++    const r = await createOrder({ id: ORDER_ID_1, label: null, idempotencyKey: "k1" });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.id).toBe(ORDER_ID_1);
++  });
++
++  it("createOrder es idempotente por idempotencyKey", async () => {
++    holder.supabase = makeSupabaseMock({
++      tables: { orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", idempotency_key: "k1", status: "abierta" }] } },
++    });
++    const r = await createOrder({ id: ORDER_ID_2, label: null, idempotencyKey: "k1" });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.id).toBe(ORDER_ID_1);
++  });
++
++  it("addOrderItems rechaza pedido de otro salón / inexistente", async () => {
++    holder.supabase = makeSupabaseMock({ tables: { orders: { data: [] } } });
++    const r = await addOrderItems({ orderId: ORDER_ID_X, items: [
++      { id: ITEM_ID_1, productId: PRODUCT_ID_1, qty: 1, unitPriceCents: 500, vatRate: 10, stationId: null, comboGroup: null, modifiersSnapshot: [] },
++    ]});
++    expect(r.ok).toBe(false);
++  });
++
++  // Ronda de fix (Important #2): la idempotencia de `createOrder` ya no
++  // depende solo del select previo (fast-path) — si el INSERT choca con el
++  // índice único `orders_idempotency_key` (23505, condición de carrera entre
++  // dos requests con la misma key), se relee la fila ganadora y se devuelve.
++  //
++  // `makeSupabaseMock` resuelve `select` leyendo el array de `tables.orders`
++  // en el momento de la llamada (no una foto fija) — así que para simular la
++  // carrera de verdad (fast-path NO ve nada todavía, pero el re-fetch
++  // posterior al 23505 SÍ) se arranca con el array vacío y es el propio
++  // `onWrite` del insert quien "aterriza" la fila ganadora en ese array justo
++  // antes de devolver el error, imitando al otro request que gana la carrera
++  // entre nuestro select y nuestro insert.
++  it("createOrder resuelve la fila existente si el insert choca por idempotencyKey (23505)", async () => {
++    const ordersData: unknown[] = [];
++    holder.supabase = makeSupabaseMock({
++      tables: { orders: { data: ordersData } },
++      onWrite: (op: string, table: string) => {
++        if (op === "insert" && table === "orders") {
++          ordersData.push({ id: ORDER_ID_1, salon_id: "SALON", idempotency_key: "k1", status: "abierta" });
++          return { error: { code: "23505", message: "duplicate key value violates unique constraint" } };
++        }
++        return {};
++      },
++    });
++    const r = await createOrder({ id: ORDER_ID_2, label: null, idempotencyKey: "k1" });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.id).toBe(ORDER_ID_1);
++  });
++
++  // Ronda de fix (Important #1): voidOrderItem debe gatear por estado del
++  // pedido igual que addOrderItems — no se puede anular una línea de un
++  // pedido que ya no está abierta (p.ej. cobrada).
++  it("voidOrderItem rechaza si el pedido no está abierta", async () => {
++    holder.supabase = makeSupabaseMock({
++      tables: { orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "cobrada" }] } },
++    });
++    const r = await voidOrderItem({ orderId: ORDER_ID_1, itemId: ITEM_ID_1, reason: "pedido equivocado" });
++    expect(r.ok).toBe(false);
++  });
++
++  // Happy path que no existía todavía: pedido abierta + ítem pendiente →
++  // (1) UPDATE del original a status:"anulado" (excluye del cobro futuro de
++  // settleOrder, que filtrará status != 'anulado') + (2) INSERT de la fila de
++  // auditoría append-only. `onWrite` es un `vi.fn` para poder comprobar que
++  // el UPDATE se emitió de verdad (no solo confiar en el resultado final).
++  it("voidOrderItem marca el original como anulado (UPDATE) e inserta la fila de anulación (INSERT)", async () => {
++    const onWrite = vi.fn((op: string, table: string) => {
++      if (op === "update" && table === "order_items") return { data: null, error: null };
++      if (op === "insert" && table === "order_items") {
++        return { data: [{
++          id: "66666666-6666-4666-8666-666666666666", salon_id: "SALON", order_id: ORDER_ID_1,
++          product_id: PRODUCT_ID_1, qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null,
++          status: "anulado", void_of_item_id: ITEM_ID_1, void_reason: "pedido equivocado",
++        }] };
++      }
++      return {};
++    });
++    holder.supabase = makeSupabaseMock({
++      tables: {
++        orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "abierta" }] },
++        order_items: { data: [{
++          id: ITEM_ID_1, salon_id: "SALON", order_id: ORDER_ID_1, product_id: PRODUCT_ID_1,
++          qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null, status: "pendiente",
++          combo_group: null, modifiers_snapshot: [], void_of_item_id: null, void_reason: null,
++        }] },
++      },
++      onWrite,
++    });
++    const r = await voidOrderItem({ orderId: ORDER_ID_1, itemId: ITEM_ID_1, reason: "pedido equivocado" });
++    expect(r.ok).toBe(true);
++    if (r.ok) {
++      expect(r.data.status).toBe("anulado");
++      expect(r.data.void_of_item_id).toBe(ITEM_ID_1);
++    }
++    // El original se marcó anulado — esto es lo que lo excluye del cobro.
++    expect(onWrite).toHaveBeenCalledWith(
++      "update", "order_items", { status: "anulado", void_reason: "pedido equivocado" },
++    );
++    // Y sigue existiendo la fila de auditoría append-only.
++    expect(onWrite).toHaveBeenCalledWith(
++      "insert", "order_items", expect.objectContaining({ void_of_item_id: ITEM_ID_1 }),
++    );
++  });
++
++  // Ronda de fix (Minor #3): no tiene sentido anular una anulación.
++  it("voidOrderItem rechaza anular una línea que ya está anulada", async () => {
++    holder.supabase = makeSupabaseMock({
++      tables: {
++        orders: { data: [{ id: ORDER_ID_1, salon_id: "SALON", status: "abierta" }] },
++        order_items: { data: [{
++          id: ITEM_ID_1, salon_id: "SALON", order_id: ORDER_ID_1, product_id: PRODUCT_ID_1,
++          qty: 1, unit_price_cents: 500, vat_rate: 10, station_id: null, status: "anulado",
++          combo_group: null, modifiers_snapshot: [], void_of_item_id: "77777777-7777-4777-8777-777777777777",
++          void_reason: "ya anulada antes",
++        }] },
++      },
++    });
++    const r = await voidOrderItem({ orderId: ORDER_ID_1, itemId: ITEM_ID_1, reason: "otra vez" });
++    expect(r.ok).toBe(false);
++  });
++});
+diff --git a/src/tests/integration/restauracion-order-status.test.ts b/src/tests/integration/restauracion-order-status.test.ts
+new file mode 100644
+index 0000000..9223f1a
+--- /dev/null
++++ b/src/tests/integration/restauracion-order-status.test.ts
+@@ -0,0 +1,56 @@
++import { beforeEach, describe, expect, it, vi } from "vitest";
++const holder = vi.hoisted(() => ({ supabase: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({ getActiveSalonId: () => Promise.resolve("SALON") }));
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++import { sendOrderToStations, setOrderItemStatus } from "@/app/(dashboard)/mostrador/actions";
++
++beforeEach(() => { holder.supabase = null; });
++
++// Mismos uuids que `restauracion-order-actions.test.ts` (los ids de ejemplo
++// del brief, "O1"/"i1", no son UUIDs válidos y no pasarían `safeParse` —
++// `sendOrderToStationsSchema`/`setOrderItemStatusSchema` exigen `.uuid()`).
++const ORDER_ID_1 = "11111111-1111-4111-8111-111111111111";
++const ITEM_ID_1 = "44444444-4444-4444-8444-444444444444";
++
++describe("order status actions", () => {
++  it("setOrderItemStatus da CONFLICTO si el estado esperado ya cambió", async () => {
++    holder.supabase = makeSupabaseMock({ onWrite: (op: string) => op === "update" ? { data: [] } : {} });
++    const r = await setOrderItemStatus({ itemId: ITEM_ID_1, from: "enviado", to: "listo" });
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error.toLowerCase()).toContain("conflicto");
++  });
++
++  it("setOrderItemStatus transiciona el ítem cuando el estado esperado coincide", async () => {
++    const onWrite = vi.fn((op: string) =>
++      op === "update"
++        ? { data: [{ id: ITEM_ID_1, salon_id: "SALON", order_id: ORDER_ID_1, status: "listo" }] }
++        : {},
++    );
++    holder.supabase = makeSupabaseMock({ onWrite });
++    const r = await setOrderItemStatus({ itemId: ITEM_ID_1, from: "enviado", to: "listo" });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.status).toBe("listo");
++    expect(onWrite).toHaveBeenCalledWith("update", "order_items", { status: "listo" });
++  });
++
++  it("sendOrderToStations cuenta las líneas pendientes que pasan a enviado", async () => {
++    holder.supabase = makeSupabaseMock({
++      onWrite: (op: string) =>
++        op === "update"
++          ? { data: [{ id: ITEM_ID_1 }, { id: "88888888-8888-4888-8888-888888888888" }] }
++          : {},
++    });
++    const r = await sendOrderToStations({ orderId: ORDER_ID_1 });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.sent).toBe(2);
++  });
++
++  it("sendOrderToStations devuelve 0 si no había líneas pendientes", async () => {
++    holder.supabase = makeSupabaseMock({ onWrite: (op: string) => (op === "update" ? { data: [] } : {}) });
++    const r = await sendOrderToStations({ orderId: ORDER_ID_1 });
++    expect(r.ok).toBe(true);
++    if (r.ok) expect(r.data.sent).toBe(0);
++  });
++});
+diff --git a/src/tests/integration/restauracion-settle.test.ts b/src/tests/integration/restauracion-settle.test.ts
+new file mode 100644
+index 0000000..f8c8bc2
+--- /dev/null
++++ b/src/tests/integration/restauracion-settle.test.ts
+@@ -0,0 +1,147 @@
++/**
++ * Test de integración de `settleOrder` (Task 6 del plan de restauración): la
++ * pieza que MATERIALIZA un `pos_sale` a partir de un pedido de mostrador,
++ * replicando el patrón de `createSale` (TPV) — cabecera + líneas + pagos, con
++ * rollback manual si un paso falla (ver `mostrador/actions.ts`).
++ *
++ * Ronda de fix (Critical + Important + Minor): además del happy-path, cubre
++ * el fail-fast de cobertura de pagos (Critical) y el backstop de idempotencia
++ * en BD ante una carrera de dos requests (Important, índice único parcial
++ * `pos_sales_order_id_unique`, migración 20260810110000).
++ */
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++const holder = vi.hoisted(() => ({ supabase: null as unknown }));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++vi.mock("@/lib/supabase/server", () => ({ createClient: () => holder.supabase }));
++vi.mock("@/lib/salon", () => ({ getActiveSalonId: () => Promise.resolve("SALON") }));
++
++import { makeSupabaseMock } from "@/tests/helpers/supabase-mock";
++
++import { settleOrder } from "@/app/(dashboard)/mostrador/actions";
++
++beforeEach(() => {
++  holder.supabase = null;
++});
++
++// `settleOrderSchema` exige `.uuid()` en `orderId` (transcrito verbatim del
++// brief) — el id de ejemplo del brief ("O1") no es un uuid válido y no pasaría
++// `safeParse`. Se usa un uuid real aquí, MISMA estructura/aserciones que el
++// brief (precedente: `restauracion-order-actions.test.ts`, mismo motivo).
++const ORDER_ID = "11111111-1111-4111-8111-111111111111";
++
++/** Pedido abierto con una línea: 2 × 880c (IVA 10%) = 1760c de total. */
++function orderTables() {
++  return {
++    orders: { data: [{ id: ORDER_ID, salon_id: "SALON", status: "abierta" }] },
++    order_items: {
++      data: [
++        {
++          id: "i1",
++          salon_id: "SALON",
++          order_id: ORDER_ID,
++          product_id: "p1",
++          qty: 2,
++          unit_price_cents: 880,
++          vat_rate: 10,
++          status: "enviado",
++          void_of_item_id: null,
++          modifiers_snapshot: [],
++          products: { name: "Hamburguesa" },
++        },
++      ],
++    },
++    pos_sessions: { data: [{ id: "SESS1" }] },
++  };
++}
++
++describe("settleOrder", () => {
++  it("materializa un pos_sale desde el pedido", async () => {
++    holder.supabase = makeSupabaseMock({
++      tables: { ...orderTables(), pos_sales: { data: [] } },
++      onWrite: (op: string, table: string) =>
++        op === "insert" && table === "pos_sales" ? { data: [{ id: "S1" }] } : {},
++    });
++
++    // Tenders suman EXACTO el total (1760c) — el fix Critical de cobertura no
++    // debe romper el happy-path.
++    const r = await settleOrder({
++      orderId: ORDER_ID,
++      tenders: [{ method: "efectivo", amountCents: 1760, paymentMethodId: null }],
++      sendPending: true,
++    });
++
++    expect(r.ok).toBe(true);
++    if (r.ok) {
++      expect(r.data.saleId).toBe("S1");
++      expect(r.data.totalCents).toBe(1760);
++    }
++  });
++
++  it("(Critical) rechaza el cobro si los pagos no cubren el total, sin crear la venta", async () => {
++    let saleInsertCalled = false;
++    holder.supabase = makeSupabaseMock({
++      tables: { ...orderTables(), pos_sales: { data: [] } },
++      onWrite: (op: string, table: string) => {
++        if (op === "insert" && table === "pos_sales") saleInsertCalled = true;
++        return {};
++      },
++    });
++
++    // El total del pedido es 1760c; se paga de menos (1000c) a propósito.
++    const r = await settleOrder({
++      orderId: ORDER_ID,
++      tenders: [{ method: "efectivo", amountCents: 1000, paymentMethodId: null }],
++      sendPending: false,
++    });
++
++    expect(r.ok).toBe(false);
++    if (!r.ok) expect(r.error).toBe("Los pagos no cubren el total del pedido");
++    // Fail-fast: no se llegó a escribir nada en `pos_sales`.
++    expect(saleInsertCalled).toBe(false);
++  });
++
++  it("(Important) backstop 23505: si el insert de pos_sales choca con el índice único, relee la venta ganadora de la carrera", async () => {
++    // Simula la carrera: en el momento del INSERT no hay fila todavía (el
++    // fast-path del paso 2 no ve nada), pero el propio INSERT choca con
++    // `pos_sales_order_id_unique` porque OTRO request ya insertó la venta un
++    // instante antes. `posSalesData` es mutable: el `onWrite` del insert la
++    // "aterriza" en el momento del choque, y el getter de `tables.pos_sales`
++    // hace que la relectura posterior (dentro de `settleOrder`) SÍ la vea.
++    let posSalesData: Array<{ id: string; order_id: string; salon_id: string; total_cents: number }> = [];
++    holder.supabase = makeSupabaseMock({
++      tables: {
++        ...orderTables(),
++        get pos_sales() {
++          return { data: posSalesData };
++        },
++      },
++      onWrite: (op: string, table: string) => {
++        if (op === "insert" && table === "pos_sales") {
++          posSalesData = [
++            { id: "S-RACE", order_id: ORDER_ID, salon_id: "SALON", total_cents: 1760 },
++          ];
++          return {
++            error: {
++              code: "23505",
++              message: 'duplicate key value violates unique constraint "pos_sales_order_id_unique"',
++            },
++          };
++        }
++        return {};
++      },
++    });
++
++    const r = await settleOrder({
++      orderId: ORDER_ID,
++      tenders: [{ method: "efectivo", amountCents: 1760, paymentMethodId: null }],
++      sendPending: false,
++    });
++
++    expect(r.ok).toBe(true);
++    if (r.ok) {
++      expect(r.data.saleId).toBe("S-RACE");
++      expect(r.data.totalCents).toBe(1760);
++    }
++  });
++});
+diff --git a/src/tests/unit/dashboard-nav-items.test.ts b/src/tests/unit/dashboard-nav-items.test.ts
+index 037707c..e84459b 100644
+--- a/src/tests/unit/dashboard-nav-items.test.ts
++++ b/src/tests/unit/dashboard-nav-items.test.ts
+@@ -89,6 +89,19 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
+   });
+   it("restauración: staff (sin settings) no cae en 'Próximamente'", () => {
+     const items = buildDashboardNavItems({ showSettings: false, hasPos: false, sector: "restauracion" });
+     expect(items.map((i) => i.href)).not.toContain("/proximamente");
+   });
++
++  it("restauración: staff ve Mostrador pero NO Carta", () => {
++    const items = buildDashboardNavItems({ showSettings: false, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/mostrador");
++    expect(hrefs).not.toContain("/carta");
++  });
++  it("restauración: owner ve Mostrador y Carta", () => {
++    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
++    const hrefs = items.map((i) => i.href);
++    expect(hrefs).toContain("/mostrador");
++    expect(hrefs).toContain("/carta");
++  });
+ });
+diff --git a/src/tests/unit/kitchen-comanda.test.ts b/src/tests/unit/kitchen-comanda.test.ts
+new file mode 100644
+index 0000000..1272cd9
+--- /dev/null
++++ b/src/tests/unit/kitchen-comanda.test.ts
+@@ -0,0 +1,15 @@
++import { describe, it, expect } from "vitest";
++import { buildKitchenComandaHtml } from "@/lib/restauracion/kitchen-comanda";
++
++it("incluye número de pedido, estación, líneas y modificadores; SIN precios", () => {
++  const html = buildKitchenComandaHtml({
++    orderNumber: 42, stationName: "Cocina", label: "Barra 3",
++    issuedAt: new Date("2026-08-10T12:00:00Z"),
++    lines: [{ qty: 2, name: "Hamburguesa", modifiers: ["Extra bacon", "Sin cebolla"] }],
++  });
++  expect(html).toContain("42");
++  expect(html).toContain("Cocina");
++  expect(html).toContain("Hamburguesa");
++  expect(html).toContain("Extra bacon");
++  expect(html).not.toMatch(/€|\d+,\d{2}/);
++});
+diff --git a/src/tests/unit/order-keys.test.ts b/src/tests/unit/order-keys.test.ts
+new file mode 100644
+index 0000000..9c89871
+--- /dev/null
++++ b/src/tests/unit/order-keys.test.ts
+@@ -0,0 +1,10 @@
++import { describe, it, expect } from "vitest";
++import { orderKeys } from "@/lib/queries/orders";
++
++describe("orderKeys", () => {
++  it("deriva sub-keys del salón", () => {
++    expect(orderKeys.all("s1")).toEqual(["orders", "s1"]);
++    expect(orderKeys.open("s1")).toEqual(["orders", "s1", "open"]);
++    expect(orderKeys.detail("s1", "o1")).toEqual(["orders", "s1", "detail", "o1"]);
++  });
++});
+diff --git a/src/tests/unit/order-panel.test.tsx b/src/tests/unit/order-panel.test.tsx
+new file mode 100644
+index 0000000..7d00187
+--- /dev/null
++++ b/src/tests/unit/order-panel.test.tsx
+@@ -0,0 +1,140 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++import { formatMoney } from "@/lib/format";
++import { buildSettleLines, settleTotals } from "@/lib/restauracion/order";
++
++/**
++ * Mock de `@/hooks/use-orders` (patrón `menu-item-form.test.tsx`, vi.hoisted +
++ * createElement + getByRole): `OrderPanel` orquesta Mandar/Cobrar llamando a
++ * estos hooks directamente, así que el test no necesita un `QueryClientProvider`
++ * — igual que `MenuItemForm` no lo necesita al mockear `@/hooks/use-menu`.
++ */
++const m = vi.hoisted(() => ({
++  createOrder: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++  addOrderItems: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++  sendOrderToStations: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++  settleOrder: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, reset: vi.fn() },
++}));
++vi.mock("@/hooks/use-orders", () => ({
++  useCreateOrder: () => m.createOrder,
++  useAddOrderItems: () => m.addOrderItems,
++  useSendOrderToStations: () => m.sendOrderToStations,
++  useSettleOrder: () => m.settleOrder,
++}));
++
++import { OrderPanel, type OrderPanelItem } from "@/app/(dashboard)/mostrador/order-panel";
++
++beforeEach(() => {
++  m.createOrder.mutateAsync = vi.fn();
++  m.addOrderItems.mutateAsync = vi.fn();
++  m.sendOrderToStations.mutateAsync = vi.fn();
++  m.settleOrder.mutateAsync = vi.fn();
++});
++afterEach(() => cleanup());
++
++/**
++ * `formatMoney` (Intl.NumberFormat es-ES) separa el importe del símbolo con un
++ * espacio non-breaking (U+00A0). El normalizador por defecto de
++ * testing-library colapsa el TEXTO DEL DOM (NBSP → espacio normal) pero NO el
++ * string que se le pasa como matcher (`matches()` compara
++ * `normalizedText === String(matcher)` sin normalizar `matcher`) — así que
++ * hay que normalizar aquí a mano o `getByText` nunca encuentra el importe.
++ */
++const NBSP = " ";
++function moneyText(cents: number): string {
++  return formatMoney(cents).replaceAll(NBSP, " ");
++}
++
++/** Dos líneas del pedido: un producto simple y una bebida, sin modificadores. */
++const ITEMS: OrderPanelItem[] = [
++  {
++    id: "item-1",
++    productId: "p1",
++    name: "Hamburguesa",
++    qty: 2,
++    unitPriceCents: 880,
++    vatRate: 10,
++    stationId: "cocina",
++    comboGroup: null,
++    modifiersSnapshot: [],
++  },
++  {
++    id: "item-2",
++    productId: "p2",
++    name: "Coca-Cola",
++    qty: 1,
++    unitPriceCents: 250,
++    vatRate: 10,
++    stationId: "barra",
++    comboGroup: null,
++    modifiersSnapshot: [],
++  },
++];
++
++function renderPanel(
++  overrides: Partial<React.ComponentProps<typeof OrderPanel>> = {},
++): ReturnType<typeof render> {
++  return render(
++    createElement(OrderPanel, {
++      salonId: "SALON",
++      salonName: "Mi Bar",
++      order: null,
++      items: ITEMS,
++      pendingIds: new Set(ITEMS.map((i) => i.id)),
++      stations: [],
++      paymentMethods: [],
++      onOrderPersisted: vi.fn(),
++      onItemsSent: vi.fn(),
++      onSettled: vi.fn(),
++      ...overrides,
++    }),
++  );
++}
++
++describe("OrderPanel", () => {
++  it("renderiza cada línea del pedido y el total calculado con settleTotals", () => {
++    renderPanel();
++
++    expect(screen.getByText(/hamburguesa/i)).toBeInTheDocument();
++    expect(screen.getByText(/coca-cola/i)).toBeInTheDocument();
++
++    const lines = buildSettleLines(
++      ITEMS.map((it) => ({
++        productName: it.name,
++        qty: it.qty,
++        unitPriceCents: it.unitPriceCents,
++        vatRate: it.vatRate,
++        modifiersSnapshot: it.modifiersSnapshot,
++      })),
++    );
++    const totals = settleTotals(lines);
++
++    expect(screen.getByText(moneyText(totals.totalCents))).toBeInTheDocument();
++  });
++
++  it("muestra los botones Mandar y Cobrar", () => {
++    renderPanel();
++
++    expect(screen.getByRole("button", { name: /mandar/i })).toBeInTheDocument();
++    expect(screen.getByRole("button", { name: /cobrar/i })).toBeInTheDocument();
++  });
++
++  it("al pulsar Cobrar dispara el flujo de pago", async () => {
++    const user = userEvent.setup();
++    renderPanel();
++
++    await user.click(screen.getByRole("button", { name: /cobrar/i }));
++
++    expect(screen.getByRole("button", { name: /confirmar cobro/i })).toBeInTheDocument();
++  });
++
++  it("con el pedido vacío, Mandar y Cobrar están deshabilitados", () => {
++    renderPanel({ items: [], pendingIds: new Set() });
++
++    expect(screen.getByRole("button", { name: /mandar/i })).toBeDisabled();
++    expect(screen.getByRole("button", { name: /cobrar/i })).toBeDisabled();
++  });
++});
+diff --git a/src/tests/unit/payment-sheet.test.tsx b/src/tests/unit/payment-sheet.test.tsx
+new file mode 100644
+index 0000000..d3f951e
+--- /dev/null
++++ b/src/tests/unit/payment-sheet.test.tsx
+@@ -0,0 +1,128 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, describe, expect, it, vi } from "vitest";
++
++import { PaymentSheet } from "@/app/(dashboard)/mostrador/payment-sheet";
++import { formatMoney } from "@/lib/format";
++import type { SettleTenderInput } from "@/lib/validations/order";
++
++/**
++ * `PaymentSheet` no depende de ningún hook de datos (recibe `paymentMethods`
++ * por prop), así que no hace falta mockear módulos — a diferencia de
++ * `order-panel.test.tsx` (que sí mockea `@/hooks/use-orders`), este test
++ * monta el componente "a pelo" (patrón createElement + getByRole).
++ */
++
++afterEach(() => cleanup());
++
++/**
++ * `formatMoney` (Intl.NumberFormat es-ES) separa el importe del símbolo con
++ * un espacio non-breaking (U+00A0), que `getByText` NO normaliza en el string
++ * que se le pasa como matcher (ver `order-panel.test.tsx`) — se normaliza a
++ * mano aquí también.
++ */
++const NBSP = " ";
++function moneyText(cents: number): string {
++  return formatMoney(cents).replaceAll(NBSP, " ");
++}
++
++function renderSheet(
++  overrides: Partial<React.ComponentProps<typeof PaymentSheet>> = {},
++): { onConfirm: ReturnType<typeof vi.fn> } {
++  const onConfirm = vi.fn();
++  render(
++    createElement(PaymentSheet, {
++      open: true,
++      onOpenChange: vi.fn(),
++      totalCents: 1234,
++      paymentMethods: [],
++      pending: false,
++      error: null,
++      onConfirm,
++      ...overrides,
++    }),
++  );
++  return { onConfirm };
++}
++
++describe("PaymentSheet", () => {
++  it("efectivo que excede el total: aplica solo el total (no lo entregado) y muestra el cambio", async () => {
++    const user = userEvent.setup();
++    const { onConfirm } = renderSheet({ totalCents: 1234 });
++
++    // Fila inicial: efectivo. Se sustituye el importe (arranca cubriendo el
++    // total exacto) por uno que EXCEDE el total: cliente entrega 20,00€ para
++    // un total de 12,34€.
++    const amountInput = screen.getByLabelText(/entrega/i);
++    await user.clear(amountInput);
++    await user.type(amountInput, "20,00");
++
++    // El cambio (20,00 - 12,34 = 7,66€) se muestra bajo la fila y en el
++    // resumen agregado: ambos textos combinan "Cambio"/"cambio" + el importe
++    // en el MISMO nodo ("Cambio: 7,66 €" / "Cobro cuadrado · cambio 7,66 €"),
++    // así que se comprueba por `textContent` en vez de un `getByText` exacto
++    // (que solo matchea el texto propio de un elemento, sin concatenar).
++    const cambioNodes = screen.getAllByText(/cambio/i);
++    expect(cambioNodes.length).toBeGreaterThan(0);
++    expect(
++      cambioNodes.some((el) => el.textContent?.includes(moneyText(766)) === true),
++    ).toBe(true);
++
++    // El cobro está cuadrado (el efectivo se topa al total, el resto es
++    // cambio) — "Confirmar cobro" debe estar habilitado.
++    const confirmButton = screen.getByRole("button", { name: /confirmar cobro/i });
++    expect(confirmButton).toBeEnabled();
++
++    await user.click(confirmButton);
++
++    expect(onConfirm).toHaveBeenCalledTimes(1);
++    const tenders = onConfirm.mock.calls[0]![0] as SettleTenderInput[];
++    // El tender aplicado es el TOTAL, NUNCA el efectivo entregado (20,00€).
++    expect(tenders).toEqual([{ method: "efectivo", amountCents: 1234, paymentMethodId: null }]);
++  });
++
++  it("'Confirmar cobro' está deshabilitado hasta que el restante sea 0", async () => {
++    const user = userEvent.setup();
++    renderSheet({ totalCents: 1000 });
++
++    const amountInput = screen.getByLabelText(/entrega/i);
++    const confirmButton = screen.getByRole("button", { name: /confirmar cobro/i });
++
++    // Por debajo del total: falta por cobrar → deshabilitado.
++    await user.clear(amountInput);
++    await user.type(amountInput, "5,00");
++    expect(confirmButton).toBeDisabled();
++
++    // Exactamente el total → habilitado.
++    await user.clear(amountInput);
++    await user.type(amountInput, "10,00");
++    expect(confirmButton).toBeEnabled();
++  });
++
++  it("no envía tenders fantasma a 0€: onConfirm recibe solo importes > 0 que suman el total exacto", async () => {
++    const user = userEvent.setup();
++    const { onConfirm } = renderSheet({ totalCents: 1000 });
++
++    // La fila inicial (efectivo) ya cubre el total exacto (10,00€). Añadir
++    // OTRO medio de pago sin tocarlo siembra una fila con importe vacío
++    // (`addRow`: `remainingCents <= 0` ⇒ `amount: ""`) — el tender fantasma
++    // que el servidor (`settleTenderSchema`, `amountCents` debe ser > 0)
++    // rechazaría si llegase tal cual.
++    await user.click(screen.getByRole("button", { name: /añadir otro medio de pago/i }));
++
++    const confirmButton = screen.getByRole("button", { name: /confirmar cobro/i });
++    // El agregado ya cuadra (la fila vacía aporta 0) — el gate de cobertura
++    // sigue mirando el AGREGADO, no filas individuales.
++    expect(confirmButton).toBeEnabled();
++
++    await user.click(confirmButton);
++
++    expect(onConfirm).toHaveBeenCalledTimes(1);
++    const tenders = onConfirm.mock.calls[0]![0] as SettleTenderInput[];
++
++    expect(tenders.every((t) => t.amountCents > 0)).toBe(true);
++    expect(tenders).toHaveLength(1);
++    expect(tenders.reduce((acc, t) => acc + t.amountCents, 0)).toBe(1000);
++  });
++});
+diff --git a/src/tests/unit/pos-sales-order-unique-sql.test.ts b/src/tests/unit/pos-sales-order-unique-sql.test.ts
+new file mode 100644
+index 0000000..a47848d
+--- /dev/null
++++ b/src/tests/unit/pos-sales-order-unique-sql.test.ts
+@@ -0,0 +1,22 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++/**
++ * sql-coherence de la migración de backstop de idempotencia (ronda de fix de
++ * Task 6): un índice único parcial en `pos_sales.order_id` garantiza en BD que
++ * no puede haber dos ventas para el mismo pedido, aunque una condición de
++ * carrera se colara por delante del fast-path de `settleOrder`.
++ */
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810110000_pos_sales_order_id_unique.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración pos_sales_order_id_unique", () => {
++  it("crea un índice único parcial en pos_sales.order_id", () => {
++    expect(SQL).toContain("create unique index");
++    expect(SQL).toContain("pos_sales_order_id_unique");
++    expect(SQL).toContain("where order_id is not null");
++  });
++});
+diff --git a/src/tests/unit/restauracion-order.test.ts b/src/tests/unit/restauracion-order.test.ts
+new file mode 100644
+index 0000000..07f4529
+--- /dev/null
++++ b/src/tests/unit/restauracion-order.test.ts
+@@ -0,0 +1,51 @@
++import { describe, it, expect } from "vitest";
++import { buildOrderItemDrafts, buildSettleLines, settleTotals } from "@/lib/restauracion/order";
++
++let n = 0;
++const newId = () => `id-${++n}`;
++
++describe("buildOrderItemDrafts", () => {
++  it("producto simple con modificadores → 1 draft con precio efectivo", () => {
++    n = 0;
++    const drafts = buildOrderItemDrafts({
++      productId: "p1", name: "Hamburguesa", basePriceCents: 800, vatRate: 10,
++      stationId: "cocina", isCombo: false, qty: 2,
++      modifiers: [{ name: "Extra bacon", priceDeltaCents: 80 }], comboPieces: [],
++    }, newId);
++    expect(drafts).toHaveLength(1);
++    expect(drafts[0]).toMatchObject({ productId: "p1", qty: 2, unitPriceCents: 880, stationId: "cocina", comboGroup: null });
++  });
++
++  it("combo → cabecera con precio + piezas a 0 con su estación y comboGroup común", () => {
++    n = 0;
++    const drafts = buildOrderItemDrafts({
++      productId: "combo1", name: "Menú", basePriceCents: 1000, vatRate: 10,
++      stationId: "cocina", isCombo: true, qty: 1, modifiers: [],
++      comboPieces: [
++        { componentProductId: "food", qty: 1, stationId: "cocina", stationOverrideId: null },
++        { componentProductId: "drink", qty: 1, stationId: "cocina", stationOverrideId: "barra" },
++      ],
++    }, newId);
++    expect(drafts).toHaveLength(3);
++    expect(drafts[0]!.unitPriceCents).toBe(1000);
++    const group = drafts[0]!.comboGroup;
++    expect(group).not.toBeNull();
++    expect(drafts.every((d) => d.comboGroup === group)).toBe(true);
++    expect(drafts[1]!.unitPriceCents).toBe(0);
++    expect(drafts[2]!.stationId).toBe("barra");
++  });
++});
++
++describe("buildSettleLines + settleTotals", () => {
++  it("una línea por ítem con nombre+modificadores; base+IVA==bruto", () => {
++    const lines = buildSettleLines([
++      { productName: "Hamburguesa", qty: 2, unitPriceCents: 880, vatRate: 10,
++        modifiersSnapshot: [{ name: "Extra bacon" }] },
++    ]);
++    expect(lines[0]!.description).toContain("Hamburguesa");
++    expect(lines[0]!.description).toContain("Extra bacon");
++    const totals = settleTotals(lines);
++    expect(totals.subtotalCents + totals.taxCents).toBe(totals.totalCents);
++    expect(totals.totalCents).toBe(1760);
++  });
++});
+diff --git a/src/tests/unit/restauracion-orders-sql.test.ts b/src/tests/unit/restauracion-orders-sql.test.ts
+new file mode 100644
+index 0000000..31c61bb
+--- /dev/null
++++ b/src/tests/unit/restauracion-orders-sql.test.ts
+@@ -0,0 +1,47 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { describe, it, expect } from "vitest";
++
++const SQL = readFileSync(
++  join(process.cwd(), "supabase", "migrations", "20260810100000_restauracion_orders.sql"),
++  "utf8",
++).toLowerCase();
++
++describe("migración orders", () => {
++  it("crea los enums de estado de pedido e ítem", () => {
++    expect(SQL).toContain("create type public.order_status as enum");
++    expect(SQL).toContain("'abierta'");
++    expect(SQL).toContain("create type public.order_item_status as enum");
++    expect(SQL).toContain("'enviado'");
++    expect(SQL).toContain("'anulado'");
++  });
++
++  it("orders con id de cliente, idempotency_key único por salón y clave compuesta", () => {
++    expect(SQL).toContain("create table if not exists public.orders");
++    expect(SQL).toContain("idempotency_key");
++    expect(SQL).toContain("unique (salon_id, idempotency_key)");
++    expect(SQL).toContain("orders_id_salon_key unique (id, salon_id)");
++  });
++
++  it("order_items append-only: void_of_item_id, unit_price_cents>=0, FKs compuestas", () => {
++    expect(SQL).toContain("create table if not exists public.order_items");
++    expect(SQL).toContain("void_of_item_id");
++    expect(SQL).toContain("check (unit_price_cents >= 0)");
++    expect(SQL).toContain("foreign key (order_id, salon_id)");
++    expect(SQL).toContain("foreign key (product_id, salon_id)");
++    expect(SQL).toContain("foreign key (station_id, salon_id)");
++    expect(SQL).toContain("modifiers_snapshot jsonb");
++  });
++
++  it("añade pos_sales.order_id con FK compuesta a orders", () => {
++    expect(SQL).toContain("alter table public.pos_sales");
++    expect(SQL).toContain("add column if not exists order_id uuid");
++    expect(SQL).toContain("references public.orders (id, salon_id)");
++  });
++
++  it("RLS: miembros crean/leen (operativa) y guardián", () => {
++    expect(SQL).toContain("salon_id in (select app.user_salon_ids())");
++    expect(SQL).toContain("members_insert_orders");
++    expect(SQL).toContain("do $guard$");
++  });
++});
+diff --git a/src/types/database.ts b/src/types/database.ts
+index d324ce4..8db5b90 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -64,10 +64,25 @@ export type PlanItemState =
+  * Migración 20260801120000_stock_inventory. `entrada`/`salida` = flujo normal;
+  * `ajuste` = corrección manual (fija el total); `merma` = pérdida/rotura.
+  */
+ export type StockMovementKind = "entrada" | "salida" | "ajuste" | "merma";
+ 
++/**
++ * Estado del pedido de mostrador (espejo del enum public.order_status).
++ * Migración 20260810100000_restauracion_orders.
++ */
++export type OrderStatus = "abierta" | "cobrada" | "cerrada" | "anulada";
++
++/** Estado de una línea de pedido (espejo del enum public.order_item_status). */
++export type OrderItemStatus =
++  | "pendiente"
++  | "enviado"
++  | "preparando"
++  | "listo"
++  | "entregado"
++  | "anulado";
++
+ export type AppointmentStatus =
+   | "pending"
+   | "confirmed"
+   | "completed"
+   | "cancelled"
+@@ -1097,10 +1112,172 @@ export interface Database {
+             referencedRelation: "stations";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      // Pedidos de mostrador (restauración), append-only — migración
++      // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE
++      // (offline-ready): sin default en BD → REQUERIDO en Insert.
++      // `order_number` es correlativo por salón (trigger app.set_order_number,
++      // omitir en Insert). session_id es FK compuesta opcional hacia
++      // pos_sessions (orders_session_id_fkey, on delete set null).
++      // idempotency_key es único por salón (orders_idempotency_key) para que
++      // reintentos del cliente no dupliquen el pedido. Clave de apoyo
++      // orders_id_salon_key (id, salon_id) para las FKs compuestas de
++      // order_items y pos_sales.order_id.
++      orders: {
++        Row: {
++          id: string;
++          salon_id: string;
++          session_id: string | null;
++          order_number: number | null; // bigint — correlativo por salón (trigger)
++          channel: string;
++          status: OrderStatus;
++          label: string | null;
++          idempotency_key: string | null;
++          created_by: string | null;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id: string; // sin default en BD: generado en cliente
++          salon_id: string;
++          session_id?: string | null;
++          // order_number lo pone el trigger app.set_order_number: omitir
++          channel?: string;
++          status?: OrderStatus;
++          label?: string | null;
++          idempotency_key?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          session_id?: string | null;
++          order_number?: number | null;
++          channel?: string;
++          status?: OrderStatus;
++          label?: string | null;
++          idempotency_key?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "orders_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "orders_session_id_fkey";
++            columns: ["session_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "pos_sessions";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
++      // Líneas de pedido (restauración), append-only — migración
++      // 20260810100000_restauracion_orders. `id` se genera EN CLIENTE: sin
++      // default en BD → REQUERIDO en Insert. `void_of_item_id` !== null marca
++      // una fila como anulación de otra (append-only: nunca se hace UPDATE del
++      // qty/precio, se inserta una anulación). `modifiers_snapshot` guarda los
++      // modificadores elegidos en el momento del pedido (el catálogo puede
++      // cambiar). station_id es FK compuesta opcional hacia stations
++      // (order_items_station_id_fkey, on delete set null) para el ruteo a
++      // cocina/barra. Clave de apoyo order_items_id_salon_key (id, salon_id).
++      order_items: {
++        Row: {
++          id: string;
++          salon_id: string;
++          order_id: string;
++          product_id: string;
++          qty: number;
++          unit_price_cents: number;
++          vat_rate: number;
++          station_id: string | null;
++          status: OrderItemStatus;
++          combo_group: string | null;
++          modifiers_snapshot: Json;
++          void_of_item_id: string | null;
++          void_reason: string | null;
++          created_by: string | null;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id: string; // sin default en BD: generado en cliente
++          salon_id: string;
++          order_id: string;
++          product_id: string;
++          qty?: number;
++          unit_price_cents?: number;
++          vat_rate?: number;
++          station_id?: string | null;
++          status?: OrderItemStatus;
++          combo_group?: string | null;
++          modifiers_snapshot?: Json;
++          void_of_item_id?: string | null;
++          void_reason?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          order_id?: string;
++          product_id?: string;
++          qty?: number;
++          unit_price_cents?: number;
++          vat_rate?: number;
++          station_id?: string | null;
++          status?: OrderItemStatus;
++          combo_group?: string | null;
++          modifiers_snapshot?: Json;
++          void_of_item_id?: string | null;
++          void_reason?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "order_items_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++          {
++            foreignKeyName: "order_items_order_id_fkey";
++            columns: ["order_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "orders";
++            referencedColumns: ["id", "salon_id"];
++          },
++          {
++            foreignKeyName: "order_items_product_id_fkey";
++            columns: ["product_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "products";
++            referencedColumns: ["id", "salon_id"];
++          },
++          {
++            foreignKeyName: "order_items_station_id_fkey";
++            columns: ["station_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "stations";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
+       // Movimientos de stock (libro de inventario) — migración
+       // 20260801120000_stock_inventory. `quantity` es el DELTA CON SIGNO ya
+       // aplicado al stock resultante (no la magnitud introducida por el
+       // usuario); ver `@/lib/stock` para la lógica pura de cálculo
+       // (`applyMovement`/`movementDelta`) y `products/stock-actions.ts` para la
+@@ -1858,10 +2035,14 @@ export interface Database {
+           sold_by: string | null;
+           sold_at: string;
+           notes: string | null;
+           created_at: string;
+           updated_at: string;
++          // Enlace fiscal al pedido de origen (restauración) — migración
++          // 20260810100000_restauracion_orders. FK compuesta
++          // pos_sales_order_id_fkey (order_id, salon_id) → orders (id, salon_id).
++          order_id: string | null;
+         };
+         Insert: {
+           id?: string;
+           salon_id: string;
+           session_id?: string | null;
+@@ -1877,10 +2058,11 @@ export interface Database {
+           sold_by?: string | null;
+           sold_at?: string;
+           notes?: string | null;
+           created_at?: string;
+           updated_at?: string;
++          order_id?: string | null;
+         };
+         Update: {
+           id?: string;
+           salon_id?: string;
+           session_id?: string | null;
+@@ -1896,10 +2078,11 @@ export interface Database {
+           sold_by?: string | null;
+           sold_at?: string;
+           notes?: string | null;
+           created_at?: string;
+           updated_at?: string;
++          order_id?: string | null;
+         };
+         Relationships: [
+           {
+             foreignKeyName: "pos_sales_salon_id_fkey";
+             columns: ["salon_id"];
+@@ -1933,10 +2116,17 @@ export interface Database {
+             columns: ["professional_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "professionals";
+             referencedColumns: ["id", "salon_id"];
+           },
++          {
++            foreignKeyName: "pos_sales_order_id_fkey";
++            columns: ["order_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "orders";
++            referencedColumns: ["id", "salon_id"];
++          },
+         ];
+       };
+       pos_sale_lines: {
+         Row: {
+           id: string;
+@@ -3589,10 +3779,12 @@ export interface Database {
+       allergen: Allergen;
+       consent_type: ConsentType;
+       consent_status: ConsentStatus;
+       image_modality: ImageModality;
+       stock_movement_kind: StockMovementKind;
++      order_status: OrderStatus;
++      order_item_status: OrderItemStatus;
+     };
+     CompositeTypes: Record<never, never>;
+   };
+ }
+ 
+@@ -3725,10 +3917,19 @@ export type ProductModifierGroup = Tables<"product_modifier_groups">;
+ 
+ // Combos (restauración) — piezas de un producto combo con ruteo por estación
+ // opcional. Ver migración 20260809122000_restauracion_combos.
+ export type ComboComponent = Tables<"combo_components">;
+ 
++// Pedidos de mostrador (restauración), append-only — cabecera (orders) y
++// líneas (order_items). IDs generados en cliente (offline-ready): `id` es
++// REQUERIDO en los Insert (sin default en BD). Ver migración
++// 20260810100000_restauracion_orders.
++export type Order = Tables<"orders">;
++export type OrderInsert = TablesInsert<"orders">;
++export type OrderItem = Tables<"order_items">;
++export type OrderItemInsert = TablesInsert<"order_items">;
++
+ // Phase helpers -----------------------------------------------------------------
+ 
+ /** Tiempo relativo (en minutos desde el inicio de la cita) para una fase del servicio. */
+ export interface ServicePhaseRange {
+   label: "application" | "exposure" | "post_exposure";
+diff --git a/supabase/migrations/20260810100000_restauracion_orders.sql b/supabase/migrations/20260810100000_restauracion_orders.sql
+new file mode 100644
+index 0000000..4d81a6c
+--- /dev/null
++++ b/supabase/migrations/20260810100000_restauracion_orders.sql
+@@ -0,0 +1,136 @@
++-- =============================================================================
++-- Kairos — Restauración · Pedidos de mostrador (orders/order_items, append-only)
++-- IDs generados en cliente. RLS operativa (cualquier miembro). Dinero en céntimos.
++-- =============================================================================
++begin;
++
++do $$ begin
++  if not exists (select 1 from pg_type where typname = 'order_status') then
++    create type public.order_status as enum ('abierta','cobrada','cerrada','anulada');
++  end if;
++  if not exists (select 1 from pg_type where typname = 'order_item_status') then
++    create type public.order_item_status as enum
++      ('pendiente','enviado','preparando','listo','entregado','anulado');
++  end if;
++end $$;
++
++create table if not exists public.orders (
++  id            uuid primary key,                    -- generado en cliente (offline-ready)
++  salon_id      uuid not null references public.salons (id) on delete cascade,
++  session_id    uuid,
++  order_number  bigint,                              -- corto para cocina (trigger)
++  channel       text not null default 'mostrador',
++  status        public.order_status not null default 'abierta',
++  label         text,                                -- etiqueta de cuenta abierta
++  idempotency_key text,
++  created_by    uuid references auth.users (id) on delete set null,
++  created_at    timestamptz not null default now(),
++  updated_at    timestamptz not null default now(),
++  constraint orders_session_id_fkey
++    foreign key (session_id, salon_id)
++    references public.pos_sessions (id, salon_id) on delete set null (session_id),
++  constraint orders_idempotency_key unique (salon_id, idempotency_key),
++  constraint orders_id_salon_key unique (id, salon_id)
++);
++
++create table if not exists public.order_items (
++  id                 uuid primary key,               -- generado en cliente
++  salon_id           uuid not null references public.salons (id) on delete cascade,
++  order_id           uuid not null,
++  product_id         uuid not null,
++  qty                integer not null default 1 check (qty > 0),
++  unit_price_cents   integer not null default 0 check (unit_price_cents >= 0),
++  vat_rate           numeric(5,2) not null default 10.00 check (vat_rate >= 0 and vat_rate <= 100),
++  station_id         uuid,
++  status             public.order_item_status not null default 'pendiente',
++  combo_group        text,                           -- agrupa piezas de un combo
++  modifiers_snapshot jsonb not null default '[]'::jsonb,
++  void_of_item_id    uuid,                           -- si !=null, es una anulación append-only
++  void_reason        text,
++  created_by         uuid references auth.users (id) on delete set null,
++  created_at         timestamptz not null default now(),
++  updated_at         timestamptz not null default now(),
++  constraint order_items_order_id_fkey
++    foreign key (order_id, salon_id)
++    references public.orders (id, salon_id) on delete cascade,
++  constraint order_items_product_id_fkey
++    foreign key (product_id, salon_id)
++    references public.products (id, salon_id) on delete restrict,
++  constraint order_items_station_id_fkey
++    foreign key (station_id, salon_id)
++    references public.stations (id, salon_id) on delete set null (station_id),
++  constraint order_items_id_salon_key unique (id, salon_id)
++);
++
++-- Enlace fiscal: la venta apunta al pedido que la originó.
++alter table public.pos_sales
++  add column if not exists order_id uuid;
++alter table public.pos_sales
++  add constraint pos_sales_order_id_fkey
++    foreign key (order_id, salon_id)
++    references public.orders (id, salon_id) on delete set null (order_id);
++
++-- order_number correlativo por salón (trigger; concurrencia baja en mostrador).
++create or replace function app.set_order_number()
++returns trigger
++language plpgsql
++security definer
++set search_path = ''
++as $$
++begin
++  if new.order_number is null then
++    select coalesce(max(order_number), 0) + 1 into new.order_number
++    from public.orders where salon_id = new.salon_id;
++  end if;
++  return new;
++end;
++$$;
++
++create trigger trg_orders_set_number
++  before insert on public.orders
++  for each row execute function app.set_order_number();
++create trigger trg_orders_updated_at
++  before update on public.orders
++  for each row execute function app.set_updated_at();
++create trigger trg_order_items_updated_at
++  before update on public.order_items
++  for each row execute function app.set_updated_at();
++
++create index if not exists idx_order_items_order_id on public.order_items (order_id);
++create index if not exists idx_order_items_station_status on public.order_items (station_id, status);
++create index if not exists idx_orders_salon_status on public.orders (salon_id, status);
++
++-- RLS: operativa = cualquier miembro (SELECT/INSERT/UPDATE); sin DELETE (append-only).
++alter table public.orders enable row level security;
++create policy "members_select_orders" on public.orders
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "members_insert_orders" on public.orders
++  for insert to authenticated with check (salon_id in (select app.user_salon_ids()));
++create policy "members_update_orders" on public.orders
++  for update to authenticated
++  using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++
++alter table public.order_items enable row level security;
++create policy "members_select_order_items" on public.order_items
++  for select to authenticated using (salon_id in (select app.user_salon_ids()));
++create policy "members_insert_order_items" on public.order_items
++  for insert to authenticated with check (salon_id in (select app.user_salon_ids()));
++create policy "members_update_order_items" on public.order_items
++  for update to authenticated
++  using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++
++do $guard$
++declare _cnt integer;
++begin
++  select count(*) into _cnt from pg_policies
++    where schemaname = 'public' and tablename in ('orders','order_items');
++  if _cnt < 6 then
++    raise exception 'GUARDIÁN ORDERS: faltan políticas (encontradas %)', _cnt using errcode = 'raise_exception';
++  end if;
++  raise notice 'GUARDIÁN ORDERS: orders/order_items verificadas';
++end;
++$guard$;
++
++commit;
+diff --git a/supabase/migrations/20260810110000_pos_sales_order_id_unique.sql b/supabase/migrations/20260810110000_pos_sales_order_id_unique.sql
+new file mode 100644
+index 0000000..c77d15d
+--- /dev/null
++++ b/supabase/migrations/20260810110000_pos_sales_order_id_unique.sql
+@@ -0,0 +1,5 @@
++-- Kairos — Restauración · Backstop de idempotencia: una sola venta por pedido.
++begin;
++create unique index if not exists pos_sales_order_id_unique
++  on public.pos_sales (order_id) where order_id is not null;
++commit;

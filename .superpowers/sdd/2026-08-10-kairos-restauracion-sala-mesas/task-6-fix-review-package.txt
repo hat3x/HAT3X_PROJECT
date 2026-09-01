@@ -1,0 +1,182 @@
+=== FIX cad72a3..008d8b3 ===
+008d8b3 fix(restauracion): ruta de recuperación a libre + error no silencioso post-cobro
+
+=== DIFF -U12 ===
+diff --git a/src/app/(dashboard)/sala/table-panel.tsx b/src/app/(dashboard)/sala/table-panel.tsx
+index 54a42ad..0153a74 100644
+--- a/src/app/(dashboard)/sala/table-panel.tsx
++++ b/src/app/(dashboard)/sala/table-panel.tsx
+@@ -3,24 +3,25 @@
+ import { useState } from "react";
+ import { AlertCircle, Clock, CreditCard, Plus, Receipt, Sparkles, UtensilsCrossed, X } from "lucide-react";
+ 
+ import { PaymentSheet } from "@/app/(dashboard)/mostrador/payment-sheet";
+ import { Badge } from "@/components/ui/badge";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent } from "@/components/ui/card";
+ import { useOrderItems, useSettleOrder } from "@/hooks/use-orders";
+ import { useSetTableStatus } from "@/hooks/use-tables";
+ import { formatMoney } from "@/lib/format";
+ import { elapsedMinutes } from "@/lib/restauracion/kds";
+ import { settleTotals, type SettleLineInput } from "@/lib/restauracion/order";
++import { canTransition } from "@/lib/restauracion/tables";
+ import type { SettleTenderInput } from "@/lib/validations/order";
+ import type { DiningTable, Order, TableStatus } from "@/types/database";
+ 
+ const STATUS_LABELS: Record<TableStatus, string> = {
+   libre: "Libre",
+   ocupada: "Ocupada",
+   cuenta_pedida: "Cuenta pedida",
+   por_limpiar: "Por limpiar",
+ };
+ 
+ /**
+  * Etiqueta de línea de comanda: `useOrderItems` (`@/hooks/use-orders`) lee
+@@ -94,26 +95,32 @@ export function TablePanel({
+   }
+ 
+   function handleConfirmPayment(tenders: SettleTenderInput[]): void {
+     if (order === null) return;
+     setError(null);
+     settleOrder.mutate(
+       { orderId: order.id, tenders, sendPending: true },
+       {
+         onSuccess: () => {
+           setPaying(false);
+           // Orquestación pedida por el brief: al cobrar con éxito, la mesa
+           // pasa a `por_limpiar` (nunca directamente a `libre` — hace falta
+-          // que alguien confirme que la mesa quedó recogida).
+-          setTableStatus.mutate({ tableId: table.id, from: table.status, to: "por_limpiar" });
++          // que alguien confirme que la mesa quedó recogida). Reusa
++          // `changeStatus` (con su propio `onError`) en vez de un
++          // `.mutate()` crudo: si ESTA transición falla (p.ej. conflicto de
++          // concurrencia entre terminales — 0 filas afectadas), el fallo
++          // debe surfacear igual que cualquier otro cambio de estado, no
++          // tragarse en silencio (fix revisión Task 6, Important: la mesa
++          // se quedaba atascada en `ocupada`/`cuenta_pedida` sin aviso).
++          changeStatus("por_limpiar");
+         },
+         onError: (e) => setError(e instanceof Error ? e.message : "No se pudo cobrar el pedido"),
+       },
+     );
+   }
+ 
+   return (
+     <Card className="flex flex-col overflow-hidden lg:sticky lg:top-6 lg:h-fit lg:max-h-[calc(100vh-3rem)]">
+       <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-muted/30 px-5 py-4">
+         <div className="flex items-center gap-2.5">
+           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+             <UtensilsCrossed className="h-[1.15rem] w-[1.15rem]" />
+@@ -127,28 +134,68 @@ export function TablePanel({
+           {order !== null ? (
+             <Badge variant="secondary" className="tabular-nums">
+               {order.covers ?? "—"} comensales
+             </Badge>
+           ) : null}
+           <Button variant="ghost" size="icon" aria-label="Cerrar panel de mesa" onClick={onClose}>
+             <X className="h-4 w-4" />
+           </Button>
+         </div>
+       </div>
+ 
+       {order === null ? (
+-        <CardContent className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
++        <CardContent className="flex flex-1 flex-col items-center justify-center gap-3 p-10 text-center">
+           <p className="max-w-[16rem] text-sm text-muted-foreground">
+             Esta mesa no tiene una cuenta abierta.
+           </p>
++
++          {error !== null ? (
++            <p
++              role="alert"
++              className="flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive"
++            >
++              <AlertCircle className="h-4 w-4 shrink-0" />
++              {error}
++            </p>
++          ) : null}
++
++          {/* Ruta de recuperación/limpieza (fix revisión Task 6, Important):
++              tras cobrar, `order` pasa a `null` (deja de estar `abierta`) pero
++              la mesa queda en `por_limpiar` — sin esto, "Limpiar" era
++              inalcanzable justo cuando más se necesita. `canTransition`
++              (`@/lib/restauracion/tables`, Task 3) decide qué botón aplica en
++              vez de listar los estados a mano aquí. Si `table.status ===
++              "libre"` ninguna de las dos condiciones aplica y no se muestra
++              ningún botón. */}
++          {canTransition(table.status, "libre") ? (
++            <Button
++              className="h-12 rounded-xl text-sm font-semibold"
++              disabled={busy}
++              onClick={() => changeStatus("libre")}
++            >
++              <Sparkles className="mr-2 h-4 w-4" />
++              Limpiar
++            </Button>
++          ) : null}
++          {canTransition(table.status, "por_limpiar") ? (
++            <Button
++              variant="outline"
++              className="h-12 rounded-xl text-sm font-semibold"
++              disabled={busy}
++              onClick={() => changeStatus("por_limpiar")}
++            >
++              <Sparkles className="mr-2 h-4 w-4" />
++              Marcar para limpiar
++            </Button>
++          ) : null}
+         </CardContent>
+       ) : (
+         <>
+           {minutes !== null ? (
+             <div className="flex items-center gap-1.5 border-b border-border/70 px-5 py-2.5 text-xs text-muted-foreground">
+               <Clock className="h-3.5 w-3.5" />
+               Hace {minutes} min
+             </div>
+           ) : null}
+ 
+           <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
+             {activeItems.length === 0 ? (
+diff --git a/src/tests/unit/table-panel.test.tsx b/src/tests/unit/table-panel.test.tsx
+index ae95128..0e0f85d 100644
+--- a/src/tests/unit/table-panel.test.tsx
++++ b/src/tests/unit/table-panel.test.tsx
+@@ -169,13 +169,38 @@ describe("TablePanel", () => {
+     expect(screen.getByRole("button", { name: /limpiar/i })).toBeInTheDocument();
+     expect(screen.queryByRole("button", { name: /pedir cuenta/i })).not.toBeInTheDocument();
+     expect(screen.queryByRole("button", { name: /cobrar/i })).not.toBeInTheDocument();
+   });
+ 
+   it("sin pedido (mesa sin cuenta abierta), muestra un estado vacío mínimo sin acciones de comanda", () => {
+     renderPanel({ order: null });
+ 
+     expect(screen.getByText(/no tiene una cuenta abierta/i)).toBeInTheDocument();
+     expect(screen.queryByRole("button", { name: /añadir/i })).not.toBeInTheDocument();
+     expect(screen.queryByRole("button", { name: /cobrar/i })).not.toBeInTheDocument();
+   });
++
++  /**
++   * Fix revisión Task 6 (Important): tras cobrar, `settleOrder` marca el
++   * pedido como cobrado → `order` pasa a `null` en el siguiente refetch,
++   * pero la mesa queda en `por_limpiar`. Sin ruta de recuperación en el
++   * estado vacío, "Limpiar" era inalcanzable justo cuando más se necesita.
++   */
++  it("sin pedido y mesa 'por_limpiar' (caso normal tras cobrar), ofrece el botón Limpiar", () => {
++    renderPanel({ order: null, table: { ...TABLE, status: "por_limpiar" } });
++
++    expect(screen.getByRole("button", { name: /limpiar/i })).toBeInTheDocument();
++  });
++
++  it("sin pedido y mesa 'ocupada' (caso de recuperación), ofrece 'Marcar para limpiar' pero no 'Limpiar'", () => {
++    renderPanel({ order: null, table: { ...TABLE, status: "ocupada" } });
++
++    expect(screen.getByRole("button", { name: /marcar para limpiar/i })).toBeInTheDocument();
++    expect(screen.queryByRole("button", { name: /^limpiar$/i })).not.toBeInTheDocument();
++  });
++
++  it("sin pedido y mesa 'libre', no ofrece ningún botón de limpieza", () => {
++    renderPanel({ order: null, table: { ...TABLE, status: "libre" } });
++
++    expect(screen.queryByRole("button", { name: /limpiar/i })).not.toBeInTheDocument();
++  });
+ });

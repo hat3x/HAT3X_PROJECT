@@ -1,0 +1,228 @@
+=== COMMITS (f3b8098..0b1d270) ===
+0b1d270 fix(restauracion): evitar cargo cruzado al cambiar de cuenta + tender fantasma en el cobro
+
+=== DIFF --stat ===
+ src/app/(dashboard)/mostrador/mostrador-view.tsx |   9 ++
+ src/app/(dashboard)/mostrador/payment-sheet.tsx  |  17 ++-
+ src/tests/unit/payment-sheet.test.tsx            | 128 +++++++++++++++++++++++
+ 3 files changed, 149 insertions(+), 5 deletions(-)
+
+=== DIFF -U12 ===
+diff --git a/src/app/(dashboard)/mostrador/mostrador-view.tsx b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+index 0df0ac8..56976d1 100644
+--- a/src/app/(dashboard)/mostrador/mostrador-view.tsx
++++ b/src/app/(dashboard)/mostrador/mostrador-view.tsx
+@@ -118,24 +118,33 @@ export function MostradorView({ salonId, salonName }: MostradorViewProps): React
+       vatRate: product.vat_rate,
+       stationId: product.station_id,
+       isCombo: false,
+       qty: 1,
+       modifiers: [],
+       comboPieces: [],
+     });
+   }
+ 
+   function handleSelectOrder(selected: Order): void {
+     // Fuerza la recarga de líneas de la cuenta elegida (distinta a la actual).
+     loadedOrderIdRef.current = null;
++    // Limpieza SÍNCRONA de las líneas de la cuenta anterior — sin esto, hay
++    // una ventana entre `setOrder(selected)` (order.id ya apunta a la cuenta
++    // B) y a que `useOrderItems` resuelva sus líneas (el `useEffect` de
++    // arriba las carga) en la que `items`/`pendingIds` siguen siendo los de
++    // la cuenta A. Si en esa ventana se pulsa Mandar/Cobrar, se enviarían
++    // líneas de A contra el `orderId` de B (cargo/comanda cruzados). Mismo
++    // criterio que `handleNewOrder`.
++    setItems([]);
++    setPendingIds(new Set());
+     setOrder(selected);
+   }
+ 
+   function handleNewOrder(): void {
+     loadedOrderIdRef.current = null;
+     setOrder(null);
+     setItems([]);
+     setPendingIds(new Set());
+     setPickerProduct(null);
+   }
+ 
+   const assignedGroupIds = pickerProduct !== null
+diff --git a/src/app/(dashboard)/mostrador/payment-sheet.tsx b/src/app/(dashboard)/mostrador/payment-sheet.tsx
+index 7a74d01..3d3da29 100644
+--- a/src/app/(dashboard)/mostrador/payment-sheet.tsx
++++ b/src/app/(dashboard)/mostrador/payment-sheet.tsx
+@@ -164,29 +164,36 @@ export function PaymentSheet({
+         method: firstOption.method,
+         paymentMethodId: firstOption.paymentMethodId,
+         amount: pendingAmount,
+       },
+     ]);
+   }
+ 
+   function removeRow(index: number): void {
+     setRows((prev) => prev.filter((_, i) => i !== index));
+   }
+ 
+   function handleConfirm(): void {
+-    const tenders: SettleTenderInput[] = rows.map((row, i) => ({
+-      method: row.method,
+-      amountCents: applied[i]!.appliedCents,
+-      paymentMethodId: row.paymentMethodId,
+-    }));
++    // Filtra filas con importe aplicado <= 0 (p. ej. una fila que `addRow`
++    // sembró vacía porque el resto YA estaba cubierto, o un tender a 0€
++    // tecleado por error): `settleTenderSchema` exige `amountCents > 0` — un
++    // tender fantasma haría que el servidor rechazase el cobro aunque el
++    // AGREGADO (que es lo que vigila `covered`) sí cuadre con el total.
++    const tenders: SettleTenderInput[] = rows
++      .map((row, i) => ({
++        method: row.method,
++        amountCents: applied[i]!.appliedCents,
++        paymentMethodId: row.paymentMethodId,
++      }))
++      .filter((tender) => tender.amountCents > 0);
+     onConfirm(tenders);
+   }
+ 
+   const status: "settled" | "due" | "excess" =
+     remainingCents === 0 ? "settled" : remainingCents > 0 ? "due" : "excess";
+   const totalChangeCents = applied.reduce((acc, a) => acc + a.changeCents, 0);
+ 
+   return (
+     <Dialog open={open} onOpenChange={onOpenChange}>
+       <DialogContent className="sm:max-w-md">
+         <DialogHeader>
+           <DialogDescription className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+diff --git a/src/tests/unit/payment-sheet.test.tsx b/src/tests/unit/payment-sheet.test.tsx
+new file mode 100644
+index 0000000..d3f951e
+--- /dev/null
++++ b/src/tests/unit/payment-sheet.test.tsx
+@@ -0,0 +1,128 @@
++import { createElement } from "react";
++import { cleanup, render, screen } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { afterEach, describe, expect, it, vi } from "vitest";
++
++import { PaymentSheet } from "@/app/(dashboard)/mostrador/payment-sheet";
++import { formatMoney } from "@/lib/format";
++import type { SettleTenderInput } from "@/lib/validations/order";
++
++/**
++ * `PaymentSheet` no depende de ningún hook de datos (recibe `paymentMethods`
++ * por prop), así que no hace falta mockear módulos — a diferencia de
++ * `order-panel.test.tsx` (que sí mockea `@/hooks/use-orders`), este test
++ * monta el componente "a pelo" (patrón createElement + getByRole).
++ */
++
++afterEach(() => cleanup());
++
++/**
++ * `formatMoney` (Intl.NumberFormat es-ES) separa el importe del símbolo con
++ * un espacio non-breaking (U+00A0), que `getByText` NO normaliza en el string
++ * que se le pasa como matcher (ver `order-panel.test.tsx`) — se normaliza a
++ * mano aquí también.
++ */
++const NBSP = " ";
++function moneyText(cents: number): string {
++  return formatMoney(cents).replaceAll(NBSP, " ");
++}
++
++function renderSheet(
++  overrides: Partial<React.ComponentProps<typeof PaymentSheet>> = {},
++): { onConfirm: ReturnType<typeof vi.fn> } {
++  const onConfirm = vi.fn();
++  render(
++    createElement(PaymentSheet, {
++      open: true,
++      onOpenChange: vi.fn(),
++      totalCents: 1234,
++      paymentMethods: [],
++      pending: false,
++      error: null,
++      onConfirm,
++      ...overrides,
++    }),
++  );
++  return { onConfirm };
++}
++
++describe("PaymentSheet", () => {
++  it("efectivo que excede el total: aplica solo el total (no lo entregado) y muestra el cambio", async () => {
++    const user = userEvent.setup();
++    const { onConfirm } = renderSheet({ totalCents: 1234 });
++
++    // Fila inicial: efectivo. Se sustituye el importe (arranca cubriendo el
++    // total exacto) por uno que EXCEDE el total: cliente entrega 20,00€ para
++    // un total de 12,34€.
++    const amountInput = screen.getByLabelText(/entrega/i);
++    await user.clear(amountInput);
++    await user.type(amountInput, "20,00");
++
++    // El cambio (20,00 - 12,34 = 7,66€) se muestra bajo la fila y en el
++    // resumen agregado: ambos textos combinan "Cambio"/"cambio" + el importe
++    // en el MISMO nodo ("Cambio: 7,66 €" / "Cobro cuadrado · cambio 7,66 €"),
++    // así que se comprueba por `textContent` en vez de un `getByText` exacto
++    // (que solo matchea el texto propio de un elemento, sin concatenar).
++    const cambioNodes = screen.getAllByText(/cambio/i);
++    expect(cambioNodes.length).toBeGreaterThan(0);
++    expect(
++      cambioNodes.some((el) => el.textContent?.includes(moneyText(766)) === true),
++    ).toBe(true);
++
++    // El cobro está cuadrado (el efectivo se topa al total, el resto es
++    // cambio) — "Confirmar cobro" debe estar habilitado.
++    const confirmButton = screen.getByRole("button", { name: /confirmar cobro/i });
++    expect(confirmButton).toBeEnabled();
++
++    await user.click(confirmButton);
++
++    expect(onConfirm).toHaveBeenCalledTimes(1);
++    const tenders = onConfirm.mock.calls[0]![0] as SettleTenderInput[];
++    // El tender aplicado es el TOTAL, NUNCA el efectivo entregado (20,00€).
++    expect(tenders).toEqual([{ method: "efectivo", amountCents: 1234, paymentMethodId: null }]);
++  });
++
++  it("'Confirmar cobro' está deshabilitado hasta que el restante sea 0", async () => {
++    const user = userEvent.setup();
++    renderSheet({ totalCents: 1000 });
++
++    const amountInput = screen.getByLabelText(/entrega/i);
++    const confirmButton = screen.getByRole("button", { name: /confirmar cobro/i });
++
++    // Por debajo del total: falta por cobrar → deshabilitado.
++    await user.clear(amountInput);
++    await user.type(amountInput, "5,00");
++    expect(confirmButton).toBeDisabled();
++
++    // Exactamente el total → habilitado.
++    await user.clear(amountInput);
++    await user.type(amountInput, "10,00");
++    expect(confirmButton).toBeEnabled();
++  });
++
++  it("no envía tenders fantasma a 0€: onConfirm recibe solo importes > 0 que suman el total exacto", async () => {
++    const user = userEvent.setup();
++    const { onConfirm } = renderSheet({ totalCents: 1000 });
++
++    // La fila inicial (efectivo) ya cubre el total exacto (10,00€). Añadir
++    // OTRO medio de pago sin tocarlo siembra una fila con importe vacío
++    // (`addRow`: `remainingCents <= 0` ⇒ `amount: ""`) — el tender fantasma
++    // que el servidor (`settleTenderSchema`, `amountCents` debe ser > 0)
++    // rechazaría si llegase tal cual.
++    await user.click(screen.getByRole("button", { name: /añadir otro medio de pago/i }));
++
++    const confirmButton = screen.getByRole("button", { name: /confirmar cobro/i });
++    // El agregado ya cuadra (la fila vacía aporta 0) — el gate de cobertura
++    // sigue mirando el AGREGADO, no filas individuales.
++    expect(confirmButton).toBeEnabled();
++
++    await user.click(confirmButton);
++
++    expect(onConfirm).toHaveBeenCalledTimes(1);
++    const tenders = onConfirm.mock.calls[0]![0] as SettleTenderInput[];
++
++    expect(tenders.every((t) => t.amountCents > 0)).toBe(true);
++    expect(tenders).toHaveLength(1);
++    expect(tenders.reduce((acc, t) => acc + t.amountCents, 0)).toBe(1000);
++  });
++});
