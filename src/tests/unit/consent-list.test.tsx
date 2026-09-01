@@ -12,7 +12,7 @@
  */
 import { createElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Consent } from "@/types/database";
@@ -23,6 +23,9 @@ const m = vi.hoisted(() => ({
   sign: { mutate: vi.fn(), isPending: false },
   revoke: { mutate: vi.fn(), isPending: false },
   deleteConsent: vi.fn(),
+  signImageUrls: vi.fn(),
+  /** URLs que el componente mandó abrir en una pestaña nueva. */
+  abiertas: [] as string[],
 }));
 
 vi.mock("@/hooks/use-consents", () => ({
@@ -32,6 +35,7 @@ vi.mock("@/hooks/use-consents", () => ({
 
 vi.mock("@/app/(dashboard)/expediente/actions", () => ({
   deleteConsent: (consentId: string) => m.deleteConsent(consentId),
+  signImageUrls: (paths: string[]) => m.signImageUrls(paths),
 }));
 
 import { ConsentList } from "@/components/dental/consent-list";
@@ -42,6 +46,18 @@ beforeEach(() => {
   m.revoke.mutate = vi.fn();
   m.revoke.isPending = false;
   m.deleteConsent = vi.fn(async (id: string) => ({ ok: true, data: { id } }));
+  m.signImageUrls = vi.fn(async (paths: string[]) => ({
+    ok: true as const,
+    data: Object.fromEntries(paths.map((p) => [p, `https://firmado.test/${p}`])),
+  }));
+  m.abiertas = [];
+  vi.stubGlobal(
+    "open",
+    vi.fn((url: string) => {
+      m.abiertas.push(url);
+      return null;
+    }),
+  );
 });
 
 afterEach(() => {
@@ -196,5 +212,53 @@ describe("ConsentList · estados, badges y acciones", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Firmar" }));
 
     expect(within(card).getByLabelText("Firma del paciente")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Imprimir el consentimiento firmado
+//
+// Nadia necesita darle el papel al paciente. El PDF sellado ya se archiva al
+// firmar; lo que faltaba era llegar a él. El navegador no puede ver las
+// impresoras del ordenador —ni debe—, así que "vincular la impresora" no es
+// algo que se configure aquí: se abre el documento y se imprime con la ventana
+// del sistema, que es donde se elige.
+// ---------------------------------------------------------------------------
+
+describe("ConsentList · imprimir el documento firmado", () => {
+  it("ofrece imprimir cuando el consentimiento tiene documento archivado", async () => {
+    renderList([
+      consent({
+        id: "c-firmado",
+        status: "signed",
+        signed_by_patient: "Jesús Melchor",
+        document_uri: "salon-1/customer-1/consent-c-firmado.pdf",
+      }),
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: /Imprimir/ }));
+    await waitFor(() => expect(m.abiertas.length).toBe(1));
+
+    // Pide una URL firmada para ESE documento —el bucket es privado— y la abre.
+    expect(m.signImageUrls).toHaveBeenCalledWith([
+      "salon-1/customer-1/consent-c-firmado.pdf",
+    ]);
+    expect(m.abiertas[0]).toBe(
+      "https://firmado.test/salon-1/customer-1/consent-c-firmado.pdf",
+    );
+  });
+
+  it("no ofrece imprimir si no hay documento: los firmados antes de A2 no lo tienen", () => {
+    renderList([
+      consent({
+        id: "c-viejo",
+        status: "signed",
+        signed_by_patient: "Paciente antiguo",
+        document_uri: null,
+      }),
+    ]);
+
+    // Ofrecer abrir algo que no existe es peor que no ofrecerlo.
+    expect(screen.queryByRole("button", { name: /Imprimir/ })).not.toBeInTheDocument();
   });
 });

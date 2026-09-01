@@ -4552,6 +4552,20 @@ export interface Database {
       // 20260831130000_rpc_sale_from_plan.sql: pasa líneas de un presupuesto a
       // un ticket ABIERTO del TPV de forma atómica, bloqueando las líneas para
       // que dos personas no puedan cobrarle dos veces al mismo paciente.
+      // Funde varios tickets abiertos del mismo paciente en el más antiguo. Ver
+      // migración 20260901140000_merge_open_sales.sql: los totales llegan ya
+      // calculados por `computeSaleTotals`, la función no rehace el IVA.
+      merge_open_sales: {
+        Args: {
+          p_salon_id: string;
+          p_sale_ids: string[];
+          p_subtotal_cents: number;
+          p_discount_cents: number;
+          p_tax_cents: number;
+          p_total_cents: number;
+        };
+        Returns: string;
+      };
       create_sale_from_plan_items: {
         Args: {
           p_salon_id: string;

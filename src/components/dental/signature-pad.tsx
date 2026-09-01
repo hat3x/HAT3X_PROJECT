@@ -29,11 +29,40 @@ export interface SignaturePadProps {
 /** Alto del lienzo en píxeles CSS. El ancho lo da el contenedor. */
 const PAD_HEIGHT = 160;
 
+/**
+ * Tinta de la firma, según el tema.
+ *
+ * El trazo se pinta en un `<canvas>`, y ahí no llegan las variables CSS: hay
+ * que dar un color literal. Con uno fijo, en tema oscuro la firma se dibujaba
+ * en negro sobre fondo negro y el paciente no veía lo que estaba firmando.
+ *
+ * En claro es azul de bolígrafo, no negro: es lo que la gente espera de una
+ * firma sobre papel. En oscuro, blanco.
+ *
+ * Esto es solo lo que se VE mientras se firma. El trazo se guarda como
+ * coordenadas, así que el PDF sellado sale igual firmes con el tema que firmes.
+ */
+const INK = { light: "#1e3a8a", dark: "#f8fafc" } as const;
+
+/**
+ * Si el tema oscuro está activo, leído de la clase que pone el proveedor.
+ *
+ * Se mira el DOM en vez de usar `useTheme` a propósito: este lienzo tiene que
+ * poder vivir fuera del panel —la firma en la tableta del paciente—, y allí no
+ * hay ThemeProvider. Con el hook, el componente reventaría en cuanto alguien lo
+ * montara en una pantalla pública.
+ */
+function usaTemaOscuro(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.documentElement.classList.contains("dark");
+}
+
 export function SignaturePad({
   onChange,
   disabled = false,
   label = "Firma del paciente",
 }: SignaturePadProps): React.ReactElement {
+  const [temaOscuro, setTemaOscuro] = useState(usaTemaOscuro);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const strokesRef = useRef<SignatureStroke[]>([]);
   const currentRef = useRef<SignatureStroke | null>(null);
@@ -47,7 +76,7 @@ export function SignaturePad({
     if (!canvas || !ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#111827";
+    ctx.strokeStyle = temaOscuro ? INK.dark : INK.light;
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -55,7 +84,22 @@ export function SignaturePad({
     const d = strokesToSvgPath(strokesRef.current);
     if (d === "") return;
     ctx.stroke(new Path2D(d));
+  }, [temaOscuro]);
+
+  // Cambiar de tema con una firma a medias no puede dejarla invisible: se
+  // vigila la clase y se repinta con la tinta nueva.
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTemaOscuro(usaTemaOscuro()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    repaint();
+  }, [repaint]);
 
   /**
    * Ajusta el buffer del lienzo a su tamaño real y a la densidad de pantalla.

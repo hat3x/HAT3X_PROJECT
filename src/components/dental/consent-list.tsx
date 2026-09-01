@@ -9,11 +9,12 @@ import {
   ChevronUp,
   FileSignature,
   Loader2,
+  Printer,
   ShieldOff,
   Trash2,
 } from "lucide-react";
 
-import { deleteConsent } from "@/app/(dashboard)/expediente/actions";
+import { deleteConsent, signImageUrls } from "@/app/(dashboard)/expediente/actions";
 import { SignaturePad } from "@/components/dental/signature-pad";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,6 +98,8 @@ export function ConsentList({
   const [signingId, setSigningId] = useState<string | null>(null);
   const [signName, setSignName] = useState("");
   const [signStrokes, setSignStrokes] = useState<SignatureStroke[]>([]);
+  /** Consentimiento cuyo PDF se está pidiendo, para no repetir el clic. */
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   function handleStartSign(consentId: string) {
     setActionError(null);
@@ -175,6 +178,34 @@ export function ConsentList({
     );
   }
 
+  /**
+   * Abre el PDF sellado del consentimiento en una pestaña nueva.
+   *
+   * De ahí se imprime con la ventana del sistema, que es donde se elige la
+   * impresora: una página web no puede —ni debe— ver las impresoras del
+   * ordenador, así que "vincular una impresora" no es algo que se configure
+   * aquí. Lo que hacía falta era poder llegar al documento.
+   *
+   * El PDF ya existe: se genera y se archiva al firmar. El bucket es privado,
+   * así que se pide una URL firmada en el momento en vez de guardar un enlace
+   * que caducaría.
+   */
+  async function abrirDocumento(consentId: string, path: string): Promise<void> {
+    setActionError(null);
+    setOpeningId(consentId);
+    try {
+      const result = await signImageUrls([path]);
+      const url = result.ok ? result.data[path] : undefined;
+      if (url === undefined) {
+        setActionError("No se pudo abrir el documento firmado.");
+        return;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      setOpeningId(null);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {actionError !== null && (
@@ -202,9 +233,30 @@ export function ConsentList({
                     )}
                   </div>
                 </div>
-                <Badge className={STATUS_BADGE_CLASSES[consent.status]}>
-                  {CONSENT_STATUS_LABELS[consent.status]}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {/* Solo cuando hay documento: los firmados antes de A2 no lo
+                      tienen, y ofrecer abrir algo que no existe es peor que no
+                      ofrecerlo. */}
+                  {consent.document_uri !== null && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={openingId === consent.id}
+                      onClick={() => void abrirDocumento(consent.id, consent.document_uri!)}
+                    >
+                      {openingId === consent.id ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Printer className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                      Imprimir
+                    </Button>
+                  )}
+                  <Badge className={STATUS_BADGE_CLASSES[consent.status]}>
+                    {CONSENT_STATUS_LABELS[consent.status]}
+                  </Badge>
+                </div>
               </div>
 
               {consent.body !== null && consent.body !== "" && (

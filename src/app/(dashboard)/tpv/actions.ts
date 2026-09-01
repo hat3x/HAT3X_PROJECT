@@ -589,3 +589,77 @@ export async function lookupLoyaltyByQr(
     };
   }
 }
+
+/**
+ * Funde varios tickets ABIERTOS del mismo paciente en uno solo, y devuelve el
+ * que queda para poder cobrarlo.
+ *
+ * ── POR QUÉ HACE FALTA ──────────────────────────────────────────────────────
+ * En una clínica el tratamiento se hace por partes: la limpieza un día, el
+ * blanqueamiento otro. Cada parte deja su ticket abierto al pasar el
+ * presupuesto a caja, y cuando el paciente viene a pagar, paga UNA vez. Sin
+ * fundirlos habría que cobrarle dos veces y emitirle dos facturas.
+ *
+ * ── POR QUÉ NO SE COBRAN VARIOS A LA VEZ ────────────────────────────────────
+ * Los cobros cuelgan de un `sale_id`. Un pago de 500 € repartido entre dos
+ * ventas obligaría a inventarse el reparto, y ese reparto sería una mentira
+ * contable en cuanto los importes no cuadraran. Fundir primero deja la caja
+ * exactamente como el caso de siempre.
+ *
+ * No cobra: deja un ticket abierto. Cobrarlo es el camino de `createSale`.
+ */
+export async function mergeOpenSales(
+  saleIds: readonly string[],
+): Promise<ActionResult<{ saleId: string }>> {
+  const salonId = await getActiveSalonId();
+  if (salonId === null) return { ok: false, error: "No tienes un salón asignado" };
+
+  if (saleIds.length < 2) {
+    return { ok: false, error: "Marca al menos dos tickets para fundirlos." };
+  }
+
+  const supabase = createClient();
+
+  // Los importes se leen de la BASE, nunca del navegador: si vinieran del
+  // cliente, cualquiera podría fundir dos tickets de 500 € en uno de 5.
+  const { data: lineas, error: lineasError } = await supabase
+    .from("pos_sale_lines")
+    .select("quantity, unit_price_cents, vat_rate, discount_cents")
+    .in("sale_id", saleIds as string[])
+    .eq("salon_id", salonId);
+
+  if (lineasError !== null) {
+    return { ok: false, error: `No se pudieron leer los tickets: ${lineasError.message}` };
+  }
+  if (lineas === null || lineas.length === 0) {
+    return { ok: false, error: "Esos tickets no tienen ninguna línea que cobrar." };
+  }
+
+  // El mismo cálculo que la caja. La función de base de datos no rehace la
+  // aritmética del IVA: recibe los totales ya hechos.
+  const totales = computeSaleTotals(
+    lineas.map((l) => ({
+      quantity: Number(l.quantity),
+      unitPriceCents: l.unit_price_cents,
+      vatRate: Number(l.vat_rate),
+      discountCents: l.discount_cents,
+    })),
+  );
+
+  const { data: destino, error: rpcError } = await supabase.rpc("merge_open_sales", {
+    p_salon_id: salonId,
+    p_sale_ids: saleIds as string[],
+    p_subtotal_cents: totales.subtotalCents,
+    p_discount_cents: totales.discountCents,
+    p_tax_cents: totales.taxCents,
+    p_total_cents: totales.totalCents,
+  });
+
+  if (rpcError !== null) {
+    return { ok: false, error: rpcError.message };
+  }
+
+  revalidatePath("/customers");
+  revalidatePath("/facturacion/tickets");
+  return { ok: true, data: { saleId: destino as string } };
+}
