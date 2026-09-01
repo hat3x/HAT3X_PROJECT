@@ -6,9 +6,11 @@
 //
 // Es lo que permite cumplir el §7.3 del spec —dos binarios, no un
 // interruptor— sin duplicar codigo: el perfil `tienda` compila
-// `personal.ts`, que devuelve `null`, y la piel no puede colarse en el
-// paquete publico ni por accidente, porque sus ficheros ni siquiera estan en
-// el repositorio.
+// `personal.ts`, que devuelve `null`, y sin `KAIZEN_SKIN=1` la piel no se
+// resuelve, asi que no puede colarse en el paquete publico.
+//
+// Sus ficheros SI estan en el repositorio (es la copia de seguridad del
+// proyecto). La garantia es esta variable de entorno, no su ausencia.
 const { getDefaultConfig } = require('expo/metro-config')
 
 const config = getDefaultConfig(__dirname)

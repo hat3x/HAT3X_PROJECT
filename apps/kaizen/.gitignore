@@ -41,10 +41,7 @@ yarn-error.*
 /ios
 /android
 
-# Capturas de pantalla generadas por scripts/captura.mjs
-capturas/
-
-# La piel personal y su arte: nunca entran en el repositorio ni, por tanto, en
-# el paquete publico. Ver src/design/temas/personal.ts y metro.config.js.
-assets/skins/
-src/design/temas/personal.skin.ts
+# La piel personal, su arte y las capturas SI se versionan: este repositorio es
+# la copia de seguridad del proyecto, no la fuente de la que compila la tienda.
+# Que la piel no llegue al paquete publico lo garantiza KAIZEN_SKIN en
+# metro.config.js, no su ausencia del repositorio.
