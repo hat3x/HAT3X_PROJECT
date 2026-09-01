@@ -38,7 +38,8 @@ supabase/.temp/
 .env*
 
 # APK/keystore de la PWA (NO commitear: la keystore es secreta)
-apk/
+# apk/ se versiona: son los artefactos que suben a Play Store
+#apk/
 
 # Agente local de captura de imagen. `agent.config.json` lleva el pairingToken,
 # que es un SECRETO: se genera por instalación y nunca se versiona. El ejemplo

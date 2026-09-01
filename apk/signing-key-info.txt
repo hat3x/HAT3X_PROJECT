@@ -1,0 +1,10 @@
+Keep this file and signing.keystore in a safe place. You'll need these files if you want to upload future versions of your PWA to the Google Play Store.
+
+Key store file: signing.keystore
+Key store password: f0sxEbouRHbN
+Key alias: kairos
+Key password: f0sxEbouRHbN
+Signer's full name: HAT3X
+Signer's organization: HAT3X
+Signer's organizational unit: Kairos
+Signer's country code: ES
