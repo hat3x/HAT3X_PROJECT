@@ -1,0 +1,176 @@
+# Review package: 7f8f0ba8254854a34db449cfe16066b21aac7556..607e209
+
+## Commits
+607e209 feat(ortodoncia): dominio ortho (tipos + label maps)
+
+## Files changed
+ src/lib/dental/index.ts            |   1 +
+ src/lib/dental/ortho.ts            | 110 +++++++++++++++++++++++++++++++++++++
+ src/tests/unit/ortho-logic.test.ts |  28 ++++++++++
+ 3 files changed, 139 insertions(+)
+
+## Diff
+diff --git a/src/lib/dental/index.ts b/src/lib/dental/index.ts
+index 9908ca4..66d2469 100644
+--- a/src/lib/dental/index.ts
++++ b/src/lib/dental/index.ts
+@@ -1,8 +1,9 @@
+ /**
+  * Dental library barrel export.
+  * Import from "@/lib/dental" to access all dental utilities.
+  */
+ 
+ export * from "./tooth";
+ export * from "./color";
+ export * from "./catalog";
++export * from "./ortho";
+diff --git a/src/lib/dental/ortho.ts b/src/lib/dental/ortho.ts
+new file mode 100644
+index 0000000..3606afc
+--- /dev/null
++++ b/src/lib/dental/ortho.ts
+@@ -0,0 +1,110 @@
++/** Dominio de ortodoncia (Fase 1): tipos, valores por defecto y etiquetas ES. Puro, sin IO. */
++
++export type MalocclusionClass = "I" | "II-1" | "II-2" | "III";
++export type CrowdingLevel = "ninguno" | "leve" | "moderado" | "severo";
++export type Crossbite = "ninguna" | "anterior" | "posterior";
++export type ApplianceType =
++  | "brackets_metalicos"
++  | "brackets_esteticos"
++  | "alineadores"
++  | "ortopedia";
++export type OrthoArch = "superior" | "inferior" | "ambas";
++export type OrthoStatus = "activo" | "retencion" | "finalizado" | "cancelado";
++
++export interface OrthoFicha {
++  malocclusionClass: MalocclusionClass | null;
++  crowdingUpper: CrowdingLevel | null;
++  crowdingLower: CrowdingLevel | null;
++  diastema: boolean;
++  diastemaNote: string | null;
++  crossbite: Crossbite | null;
++  overjetMm: number | null;
++  overbiteMm: number | null;
++  openBite: boolean;
++  diagnosisNotes: string | null;
++}
++
++export interface OrthoTreatment {
++  applianceType: ApplianceType | null;
++  arch: OrthoArch | null;
++  estimatedMonths: number | null;
++  startDate: string | null; // ISO "YYYY-MM-DD"
++  status: OrthoStatus | null;
++  objectives: string | null;
++}
++
++export interface OrthoData {
++  ficha: OrthoFicha;
++  treatment: OrthoTreatment;
++}
++
++export interface OrthoVisitActions {
++  wireChange: boolean;
++  wireDetail: string | null;
++  ligatures: boolean;
++  elastics: boolean;
++  elasticsDetail: string | null;
++  alignerDelivered: number | null;
++}
++
++export const EMPTY_ORTHO_FICHA: OrthoFicha = {
++  malocclusionClass: null,
++  crowdingUpper: null,
++  crowdingLower: null,
++  diastema: false,
++  diastemaNote: null,
++  crossbite: null,
++  overjetMm: null,
++  overbiteMm: null,
++  openBite: false,
++  diagnosisNotes: null,
++};
++
++export const EMPTY_ORTHO_TREATMENT: OrthoTreatment = {
++  applianceType: null,
++  arch: null,
++  estimatedMonths: null,
++  startDate: null,
++  status: null,
++  objectives: null,
++};
++
++export const MALOCCLUSION_CLASS_LABELS: Record<MalocclusionClass, string> = {
++  I: "Clase I",
++  "II-1": "Clase II división 1",
++  "II-2": "Clase II división 2",
++  III: "Clase III",
++};
++
++export const CROWDING_LEVEL_LABELS: Record<CrowdingLevel, string> = {
++  ninguno: "Ninguno",
++  leve: "Leve",
++  moderado: "Moderado",
++  severo: "Severo",
++};
++
++export const CROSSBITE_LABELS: Record<Crossbite, string> = {
++  ninguna: "Ninguna",
++  anterior: "Anterior",
++  posterior: "Posterior",
++};
++
++export const APPLIANCE_TYPE_LABELS: Record<ApplianceType, string> = {
++  brackets_metalicos: "Brackets metálicos",
++  brackets_esteticos: "Brackets estéticos",
++  alineadores: "Alineadores invisibles",
++  ortopedia: "Ortopedia",
++};
++
++export const ORTHO_ARCH_LABELS: Record<OrthoArch, string> = {
++  superior: "Superior",
++  inferior: "Inferior",
++  ambas: "Ambas",
++};
++
++export const ORTHO_STATUS_LABELS: Record<OrthoStatus, string> = {
++  activo: "Activo",
++  retencion: "Retención",
++  finalizado: "Finalizado",
++  cancelado: "Cancelado",
++};
+diff --git a/src/tests/unit/ortho-logic.test.ts b/src/tests/unit/ortho-logic.test.ts
+new file mode 100644
+index 0000000..f86307d
+--- /dev/null
++++ b/src/tests/unit/ortho-logic.test.ts
+@@ -0,0 +1,28 @@
++import { describe, it, expect } from "vitest";
++
++import {
++  MALOCCLUSION_CLASS_LABELS,
++  APPLIANCE_TYPE_LABELS,
++  ORTHO_STATUS_LABELS,
++  EMPTY_ORTHO_FICHA,
++  EMPTY_ORTHO_TREATMENT,
++} from "@/lib/dental/ortho";
++
++describe("ortho label maps", () => {
++  it("cubre las 4 clases de maloclusión", () => {
++    expect(Object.keys(MALOCCLUSION_CLASS_LABELS)).toHaveLength(4);
++    expect(MALOCCLUSION_CLASS_LABELS["II-1"]).toBe("Clase II división 1");
++  });
++
++  it("cubre las 4 aparatologías y los 4 estados", () => {
++    expect(Object.keys(APPLIANCE_TYPE_LABELS)).toHaveLength(4);
++    expect(APPLIANCE_TYPE_LABELS.alineadores).toBe("Alineadores invisibles");
++    expect(ORTHO_STATUS_LABELS.retencion).toBe("Retención");
++  });
++
++  it("los EMPTY_* tienen todos los campos en null/false", () => {
++    expect(EMPTY_ORTHO_FICHA.malocclusionClass).toBeNull();
++    expect(EMPTY_ORTHO_FICHA.diastema).toBe(false);
++    expect(EMPTY_ORTHO_TREATMENT.status).toBeNull();
++  });
++});

@@ -1,0 +1,159 @@
+# Review package: 44c499e128a2738c7da286197f46771f4bfd59bd..8728628
+
+## Commits
+8728628 feat(imagenes): aceptar PDF en la subida (25 MiB)
+
+## Files changed
+ src/app/(dashboard)/expediente/actions.ts | 12 +++++++-----
+ src/tests/unit/expediente-actions.test.ts | 32 ++++++++++++++++++++++++++++++-
+ 2 files changed, 38 insertions(+), 6 deletions(-)
+
+## Diff
+diff --git a/src/app/(dashboard)/expediente/actions.ts b/src/app/(dashboard)/expediente/actions.ts
+index cd17e2c..ed43e13 100644
+--- a/src/app/(dashboard)/expediente/actions.ts
++++ b/src/app/(dashboard)/expediente/actions.ts
+@@ -44,25 +44,25 @@ const ERROR_ROLE = "No tienes permiso para escribir en el expediente clínico.";
+ /** Roles con permiso de escritura general UNA VEZ pasado el gate de sector. */
+ const WRITE_ROLES: readonly MemberRole[] = ["owner", "manager", "staff"];
+ 
+ /** Roles con permiso de borrado de consentimientos. `staff` queda excluido. */
+ const DELETE_ROLES: readonly MemberRole[] = ["owner", "manager"];
+ 
+ /** Bucket privado de imágenes/radiografías clínicas (migración 20260801110000). */
+ const PATIENT_MEDIA_BUCKET = "patient-media";
+ 
+ /** MIME de imagen admitidos al subir (radiografías/fotos exportadas como imagen). */
+-const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
++const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"] as const;
+ type AllowedImageMime = (typeof ALLOWED_IMAGE_MIME_TYPES)[number];
+ 
+ /** Tamaño máximo de una imagen subida. */
+-const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MiB
++const MAX_IMAGE_BYTES = 25 * 1024 * 1024; // 25 MiB
+ 
+ /** Segundos de validez de una signed URL de `patient-media`. */
+ const SIGNED_URL_TTL_SECONDS = 3600;
+ 
+ // ---------------------------------------------------------------------------
+ // Gate — defensa en profundidad (sector + rol), igual que planes/actions.ts
+ // ---------------------------------------------------------------------------
+ 
+ async function assertExpedienteAccess(
+   requiredRoles: readonly MemberRole[] = WRITE_ROLES,
+@@ -291,20 +291,22 @@ function isAllowedImageMime(mime: string): mime is AllowedImageMime {
+ 
+ /** Extensión canónica del objeto en Storage para un MIME de imagen admitido. */
+ function imageExtensionForMime(mime: AllowedImageMime): string {
+   switch (mime) {
+     case "image/png":
+       return "png";
+     case "image/jpeg":
+       return "jpg";
+     case "image/webp":
+       return "webp";
++    case "application/pdf":
++      return "pdf";
+   }
+ }
+ 
+ /** Lee un campo de texto opcional de un FormData; cadena vacía cuenta como ausente. */
+ function readOptionalString(formData: FormData, key: string): string | null {
+   const value = formData.get(key);
+   if (typeof value !== "string" || value.length === 0) return null;
+   return value;
+ }
+ 
+@@ -321,32 +323,32 @@ function readOptionalString(formData: FormData, key: string): string | null {
+  * Convención de path: `{salon_id}/{customerId}/{uuid}.{ext}` (README de la
+  * migración). Valida MIME de imagen (`png|jpeg|webp`) y tamaño (≤ 15 MiB) EN
+  * SERVIDOR con mensajes legibles antes de tocar Storage.
+  */
+ export async function uploadPatientImage(formData: FormData): Promise<ActionResult<PatientImage>> {
+   const access = await assertExpedienteAccess();
+   if (!access.ok) return { ok: false, error: access.error };
+ 
+   const file = formData.get("file");
+   if (!(file instanceof File) || file.size === 0) {
+-    return { ok: false, error: "Selecciona un archivo de imagen." };
++    return { ok: false, error: "Selecciona un archivo." };
+   }
+ 
+   const contentType = (file.type ?? "").trim().toLowerCase();
+   if (!isAllowedImageMime(contentType)) {
+     return {
+       ok: false,
+-      error: `Formato de imagen no admitido. Usa: ${ALLOWED_IMAGE_MIME_TYPES.join(", ")}.`,
++      error: `Formato no admitido. Usa: ${ALLOWED_IMAGE_MIME_TYPES.join(", ")}.`,
+     };
+   }
+   if (file.size > MAX_IMAGE_BYTES) {
+-    return { ok: false, error: "La imagen supera el tamaño máximo de 15 MiB." };
++    return { ok: false, error: "El archivo supera el tamaño máximo de 25 MiB." };
+   }
+ 
+   const customerId = readOptionalString(formData, "customerId");
+   if (customerId === null) {
+     return { ok: false, error: "Falta el paciente (customerId)." };
+   }
+ 
+   const modality = readOptionalString(formData, "modality");
+   if (modality === null || !isImageModality(modality)) {
+     return { ok: false, error: "Falta o no es válida la modalidad de la imagen." };
+diff --git a/src/tests/unit/expediente-actions.test.ts b/src/tests/unit/expediente-actions.test.ts
+index e6d183b..2fe01a1 100644
+--- a/src/tests/unit/expediente-actions.test.ts
++++ b/src/tests/unit/expediente-actions.test.ts
+@@ -447,21 +447,51 @@ describe("uploadPatientImage", () => {
+     expect(result).toEqual({ ok: true, data: inserted });
+     expect(storageFromMock).toHaveBeenCalledWith("patient-media");
+     expect(uploadMock).toHaveBeenCalledTimes(1);
+     const call = uploadMock.mock.calls[0] as unknown as [string, unknown, Record<string, unknown>];
+     const [path, , options] = call;
+     expect(path.startsWith(`${SALON_ID}/${CUSTOMER_ID}/`)).toBe(true);
+     expect(path.endsWith(".png")).toBe(true);
+     expect(options.contentType).toBe("image/png");
+   });
+ 
+-  it("MIME no admitido ⇒ { ok:false } sin llamar a Storage ni a la BD", async () => {
++  it("sube un PDF a patient-media y crea la fila de metadatos", async () => {
++    salon("odontologia");
++    membership("staff");
++
++    const uploadMock = vi.fn(async () => ({ error: null }));
++    storageFromMock.mockReturnValue({ upload: uploadMock });
++
++    const inserted = imageRow({ mime: "application/pdf", storage_path: `${SALON_ID}/${CUSTOMER_ID}/report.pdf` });
++    fromMock.mockImplementation((table: string) => {
++      if (table === "patient_images") return chain({ data: inserted, error: null });
++      throw new Error(`tabla inesperada: ${table}`);
++    });
++
++    const formData = new FormData();
++    formData.set("file", new File([new Uint8Array(100)], "report.pdf", { type: "application/pdf" }));
++    formData.set("customerId", CUSTOMER_ID);
++    formData.set("modality", "periapical");
++
++    const result = await uploadPatientImage(formData);
++
++    expect(result).toEqual({ ok: true, data: inserted });
++    expect(storageFromMock).toHaveBeenCalledWith("patient-media");
++    expect(uploadMock).toHaveBeenCalledTimes(1);
++    const call = uploadMock.mock.calls[0] as unknown as [string, unknown, Record<string, unknown>];
++    const [path, , options] = call;
++    expect(path.startsWith(`${SALON_ID}/${CUSTOMER_ID}/`)).toBe(true);
++    expect(path.endsWith(".pdf")).toBe(true);
++    expect(options.contentType).toBe("application/pdf");
++  });
++
++  it("MIME no admitido (image/gif) ⇒ { ok:false } sin llamar a Storage ni a la BD", async () => {
+     salon("odontologia");
+     membership("staff");
+ 
+     const formData = new FormData();
+     formData.set("file", new File([new Uint8Array(10)], "rx.gif", { type: "image/gif" }));
+     formData.set("customerId", CUSTOMER_ID);
+     formData.set("modality", "periapical");
+ 
+     const result = await uploadPatientImage(formData);
+ 

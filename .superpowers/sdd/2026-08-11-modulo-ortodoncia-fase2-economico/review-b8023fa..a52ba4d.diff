@@ -1,0 +1,396 @@
+# Review package: b8023fae22eb19c1f4155ad681eedaebe6ebf4f3..a52ba4d
+
+## Commits
+a52ba4d feat(ortodoncia): tablas plan de pago + RPC atomica + tipos
+
+## Files changed
+ src/types/database.ts                              | 153 +++++++++++++++++++++
+ .../migrations/20260811130000_ortho_payments.sql   | 138 +++++++++++++++++++
+ 2 files changed, 291 insertions(+)
+
+## Diff
+diff --git a/src/types/database.ts b/src/types/database.ts
+index c3d1749..5243c9f 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -196,20 +196,26 @@ export type ImageModality =
+   | "foto_intraoral"
+   | "scan_stl";
+ 
+ /**
+  * Estado de una receta/prescripción (espejo del enum public.prescription_status).
+  * Borrador → emitida → revocada; INMUTABLE tras emitir (trigger
+  * `prescription_guard`, migración 20260801140000_prescriptions.sql).
+  */
+ export type PrescriptionStatus = "draft" | "issued" | "revoked";
+ 
++/** Estado del plan de pago de ortodoncia (espejo del enum public.ortho_plan_status). */
++export type OrthoPlanStatus = "activo" | "completado" | "cancelado";
++
++/** Estado de una cuota del plan de pago de ortodoncia (espejo del enum public.ortho_installment_status). */
++export type OrthoInstallmentStatus = "pendiente" | "pagada";
++
+ export interface Database {
+   public: {
+     Tables: {
+       time_clock: {
+         Row: {
+           id: string;
+           salon_id: string;
+           user_id: string | null;
+           clock_in: string;
+           clock_out: string | null;
+@@ -3218,20 +3224,140 @@ export interface Database {
+           appointment_id?: string | null;
+           visit_date?: string;
+           actions?: Json;
+           notes?: string | null;
+           next_step?: string | null;
+           created_by?: string | null;
+           created_at?: string;
+         };
+         Relationships: [];
+       };
++      // Ortodoncia — plan de pago (Fase 2 económico). Presupuesto cerrado a
++      // plazos con calendario de cuotas (ortho_installment). Solo un plan
++      // "activo" por paciente (índice único parcial). Creación atómica vía
++      // RPC create_ortho_payment_plan. Ver migración
++      // 20260811130000_ortho_payments.sql.
++      ortho_payment_plan: {
++        Row: {
++          id: string;
++          salon_id: string;
++          customer_id: string;
++          total_cents: number;
++          down_payment_cents: number;
++          installment_count: number;
++          day_of_month: number;
++          start_date: string;
++          currency: string;
++          status: OrthoPlanStatus;
++          notes: string | null;
++          created_by: string | null;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          customer_id: string;
++          total_cents: number;
++          down_payment_cents?: number;
++          installment_count: number;
++          day_of_month: number;
++          start_date: string;
++          currency?: string;
++          status?: OrthoPlanStatus;
++          notes?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          customer_id?: string;
++          total_cents?: number;
++          down_payment_cents?: number;
++          installment_count?: number;
++          day_of_month?: number;
++          start_date?: string;
++          currency?: string;
++          status?: OrthoPlanStatus;
++          notes?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "ortho_payment_plan_customer_fk";
++            columns: ["customer_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "clinical_records";
++            referencedColumns: ["customer_id", "salon_id"];
++          },
++        ];
++      };
++      // Ortodoncia — cuotas del plan de pago (1:N desde ortho_payment_plan vía
++      // plan_id+salon_id). `seq` es el nº de cuota (1..installment_count).
++      // Ver migración 20260811130000_ortho_payments.sql.
++      ortho_installment: {
++        Row: {
++          id: string;
++          salon_id: string;
++          plan_id: string;
++          customer_id: string;
++          seq: number;
++          due_date: string;
++          amount_cents: number;
++          status: OrthoInstallmentStatus;
++          paid_at: string | null;
++          paid_method: string | null;
++          paid_amount_cents: number | null;
++          created_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          plan_id: string;
++          customer_id: string;
++          seq: number;
++          due_date: string;
++          amount_cents: number;
++          status?: OrthoInstallmentStatus;
++          paid_at?: string | null;
++          paid_method?: string | null;
++          paid_amount_cents?: number | null;
++          created_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          plan_id?: string;
++          customer_id?: string;
++          seq?: number;
++          due_date?: string;
++          amount_cents?: number;
++          status?: OrthoInstallmentStatus;
++          paid_at?: string | null;
++          paid_method?: string | null;
++          paid_amount_cents?: number | null;
++          created_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "ortho_installment_plan_fk";
++            columns: ["plan_id", "salon_id"];
++            isOneToOne: false;
++            referencedRelation: "ortho_payment_plan";
++            referencedColumns: ["id", "salon_id"];
++          },
++        ];
++      };
+       // Planes de tratamiento — fases (1:N desde treatment_plan vía
+       // plan_id+salon_id). Sin updated_at (solo created_at). Ver migración
+       // 20260801100000_treatment_plans.sql.
+       plan_phase: {
+         Row: {
+           id: string;
+           salon_id: string;
+           plan_id: string;
+           position: number;
+           name: string;
+@@ -3938,20 +4064,42 @@ export interface Database {
+           p_payment_method?: string | null;
+           p_search?: string | null;
+         };
+         Returns: {
+           invoice_count: number;
+           taxable_base_cents: number;
+           tax_cents: number;
+           total_cents: number;
+         }[];
+       };
++
++      /**
++       * Creación atómica del plan de pago de ortodoncia + sus cuotas
++       * (migración `20260811130000_ortho_payments`). SECURITY DEFINER, gate
++       * owner/manager. `p_installments` es un array de {seq, dueDate,
++       * amountCents} calculado en la app. Devuelve el id del plan creado.
++       */
++      create_ortho_payment_plan: {
++        Args: {
++          p_salon_id: string;
++          p_customer_id: string;
++          p_total_cents: number;
++          p_down_payment_cents: number;
++          p_installment_count: number;
++          p_day_of_month: number;
++          p_start_date: string;
++          p_currency: string;
++          p_notes: string | null;
++          p_installments: Json;
++        };
++        Returns: string;
++      };
+     };
+     Enums: {
+       member_role: MemberRole;
+       appointment_status: AppointmentStatus;
+       reminder_type: ReminderType;
+       reminder_status: ReminderStatus;
+       pos_sale_status: PosSaleStatus;
+       pos_payment_method: PosPaymentMethod;
+       pos_session_status: PosSessionStatus;
+       pos_invoice_type: PosInvoiceType;
+@@ -4046,20 +4194,25 @@ export type PlanItemInsert = TablesInsert<"plan_item">;
+ export type PerioTooth = Tables<"perio_tooth">;
+ export type PerioToothInsert = TablesInsert<"perio_tooth">;
+ export type PerioSite = Tables<"perio_site">;
+ export type PerioSiteInsert = TablesInsert<"perio_site">;
+ 
+ // Ortodoncia — log de progreso por visita (Fase 1). Ficha y tratamiento en
+ // clinical_records.data.ortho (JSONB); esta tabla registra una entrada por
+ // visita.
+ export type OrthoVisit = Tables<"ortho_visit">;
+ 
++// Ortodoncia — plan de pago (Fase 2 económico) — cabecera (ortho_payment_plan)
++// y cuotas (ortho_installment). Creación atómica vía RPC create_ortho_payment_plan.
++export type OrthoPaymentPlan = Tables<"ortho_payment_plan">;
++export type OrthoInstallment = Tables<"ortho_installment">;
++
+ // Mutuas y seguros (odontología) — aseguradoras (insurer), póliza del paciente
+ // (customer_insurance) y baremo por servicio (insurer_service_price).
+ export type Insurer = Tables<"insurer">;
+ export type InsurerInsert = TablesInsert<"insurer">;
+ export type CustomerInsurance = Tables<"customer_insurance">;
+ export type CustomerInsuranceInsert = TablesInsert<"customer_insurance">;
+ export type InsurerServicePrice = Tables<"insurer_service_price">;
+ export type InsurerServicePriceInsert = TablesInsert<"insurer_service_price">;
+ 
+ // Consentimientos informados + imágenes/radiografías (odontología) — bucket
+diff --git a/supabase/migrations/20260811130000_ortho_payments.sql b/supabase/migrations/20260811130000_ortho_payments.sql
+new file mode 100644
+index 0000000..4f13eb6
+--- /dev/null
++++ b/supabase/migrations/20260811130000_ortho_payments.sql
+@@ -0,0 +1,138 @@
++-- supabase/migrations/20260811130000_ortho_payments.sql
++-- Plan de pago de ortodoncia (Fase 2): presupuesto cerrado a plazos.
++--
++-- APLICACIÓN VÍA MANAGEMENT API:
++--   POST https://api.supabase.com/v1/projects/jztoyekixcziaicrnlce/database/migrations
++--   User-Agent: Mozilla/5.0
++--   Authorization: Bearer <token>
++--   Content-Type: application/sql
++--   Body: <contenido de este archivo>
++
++begin;
++
++create type public.ortho_plan_status as enum ('activo', 'completado', 'cancelado');
++create type public.ortho_installment_status as enum ('pendiente', 'pagada');
++
++create table public.ortho_payment_plan (
++  id                 uuid primary key default gen_random_uuid(),
++  salon_id           uuid not null references public.salons(id) on delete cascade,
++  customer_id        uuid not null,
++  total_cents        integer not null check (total_cents > 0),
++  down_payment_cents integer not null default 0 check (down_payment_cents >= 0),
++  installment_count  integer not null check (installment_count >= 1),
++  day_of_month       smallint not null check (day_of_month between 1 and 31),
++  start_date         date not null,
++  currency           char(3) not null default 'EUR',
++  status             public.ortho_plan_status not null default 'activo',
++  notes              text,
++  created_by         uuid,
++  created_at         timestamptz not null default now(),
++  updated_at         timestamptz not null default now(),
++  check (down_payment_cents <= total_cents),
++  constraint ortho_payment_plan_customer_fk
++    foreign key (customer_id, salon_id)
++    references public.clinical_records (customer_id, salon_id) on delete cascade,
++  unique (id, salon_id)
++);
++
++-- Solo UN plan activo por paciente.
++create unique index ortho_payment_plan_one_active
++  on public.ortho_payment_plan (customer_id, salon_id) where status = 'activo';
++
++create table public.ortho_installment (
++  id                uuid primary key default gen_random_uuid(),
++  salon_id          uuid not null,
++  plan_id           uuid not null,
++  customer_id       uuid not null,
++  seq               smallint not null,
++  due_date          date not null,
++  amount_cents      integer not null check (amount_cents > 0),
++  status            public.ortho_installment_status not null default 'pendiente',
++  paid_at           timestamptz,
++  paid_method       text,
++  paid_amount_cents integer,
++  created_at        timestamptz not null default now(),
++  constraint ortho_installment_plan_fk
++    foreign key (plan_id, salon_id)
++    references public.ortho_payment_plan (id, salon_id) on delete cascade,
++  unique (plan_id, seq)
++);
++
++create index ortho_installment_plan_idx on public.ortho_installment (salon_id, plan_id, seq);
++create index ortho_installment_overdue_idx
++  on public.ortho_installment (salon_id, customer_id, status, due_date);
++
++alter table public.ortho_payment_plan enable row level security;
++alter table public.ortho_installment  enable row level security;
++
++create policy ortho_payment_plan_rw on public.ortho_payment_plan
++  for all using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++create policy ortho_installment_rw on public.ortho_installment
++  for all using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++
++-- Creación atómica del plan + sus cuotas. El calendario se calcula en la app y se
++-- pasa como p_installments (array de {seq, dueDate, amountCents}). Gate owner/manager.
++create or replace function public.create_ortho_payment_plan(
++  p_salon_id           uuid,
++  p_customer_id        uuid,
++  p_total_cents        integer,
++  p_down_payment_cents integer,
++  p_installment_count  integer,
++  p_day_of_month       integer,
++  p_start_date         date,
++  p_currency           text,
++  p_notes              text,
++  p_installments       jsonb
++)
++returns uuid
++language plpgsql
++security definer
++set search_path = ''
++as $$
++declare
++  v_uid     uuid := auth.uid();
++  v_plan_id uuid;
++  v_line    jsonb;
++begin
++  if v_uid is null then
++    raise exception 'UNAUTHORIZED' using errcode = '28000';
++  end if;
++  perform 1 from public.salon_members
++    where user_id = v_uid and salon_id = p_salon_id and role in ('owner', 'manager');
++  if not found then
++    raise exception 'FORBIDDEN' using errcode = '42501';
++  end if;
++
++  perform 1 from public.ortho_payment_plan
++    where salon_id = p_salon_id and customer_id = p_customer_id and status = 'activo';
++  if found then
++    raise exception 'PLAN_EXISTS' using errcode = '23505';
++  end if;
++
++  insert into public.ortho_payment_plan (
++    salon_id, customer_id, total_cents, down_payment_cents, installment_count,
++    day_of_month, start_date, currency, status, notes, created_by
++  ) values (
++    p_salon_id, p_customer_id, p_total_cents, p_down_payment_cents, p_installment_count,
++    p_day_of_month, p_start_date, coalesce(p_currency, 'EUR'), 'activo', p_notes, v_uid
++  ) returning id into v_plan_id;
++
++  for v_line in select * from jsonb_array_elements(p_installments) loop
++    insert into public.ortho_installment (salon_id, plan_id, customer_id, seq, due_date, amount_cents, status)
++      values (
++        p_salon_id, v_plan_id, p_customer_id,
++        (v_line->>'seq')::smallint, (v_line->>'dueDate')::date, (v_line->>'amountCents')::integer,
++        'pendiente'
++      );
++  end loop;
++
++  return v_plan_id;
++end;
++$$;
++
++revoke all on function public.create_ortho_payment_plan(uuid, uuid, integer, integer, integer, integer, date, text, text, jsonb) from public;
++grant execute on function public.create_ortho_payment_plan(uuid, uuid, integer, integer, integer, integer, date, text, text, jsonb) to authenticated;
++
++commit;

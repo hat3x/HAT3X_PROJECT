@@ -1,0 +1,1472 @@
+# Review package: ec5faf43391a87303b7023c751ca1515ea6e84bb..HEAD
+
+## Commits
+7785236 feat(ortodoncia): pestana Laboratorio + progreso de alineadores
+112700b fix(ortodoncia): limpiar actionError al abrir dialogo de borrado
+3274155 feat(ortodoncia): UI tarjeta Laboratorio (ui-ux-pro-max)
+3874218 feat(ortodoncia): hooks pedidos de laboratorio
+c9b562f feat(ortodoncia): server actions pedidos de laboratorio
+10122fe feat(ortodoncia): queries pedidos de laboratorio
+71d1d19 feat(ortodoncia): tabla lab_order + tipo (RLS por tenant)
+26adf83 feat(ortodoncia): esquemas Zod pedido laboratorio + alignerTotal
+9210049 feat(ortodoncia): logica laboratorio + progreso alineadores + alignerTotal
+
+## Files changed
+ src/app/(dashboard)/ortodoncia/lab-actions.ts    | 123 +++++
+ src/components/dental/ortho-lab-card.tsx         | 574 +++++++++++++++++++++++
+ src/components/dental/ortodoncia-view.tsx        |  52 ++
+ src/hooks/use-lab-orders.ts                      |  74 +++
+ src/lib/dental/index.ts                          |   1 +
+ src/lib/dental/lab-orders.ts                     |  53 +++
+ src/lib/dental/ortho.ts                          |   2 +
+ src/lib/queries/lab-orders.ts                    |  23 +
+ src/lib/validations/lab-orders.ts                |  16 +
+ src/lib/validations/ortho.ts                     |   1 +
+ src/tests/unit/lab-order-actions.test.ts         |  61 +++
+ src/tests/unit/lab-orders-logic.test.ts          |  39 ++
+ src/tests/unit/lab-orders-schema.test.ts         |  36 ++
+ src/types/database.ts                            |  49 ++
+ supabase/migrations/20260811140000_lab_order.sql |  39 ++
+ 15 files changed, 1143 insertions(+)
+
+## Diff
+diff --git a/src/app/(dashboard)/ortodoncia/lab-actions.ts b/src/app/(dashboard)/ortodoncia/lab-actions.ts
+new file mode 100644
+index 0000000..9996bf4
+--- /dev/null
++++ b/src/app/(dashboard)/ortodoncia/lab-actions.ts
+@@ -0,0 +1,123 @@
++"use server";
++
++import { revalidatePath } from "next/cache";
++
++import { getActiveMembership, getActiveSalon } from "@/lib/salon";
++import { createClient } from "@/lib/supabase/server";
++import {
++  createLabOrderSchema,
++  markLabDateSchema,
++  type CreateLabOrderInput,
++  type MarkLabDateInput,
++} from "@/lib/validations/lab-orders";
++import type { LabOrder, MemberRole } from "@/types/database";
++
++export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
++
++const ERROR_NO_SALON = "No tienes un salón asignado";
++const ERROR_SECTOR = "Esta sección solo está disponible en clínicas dentales";
++const ERROR_ROLE = "No tienes permisos para esta acción";
++
++const STAFF_ROLES: readonly MemberRole[] = ["owner", "manager", "staff"];
++const MANAGER_ROLES: readonly MemberRole[] = ["owner", "manager"];
++
++async function assertLabAccess(
++  requiredRoles: readonly MemberRole[],
++): Promise<{ ok: true; salonId: string } | { ok: false; error: string }> {
++  const salon = await getActiveSalon();
++  if (salon === null) return { ok: false, error: ERROR_NO_SALON };
++  if (salon.sector !== "odontologia") return { ok: false, error: ERROR_SECTOR };
++  const membership = await getActiveMembership();
++  if (membership === null || !requiredRoles.includes(membership.role)) {
++    return { ok: false, error: ERROR_ROLE };
++  }
++  return { ok: true, salonId: salon.id };
++}
++
++/** Crea un pedido a laboratorio (estado inicial: enviado). Owner/manager/staff. */
++export async function createLabOrder(
++  customerId: string,
++  input: CreateLabOrderInput,
++): Promise<ActionResult<LabOrder>> {
++  const parsed = createLabOrderSchema.safeParse(input);
++  if (!parsed.success) {
++    return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos no válidos" };
++  }
++
++  const access = await assertLabAccess(STAFF_ROLES);
++  if (!access.ok) return { ok: false, error: access.error };
++
++  const supabase = createClient();
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  const { data, error } = await supabase
++    .from("lab_order")
++    .insert({
++      salon_id: access.salonId,
++      customer_id: customerId,
++      kind: parsed.data.kind,
++      lab_name: parsed.data.labName,
++      sent_at: parsed.data.sentAt,
++      notes: parsed.data.notes,
++      created_by: user?.id ?? null,
++    })
++    .select("*")
++    .single();
++
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/ortodoncia");
++  return { ok: true, data };
++}
++
++async function setLabDate(
++  orderId: string,
++  column: "received_at" | "delivered_at",
++  input: MarkLabDateInput,
++): Promise<ActionResult<null>> {
++  const parsed = markLabDateSchema.safeParse(input);
++  if (!parsed.success) {
++    return { ok: false, error: parsed.error.issues[0]?.message ?? "Fecha no válida" };
++  }
++  const access = await assertLabAccess(STAFF_ROLES);
++  if (!access.ok) return { ok: false, error: access.error };
++
++  const supabase = createClient();
++  const { error } = await supabase
++    .from("lab_order")
++    .update({ [column]: parsed.data.date, updated_at: new Date().toISOString() })
++    .eq("id", orderId)
++    .eq("salon_id", access.salonId);
++
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/ortodoncia");
++  return { ok: true, data: null };
++}
++
++/** Marca el pedido como recibido en la clínica. Owner/manager/staff. */
++export function markLabOrderReceived(orderId: string, input: MarkLabDateInput): Promise<ActionResult<null>> {
++  return setLabDate(orderId, "received_at", input);
++}
++
++/** Marca el pedido como entregado al paciente. Owner/manager/staff. */
++export function markLabOrderDelivered(orderId: string, input: MarkLabDateInput): Promise<ActionResult<null>> {
++  return setLabDate(orderId, "delivered_at", input);
++}
++
++/** Borra un pedido. Owner/manager. */
++export async function deleteLabOrder(orderId: string): Promise<ActionResult<null>> {
++  const access = await assertLabAccess(MANAGER_ROLES);
++  if (!access.ok) return { ok: false, error: access.error };
++
++  const supabase = createClient();
++  const { error } = await supabase
++    .from("lab_order")
++    .delete()
++    .eq("id", orderId)
++    .eq("salon_id", access.salonId);
++
++  if (error !== null) return { ok: false, error: error.message };
++  revalidatePath("/ortodoncia");
++  return { ok: true, data: null };
++}
+diff --git a/src/components/dental/ortho-lab-card.tsx b/src/components/dental/ortho-lab-card.tsx
+new file mode 100644
+index 0000000..9dca22a
+--- /dev/null
++++ b/src/components/dental/ortho-lab-card.tsx
+@@ -0,0 +1,574 @@
++"use client";
++
++import { useState } from "react";
++import {
++  AlertCircle,
++  CalendarDays,
++  CheckCircle2,
++  FlaskConical,
++  Loader2,
++  PackageCheck,
++  Send,
++  Trash2,
++} from "lucide-react";
++
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { Skeleton } from "@/components/ui/skeleton";
++import { Textarea } from "@/components/ui/textarea";
++import {
++  useCreateLabOrder,
++  useDeleteLabOrder,
++  useLabOrders,
++  useMarkLabOrderDelivered,
++  useMarkLabOrderReceived,
++} from "@/hooks/use-lab-orders";
++import {
++  LAB_ORDER_KIND_LABELS,
++  LAB_ORDER_STATUS_LABELS,
++  labOrderStatus,
++  type LabOrderKind,
++  type LabOrderStatus,
++} from "@/lib/dental/lab-orders";
++import type { LabOrder } from "@/types/database";
++
++// ---------------------------------------------------------------------------
++// OrthoLabCard — pedidos a laboratorio (modelos, retenedores, alineadores...).
++// Componente CLIENTE (no importa de "@/lib/salon"; recibe salonId/customerId
++// por prop, resueltos en el page servidor). Mismo patrón que
++// OrthoPaymentPlanCard: formulario + lista, mutaciones con error local
++// por-acción, botones deshabilitados mientras están pendientes, diálogo de
++// confirmación para la acción destructiva (borrar).
++// ---------------------------------------------------------------------------
++
++export interface OrthoLabCardProps {
++  salonId: string;
++  customerId: string;
++}
++
++const KINDS: readonly LabOrderKind[] = [
++  "modelo",
++  "retenedor",
++  "alineadores",
++  "ortopedia",
++  "otro",
++];
++
++function todayIso(): string {
++  return new Date().toISOString().slice(0, 10);
++}
++
++/** Convención de fecha del módulo dental (igual que ConsentList/OrthoPaymentPlanCard). */
++function formatDate(iso: string): string {
++  return new Date(iso).toLocaleDateString("es-ES", {
++    day: "2-digit",
++    month: "2-digit",
++    year: "numeric",
++  });
++}
++
++export function OrthoLabCard({ salonId, customerId }: OrthoLabCardProps): React.ReactElement {
++  const ordersQuery = useLabOrders(salonId, customerId);
++  const createOrder = useCreateLabOrder(salonId, customerId);
++  const markReceived = useMarkLabOrderReceived(salonId, customerId);
++  const markDelivered = useMarkLabOrderDelivered(salonId, customerId);
++  const deleteOrder = useDeleteLabOrder(salonId, customerId);
++
++  const [kind, setKind] = useState<LabOrderKind>("alineadores");
++  const [labName, setLabName] = useState("");
++  const [sentAt, setSentAt] = useState(todayIso());
++  const [notes, setNotes] = useState("");
++  const [formError, setFormError] = useState<string | null>(null);
++
++  // Las acciones de fila (marcar recibido/entregado, borrar) comparten un
++  // único error local: solo suele haber una en curso a la vez, mismo
++  // espíritu que `unpayError` en OrthoPaymentPlanCard.
++  const [actionError, setActionError] = useState<string | null>(null);
++
++  // Confirmación de borrado (acción destructiva) — mismo patrón que el
++  // diálogo de cancelación del plan de pago.
++  const [deleteTarget, setDeleteTarget] = useState<LabOrder | null>(null);
++
++  function submit(): void {
++    setFormError(null);
++    createOrder.mutate(
++      { kind, labName: labName || null, sentAt, notes: notes || null },
++      {
++        onSuccess: () => {
++          setLabName("");
++          setNotes("");
++        },
++        onError: (e) =>
++          setFormError(e instanceof Error ? e.message : "No se pudo crear el pedido."),
++      },
++    );
++  }
++
++  function handleMarkReceived(orderId: string): void {
++    setActionError(null);
++    markReceived.mutate(
++      { orderId, input: { date: todayIso() } },
++      {
++        onError: (e) =>
++          setActionError(e instanceof Error ? e.message : "No se pudo marcar como recibido."),
++      },
++    );
++  }
++
++  function handleMarkDelivered(orderId: string): void {
++    setActionError(null);
++    markDelivered.mutate(
++      { orderId, input: { date: todayIso() } },
++      {
++        onError: (e) =>
++          setActionError(e instanceof Error ? e.message : "No se pudo marcar como entregado."),
++      },
++    );
++  }
++
++  function handleConfirmDelete(): void {
++    if (deleteTarget === null) return;
++    setActionError(null);
++    deleteOrder.mutate(deleteTarget.id, {
++      onSuccess: () => setDeleteTarget(null),
++      onError: (e) =>
++        setActionError(e instanceof Error ? e.message : "No se pudo borrar el pedido."),
++    });
++  }
++
++  const orders = ordersQuery.data ?? [];
++
++  return (
++    <Card>
++      <CardHeader className="flex flex-row items-center gap-3 space-y-0">
++        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
++          <FlaskConical className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />
++        </span>
++        <div>
++          <CardTitle className="text-xl">Laboratorio</CardTitle>
++          <p className="text-sm text-muted-foreground">
++            Modelos, retenedores y alineadores enviados y recibidos del laboratorio.
++          </p>
++        </div>
++      </CardHeader>
++      <CardContent className="space-y-6">
++        <NewOrderForm
++          kind={kind}
++          onKindChange={setKind}
++          labName={labName}
++          onLabNameChange={setLabName}
++          sentAt={sentAt}
++          onSentAtChange={setSentAt}
++          notes={notes}
++          onNotesChange={setNotes}
++          error={formError}
++          creating={createOrder.isPending}
++          onSubmit={submit}
++        />
++
++        {actionError !== null && (
++          <p
++            role="alert"
++            className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
++          >
++            <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++            {actionError}
++          </p>
++        )}
++
++        {ordersQuery.isPending ? (
++          <OrdersSkeleton />
++        ) : ordersQuery.isError ? (
++          <OrdersError
++            message={
++              ordersQuery.error instanceof Error
++                ? ordersQuery.error.message
++                : "No se pudieron cargar los pedidos de laboratorio."
++            }
++            onRetry={() => void ordersQuery.refetch()}
++          />
++        ) : orders.length === 0 ? (
++          <OrdersEmpty />
++        ) : (
++          <ul className="space-y-3">
++            {orders.map((o) => (
++              <LabOrderRow
++                key={o.id}
++                order={o}
++                onMarkReceived={() => handleMarkReceived(o.id)}
++                onMarkDelivered={() => handleMarkDelivered(o.id)}
++                onDelete={() => {
++                  setActionError(null);
++                  setDeleteTarget(o);
++                }}
++                receivingPending={markReceived.isPending}
++                deliveringPending={markDelivered.isPending}
++              />
++            ))}
++          </ul>
++        )}
++      </CardContent>
++
++      {/* Confirmación de borrado (acción destructiva). */}
++      <Dialog
++        open={deleteTarget !== null}
++        onOpenChange={(open) => {
++          if (!open) setDeleteTarget(null);
++        }}
++      >
++        <DialogContent>
++          <DialogHeader>
++            <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
++              <Trash2 className="h-5 w-5" aria-hidden="true" />
++            </div>
++            <DialogTitle>¿Borrar este pedido de laboratorio?</DialogTitle>
++            <DialogDescription>
++              {deleteTarget !== null &&
++                `${LAB_ORDER_KIND_LABELS[deleteTarget.kind]}${
++                  deleteTarget.lab_name !== null ? ` · ${deleteTarget.lab_name}` : ""
++                } · enviado el ${formatDate(deleteTarget.sent_at)}. `}
++              Esta acción no se puede deshacer.
++            </DialogDescription>
++          </DialogHeader>
++
++          {actionError !== null && (
++            <p
++              role="alert"
++              className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
++            >
++              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++              {actionError}
++            </p>
++          )}
++
++          <DialogFooter>
++            <Button
++              type="button"
++              variant="ghost"
++              onClick={() => setDeleteTarget(null)}
++              disabled={deleteOrder.isPending}
++            >
++              Cancelar
++            </Button>
++            <Button
++              type="button"
++              variant="destructive"
++              className="gap-1.5"
++              disabled={deleteOrder.isPending}
++              onClick={handleConfirmDelete}
++            >
++              {deleteOrder.isPending ? (
++                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
++              ) : (
++                <Trash2 className="h-4 w-4" aria-hidden="true" />
++              )}
++              {deleteOrder.isPending ? "Borrando…" : "Sí, borrar"}
++            </Button>
++          </DialogFooter>
++        </DialogContent>
++      </Dialog>
++    </Card>
++  );
++}
++
++// --- Formulario de nuevo pedido ---------------------------------------------
++
++interface NewOrderFormProps {
++  kind: LabOrderKind;
++  onKindChange: (k: LabOrderKind) => void;
++  labName: string;
++  onLabNameChange: (v: string) => void;
++  sentAt: string;
++  onSentAtChange: (v: string) => void;
++  notes: string;
++  onNotesChange: (v: string) => void;
++  error: string | null;
++  creating: boolean;
++  onSubmit: () => void;
++}
++
++function NewOrderForm({
++  kind,
++  onKindChange,
++  labName,
++  onLabNameChange,
++  sentAt,
++  onSentAtChange,
++  notes,
++  onNotesChange,
++  error,
++  creating,
++  onSubmit,
++}: NewOrderFormProps): React.ReactElement {
++  return (
++    <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-5">
++      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
++        Nuevo pedido
++      </p>
++      <div className="grid gap-4 sm:grid-cols-2">
++        <div className="space-y-1.5">
++          <Label htmlFor="lab-kind">Tipo</Label>
++          <Select value={kind} onValueChange={(v) => onKindChange(v as LabOrderKind)}>
++            <SelectTrigger id="lab-kind">
++              <SelectValue />
++            </SelectTrigger>
++            <SelectContent>
++              {KINDS.map((k) => (
++                <SelectItem key={k} value={k}>
++                  {LAB_ORDER_KIND_LABELS[k]}
++                </SelectItem>
++              ))}
++            </SelectContent>
++          </Select>
++        </div>
++        <div className="space-y-1.5">
++          <Label htmlFor="lab-name">Laboratorio</Label>
++          <Input
++            id="lab-name"
++            placeholder="Nombre del laboratorio"
++            value={labName}
++            onChange={(e) => onLabNameChange(e.target.value)}
++          />
++        </div>
++        <div className="space-y-1.5">
++          <Label htmlFor="lab-sent">
++            Fecha de envío <span className="text-destructive">*</span>
++          </Label>
++          <Input
++            id="lab-sent"
++            type="date"
++            value={sentAt}
++            onChange={(e) => onSentAtChange(e.target.value)}
++          />
++        </div>
++        <div className="space-y-1.5 sm:col-span-2">
++          <Label htmlFor="lab-notes">Notas</Label>
++          <Textarea
++            id="lab-notes"
++            placeholder="Instrucciones, color, observaciones…"
++            rows={2}
++            value={notes}
++            onChange={(e) => onNotesChange(e.target.value)}
++          />
++        </div>
++      </div>
++
++      {error !== null && (
++        <p
++          role="alert"
++          className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
++        >
++          <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++          {error}
++        </p>
++      )}
++
++      <Button
++        type="button"
++        className="gap-1.5"
++        onClick={onSubmit}
++        disabled={creating || sentAt.trim() === ""}
++      >
++        {creating ? (
++          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
++        ) : (
++          <Send className="h-4 w-4" aria-hidden="true" />
++        )}
++        {creating ? "Creando…" : "Nuevo pedido"}
++      </Button>
++    </div>
++  );
++}
++
++// --- Loading / error / empty -------------------------------------------------
++
++function OrdersSkeleton(): React.ReactElement {
++  return (
++    <div aria-busy="true" aria-live="polite" className="space-y-3">
++      <span className="sr-only">Cargando pedidos de laboratorio…</span>
++      {Array.from({ length: 2 }).map((_, i) => (
++        <Skeleton key={i} className="h-24 w-full rounded-xl" />
++      ))}
++    </div>
++  );
++}
++
++function OrdersError({
++  message,
++  onRetry,
++}: {
++  message: string;
++  onRetry: () => void;
++}): React.ReactElement {
++  return (
++    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-destructive/30 bg-destructive/5 px-4 py-10 text-center">
++      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
++        <AlertCircle className="h-5 w-5" aria-hidden="true" />
++      </span>
++      <p className="text-sm font-medium text-foreground">No se pudieron cargar los pedidos</p>
++      <p className="max-w-[32ch] text-xs text-muted-foreground">{message}</p>
++      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
++        Reintentar
++      </Button>
++    </div>
++  );
++}
++
++function OrdersEmpty(): React.ReactElement {
++  return (
++    <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border/70 px-4 py-10 text-center">
++      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
++        <FlaskConical className="h-5 w-5" aria-hidden="true" />
++      </span>
++      <p className="text-sm font-medium text-foreground">Sin pedidos de laboratorio</p>
++      <p className="max-w-[32ch] text-xs text-muted-foreground">
++        Los pedidos que envíes al laboratorio aparecerán aquí.
++      </p>
++    </div>
++  );
++}
++
++// --- Fila de pedido ----------------------------------------------------------
++
++function LabOrderRow({
++  order,
++  onMarkReceived,
++  onMarkDelivered,
++  onDelete,
++  receivingPending,
++  deliveringPending,
++}: {
++  order: LabOrder;
++  onMarkReceived: () => void;
++  onMarkDelivered: () => void;
++  onDelete: () => void;
++  receivingPending: boolean;
++  deliveringPending: boolean;
++}): React.ReactElement {
++  const status = labOrderStatus({
++    sentAt: order.sent_at,
++    receivedAt: order.received_at,
++    deliveredAt: order.delivered_at,
++  });
++
++  return (
++    <li className="rounded-xl border border-border/70 p-4 transition-colors duration-150 ease-apple-out hover:border-ring/30">
++      <div className="flex flex-wrap items-start justify-between gap-2">
++        <div>
++          <p className="font-medium text-foreground">
++            {LAB_ORDER_KIND_LABELS[order.kind]}
++            {order.lab_name !== null && (
++              <span className="font-normal text-muted-foreground"> · {order.lab_name}</span>
++            )}
++          </p>
++          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
++            <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++            <span>
++              Enviado {formatDate(order.sent_at)}
++              {order.received_at !== null && ` · Recibido ${formatDate(order.received_at)}`}
++              {order.delivered_at !== null && ` · Entregado ${formatDate(order.delivered_at)}`}
++            </span>
++          </p>
++        </div>
++        <StatusBadge status={status} />
++      </div>
++
++      {order.notes !== null && (
++        <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted/40 p-2.5 text-sm text-foreground">
++          {order.notes}
++        </p>
++      )}
++
++      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
++        {status === "enviado" && (
++          <Button
++            type="button"
++            size="sm"
++            variant="outline"
++            className="gap-1.5"
++            disabled={receivingPending}
++            onClick={onMarkReceived}
++          >
++            {receivingPending ? (
++              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++            ) : (
++              <PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />
++            )}
++            Marcar recibido
++          </Button>
++        )}
++        {status === "recibido" && (
++          <Button
++            type="button"
++            size="sm"
++            variant="outline"
++            className="gap-1.5"
++            disabled={deliveringPending}
++            onClick={onMarkDelivered}
++          >
++            {deliveringPending ? (
++              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++            ) : (
++              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
++            )}
++            Marcar entregado
++          </Button>
++        )}
++        <Button
++          type="button"
++          size="sm"
++          variant="ghost"
++          className="ml-auto gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
++          onClick={onDelete}
++        >
++          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
++          Borrar
++        </Button>
++      </div>
++    </li>
++  );
++}
++
++/** Chip de estado: color + icono (nunca solo color) para las tres fases del pedido. */
++function StatusBadge({ status }: { status: LabOrderStatus }): React.ReactElement {
++  if (status === "entregado") {
++    return (
++      <Badge variant="outline" className="gap-1 border-success/30 bg-success/10 text-success">
++        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
++        {LAB_ORDER_STATUS_LABELS.entregado}
++      </Badge>
++    );
++  }
++  if (status === "recibido") {
++    return (
++      <Badge variant="outline" className="gap-1 border-info/30 bg-info/10 text-info">
++        <PackageCheck className="h-3 w-3" aria-hidden="true" />
++        {LAB_ORDER_STATUS_LABELS.recibido}
++      </Badge>
++    );
++  }
++  return (
++    <Badge variant="outline" className="gap-1 text-muted-foreground">
++      <Send className="h-3 w-3" aria-hidden="true" />
++      {LAB_ORDER_STATUS_LABELS.enviado}
++    </Badge>
++  );
++}
+diff --git a/src/components/dental/ortodoncia-view.tsx b/src/components/dental/ortodoncia-view.tsx
+index e94fdb9..75ddef2 100644
+--- a/src/components/dental/ortodoncia-view.tsx
++++ b/src/components/dental/ortodoncia-view.tsx
+@@ -1,16 +1,17 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+ 
+ import { ConsentList } from "@/components/dental/consent-list";
+ import { OrthoImagingCard } from "@/components/dental/ortho-imaging-card";
++import { OrthoLabCard } from "@/components/dental/ortho-lab-card";
+ import { OrthoPaymentPlanCard } from "@/components/dental/ortho-payment-plan-card";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+ import { PillTabs } from "@/components/ui/pill-tabs";
+ import { Textarea } from "@/components/ui/textarea";
+ import { useConsents, useCreateConsent } from "@/hooks/use-consents";
+ import {
+   useAddOrthoVisit,
+@@ -25,20 +26,21 @@ import {
+   CROWDING_LEVEL_LABELS,
+   EMPTY_ORTHO_FICHA,
+   EMPTY_ORTHO_TREATMENT,
+   MALOCCLUSION_CLASS_LABELS,
+   ORTHO_ARCH_LABELS,
+   ORTHO_STATUS_LABELS,
+   type OrthoFicha,
+   type OrthoTreatment,
+   type OrthoVisitActions,
+ } from "@/lib/dental/ortho";
++import { computeAlignerProgress } from "@/lib/dental/lab-orders";
+ import type { OrthoVisitInput } from "@/lib/validations/ortho";
+ import type { OrthoVisit } from "@/types/database";
+ 
+ export interface OrtodonciaViewProps {
+   salonId: string;
+   customerId: string;
+ }
+ 
+ // <select> nativo tipado que emite el valor del enum o null.
+ function EnumSelect<T extends string>({
+@@ -74,20 +76,21 @@ function numberOrNull(v: string): number | null {
+   const n = Number(v);
+   return Number.isFinite(n) ? n : null;
+ }
+ 
+ const ORTHO_TABS = [
+   { id: "ficha", label: "Ficha y tratamiento" },
+   { id: "seguimiento", label: "Seguimiento" },
+   { id: "consentimiento", label: "Consentimiento" },
+   { id: "pago", label: "Plan de pago" },
+   { id: "radiografias", label: "Radiografías" },
++  { id: "laboratorio", label: "Laboratorio" },
+ ] as const;
+ 
+ export function OrtodonciaView({
+   salonId,
+   customerId,
+ }: OrtodonciaViewProps): React.ReactElement {
+   const dataQuery = useOrthoData(salonId, customerId);
+   const visitsQuery = useOrthoVisits(salonId, customerId);
+   const consentsQuery = useConsents(salonId, customerId);
+   const saveData = useSaveOrthoData(salonId, customerId);
+@@ -272,20 +275,67 @@ export function OrtodonciaView({
+               <div className="space-y-1.5 sm:col-span-2">
+                 <Label htmlFor="objectives">Objetivos</Label>
+                 <Textarea
+                   id="objectives"
+                   value={treatment.objectives ?? ""}
+                   onChange={(e) =>
+                     setTreatment((t) => ({ ...t, objectives: e.target.value || null }))
+                   }
+                 />
+               </div>
++              {treatment.applianceType === "alineadores" && (
++                <div className="space-y-1.5">
++                  <Label htmlFor="alignerTotal">Nº total de alineadores</Label>
++                  <Input
++                    id="alignerTotal"
++                    type="number"
++                    min={1}
++                    value={treatment.alignerTotal ?? ""}
++                    onChange={(e) =>
++                      setTreatment((t) => ({ ...t, alignerTotal: numberOrNull(e.target.value) }))
++                    }
++                  />
++                </div>
++              )}
++              {treatment.applianceType === "alineadores" &&
++                treatment.alignerTotal !== null &&
++                (() => {
++                  const progress = computeAlignerProgress(
++                    treatment.alignerTotal,
++                    (visitsQuery.data ?? []).map(
++                      (v) =>
++                        (v.actions as Partial<OrthoVisitActions> | null)?.alignerDelivered ??
++                        null,
++                    ),
++                  );
++                  const pct =
++                    progress.total > 0
++                      ? Math.min(100, (progress.delivered / progress.total) * 100)
++                      : 0;
++                  return (
++                    <div className="space-y-1.5 sm:col-span-2">
++                      <div className="flex items-center justify-between">
++                        <Label>Alineadores entregados</Label>
++                        <span className="text-sm tabular-nums text-muted-foreground">
++                          {progress.delivered} de {progress.total} · {progress.pending}{" "}
++                          pendientes
++                        </span>
++                      </div>
++                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
++                        <div
++                          className="h-full rounded-full bg-primary transition-[width] duration-300"
++                          style={{ width: `${pct}%` }}
++                        />
++                      </div>
++                    </div>
++                  );
++                })()}
+             </CardContent>
+           </Card>
+ 
+           <div className="flex items-center gap-3">
+             <Button onClick={handleSaveData} disabled={saveData.isPending}>
+               {saveData.isPending ? "Guardando…" : "Guardar ficha y tratamiento"}
+             </Button>
+             {saveData.isError && (
+               <span className="text-sm text-destructive">
+                 {(saveData.error as Error).message}
+@@ -324,20 +374,22 @@ export function OrtodonciaView({
+             />
+           </CardContent>
+         </Card>
+       )}
+ 
+       {tab === "pago" && <OrthoPaymentPlanCard salonId={salonId} customerId={customerId} />}
+ 
+       {tab === "radiografias" && (
+         <OrthoImagingCard salonId={salonId} customerId={customerId} />
+       )}
++
++      {tab === "laboratorio" && <OrthoLabCard salonId={salonId} customerId={customerId} />}
+     </div>
+   );
+ }
+ 
+ // --- Timeline de visitas ------------------------------------------------------
+ 
+ const EMPTY_VISIT_ACTIONS: OrthoVisitActions = {
+   wireChange: false,
+   wireDetail: null,
+   ligatures: false,
+diff --git a/src/hooks/use-lab-orders.ts b/src/hooks/use-lab-orders.ts
+new file mode 100644
+index 0000000..f57d9c2
+--- /dev/null
++++ b/src/hooks/use-lab-orders.ts
+@@ -0,0 +1,74 @@
++"use client";
++
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++
++import {
++  createLabOrder,
++  deleteLabOrder,
++  markLabOrderDelivered,
++  markLabOrderReceived,
++} from "@/app/(dashboard)/ortodoncia/lab-actions";
++import { fetchLabOrders, labOrderKeys } from "@/lib/queries/lab-orders";
++import type { CreateLabOrderInput, MarkLabDateInput } from "@/lib/validations/lab-orders";
++
++export function useLabOrders(salonId: string, customerId: string) {
++  return useQuery({
++    queryKey: labOrderKeys.list(salonId, customerId),
++    queryFn: () => fetchLabOrders(salonId, customerId),
++    enabled: customerId.length > 0,
++  });
++}
++
++function useInvalidate(salonId: string, customerId: string) {
++  const queryClient = useQueryClient();
++  return () =>
++    void queryClient.invalidateQueries({ queryKey: labOrderKeys.list(salonId, customerId) });
++}
++
++export function useCreateLabOrder(salonId: string, customerId: string) {
++  const invalidate = useInvalidate(salonId, customerId);
++  return useMutation({
++    mutationFn: async (input: CreateLabOrderInput) => {
++      const res = await createLabOrder(customerId, input);
++      if (!res.ok) throw new Error(res.error);
++      return res.data;
++    },
++    onSuccess: invalidate,
++  });
++}
++
++export function useMarkLabOrderReceived(salonId: string, customerId: string) {
++  const invalidate = useInvalidate(salonId, customerId);
++  return useMutation({
++    mutationFn: async (vars: { orderId: string; input: MarkLabDateInput }) => {
++      const res = await markLabOrderReceived(vars.orderId, vars.input);
++      if (!res.ok) throw new Error(res.error);
++      return res.data;
++    },
++    onSuccess: invalidate,
++  });
++}
++
++export function useMarkLabOrderDelivered(salonId: string, customerId: string) {
++  const invalidate = useInvalidate(salonId, customerId);
++  return useMutation({
++    mutationFn: async (vars: { orderId: string; input: MarkLabDateInput }) => {
++      const res = await markLabOrderDelivered(vars.orderId, vars.input);
++      if (!res.ok) throw new Error(res.error);
++      return res.data;
++    },
++    onSuccess: invalidate,
++  });
++}
++
++export function useDeleteLabOrder(salonId: string, customerId: string) {
++  const invalidate = useInvalidate(salonId, customerId);
++  return useMutation({
++    mutationFn: async (orderId: string) => {
++      const res = await deleteLabOrder(orderId);
++      if (!res.ok) throw new Error(res.error);
++      return res.data;
++    },
++    onSuccess: invalidate,
++  });
++}
+diff --git a/src/lib/dental/index.ts b/src/lib/dental/index.ts
+index 258ed8f..b3e9c0a 100644
+--- a/src/lib/dental/index.ts
++++ b/src/lib/dental/index.ts
+@@ -1,10 +1,11 @@
+ /**
+  * Dental library barrel export.
+  * Import from "@/lib/dental" to access all dental utilities.
+  */
+ 
+ export * from "./tooth";
+ export * from "./color";
+ export * from "./catalog";
+ export * from "./ortho";
+ export * from "./ortho-payments";
++export * from "./lab-orders";
+diff --git a/src/lib/dental/lab-orders.ts b/src/lib/dental/lab-orders.ts
+new file mode 100644
+index 0000000..478c4b7
+--- /dev/null
++++ b/src/lib/dental/lab-orders.ts
+@@ -0,0 +1,53 @@
++/** Pedidos a laboratorio + progreso de alineadores (Fase 4). Puro, sin IO. */
++
++export type LabOrderKind = "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
++export type LabOrderStatus = "enviado" | "recibido" | "entregado";
++
++export const LAB_ORDER_KIND_LABELS: Record<LabOrderKind, string> = {
++  modelo: "Modelo",
++  retenedor: "Retenedor",
++  alineadores: "Alineadores",
++  ortopedia: "Ortopedia",
++  otro: "Otro",
++};
++
++export const LAB_ORDER_STATUS_LABELS: Record<LabOrderStatus, string> = {
++  enviado: "Enviado",
++  recibido: "Recibido",
++  entregado: "Entregado",
++};
++
++/** Estado derivado de las fechas del pedido (no se almacena). */
++export function labOrderStatus(order: {
++  sentAt: string;
++  receivedAt: string | null;
++  deliveredAt: string | null;
++}): LabOrderStatus {
++  if (order.deliveredAt !== null) return "entregado";
++  if (order.receivedAt !== null) return "recibido";
++  return "enviado";
++}
++
++export interface AlignerProgress {
++  total: number;
++  delivered: number;
++  pending: number;
++}
++
++/**
++ * Progreso de alineadores. `deliveredNumbers` = el `alignerDelivered` de cada visita
++ * (nº del alineador entregado en esa visita; null si no se entregó). Entregados = el mayor
++ * de esos números; pendientes = total − entregados (nunca negativo).
++ */
++export function computeAlignerProgress(
++  alignerTotal: number | null,
++  deliveredNumbers: readonly (number | null)[],
++): AlignerProgress {
++  const total = alignerTotal ?? 0;
++  const delivered = deliveredNumbers.reduce<number>(
++    (max, n) => (n !== null && n > max ? n : max),
++    0,
++  );
++  const pending = Math.max(0, total - delivered);
++  return { total, delivered, pending };
++}
+diff --git a/src/lib/dental/ortho.ts b/src/lib/dental/ortho.ts
+index 3606afc..1fde2d1 100644
+--- a/src/lib/dental/ortho.ts
++++ b/src/lib/dental/ortho.ts
+@@ -24,20 +24,21 @@ export interface OrthoFicha {
+   diagnosisNotes: string | null;
+ }
+ 
+ export interface OrthoTreatment {
+   applianceType: ApplianceType | null;
+   arch: OrthoArch | null;
+   estimatedMonths: number | null;
+   startDate: string | null; // ISO "YYYY-MM-DD"
+   status: OrthoStatus | null;
+   objectives: string | null;
++  alignerTotal: number | null;
+ }
+ 
+ export interface OrthoData {
+   ficha: OrthoFicha;
+   treatment: OrthoTreatment;
+ }
+ 
+ export interface OrthoVisitActions {
+   wireChange: boolean;
+   wireDetail: string | null;
+@@ -60,20 +61,21 @@ export const EMPTY_ORTHO_FICHA: OrthoFicha = {
+   diagnosisNotes: null,
+ };
+ 
+ export const EMPTY_ORTHO_TREATMENT: OrthoTreatment = {
+   applianceType: null,
+   arch: null,
+   estimatedMonths: null,
+   startDate: null,
+   status: null,
+   objectives: null,
++  alignerTotal: null,
+ };
+ 
+ export const MALOCCLUSION_CLASS_LABELS: Record<MalocclusionClass, string> = {
+   I: "Clase I",
+   "II-1": "Clase II división 1",
+   "II-2": "Clase II división 2",
+   III: "Clase III",
+ };
+ 
+ export const CROWDING_LEVEL_LABELS: Record<CrowdingLevel, string> = {
+diff --git a/src/lib/queries/lab-orders.ts b/src/lib/queries/lab-orders.ts
+new file mode 100644
+index 0000000..e3bdb9b
+--- /dev/null
++++ b/src/lib/queries/lab-orders.ts
+@@ -0,0 +1,23 @@
++import { createClient } from "@/lib/supabase/client";
++import type { LabOrder } from "@/types/database";
++
++export const labOrderKeys = {
++  all: (salonId: string) => ["lab-orders", salonId] as const,
++  list: (salonId: string, customerId: string) =>
++    [...labOrderKeys.all(salonId), "list", customerId] as const,
++};
++
++/** Pedidos a laboratorio del paciente (más reciente primero). */
++export async function fetchLabOrders(salonId: string, customerId: string): Promise<LabOrder[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("lab_order")
++    .select("*")
++    .eq("salon_id", salonId)
++    .eq("customer_id", customerId)
++    .order("sent_at", { ascending: false })
++    .order("created_at", { ascending: false });
++
++  if (error !== null) throw new Error(error.message);
++  return data ?? [];
++}
+diff --git a/src/lib/validations/lab-orders.ts b/src/lib/validations/lab-orders.ts
+new file mode 100644
+index 0000000..fb6a3df
+--- /dev/null
++++ b/src/lib/validations/lab-orders.ts
+@@ -0,0 +1,16 @@
++import { z } from "zod";
++
++export const createLabOrderSchema = z.object({
++  kind: z.enum(["modelo", "retenedor", "alineadores", "ortopedia", "otro"]),
++  labName: z.string().trim().max(200).nullable().default(null),
++  sentAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida"),
++  notes: z.string().trim().max(2000).nullable().default(null),
++});
++
++export type CreateLabOrderInput = z.input<typeof createLabOrderSchema>;
++
++export const markLabDateSchema = z.object({
++  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida"),
++});
++
++export type MarkLabDateInput = z.input<typeof markLabDateSchema>;
+diff --git a/src/lib/validations/ortho.ts b/src/lib/validations/ortho.ts
+index 16d0816..37f2a7a 100644
+--- a/src/lib/validations/ortho.ts
++++ b/src/lib/validations/ortho.ts
+@@ -19,20 +19,21 @@ export const orthoFichaSchema = z.object({
+ export const orthoTreatmentSchema = z.object({
+   applianceType: z
+     .enum(["brackets_metalicos", "brackets_esteticos", "alineadores", "ortopedia"])
+     .nullable()
+     .default(null),
+   arch: z.enum(["superior", "inferior", "ambas"]).nullable().default(null),
+   estimatedMonths: z.number().int().min(1).max(120).nullable().default(null),
+   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida").nullable().default(null),
+   status: z.enum(["activo", "retencion", "finalizado", "cancelado"]).nullable().default(null),
+   objectives: optionalText(4000),
++  alignerTotal: z.number().int().min(1).max(120).nullable().default(null),
+ });
+ 
+ export const orthoDataSchema = z.object({
+   ficha: orthoFichaSchema,
+   treatment: orthoTreatmentSchema,
+ });
+ 
+ export type OrthoDataInput = z.input<typeof orthoDataSchema>;
+ export type OrthoDataValues = z.output<typeof orthoDataSchema>;
+ 
+diff --git a/src/tests/unit/lab-order-actions.test.ts b/src/tests/unit/lab-order-actions.test.ts
+new file mode 100644
+index 0000000..dd2cf09
+--- /dev/null
++++ b/src/tests/unit/lab-order-actions.test.ts
+@@ -0,0 +1,61 @@
++import { describe, it, expect, beforeEach, vi } from "vitest";
++
++const { getActiveSalonMock, getActiveMembershipMock, fromMock, getUserMock } = vi.hoisted(() => ({
++  getActiveSalonMock: vi.fn(),
++  getActiveMembershipMock: vi.fn(),
++  fromMock: vi.fn(),
++  getUserMock: vi.fn(),
++}));
++
++vi.mock("@/lib/salon", () => ({
++  getActiveSalon: () => getActiveSalonMock(),
++  getActiveMembership: () => getActiveMembershipMock(),
++}));
++vi.mock("@/lib/supabase/server", () => ({
++  createClient: () => ({ from: (t: string) => fromMock(t), auth: { getUser: () => getUserMock() } }),
++}));
++vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
++
++import { createLabOrder, deleteLabOrder } from "@/app/(dashboard)/ortodoncia/lab-actions";
++
++beforeEach(() => {
++  vi.clearAllMocks();
++  getUserMock.mockResolvedValue({ data: { user: { id: "u1" } } });
++});
++
++describe("createLabOrder", () => {
++  it("rechaza si el salón no es odontología", async () => {
++    getActiveSalonMock.mockResolvedValue({ id: "s1", sector: "peluqueria" });
++    getActiveMembershipMock.mockResolvedValue({ role: "owner" });
++    const res = await createLabOrder("c1", { kind: "alineadores", labName: "Lab", sentAt: "2026-08-10" });
++    expect(res.ok).toBe(false);
++  });
++
++  it("staff puede crear (inserta acotado por salon)", async () => {
++    getActiveSalonMock.mockResolvedValue({ id: "s1", sector: "odontologia" });
++    getActiveMembershipMock.mockResolvedValue({ role: "staff" });
++    let inserted: Record<string, unknown> | null = null;
++    fromMock.mockReturnValue({
++      insert: (p: Record<string, unknown>) => {
++        inserted = p;
++        return { select: () => ({ single: async () => ({ data: { id: "lo1" }, error: null }) }) };
++      },
++    });
++    const res = await createLabOrder("c1", { kind: "alineadores", labName: "Lab X", sentAt: "2026-08-10" });
++    expect(res.ok).toBe(true);
++    const w = inserted as unknown as { salon_id: string; customer_id: string; kind: string; sent_at: string };
++    expect(w.salon_id).toBe("s1");
++    expect(w.customer_id).toBe("c1");
++    expect(w.kind).toBe("alineadores");
++    expect(w.sent_at).toBe("2026-08-10");
++  });
++});
++
++describe("deleteLabOrder", () => {
++  it("rechaza a staff (borrar es owner/manager)", async () => {
++    getActiveSalonMock.mockResolvedValue({ id: "s1", sector: "odontologia" });
++    getActiveMembershipMock.mockResolvedValue({ role: "staff" });
++    const res = await deleteLabOrder("lo1");
++    expect(res.ok).toBe(false);
++  });
++});
+diff --git a/src/tests/unit/lab-orders-logic.test.ts b/src/tests/unit/lab-orders-logic.test.ts
+new file mode 100644
+index 0000000..71bbe26
+--- /dev/null
++++ b/src/tests/unit/lab-orders-logic.test.ts
+@@ -0,0 +1,39 @@
++import { describe, it, expect } from "vitest";
++
++import {
++  computeAlignerProgress,
++  labOrderStatus,
++  LAB_ORDER_KIND_LABELS,
++} from "@/lib/dental/lab-orders";
++
++describe("labOrderStatus", () => {
++  it("enviado cuando solo hay sentAt", () => {
++    expect(labOrderStatus({ sentAt: "2026-08-01", receivedAt: null, deliveredAt: null })).toBe("enviado");
++  });
++  it("recibido cuando hay receivedAt pero no deliveredAt", () => {
++    expect(labOrderStatus({ sentAt: "2026-08-01", receivedAt: "2026-08-05", deliveredAt: null })).toBe("recibido");
++  });
++  it("entregado cuando hay deliveredAt", () => {
++    expect(labOrderStatus({ sentAt: "2026-08-01", receivedAt: "2026-08-05", deliveredAt: "2026-08-06" })).toBe("entregado");
++  });
++});
++
++describe("computeAlignerProgress", () => {
++  it("entregados = mayor alignerDelivered; pendientes = total - entregados", () => {
++    const p = computeAlignerProgress(24, [3, 7, null, 5]);
++    expect(p).toEqual({ total: 24, delivered: 7, pending: 17 });
++  });
++  it("sin total → todo 0, pendientes no negativo", () => {
++    expect(computeAlignerProgress(null, [2])).toEqual({ total: 0, delivered: 2, pending: 0 });
++  });
++  it("sin entregas → delivered 0", () => {
++    expect(computeAlignerProgress(10, [])).toEqual({ total: 10, delivered: 0, pending: 10 });
++  });
++});
++
++describe("LAB_ORDER_KIND_LABELS", () => {
++  it("cubre las 5 clases", () => {
++    expect(Object.keys(LAB_ORDER_KIND_LABELS)).toHaveLength(5);
++    expect(LAB_ORDER_KIND_LABELS.alineadores).toBe("Alineadores");
++  });
++});
+diff --git a/src/tests/unit/lab-orders-schema.test.ts b/src/tests/unit/lab-orders-schema.test.ts
+new file mode 100644
+index 0000000..0c1545d
+--- /dev/null
++++ b/src/tests/unit/lab-orders-schema.test.ts
+@@ -0,0 +1,36 @@
++import { describe, it, expect } from "vitest";
++
++import { createLabOrderSchema, markLabDateSchema } from "@/lib/validations/lab-orders";
++import { orthoTreatmentSchema } from "@/lib/validations/ortho";
++
++describe("createLabOrderSchema", () => {
++  const base = { kind: "alineadores", labName: "Lab X", sentAt: "2026-08-10" };
++  it("acepta un pedido válido", () => {
++    expect(createLabOrderSchema.safeParse(base).success).toBe(true);
++  });
++  it("rechaza un kind inválido", () => {
++    expect(createLabOrderSchema.safeParse({ ...base, kind: "corona" }).success).toBe(false);
++  });
++  it("rechaza fecha no-ISO", () => {
++    expect(createLabOrderSchema.safeParse({ ...base, sentAt: "10/08/2026" }).success).toBe(false);
++  });
++});
++
++describe("markLabDateSchema", () => {
++  it("acepta fecha ISO", () => {
++    expect(markLabDateSchema.safeParse({ date: "2026-08-12" }).success).toBe(true);
++  });
++  it("rechaza fecha no-ISO", () => {
++    expect(markLabDateSchema.safeParse({ date: "hoy" }).success).toBe(false);
++  });
++});
++
++describe("orthoTreatmentSchema alignerTotal", () => {
++  it("acepta alignerTotal entero y nulo (default)", () => {
++    expect(orthoTreatmentSchema.safeParse({ alignerTotal: 24 }).success).toBe(true);
++    expect(orthoTreatmentSchema.safeParse({}).success).toBe(true); // default null
++  });
++  it("rechaza alignerTotal 0", () => {
++    expect(orthoTreatmentSchema.safeParse({ alignerTotal: 0 }).success).toBe(false);
++  });
++});
+diff --git a/src/types/database.ts b/src/types/database.ts
+index 0d33e4b..2a9e4fc 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -3382,20 +3382,68 @@ export interface Database {
+         Relationships: [
+           {
+             foreignKeyName: "ortho_installment_plan_fk";
+             columns: ["plan_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "ortho_payment_plan";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      // Ortodoncia — pedidos a laboratorio (Fase 4). Estado (enviado/recibido/
++      // entregado) derivado en la app de sent_at/received_at/delivered_at.
++      // Ver migración 20260811140000_lab_order.sql.
++      lab_order: {
++        Row: {
++          id: string;
++          salon_id: string;
++          customer_id: string;
++          kind: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
++          lab_name: string | null;
++          sent_at: string;
++          received_at: string | null;
++          delivered_at: string | null;
++          notes: string | null;
++          created_by: string | null;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          customer_id: string;
++          kind: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
++          lab_name?: string | null;
++          sent_at: string;
++          received_at?: string | null;
++          delivered_at?: string | null;
++          notes?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          customer_id?: string;
++          kind?: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
++          lab_name?: string | null;
++          sent_at?: string;
++          received_at?: string | null;
++          delivered_at?: string | null;
++          notes?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [];
++      };
+       // Planes de tratamiento — fases (1:N desde treatment_plan vía
+       // plan_id+salon_id). Sin updated_at (solo created_at). Ver migración
+       // 20260801100000_treatment_plans.sql.
+       plan_phase: {
+         Row: {
+           id: string;
+           salon_id: string;
+           plan_id: string;
+           position: number;
+           name: string;
+@@ -4237,20 +4285,21 @@ export type PerioSiteInsert = TablesInsert<"perio_site">;
+ 
+ // Ortodoncia — log de progreso por visita (Fase 1). Ficha y tratamiento en
+ // clinical_records.data.ortho (JSONB); esta tabla registra una entrada por
+ // visita.
+ export type OrthoVisit = Tables<"ortho_visit">;
+ 
+ // Ortodoncia — plan de pago (Fase 2 económico) — cabecera (ortho_payment_plan)
+ // y cuotas (ortho_installment). Creación atómica vía RPC create_ortho_payment_plan.
+ export type OrthoPaymentPlan = Tables<"ortho_payment_plan">;
+ export type OrthoInstallment = Tables<"ortho_installment">;
++export type LabOrder = Tables<"lab_order">;
+ 
+ // Mutuas y seguros (odontología) — aseguradoras (insurer), póliza del paciente
+ // (customer_insurance) y baremo por servicio (insurer_service_price).
+ export type Insurer = Tables<"insurer">;
+ export type InsurerInsert = TablesInsert<"insurer">;
+ export type CustomerInsurance = Tables<"customer_insurance">;
+ export type CustomerInsuranceInsert = TablesInsert<"customer_insurance">;
+ export type InsurerServicePrice = Tables<"insurer_service_price">;
+ export type InsurerServicePriceInsert = TablesInsert<"insurer_service_price">;
+ 
+diff --git a/supabase/migrations/20260811140000_lab_order.sql b/supabase/migrations/20260811140000_lab_order.sql
+new file mode 100644
+index 0000000..451f8df
+--- /dev/null
++++ b/supabase/migrations/20260811140000_lab_order.sql
+@@ -0,0 +1,39 @@
++-- supabase/migrations/20260811140000_lab_order.sql
++-- Pedidos a laboratorio de ortodoncia (Fase 4). Estado derivado de las fechas en la app.
++--
++-- APLICACIÓN VÍA MANAGEMENT API (la aplica el usuario en el SQL editor):
++--   POST https://api.supabase.com/v1/projects/jztoyekixcziaicrnlce/database/migrations
++--   Content-Type: application/sql
++--   Body: <contenido de este archivo>
++
++begin;
++
++create type public.lab_order_kind as enum ('modelo', 'retenedor', 'alineadores', 'ortopedia', 'otro');
++
++create table public.lab_order (
++  id           uuid primary key default gen_random_uuid(),
++  salon_id     uuid not null references public.salons(id) on delete cascade,
++  customer_id  uuid not null,
++  kind         public.lab_order_kind not null,
++  lab_name     text,
++  sent_at      date not null,
++  received_at  date,
++  delivered_at date,
++  notes        text,
++  created_by   uuid,
++  created_at   timestamptz not null default now(),
++  updated_at   timestamptz not null default now(),
++  constraint lab_order_customer_fk
++    foreign key (customer_id, salon_id)
++    references public.clinical_records (customer_id, salon_id) on delete cascade
++);
++
++create index lab_order_customer_idx on public.lab_order (salon_id, customer_id, sent_at desc);
++
++alter table public.lab_order enable row level security;
++
++create policy lab_order_rw on public.lab_order
++  for all using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++
++commit;

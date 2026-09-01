@@ -1,0 +1,167 @@
+# Review package: 112700b803ea371ce9e88d196a0209af45969e96..HEAD
+
+## Commits
+7785236 feat(ortodoncia): pestana Laboratorio + progreso de alineadores
+
+## Files changed
+ src/components/dental/ortodoncia-view.tsx | 52 +++++++++++++++++++++++++++++++
+ 1 file changed, 52 insertions(+)
+
+## Diff
+diff --git a/src/components/dental/ortodoncia-view.tsx b/src/components/dental/ortodoncia-view.tsx
+index e94fdb9..75ddef2 100644
+--- a/src/components/dental/ortodoncia-view.tsx
++++ b/src/components/dental/ortodoncia-view.tsx
+@@ -1,16 +1,17 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+ 
+ import { ConsentList } from "@/components/dental/consent-list";
+ import { OrthoImagingCard } from "@/components/dental/ortho-imaging-card";
++import { OrthoLabCard } from "@/components/dental/ortho-lab-card";
+ import { OrthoPaymentPlanCard } from "@/components/dental/ortho-payment-plan-card";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+ import { PillTabs } from "@/components/ui/pill-tabs";
+ import { Textarea } from "@/components/ui/textarea";
+ import { useConsents, useCreateConsent } from "@/hooks/use-consents";
+ import {
+   useAddOrthoVisit,
+@@ -25,20 +26,21 @@ import {
+   CROWDING_LEVEL_LABELS,
+   EMPTY_ORTHO_FICHA,
+   EMPTY_ORTHO_TREATMENT,
+   MALOCCLUSION_CLASS_LABELS,
+   ORTHO_ARCH_LABELS,
+   ORTHO_STATUS_LABELS,
+   type OrthoFicha,
+   type OrthoTreatment,
+   type OrthoVisitActions,
+ } from "@/lib/dental/ortho";
++import { computeAlignerProgress } from "@/lib/dental/lab-orders";
+ import type { OrthoVisitInput } from "@/lib/validations/ortho";
+ import type { OrthoVisit } from "@/types/database";
+ 
+ export interface OrtodonciaViewProps {
+   salonId: string;
+   customerId: string;
+ }
+ 
+ // <select> nativo tipado que emite el valor del enum o null.
+ function EnumSelect<T extends string>({
+@@ -74,20 +76,21 @@ function numberOrNull(v: string): number | null {
+   const n = Number(v);
+   return Number.isFinite(n) ? n : null;
+ }
+ 
+ const ORTHO_TABS = [
+   { id: "ficha", label: "Ficha y tratamiento" },
+   { id: "seguimiento", label: "Seguimiento" },
+   { id: "consentimiento", label: "Consentimiento" },
+   { id: "pago", label: "Plan de pago" },
+   { id: "radiografias", label: "Radiografías" },
++  { id: "laboratorio", label: "Laboratorio" },
+ ] as const;
+ 
+ export function OrtodonciaView({
+   salonId,
+   customerId,
+ }: OrtodonciaViewProps): React.ReactElement {
+   const dataQuery = useOrthoData(salonId, customerId);
+   const visitsQuery = useOrthoVisits(salonId, customerId);
+   const consentsQuery = useConsents(salonId, customerId);
+   const saveData = useSaveOrthoData(salonId, customerId);
+@@ -272,20 +275,67 @@ export function OrtodonciaView({
+               <div className="space-y-1.5 sm:col-span-2">
+                 <Label htmlFor="objectives">Objetivos</Label>
+                 <Textarea
+                   id="objectives"
+                   value={treatment.objectives ?? ""}
+                   onChange={(e) =>
+                     setTreatment((t) => ({ ...t, objectives: e.target.value || null }))
+                   }
+                 />
+               </div>
++              {treatment.applianceType === "alineadores" && (
++                <div className="space-y-1.5">
++                  <Label htmlFor="alignerTotal">Nº total de alineadores</Label>
++                  <Input
++                    id="alignerTotal"
++                    type="number"
++                    min={1}
++                    value={treatment.alignerTotal ?? ""}
++                    onChange={(e) =>
++                      setTreatment((t) => ({ ...t, alignerTotal: numberOrNull(e.target.value) }))
++                    }
++                  />
++                </div>
++              )}
++              {treatment.applianceType === "alineadores" &&
++                treatment.alignerTotal !== null &&
++                (() => {
++                  const progress = computeAlignerProgress(
++                    treatment.alignerTotal,
++                    (visitsQuery.data ?? []).map(
++                      (v) =>
++                        (v.actions as Partial<OrthoVisitActions> | null)?.alignerDelivered ??
++                        null,
++                    ),
++                  );
++                  const pct =
++                    progress.total > 0
++                      ? Math.min(100, (progress.delivered / progress.total) * 100)
++                      : 0;
++                  return (
++                    <div className="space-y-1.5 sm:col-span-2">
++                      <div className="flex items-center justify-between">
++                        <Label>Alineadores entregados</Label>
++                        <span className="text-sm tabular-nums text-muted-foreground">
++                          {progress.delivered} de {progress.total} · {progress.pending}{" "}
++                          pendientes
++                        </span>
++                      </div>
++                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
++                        <div
++                          className="h-full rounded-full bg-primary transition-[width] duration-300"
++                          style={{ width: `${pct}%` }}
++                        />
++                      </div>
++                    </div>
++                  );
++                })()}
+             </CardContent>
+           </Card>
+ 
+           <div className="flex items-center gap-3">
+             <Button onClick={handleSaveData} disabled={saveData.isPending}>
+               {saveData.isPending ? "Guardando…" : "Guardar ficha y tratamiento"}
+             </Button>
+             {saveData.isError && (
+               <span className="text-sm text-destructive">
+                 {(saveData.error as Error).message}
+@@ -324,20 +374,22 @@ export function OrtodonciaView({
+             />
+           </CardContent>
+         </Card>
+       )}
+ 
+       {tab === "pago" && <OrthoPaymentPlanCard salonId={salonId} customerId={customerId} />}
+ 
+       {tab === "radiografias" && (
+         <OrthoImagingCard salonId={salonId} customerId={customerId} />
+       )}
++
++      {tab === "laboratorio" && <OrthoLabCard salonId={salonId} customerId={customerId} />}
+     </div>
+   );
+ }
+ 
+ // --- Timeline de visitas ------------------------------------------------------
+ 
+ const EMPTY_VISIT_ACTIONS: OrthoVisitActions = {
+   wireChange: false,
+   wireDetail: null,
+   ligatures: false,

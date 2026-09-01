@@ -1,0 +1,107 @@
+# Review package: 26f52221bed5950ead636cb36b0f7468c5bffb78..9c493f8
+
+## Commits
+9c493f8 feat(ortodoncia): hooks plan de pago
+
+## Files changed
+ src/hooks/use-ortho-payments.ts | 91 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 91 insertions(+)
+
+## Diff
+diff --git a/src/hooks/use-ortho-payments.ts b/src/hooks/use-ortho-payments.ts
+new file mode 100644
+index 0000000..f123c42
+--- /dev/null
++++ b/src/hooks/use-ortho-payments.ts
+@@ -0,0 +1,91 @@
++"use client";
++
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++
++import {
++  cancelOrthoPaymentPlan,
++  createOrthoPaymentPlan,
++  payInstallment,
++  unpayInstallment,
++} from "@/app/(dashboard)/ortodoncia/payment-actions";
++import {
++  fetchOrthoPaymentPlan,
++  fetchOverdueOrthoCounts,
++  orthoPaymentKeys,
++} from "@/lib/queries/ortho-payments";
++import type { CreateOrthoPlanInput, PayInstallmentInput } from "@/lib/validations/ortho-payments";
++
++export function useOrthoPaymentPlan(salonId: string, customerId: string) {
++  return useQuery({
++    queryKey: orthoPaymentKeys.plan(salonId, customerId),
++    queryFn: () => fetchOrthoPaymentPlan(salonId, customerId),
++    enabled: customerId.length > 0,
++  });
++}
++
++export function useOverdueOrtho(
++  salonId: string,
++  customerIds: readonly string[],
++  todayIso: string,
++  enabled: boolean,
++) {
++  return useQuery({
++    queryKey: orthoPaymentKeys.overdue(salonId, customerIds),
++    queryFn: () => fetchOverdueOrthoCounts(salonId, customerIds, todayIso),
++    enabled: enabled && customerIds.length > 0,
++  });
++}
++
++function useInvalidatePlan(salonId: string, customerId: string) {
++  const queryClient = useQueryClient();
++  return () =>
++    void queryClient.invalidateQueries({ queryKey: orthoPaymentKeys.plan(salonId, customerId) });
++}
++
++export function useCreateOrthoPaymentPlan(salonId: string, customerId: string) {
++  const invalidate = useInvalidatePlan(salonId, customerId);
++  return useMutation({
++    mutationFn: async (input: CreateOrthoPlanInput) => {
++      const res = await createOrthoPaymentPlan(customerId, input);
++      if (!res.ok) throw new Error(res.error);
++      return res.data;
++    },
++    onSuccess: invalidate,
++  });
++}
++
++export function usePayInstallment(salonId: string, customerId: string) {
++  const invalidate = useInvalidatePlan(salonId, customerId);
++  return useMutation({
++    mutationFn: async (vars: { installmentId: string; input: PayInstallmentInput }) => {
++      const res = await payInstallment(vars.installmentId, vars.input);
++      if (!res.ok) throw new Error(res.error);
++      return res.data;
++    },
++    onSuccess: invalidate,
++  });
++}
++
++export function useUnpayInstallment(salonId: string, customerId: string) {
++  const invalidate = useInvalidatePlan(salonId, customerId);
++  return useMutation({
++    mutationFn: async (installmentId: string) => {
++      const res = await unpayInstallment(installmentId);
++      if (!res.ok) throw new Error(res.error);
++      return res.data;
++    },
++    onSuccess: invalidate,
++  });
++}
++
++export function useCancelOrthoPaymentPlan(salonId: string, customerId: string) {
++  const invalidate = useInvalidatePlan(salonId, customerId);
++  return useMutation({
++    mutationFn: async (planId: string) => {
++      const res = await cancelOrthoPaymentPlan(planId);
++      if (!res.ok) throw new Error(res.error);
++      return res.data;
++    },
++    onSuccess: invalidate,
++  });
++}

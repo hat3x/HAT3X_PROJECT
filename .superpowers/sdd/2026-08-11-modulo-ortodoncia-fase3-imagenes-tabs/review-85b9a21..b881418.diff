@@ -1,0 +1,2875 @@
+# Review package: 85b9a214ced55b05e8dc8b21918378e46ce53f66..HEAD
+
+## Commits
+b881418 feat(horarios): horario de apertura de la clinica (salon_opening_hours)
+6e40f6d feat(horarios): /ajustes/horarios en tabs (clinica / por profesional)
+40506e6 feat(ortodoncia): /ortodoncia en subsecciones por pill-tabs
+b0fd9f1 feat(ortodoncia): OrthoImagingCard (radiografias, ui-ux-pro-max)
+a3a31c0 feat(imagenes): galeria muestra PDF como 'Abrir' (pestana nueva)
+f0d05b8 refactor(imagenes): UploadImageForm compartido (+PDF, defaultModality)
+8728628 feat(imagenes): aceptar PDF en la subida (25 MiB)
+44c499e feat(ui): componente reutilizable PillTabs
+
+## Files changed
+ src/app/(dashboard)/ajustes/horarios/actions.ts    |  69 ++++
+ .../(dashboard)/ajustes/horarios/horarios-view.tsx | 185 +++++----
+ .../ajustes/horarios/salon-schedule-editor.tsx     | 253 +++++++++++++
+ src/app/(dashboard)/expediente/actions.ts          |  12 +-
+ src/app/api/reception/opening-hours/handler.ts     |  27 ++
+ src/app/api/reception/opening-hours/route.ts       |  26 ++
+ src/components/dental/expediente-workspace.tsx     | 156 +-------
+ src/components/dental/image-gallery.tsx            |  27 +-
+ src/components/dental/ortho-imaging-card.tsx       | 116 ++++++
+ src/components/dental/ortodoncia-view.tsx          | 421 +++++++++++----------
+ src/components/dental/upload-image-form.tsx        | 156 ++++++++
+ src/components/ui/pill-tabs.tsx                    |  51 +++
+ src/hooks/use-schedules.ts                         |  31 ++
+ src/lib/booking/availability.ts                    |  83 +++-
+ src/lib/booking/server.ts                          |  39 +-
+ src/lib/queries/schedules.ts                       |  31 +-
+ src/lib/validations/schedule.ts                    |  44 +++
+ src/tests/unit/availability.test.ts                | 113 ++++++
+ src/tests/unit/expediente-actions.test.ts          |  32 +-
+ src/types/database.ts                              |  39 ++
+ .../20260810150000_salon_opening_hours.sql         |  64 ++++
+ 21 files changed, 1526 insertions(+), 449 deletions(-)
+
+## Diff
+diff --git a/src/app/(dashboard)/ajustes/horarios/actions.ts b/src/app/(dashboard)/ajustes/horarios/actions.ts
+index ce0073f..415ecc8 100644
+--- a/src/app/(dashboard)/ajustes/horarios/actions.ts
++++ b/src/app/(dashboard)/ajustes/horarios/actions.ts
+@@ -1,20 +1,22 @@
+ "use server";
+ 
+ import { revalidatePath } from "next/cache";
+ 
+ import { getActiveMembership } from "@/lib/salon";
+ import { createClient } from "@/lib/supabase/server";
+ import {
+   exceptionSchema,
++  salonWeeklyScheduleSchema,
+   weeklyScheduleSchema,
+   type ExceptionInput,
++  type SalonWeeklyScheduleInput,
+   type WeeklyScheduleInput,
+ } from "@/lib/validations/schedule";
+ import type { ScheduleException, TablesInsert } from "@/types/database";
+ 
+ /** Resultado tipado de un Server Action de horarios. */
+ export type ActionResult<T> =
+   | { ok: true; data: T }
+   | { ok: false; error: string };
+ 
+ /** Cliente de Supabase con el tipo `Database`. */
+@@ -142,20 +144,87 @@ export async function saveWeeklySchedule(
+         await supabase.from("professional_schedules").insert(previous);
+       }
+       return { ok: false, error: insertError.message };
+     }
+   }
+ 
+   revalidatePath("/ajustes/horarios");
+   return { ok: true, data: null };
+ }
+ 
++/**
++ * Reemplaza el HORARIO DE APERTURA de la clínica/salón completo.
++ *
++ * Igual que `saveWeeklySchedule` pero a nivel de salón (sin profesional): el editor
++ * envía todos los tramos de la semana y se aplica «borrar e insertar» sobre
++ * `salon_opening_hours`. Si la inserción falla se restaura la instantánea previa.
++ * Este horario lo intersecta el motor de disponibilidad con el de cada profesional.
++ */
++export async function saveSalonSchedule(
++  input: SalonWeeklyScheduleInput,
++): Promise<ActionResult<null>> {
++  const parsed = salonWeeklyScheduleSchema.safeParse(input);
++  if (!parsed.success) {
++    return { ok: false, error: firstIssue(parsed.error) };
++  }
++
++  const auth = await requireManagerSalonId();
++  if (!auth.ok) {
++    return { ok: false, error: auth.error };
++  }
++
++  const supabase = createClient();
++
++  // Instantánea para restaurar si falla la inserción (sin transacción disponible).
++  const { data: previous, error: snapshotError } = await supabase
++    .from("salon_opening_hours")
++    .select("*")
++    .eq("salon_id", auth.salonId);
++  if (snapshotError !== null) {
++    return { ok: false, error: snapshotError.message };
++  }
++
++  const { error: deleteError } = await supabase
++    .from("salon_opening_hours")
++    .delete()
++    .eq("salon_id", auth.salonId);
++  if (deleteError !== null) {
++    return { ok: false, error: deleteError.message };
++  }
++
++  if (parsed.data.slots.length > 0) {
++    const rows: TablesInsert<"salon_opening_hours">[] = parsed.data.slots.map(
++      (slot) => ({
++        salon_id: auth.salonId,
++        weekday: slot.weekday,
++        start_time: slot.start_time,
++        end_time: slot.end_time,
++      }),
++    );
++
++    const { error: insertError } = await supabase
++      .from("salon_opening_hours")
++      .insert(rows);
++
++    if (insertError !== null) {
++      // Restaura el horario anterior para no dejarlo vacío tras el borrado.
++      if (previous.length > 0) {
++        await supabase.from("salon_opening_hours").insert(previous);
++      }
++      return { ok: false, error: insertError.message };
++    }
++  }
++
++  revalidatePath("/ajustes/horarios");
++  return { ok: true, data: null };
++}
++
+ /** Valores validados de una excepción. */
+ type ExceptionValues = ReturnType<typeof exceptionSchema.parse>;
+ 
+ /**
+  * Traduce los valores validados a un payload persistible en
+  * `schedule_exceptions`. Cuando el profesional libra (`is_available=false`),
+  * las horas se fuerzan a `null`.
+  */
+ function toExceptionPayload(
+   salonId: string,
+diff --git a/src/app/(dashboard)/ajustes/horarios/horarios-view.tsx b/src/app/(dashboard)/ajustes/horarios/horarios-view.tsx
+index 86deecd..2a5790e 100644
+--- a/src/app/(dashboard)/ajustes/horarios/horarios-view.tsx
++++ b/src/app/(dashboard)/ajustes/horarios/horarios-view.tsx
+@@ -1,149 +1,182 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+ import { CalendarClock, Clock } from "lucide-react";
+ 
+ import { ExceptionsEditor } from "@/app/(dashboard)/ajustes/horarios/exceptions-editor";
++import { SalonScheduleEditor } from "@/app/(dashboard)/ajustes/horarios/salon-schedule-editor";
+ import { ScheduleEditor } from "@/app/(dashboard)/ajustes/horarios/schedule-editor";
+ import { SectionHeader } from "@/app/(dashboard)/ajustes/section-header";
+ import {
+   Card,
+   CardContent,
+   CardDescription,
+   CardHeader,
+   CardTitle,
+ } from "@/components/ui/card";
+ import { Label } from "@/components/ui/label";
++import { PillTabs } from "@/components/ui/pill-tabs";
+ import {
+   Select,
+   SelectContent,
+   SelectItem,
+   SelectTrigger,
+   SelectValue,
+ } from "@/components/ui/select";
+ import { Skeleton } from "@/components/ui/skeleton";
+ import { useProfessionals } from "@/hooks/use-professionals";
+ 
+ interface HorariosViewProps {
+   salonId: string;
+ }
+ 
++const HORARIO_TABS = [
++  { id: "clinica", label: "Horario de la clínica" },
++  { id: "profesional", label: "Horarios por profesional" },
++] as const;
++
+ /**
+  * Vista de horarios de /ajustes.
+  *
+  * Selecciona un profesional y edita, para él, su horario semanal recurrente y
+  * sus excepciones puntuales (días libres u horario especial). El horario de
+  * cada profesional es independiente, por eso todo se scopea por el profesional
+  * elegido en el selector superior.
+  */
+ export function HorariosView({
+   salonId,
+ }: HorariosViewProps): React.ReactElement {
+   const { data: professionals, isPending, isError, error } = useProfessionals(
+     salonId,
+     "",
+   );
+   const [selectedId, setSelectedId] = useState("");
++  const [tab, setTab] = useState<string>("clinica");
+ 
+   // Selecciona el primer profesional en cuanto llega la lista (o si el
+   // seleccionado deja de existir, p. ej. tras eliminarlo en otra pestaña).
+   useEffect(() => {
+     if (professionals === undefined || professionals.length === 0) {
+       return;
+     }
+     const stillExists = professionals.some((p) => p.id === selectedId);
+     if (!stillExists) {
+       setSelectedId(professionals[0]!.id);
+     }
+   }, [professionals, selectedId]);
+ 
+   return (
+     <div>
+       <SectionHeader
+         icon={Clock}
+         title="Horarios"
+-        description="Define el horario semanal de cada profesional y sus excepciones puntuales."
++        description="Define el horario de apertura de la clínica y el horario semanal de cada profesional."
++      />
++
++      <PillTabs
++        tabs={HORARIO_TABS}
++        active={tab}
++        onChange={setTab}
++        ariaLabel="Tipos de horario"
++        className="mb-6"
+       />
+ 
+-      {isPending ? (
+-        <div className="grid gap-4">
+-          <Skeleton className="h-10 w-full max-w-sm" />
+-          <Skeleton className="h-64 w-full" />
+-        </div>
+-      ) : isError ? (
+-        <p role="alert" className="text-sm text-destructive">
+-          {error instanceof Error
+-            ? error.message
+-            : "Error al cargar el personal"}
+-        </p>
+-      ) : !professionals || professionals.length === 0 ? (
+-        <div className="rounded-xl border border-border/70 bg-muted/20 px-6 py-14 text-center shadow-xs">
+-          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+-            <CalendarClock className="h-6 w-6" />
+-          </span>
+-          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+-            Aún no hay personal. Da de alta profesionales en Ajustes → Personal
+-            para configurar sus horarios.
++      {tab === "clinica" ? (
++        <Card className="animate-fade-up">
++          <CardHeader>
++            <CardTitle className="text-lg">Horario de la clínica</CardTitle>
++            <CardDescription>
++              Horario de apertura del negocio. La recepcionista solo ofrece citas
++              dentro de estas horas; se combina con el horario de cada profesional.
++            </CardDescription>
++          </CardHeader>
++          <CardContent>
++            <SalonScheduleEditor salonId={salonId} />
++          </CardContent>
++        </Card>
++      ) : null}
++
++      {tab === "profesional" ? (
++        isPending ? (
++          <div className="grid gap-4">
++            <Skeleton className="h-10 w-full max-w-sm" />
++            <Skeleton className="h-64 w-full" />
++          </div>
++        ) : isError ? (
++          <p role="alert" className="text-sm text-destructive">
++            {error instanceof Error
++              ? error.message
++              : "Error al cargar el personal"}
+           </p>
+-        </div>
+-      ) : (
+-        <div className="grid gap-6 animate-fade-up [animation-delay:60ms]">
+-          <div className="grid max-w-sm gap-2">
+-            <Label htmlFor="professional">Profesional</Label>
+-            <Select value={selectedId} onValueChange={setSelectedId}>
+-              <SelectTrigger id="professional" aria-label="Profesional">
+-                <SelectValue placeholder="Selecciona un profesional" />
+-              </SelectTrigger>
+-              <SelectContent>
+-                {professionals.map((professional) => (
+-                  <SelectItem key={professional.id} value={professional.id}>
+-                    {professional.full_name}
+-                    {professional.active ? "" : " (inactivo)"}
+-                  </SelectItem>
+-                ))}
+-              </SelectContent>
+-            </Select>
++        ) : !professionals || professionals.length === 0 ? (
++          <div className="rounded-xl border border-border/70 bg-muted/20 px-6 py-14 text-center shadow-xs">
++            <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
++              <CalendarClock className="h-6 w-6" />
++            </span>
++            <p className="mx-auto max-w-sm text-sm text-muted-foreground">
++              Aún no hay personal. Da de alta profesionales en Ajustes → Personal
++              para configurar sus horarios.
++            </p>
+           </div>
++        ) : (
++          <div className="grid gap-6 animate-fade-up">
++            <div className="grid max-w-sm gap-2">
++              <Label htmlFor="professional">Profesional</Label>
++              <Select value={selectedId} onValueChange={setSelectedId}>
++                <SelectTrigger id="professional" aria-label="Profesional">
++                  <SelectValue placeholder="Selecciona un profesional" />
++                </SelectTrigger>
++                <SelectContent>
++                  {professionals.map((professional) => (
++                    <SelectItem key={professional.id} value={professional.id}>
++                      {professional.full_name}
++                      {professional.active ? "" : " (inactivo)"}
++                    </SelectItem>
++                  ))}
++                </SelectContent>
++              </Select>
++            </div>
+ 
+-          {selectedId !== "" ? (
+-            <div className="grid gap-6">
+-              <Card>
+-                <CardHeader>
+-                  <CardTitle className="text-lg">Horario semanal</CardTitle>
+-                  <CardDescription>
+-                    Tramos recurrentes por día. Añade varios tramos en un mismo
+-                    día para cubrir turno de mañana y tarde.
+-                  </CardDescription>
+-                </CardHeader>
+-                <CardContent>
+-                  <ScheduleEditor
+-                    key={selectedId}
+-                    salonId={salonId}
+-                    professionalId={selectedId}
+-                  />
+-                </CardContent>
+-              </Card>
++            {selectedId !== "" ? (
++              <div className="grid gap-6">
++                <Card>
++                  <CardHeader>
++                    <CardTitle className="text-lg">Horario semanal</CardTitle>
++                    <CardDescription>
++                      Tramos recurrentes por día. Añade varios tramos en un mismo
++                      día para cubrir turno de mañana y tarde.
++                    </CardDescription>
++                  </CardHeader>
++                  <CardContent>
++                    <ScheduleEditor
++                      key={selectedId}
++                      salonId={salonId}
++                      professionalId={selectedId}
++                    />
++                  </CardContent>
++                </Card>
+ 
+-              <Card>
+-                <CardHeader>
+-                  <CardTitle className="text-lg">Excepciones</CardTitle>
+-                  <CardDescription>
+-                    Días libres u horario especial para fechas concretas, que
+-                    prevalecen sobre el horario semanal.
+-                  </CardDescription>
+-                </CardHeader>
+-                <CardContent>
+-                  <ExceptionsEditor
+-                    key={selectedId}
+-                    salonId={salonId}
+-                    professionalId={selectedId}
+-                  />
+-                </CardContent>
+-              </Card>
+-            </div>
+-          ) : null}
+-        </div>
+-      )}
++                <Card>
++                  <CardHeader>
++                    <CardTitle className="text-lg">Excepciones</CardTitle>
++                    <CardDescription>
++                      Días libres u horario especial para fechas concretas, que
++                      prevalecen sobre el horario semanal.
++                    </CardDescription>
++                  </CardHeader>
++                  <CardContent>
++                    <ExceptionsEditor
++                      key={selectedId}
++                      salonId={salonId}
++                      professionalId={selectedId}
++                    />
++                  </CardContent>
++                </Card>
++              </div>
++            ) : null}
++          </div>
++        )
++      ) : null}
+     </div>
+   );
+ }
+diff --git a/src/app/(dashboard)/ajustes/horarios/salon-schedule-editor.tsx b/src/app/(dashboard)/ajustes/horarios/salon-schedule-editor.tsx
+new file mode 100644
+index 0000000..68b09a7
+--- /dev/null
++++ b/src/app/(dashboard)/ajustes/horarios/salon-schedule-editor.tsx
+@@ -0,0 +1,253 @@
++"use client";
++
++import { useEffect, useRef, useState } from "react";
++import { Clock, Plus, Save, Trash2 } from "lucide-react";
++
++import { SaveStatus } from "@/app/(dashboard)/ajustes/save-status";
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++import { Skeleton } from "@/components/ui/skeleton";
++import { useSalonSchedule, useSaveSalonSchedule } from "@/hooks/use-schedules";
++import { WEEKDAY_LABELS } from "@/lib/booking/format";
++import {
++  WEEKDAY_ORDER,
++  salonWeeklyScheduleSchema,
++  type SalonWeeklyScheduleInput,
++} from "@/lib/validations/schedule";
++
++interface SalonScheduleEditorProps {
++  salonId: string;
++}
++
++/** Tramo en edición; `key` es estable para React (id de fila o generado). */
++interface DraftSlot {
++  key: string;
++  weekday: number;
++  start_time: string;
++  end_time: string;
++}
++
++/** `HH:MM:SS` (o `HH:MM`) → `HH:MM` para los inputs de tipo `time`. */
++function toTimeInput(value: string): string {
++  return value.slice(0, 5);
++}
++
++/**
++ * Editor del HORARIO DE APERTURA de la clínica/salón.
++ *
++ * Espejo de {@link ScheduleEditor} pero a nivel de salón (sin profesional): define
++ * cuándo abre el negocio. El motor de disponibilidad lo INTERSECTA con el horario
++ * de cada profesional, de modo que la recepcionista de voz nunca ofrece un hueco
++ * fuera de este horario. Un día sin tramos = clínica cerrada ese día.
++ *
++ * La validación de confianza vive en el Server Action; aquí se ejecuta el mismo
++ * esquema Zod antes de enviar para feedback inmediato.
++ */
++export function SalonScheduleEditor({
++  salonId,
++}: SalonScheduleEditorProps): React.ReactElement {
++  const { data, isPending, isError, error } = useSalonSchedule(salonId);
++  const saveMutation = useSaveSalonSchedule(salonId);
++
++  const [slots, setSlots] = useState<DraftSlot[]>([]);
++  const [formError, setFormError] = useState<string | null>(null);
++  const [saved, setSaved] = useState(false);
++  const keyCounter = useRef(0);
++
++  function nextKey(): string {
++    keyCounter.current += 1;
++    return `new-${keyCounter.current}`;
++  }
++
++  // Sincroniza el borrador local con el horario del servidor cuando llega o
++  // cambia (incluido el refetch posterior a guardar).
++  useEffect(() => {
++    if (data === undefined) {
++      return;
++    }
++    setSlots(
++      data.map((row) => ({
++        key: row.id,
++        weekday: row.weekday,
++        start_time: toTimeInput(row.start_time),
++        end_time: toTimeInput(row.end_time),
++      })),
++    );
++  }, [data]);
++
++  function markDirty(): void {
++    setSaved(false);
++    setFormError(null);
++  }
++
++  function addSlot(weekday: number): void {
++    markDirty();
++    setSlots((prev) => [
++      ...prev,
++      { key: nextKey(), weekday, start_time: "10:00", end_time: "14:00" },
++    ]);
++  }
++
++  function removeSlot(key: string): void {
++    markDirty();
++    setSlots((prev) => prev.filter((slot) => slot.key !== key));
++  }
++
++  function updateSlot(
++    key: string,
++    field: "start_time" | "end_time",
++    value: string,
++  ): void {
++    markDirty();
++    setSlots((prev) =>
++      prev.map((slot) =>
++        slot.key === key ? { ...slot, [field]: value } : slot,
++      ),
++    );
++  }
++
++  function handleSave(): void {
++    const input: SalonWeeklyScheduleInput = {
++      slots: slots.map((slot) => ({
++        weekday: slot.weekday,
++        start_time: slot.start_time,
++        end_time: slot.end_time,
++      })),
++    };
++
++    const parsed = salonWeeklyScheduleSchema.safeParse(input);
++    if (!parsed.success) {
++      setFormError(parsed.error.issues[0]?.message ?? "Datos no válidos");
++      return;
++    }
++
++    setFormError(null);
++    saveMutation.mutate(input, {
++      onSuccess: () => setSaved(true),
++    });
++  }
++
++  if (isPending) {
++    return (
++      <div className="grid gap-3">
++        {Array.from({ length: 4 }).map((_, index) => (
++          <Skeleton key={index} className="h-16 w-full" />
++        ))}
++      </div>
++    );
++  }
++
++  if (isError) {
++    return (
++      <p role="alert" className="text-sm text-destructive">
++        {error instanceof Error
++          ? error.message
++          : "Error al cargar el horario de la clínica"}
++      </p>
++    );
++  }
++
++  const mutationError =
++    saveMutation.error instanceof Error ? saveMutation.error.message : null;
++
++  return (
++    <div className="grid gap-4">
++      <div className="grid gap-3">
++        {WEEKDAY_ORDER.map((weekday) => {
++          const daySlots = slots.filter((slot) => slot.weekday === weekday);
++          return (
++            <div
++              key={weekday}
++              className="grid gap-3 rounded-lg border border-border/70 p-3.5 transition-colors duration-150 ease-apple-out hover:border-border sm:grid-cols-[8rem_1fr] sm:items-start sm:gap-4"
++            >
++              <div className="flex items-center justify-between sm:block">
++                <span className="text-sm font-semibold">
++                  {WEEKDAY_LABELS[weekday]}
++                </span>
++                {daySlots.length === 0 ? (
++                  <span className="text-xs text-muted-foreground sm:mt-1 sm:block">
++                    Cerrado
++                  </span>
++                ) : null}
++              </div>
++
++              <div className="grid gap-2">
++                {daySlots.map((slot) => (
++                  <div key={slot.key} className="flex items-center gap-2">
++                    <Input
++                      type="time"
++                      aria-label={`${WEEKDAY_LABELS[weekday]}: apertura`}
++                      value={slot.start_time}
++                      onChange={(e) =>
++                        updateSlot(slot.key, "start_time", e.target.value)
++                      }
++                      className="w-[7.5rem]"
++                    />
++                    <span className="text-muted-foreground" aria-hidden="true">
++                      –
++                    </span>
++                    <Input
++                      type="time"
++                      aria-label={`${WEEKDAY_LABELS[weekday]}: cierre`}
++                      value={slot.end_time}
++                      onChange={(e) =>
++                        updateSlot(slot.key, "end_time", e.target.value)
++                      }
++                      className="w-[7.5rem]"
++                    />
++                    <Button
++                      type="button"
++                      variant="ghost"
++                      size="icon"
++                      aria-label={`Eliminar tramo de ${WEEKDAY_LABELS[weekday]}`}
++                      onClick={() => removeSlot(slot.key)}
++                    >
++                      <Trash2 className="h-4 w-4 text-destructive" />
++                    </Button>
++                  </div>
++                ))}
++
++                <div>
++                  <Button
++                    type="button"
++                    variant="outline"
++                    size="sm"
++                    onClick={() => addSlot(weekday)}
++                  >
++                    <Plus className="mr-2 h-4 w-4" />
++                    {daySlots.length === 0 ? "Añadir horario" : "Añadir tramo"}
++                  </Button>
++                </div>
++              </div>
++            </div>
++          );
++        })}
++      </div>
++
++      {formError !== null || mutationError !== null || saved ? (
++        <SaveStatus
++          error={formError ?? mutationError}
++          saved={saved}
++          savedLabel="Horario de la clínica guardado."
++        />
++      ) : (
++        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
++          <Clock className="h-3.5 w-3.5" />
++          Este es el horario de apertura del negocio. La recepcionista solo ofrece
++          citas dentro de estas horas. Deja un día sin tramos para marcarlo cerrado.
++        </p>
++      )}
++
++      <div className="flex justify-end">
++        <Button
++          type="button"
++          onClick={handleSave}
++          disabled={saveMutation.isPending}
++        >
++          <Save className="mr-2 h-4 w-4" />
++          {saveMutation.isPending ? "Guardando…" : "Guardar horario"}
++        </Button>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/(dashboard)/expediente/actions.ts b/src/app/(dashboard)/expediente/actions.ts
+index cd17e2c..ed43e13 100644
+--- a/src/app/(dashboard)/expediente/actions.ts
++++ b/src/app/(dashboard)/expediente/actions.ts
+@@ -44,25 +44,25 @@ const ERROR_ROLE = "No tienes permiso para escribir en el expediente clínico.";
+ /** Roles con permiso de escritura general UNA VEZ pasado el gate de sector. */
+ const WRITE_ROLES: readonly MemberRole[] = ["owner", "manager", "staff"];
+ 
+ /** Roles con permiso de borrado de consentimientos. `staff` queda excluido. */
+ const DELETE_ROLES: readonly MemberRole[] = ["owner", "manager"];
+ 
+ /** Bucket privado de imágenes/radiografías clínicas (migración 20260801110000). */
+ const PATIENT_MEDIA_BUCKET = "patient-media";
+ 
+ /** MIME de imagen admitidos al subir (radiografías/fotos exportadas como imagen). */
+-const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
++const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"] as const;
+ type AllowedImageMime = (typeof ALLOWED_IMAGE_MIME_TYPES)[number];
+ 
+ /** Tamaño máximo de una imagen subida. */
+-const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MiB
++const MAX_IMAGE_BYTES = 25 * 1024 * 1024; // 25 MiB
+ 
+ /** Segundos de validez de una signed URL de `patient-media`. */
+ const SIGNED_URL_TTL_SECONDS = 3600;
+ 
+ // ---------------------------------------------------------------------------
+ // Gate — defensa en profundidad (sector + rol), igual que planes/actions.ts
+ // ---------------------------------------------------------------------------
+ 
+ async function assertExpedienteAccess(
+   requiredRoles: readonly MemberRole[] = WRITE_ROLES,
+@@ -291,20 +291,22 @@ function isAllowedImageMime(mime: string): mime is AllowedImageMime {
+ 
+ /** Extensión canónica del objeto en Storage para un MIME de imagen admitido. */
+ function imageExtensionForMime(mime: AllowedImageMime): string {
+   switch (mime) {
+     case "image/png":
+       return "png";
+     case "image/jpeg":
+       return "jpg";
+     case "image/webp":
+       return "webp";
++    case "application/pdf":
++      return "pdf";
+   }
+ }
+ 
+ /** Lee un campo de texto opcional de un FormData; cadena vacía cuenta como ausente. */
+ function readOptionalString(formData: FormData, key: string): string | null {
+   const value = formData.get(key);
+   if (typeof value !== "string" || value.length === 0) return null;
+   return value;
+ }
+ 
+@@ -321,32 +323,32 @@ function readOptionalString(formData: FormData, key: string): string | null {
+  * Convención de path: `{salon_id}/{customerId}/{uuid}.{ext}` (README de la
+  * migración). Valida MIME de imagen (`png|jpeg|webp`) y tamaño (≤ 15 MiB) EN
+  * SERVIDOR con mensajes legibles antes de tocar Storage.
+  */
+ export async function uploadPatientImage(formData: FormData): Promise<ActionResult<PatientImage>> {
+   const access = await assertExpedienteAccess();
+   if (!access.ok) return { ok: false, error: access.error };
+ 
+   const file = formData.get("file");
+   if (!(file instanceof File) || file.size === 0) {
+-    return { ok: false, error: "Selecciona un archivo de imagen." };
++    return { ok: false, error: "Selecciona un archivo." };
+   }
+ 
+   const contentType = (file.type ?? "").trim().toLowerCase();
+   if (!isAllowedImageMime(contentType)) {
+     return {
+       ok: false,
+-      error: `Formato de imagen no admitido. Usa: ${ALLOWED_IMAGE_MIME_TYPES.join(", ")}.`,
++      error: `Formato no admitido. Usa: ${ALLOWED_IMAGE_MIME_TYPES.join(", ")}.`,
+     };
+   }
+   if (file.size > MAX_IMAGE_BYTES) {
+-    return { ok: false, error: "La imagen supera el tamaño máximo de 15 MiB." };
++    return { ok: false, error: "El archivo supera el tamaño máximo de 25 MiB." };
+   }
+ 
+   const customerId = readOptionalString(formData, "customerId");
+   if (customerId === null) {
+     return { ok: false, error: "Falta el paciente (customerId)." };
+   }
+ 
+   const modality = readOptionalString(formData, "modality");
+   if (modality === null || !isImageModality(modality)) {
+     return { ok: false, error: "Falta o no es válida la modalidad de la imagen." };
+diff --git a/src/app/api/reception/opening-hours/handler.ts b/src/app/api/reception/opening-hours/handler.ts
+new file mode 100644
+index 0000000..3e0b4a0
+--- /dev/null
++++ b/src/app/api/reception/opening-hours/handler.ts
+@@ -0,0 +1,27 @@
++/**
++ * Lógica de `GET /api/reception/opening-hours`, en un módulo HERMANO del `route.ts`
++ * (un `route.ts` de Next App Router solo puede exportar métodos HTTP y config de ruta;
++ * el handler se aísla aquí para ser importable por los tests).
++ *
++ * Devuelve el HORARIO DE APERTURA del salón (tabla `salon_opening_hours`), acotado por
++ * el `salonId` que el guard resuelve de la `x-api-key`. Lo usa la recepcionista de voz
++ * (vía n8n) para anunciar el horario REAL sin hardcodearlo en su prompt: cuando el
++ * propietario cambia el horario en el panel, la recepcionista lo refleja sola.
++ */
++import type { NextResponse } from "next/server";
++
++import { getOpeningHoursForSalon } from "@/lib/booking/server";
++import { ReceptionError, receptionJson } from "@/lib/reception";
++
++export async function handleReceptionOpeningHours(
++  salonId: string,
++): Promise<NextResponse> {
++  let hours: Array<{ weekday: number; start_time: string; end_time: string }>;
++  try {
++    hours = await getOpeningHoursForSalon(salonId);
++  } catch (error) {
++    throw ReceptionError.internal(error);
++  }
++
++  return receptionJson({ hours });
++}
+diff --git a/src/app/api/reception/opening-hours/route.ts b/src/app/api/reception/opening-hours/route.ts
+new file mode 100644
+index 0000000..dc0b000
+--- /dev/null
++++ b/src/app/api/reception/opening-hours/route.ts
+@@ -0,0 +1,26 @@
++/**
++ * GET /api/reception/opening-hours
++ *
++ * Endpoint del RECEPCIONISTA IA: devuelve el HORARIO DE APERTURA del salón
++ * (`salon_opening_hours`). Permite que la recepcionista de voz anuncie el horario
++ * REAL del negocio sin tenerlo hardcodeado en su prompt, de modo que un cambio de
++ * horario en el panel lo refleje sola.
++ *
++ *   · Authn + entitlement — {@link withReceptionGuard} resuelve `x-api-key → salón`
++ *     y exige el add-on `ai_receptionist`. El `salonId` que llega es de fiar y ES
++ *     LO QUE ACOTA la consulta (aislamiento cross-tenant).
++ *   · Salida — `{ hours: [{ weekday, start_time, end_time }] }` (weekday 0=domingo…6=sábado,
++ *     horas `HH:MM:SS` en la zona del salón). `hours` vacío = sin horario configurado.
++ *
++ * La lógica vive en el módulo hermano `./handler`.
++ */
++import { withReceptionGuard } from "@/lib/reception";
++
++import { handleReceptionOpeningHours } from "./handler";
++
++/** Horario vivo y autenticado: nunca cachear. */
++export const dynamic = "force-dynamic";
++
++export const GET = withReceptionGuard((_request, { salonId }) =>
++  handleReceptionOpeningHours(salonId),
++);
+diff --git a/src/components/dental/expediente-workspace.tsx b/src/components/dental/expediente-workspace.tsx
+index 9ea294d..c5d3e42 100644
+--- a/src/components/dental/expediente-workspace.tsx
++++ b/src/components/dental/expediente-workspace.tsx
+@@ -1,51 +1,49 @@
+ "use client";
+ 
+-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
++import { useRef, useState, type FormEvent } from "react";
+ import Link from "next/link";
+ import {
+   AlertCircle,
+   ChevronLeft,
+   FolderOpen,
+   Loader2,
+   Pill,
+   PlusCircle,
+   Trash2,
+-  Upload,
+ } from "lucide-react";
+ 
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+ import {
+   Select,
+   SelectContent,
+   SelectItem,
+   SelectTrigger,
+   SelectValue,
+ } from "@/components/ui/select";
+ import { Textarea } from "@/components/ui/textarea";
++import { UploadImageForm } from "@/components/dental/upload-image-form";
+ import { useConsents, useCreateConsent } from "@/hooks/use-consents";
+-import { usePatientImages, useUploadPatientImage } from "@/hooks/use-patient-images";
++import { usePatientImages } from "@/hooks/use-patient-images";
+ import { useAddPrescriptionItem, useCreatePrescription, usePrescriptions } from "@/hooks/use-prescriptions";
+ import { useProfessionals } from "@/hooks/use-professionals";
+ import {
+   CONSENT_TYPES,
+   CONSENT_TYPE_LABELS,
+-  IMAGE_MODALITIES,
+-  IMAGE_MODALITY_LABELS,
+   getConsentTemplate,
+ } from "@/lib/dental/consents";
+ import { MEDICATION_TEMPLATES, getMedicationTemplate } from "@/lib/dental/prescriptions";
+ import { cn } from "@/lib/utils";
+-import type { ConsentType, ImageModality } from "@/types/database";
++import type { ConsentType } from "@/types/database";
+ import { ConsentList } from "./consent-list";
+ import { ImageGallery } from "./image-gallery";
+ import { PrescriptionList } from "./prescription-list";
+ 
+ // ---------------------------------------------------------------------------
+ // ExpedienteWorkspace — orquesta las tres pestañas del expediente clínico
+ // (Consentimientos / Imágenes / Recetas) para un paciente concreto.
+ // Componente CLIENTE: toda la carga de datos pasa por los hooks de React
+ // Query de `use-consents.ts`/`use-patient-images.ts`/`use-prescriptions.ts`.
+ // Mismo patrón estructural que `PlanWorkspace`/`PerioWorkspace` (header +
+@@ -312,166 +310,20 @@ function NewConsentForm({ salonId, customerId }: NewConsentFormProps): React.Rea
+               <PlusCircle className="h-3.5 w-3.5" aria-hidden="true" />
+             )}
+             Crear consentimiento
+           </Button>
+         </form>
+       </CardContent>
+     </Card>
+   );
+ }
+ 
+-// ---------------------------------------------------------------------------
+-// UploadImageForm — construye el FormData que espera `uploadPatientImage`
+-// (vía `useUploadPatientImage`), mismo patrón de manejo de archivo que
+-// `SalonMarcaForm` (`ajustes/marca/salon-marca-form.tsx`), pero aquí el hook
+-// recibe el FormData completo, no un `File` suelto.
+-// ---------------------------------------------------------------------------
+-
+-interface UploadImageFormProps {
+-  salonId: string;
+-  customerId: string;
+-}
+-
+-const IMAGE_ACCEPT = "image/png,image/jpeg,image/webp";
+-
+-function UploadImageForm({ salonId, customerId }: UploadImageFormProps): React.ReactElement {
+-  const uploadMutation = useUploadPatientImage(salonId, customerId);
+-  const fileInputRef = useRef<HTMLInputElement>(null);
+-
+-  const [modality, setModality] = useState<ImageModality>("periapical");
+-  const [fdiCode, setFdiCode] = useState("");
+-  const [note, setNote] = useState("");
+-  const [file, setFile] = useState<File | null>(null);
+-  const [error, setError] = useState<string | null>(null);
+-
+-  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+-    setFile(e.target.files?.[0] ?? null);
+-  }
+-
+-  function handleSubmit(e: FormEvent) {
+-    e.preventDefault();
+-    setError(null);
+-
+-    if (file === null) {
+-      setError("Selecciona un archivo de imagen.");
+-      return;
+-    }
+-
+-    const formData = new FormData();
+-    formData.set("file", file);
+-    formData.set("customerId", customerId);
+-    formData.set("modality", modality);
+-    const trimmedFdi = fdiCode.trim();
+-    if (trimmedFdi !== "") formData.set("fdiCode", trimmedFdi);
+-    const trimmedNote = note.trim();
+-    if (trimmedNote !== "") formData.set("note", trimmedNote);
+-
+-    uploadMutation.mutate(formData, {
+-      onSuccess: () => {
+-        setFile(null);
+-        setFdiCode("");
+-        setNote("");
+-        if (fileInputRef.current !== null) fileInputRef.current.value = "";
+-      },
+-      onError: (err: unknown) => {
+-        setError(err instanceof Error ? err.message : "Error al subir la imagen.");
+-      },
+-    });
+-  }
+-
+-  return (
+-    <Card>
+-      <CardHeader className="pb-2">
+-        <CardTitle className="text-sm font-medium text-muted-foreground">Subir imagen</CardTitle>
+-      </CardHeader>
+-      <CardContent>
+-        <form className="space-y-3" onSubmit={handleSubmit}>
+-          <div className="space-y-1">
+-            <Label htmlFor="image-file">Archivo</Label>
+-            <input
+-              ref={fileInputRef}
+-              id="image-file"
+-              type="file"
+-              accept={IMAGE_ACCEPT}
+-              onChange={handleFileChange}
+-              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-accent-foreground hover:file:bg-accent/80"
+-            />
+-          </div>
+-
+-          <div className="grid gap-3 sm:grid-cols-2">
+-            <div className="space-y-1">
+-              <Label htmlFor="image-modality">Modalidad</Label>
+-              <Select
+-                value={modality}
+-                onValueChange={(v) => setModality(v as ImageModality)}
+-              >
+-                <SelectTrigger id="image-modality">
+-                  <SelectValue />
+-                </SelectTrigger>
+-                <SelectContent>
+-                  {IMAGE_MODALITIES.map((m) => (
+-                    <SelectItem key={m} value={m}>
+-                      {IMAGE_MODALITY_LABELS[m]}
+-                    </SelectItem>
+-                  ))}
+-                </SelectContent>
+-              </Select>
+-            </div>
+-
+-            <div className="space-y-1">
+-              <Label htmlFor="image-fdi">Diente (FDI, opcional)</Label>
+-              <Input
+-                id="image-fdi"
+-                inputMode="numeric"
+-                value={fdiCode}
+-                onChange={(e) => setFdiCode(e.target.value)}
+-                placeholder="Ej. 11"
+-              />
+-            </div>
+-          </div>
+-
+-          <div className="space-y-1">
+-            <Label htmlFor="image-note">Nota (opcional)</Label>
+-            <Input
+-              id="image-note"
+-              value={note}
+-              onChange={(e) => setNote(e.target.value)}
+-              placeholder="Ej. control post-endodoncia"
+-            />
+-          </div>
+-
+-          {error !== null && (
+-            <p className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive">
+-              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+-              {error}
+-            </p>
+-          )}
+-
+-          <Button
+-            type="submit"
+-            size="sm"
+-            disabled={uploadMutation.isPending}
+-            className="gap-1.5"
+-          >
+-            {uploadMutation.isPending ? (
+-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+-            ) : (
+-              <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+-            )}
+-            Subir imagen
+-          </Button>
+-        </form>
+-      </CardContent>
+-    </Card>
+-  );
+-}
+-
+ // ---------------------------------------------------------------------------
+ // NewPrescriptionForm — crea la cabecera de una receta (borrador) y sus
+ // renglones de medicación en un único envío. Los renglones se construyen
+ // primero en estado LOCAL (añadir/quitar antes de guardar, cada uno
+ // autorrellenable desde `MEDICATION_TEMPLATES` o libre); al enviar el
+ // formulario se crea la cabecera (`useCreatePrescription`) y después se
+ // persiste cada renglón (`useAddPrescriptionItem`) con el id ya asignado —
+ // igual que `plan_item` se añade uno a uno a un `treatment_plan` ya creado.
+ // ---------------------------------------------------------------------------
+ 
+diff --git a/src/components/dental/image-gallery.tsx b/src/components/dental/image-gallery.tsx
+index 09eba58..faeff88 100644
+--- a/src/components/dental/image-gallery.tsx
++++ b/src/components/dental/image-gallery.tsx
+@@ -1,15 +1,15 @@
+ "use client";
+ 
+ import { useMemo, useState } from "react";
+ import { useQuery } from "@tanstack/react-query";
+-import { AlertCircle, ImageOff, Loader2, Trash2 } from "lucide-react";
++import { AlertCircle, ExternalLink, FileText, ImageOff, Loader2, Trash2 } from "lucide-react";
+ 
+ import { signImageUrls } from "@/app/(dashboard)/expediente/actions";
+ import { Badge } from "@/components/ui/badge";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent } from "@/components/ui/card";
+ import { useDeletePatientImage } from "@/hooks/use-patient-images";
+ import { IMAGE_MODALITIES, IMAGE_MODALITY_LABELS } from "@/lib/dental/consents";
+ import type { ImageModality, PatientImage } from "@/types/database";
+ 
+ // ---------------------------------------------------------------------------
+@@ -38,20 +38,25 @@ function formatDate(iso: string): string {
+     month: "2-digit",
+     year: "numeric",
+   });
+ }
+ 
+ /** Path que se pinta para una imagen: preferentemente la miniatura, si existe. */
+ function displayPath(image: PatientImage): string {
+   return image.thumbnail_path ?? image.storage_path;
+ }
+ 
++/** Distingue los adjuntos PDF (p. ej. informes escaneados) de las imágenes reales. */
++function isPdf(image: PatientImage): boolean {
++  return image.mime === "application/pdf" || image.storage_path.toLowerCase().endsWith(".pdf");
++}
++
+ export function ImageGallery({
+   salonId,
+   customerId,
+   images,
+ }: ImageGalleryProps): React.ReactElement {
+   const [modalityFilter, setModalityFilter] = useState<ImageModality | typeof ALL_MODALITIES>(
+     ALL_MODALITIES,
+   );
+   const deleteMutation = useDeletePatientImage(salonId, customerId);
+   const [actionError, setActionError] = useState<string | null>(null);
+@@ -139,21 +144,39 @@ export function ImageGallery({
+         </p>
+       ) : (
+         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+           {filtered.map((image) => {
+             const url = urlByPath[displayPath(image)];
+             const modalityLabel = IMAGE_MODALITY_LABELS[image.modality];
+ 
+             return (
+               <Card key={image.id} className="overflow-hidden">
+                 <div className="flex aspect-square items-center justify-center bg-muted/30">
+-                  {url !== undefined ? (
++                  {isPdf(image) ? (
++                    url !== undefined ? (
++                      <a
++                        href={url}
++                        target="_blank"
++                        rel="noopener noreferrer"
++                        className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
++                      >
++                        <FileText className="h-8 w-8" aria-hidden="true" />
++                        <span className="inline-flex items-center gap-1 text-xs font-medium">
++                          Abrir PDF <ExternalLink className="h-3 w-3" aria-hidden="true" />
++                        </span>
++                      </a>
++                    ) : urlsQuery.isLoading ? (
++                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
++                    ) : (
++                      <FileText className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
++                    )
++                  ) : url !== undefined ? (
+                     // eslint-disable-next-line @next/next/no-img-element -- signed URL de Supabase Storage (bucket privado); next/image exigiría configurar remotePatterns dinámicos.
+                     <img
+                       src={url}
+                       alt={modalityLabel}
+                       className="h-full w-full object-cover"
+                     />
+                   ) : urlsQuery.isLoading ? (
+                     <Loader2
+                       className="h-5 w-5 animate-spin text-muted-foreground"
+                       aria-hidden="true"
+diff --git a/src/components/dental/ortho-imaging-card.tsx b/src/components/dental/ortho-imaging-card.tsx
+new file mode 100644
+index 0000000..8ee625c
+--- /dev/null
++++ b/src/components/dental/ortho-imaging-card.tsx
+@@ -0,0 +1,116 @@
++"use client";
++
++import { AlertCircle, ScanLine } from "lucide-react";
++
++import { ImageGallery } from "@/components/dental/image-gallery";
++import { UploadImageForm } from "@/components/dental/upload-image-form";
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
++import { Skeleton } from "@/components/ui/skeleton";
++import { usePatientImages } from "@/hooks/use-patient-images";
++
++// ---------------------------------------------------------------------------
++// OrthoImagingCard — subsección "Radiografías e imágenes" de ortodoncia.
++// Componente CLIENTE (no importa de "@/lib/salon"; recibe `salonId` por prop,
++// resuelto en el page servidor). Mismo lenguaje visual que las otras cards de
++// `OrtodonciaView` (p. ej. `OrthoPaymentPlanCard`): icono en círculo + título
++// + descripción en el header, y estados excluyentes en el content (loading /
++// error con reintento / listo) para la galería. El formulario de subida se
++// reutiliza tal cual (Task 3) con `defaultModality="cefalometrica"` para
++// preseleccionar la modalidad típica de ortodoncia sin bloquear el resto.
++// ---------------------------------------------------------------------------
++
++export interface OrthoImagingCardProps {
++  salonId: string;
++  customerId: string;
++}
++
++export function OrthoImagingCard({
++  salonId,
++  customerId,
++}: OrthoImagingCardProps): React.ReactElement {
++  const imagesQuery = usePatientImages(salonId, customerId);
++
++  return (
++    <Card>
++      <CardHeader className="flex flex-row items-center gap-3 space-y-0">
++        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
++          <ScanLine className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />
++        </span>
++        <div>
++          <CardTitle className="text-xl">Radiografías e imágenes</CardTitle>
++          <p className="text-sm text-muted-foreground">
++            Cefalometrías, panorámicas y fotografías clínicas del tratamiento.
++          </p>
++        </div>
++      </CardHeader>
++      <CardContent className="space-y-5">
++        <UploadImageForm
++          salonId={salonId}
++          customerId={customerId}
++          defaultModality="cefalometrica"
++        />
++
++        {imagesQuery.isPending ? (
++          <ImagingSkeleton />
++        ) : imagesQuery.isError ? (
++          <ImagingError
++            message={
++              imagesQuery.error instanceof Error
++                ? imagesQuery.error.message
++                : "No se pudieron cargar las imágenes."
++            }
++            onRetry={() => void imagesQuery.refetch()}
++          />
++        ) : (
++          <ImageGallery
++            salonId={salonId}
++            customerId={customerId}
++            images={imagesQuery.data ?? []}
++          />
++        )}
++      </CardContent>
++    </Card>
++  );
++}
++
++// --- Loading / error ---------------------------------------------------------
++
++/** Rejilla de placeholders con la misma proporción que las miniaturas reales de `ImageGallery`. */
++function ImagingSkeleton(): React.ReactElement {
++  return (
++    <div aria-busy="true" aria-live="polite" className="space-y-3">
++      <span className="sr-only">Cargando imágenes…</span>
++      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
++        {Array.from({ length: 4 }).map((_, i) => (
++          <Skeleton key={i} className="aspect-square w-full rounded-xl" />
++        ))}
++      </div>
++    </div>
++  );
++}
++
++/** `role="alert"` para que el error se anuncie a lectores de pantalla; incluye reintento. */
++function ImagingError({
++  message,
++  onRetry,
++}: {
++  message: string;
++  onRetry: () => void;
++}): React.ReactElement {
++  return (
++    <div
++      role="alert"
++      className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-destructive/30 bg-destructive/5 px-4 py-10 text-center"
++    >
++      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
++        <AlertCircle className="h-5 w-5" aria-hidden="true" />
++      </span>
++      <p className="text-sm font-medium text-foreground">No se pudieron cargar las imágenes</p>
++      <p className="max-w-[32ch] text-xs text-muted-foreground">{message}</p>
++      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
++        Reintentar
++      </Button>
++    </div>
++  );
++}
+diff --git a/src/components/dental/ortodoncia-view.tsx b/src/components/dental/ortodoncia-view.tsx
+index cbec58c..e94fdb9 100644
+--- a/src/components/dental/ortodoncia-view.tsx
++++ b/src/components/dental/ortodoncia-view.tsx
+@@ -1,20 +1,22 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+ 
+ import { ConsentList } from "@/components/dental/consent-list";
++import { OrthoImagingCard } from "@/components/dental/ortho-imaging-card";
+ import { OrthoPaymentPlanCard } from "@/components/dental/ortho-payment-plan-card";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
++import { PillTabs } from "@/components/ui/pill-tabs";
+ import { Textarea } from "@/components/ui/textarea";
+ import { useConsents, useCreateConsent } from "@/hooks/use-consents";
+ import {
+   useAddOrthoVisit,
+   useDeleteOrthoVisit,
+   useOrthoData,
+   useOrthoVisits,
+   useSaveOrthoData,
+ } from "@/hooks/use-ortodoncia";
+ import {
+@@ -66,251 +68,276 @@ function EnumSelect<T extends string>({
+     </select>
+   );
+ }
+ 
+ function numberOrNull(v: string): number | null {
+   if (v.trim() === "") return null;
+   const n = Number(v);
+   return Number.isFinite(n) ? n : null;
+ }
+ 
++const ORTHO_TABS = [
++  { id: "ficha", label: "Ficha y tratamiento" },
++  { id: "seguimiento", label: "Seguimiento" },
++  { id: "consentimiento", label: "Consentimiento" },
++  { id: "pago", label: "Plan de pago" },
++  { id: "radiografias", label: "Radiografías" },
++] as const;
++
+ export function OrtodonciaView({
+   salonId,
+   customerId,
+ }: OrtodonciaViewProps): React.ReactElement {
+   const dataQuery = useOrthoData(salonId, customerId);
+   const visitsQuery = useOrthoVisits(salonId, customerId);
+   const consentsQuery = useConsents(salonId, customerId);
+   const saveData = useSaveOrthoData(salonId, customerId);
+   const addVisit = useAddOrthoVisit(salonId, customerId);
+   const deleteVisit = useDeleteOrthoVisit(salonId, customerId);
+   const createConsent = useCreateConsent(salonId, customerId);
+ 
+   const [ficha, setFicha] = useState<OrthoFicha>(EMPTY_ORTHO_FICHA);
+   const [treatment, setTreatment] = useState<OrthoTreatment>(EMPTY_ORTHO_TREATMENT);
++  const [tab, setTab] = useState<string>("ficha");
+ 
+   useEffect(() => {
+     if (dataQuery.data) {
+       setFicha(dataQuery.data.ficha);
+       setTreatment(dataQuery.data.treatment);
+     }
+   }, [dataQuery.data]);
+ 
+   function handleSaveData(): void {
+     saveData.mutate({ ficha, treatment });
+   }
+ 
+   return (
+     <div className="space-y-6">
+-      {/* Ficha ortodóncica */}
+-      <Card>
+-        <CardHeader>
+-          <CardTitle>Ficha ortodóncica</CardTitle>
+-        </CardHeader>
+-        <CardContent className="grid gap-4 sm:grid-cols-2">
+-          <div className="space-y-1.5">
+-            <Label htmlFor="malocclusion">Maloclusión</Label>
+-            <EnumSelect
+-              id="malocclusion"
+-              value={ficha.malocclusionClass}
+-              labels={MALOCCLUSION_CLASS_LABELS}
+-              onChange={(v) => setFicha((f) => ({ ...f, malocclusionClass: v }))}
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="crossbite">Mordida cruzada</Label>
+-            <EnumSelect
+-              id="crossbite"
+-              value={ficha.crossbite}
+-              labels={CROSSBITE_LABELS}
+-              onChange={(v) => setFicha((f) => ({ ...f, crossbite: v }))}
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="crowdingUpper">Apiñamiento superior</Label>
+-            <EnumSelect
+-              id="crowdingUpper"
+-              value={ficha.crowdingUpper}
+-              labels={CROWDING_LEVEL_LABELS}
+-              onChange={(v) => setFicha((f) => ({ ...f, crowdingUpper: v }))}
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="crowdingLower">Apiñamiento inferior</Label>
+-            <EnumSelect
+-              id="crowdingLower"
+-              value={ficha.crowdingLower}
+-              labels={CROWDING_LEVEL_LABELS}
+-              onChange={(v) => setFicha((f) => ({ ...f, crowdingLower: v }))}
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="overjet">Resalte (mm)</Label>
+-            <Input
+-              id="overjet"
+-              type="number"
+-              value={ficha.overjetMm ?? ""}
+-              onChange={(e) =>
+-                setFicha((f) => ({ ...f, overjetMm: numberOrNull(e.target.value) }))
+-              }
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="overbite">Sobremordida (mm)</Label>
+-            <Input
+-              id="overbite"
+-              type="number"
+-              value={ficha.overbiteMm ?? ""}
+-              onChange={(e) =>
+-                setFicha((f) => ({ ...f, overbiteMm: numberOrNull(e.target.value) }))
+-              }
+-            />
+-          </div>
+-          <label className="flex items-center gap-2 text-sm">
+-            <input
+-              type="checkbox"
+-              checked={ficha.diastema}
+-              onChange={(e) => setFicha((f) => ({ ...f, diastema: e.target.checked }))}
+-            />
+-            Diastemas
+-          </label>
+-          <label className="flex items-center gap-2 text-sm">
+-            <input
+-              type="checkbox"
+-              checked={ficha.openBite}
+-              onChange={(e) => setFicha((f) => ({ ...f, openBite: e.target.checked }))}
+-            />
+-            Mordida abierta
+-          </label>
+-          <div className="space-y-1.5 sm:col-span-2">
+-            <Label htmlFor="diagnosisNotes">Notas de diagnóstico</Label>
+-            <Textarea
+-              id="diagnosisNotes"
+-              value={ficha.diagnosisNotes ?? ""}
+-              onChange={(e) =>
+-                setFicha((f) => ({ ...f, diagnosisNotes: e.target.value || null }))
+-              }
+-            />
+-          </div>
+-        </CardContent>
+-      </Card>
++      <PillTabs
++        tabs={ORTHO_TABS}
++        active={tab}
++        onChange={setTab}
++        ariaLabel="Secciones de ortodoncia"
++      />
+ 
+-      {/* Tratamiento */}
+-      <Card>
+-        <CardHeader>
+-          <CardTitle>Tratamiento</CardTitle>
+-        </CardHeader>
+-        <CardContent className="grid gap-4 sm:grid-cols-2">
+-          <div className="space-y-1.5">
+-            <Label htmlFor="appliance">Aparatología</Label>
+-            <EnumSelect
+-              id="appliance"
+-              value={treatment.applianceType}
+-              labels={APPLIANCE_TYPE_LABELS}
+-              onChange={(v) => setTreatment((t) => ({ ...t, applianceType: v }))}
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="arch">Arcada</Label>
+-            <EnumSelect
+-              id="arch"
+-              value={treatment.arch}
+-              labels={ORTHO_ARCH_LABELS}
+-              onChange={(v) => setTreatment((t) => ({ ...t, arch: v }))}
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="months">Duración estimada (meses)</Label>
+-            <Input
+-              id="months"
+-              type="number"
+-              value={treatment.estimatedMonths ?? ""}
+-              onChange={(e) =>
+-                setTreatment((t) => ({ ...t, estimatedMonths: numberOrNull(e.target.value) }))
+-              }
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="startDate">Fecha de inicio</Label>
+-            <Input
+-              id="startDate"
+-              type="date"
+-              value={treatment.startDate ?? ""}
+-              onChange={(e) =>
+-                setTreatment((t) => ({ ...t, startDate: e.target.value || null }))
+-              }
+-            />
+-          </div>
+-          <div className="space-y-1.5">
+-            <Label htmlFor="status">Estado</Label>
+-            <EnumSelect
+-              id="status"
+-              value={treatment.status}
+-              labels={ORTHO_STATUS_LABELS}
+-              onChange={(v) => setTreatment((t) => ({ ...t, status: v }))}
+-            />
+-          </div>
+-          <div className="space-y-1.5 sm:col-span-2">
+-            <Label htmlFor="objectives">Objetivos</Label>
+-            <Textarea
+-              id="objectives"
+-              value={treatment.objectives ?? ""}
+-              onChange={(e) =>
+-                setTreatment((t) => ({ ...t, objectives: e.target.value || null }))
+-              }
+-            />
++      {tab === "ficha" && (
++        <div className="space-y-6">
++          {/* Ficha ortodóncica */}
++          <Card>
++            <CardHeader>
++              <CardTitle>Ficha ortodóncica</CardTitle>
++            </CardHeader>
++            <CardContent className="grid gap-4 sm:grid-cols-2">
++              <div className="space-y-1.5">
++                <Label htmlFor="malocclusion">Maloclusión</Label>
++                <EnumSelect
++                  id="malocclusion"
++                  value={ficha.malocclusionClass}
++                  labels={MALOCCLUSION_CLASS_LABELS}
++                  onChange={(v) => setFicha((f) => ({ ...f, malocclusionClass: v }))}
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="crossbite">Mordida cruzada</Label>
++                <EnumSelect
++                  id="crossbite"
++                  value={ficha.crossbite}
++                  labels={CROSSBITE_LABELS}
++                  onChange={(v) => setFicha((f) => ({ ...f, crossbite: v }))}
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="crowdingUpper">Apiñamiento superior</Label>
++                <EnumSelect
++                  id="crowdingUpper"
++                  value={ficha.crowdingUpper}
++                  labels={CROWDING_LEVEL_LABELS}
++                  onChange={(v) => setFicha((f) => ({ ...f, crowdingUpper: v }))}
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="crowdingLower">Apiñamiento inferior</Label>
++                <EnumSelect
++                  id="crowdingLower"
++                  value={ficha.crowdingLower}
++                  labels={CROWDING_LEVEL_LABELS}
++                  onChange={(v) => setFicha((f) => ({ ...f, crowdingLower: v }))}
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="overjet">Resalte (mm)</Label>
++                <Input
++                  id="overjet"
++                  type="number"
++                  value={ficha.overjetMm ?? ""}
++                  onChange={(e) =>
++                    setFicha((f) => ({ ...f, overjetMm: numberOrNull(e.target.value) }))
++                  }
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="overbite">Sobremordida (mm)</Label>
++                <Input
++                  id="overbite"
++                  type="number"
++                  value={ficha.overbiteMm ?? ""}
++                  onChange={(e) =>
++                    setFicha((f) => ({ ...f, overbiteMm: numberOrNull(e.target.value) }))
++                  }
++                />
++              </div>
++              <label className="flex items-center gap-2 text-sm">
++                <input
++                  type="checkbox"
++                  checked={ficha.diastema}
++                  onChange={(e) => setFicha((f) => ({ ...f, diastema: e.target.checked }))}
++                />
++                Diastemas
++              </label>
++              <label className="flex items-center gap-2 text-sm">
++                <input
++                  type="checkbox"
++                  checked={ficha.openBite}
++                  onChange={(e) => setFicha((f) => ({ ...f, openBite: e.target.checked }))}
++                />
++                Mordida abierta
++              </label>
++              <div className="space-y-1.5 sm:col-span-2">
++                <Label htmlFor="diagnosisNotes">Notas de diagnóstico</Label>
++                <Textarea
++                  id="diagnosisNotes"
++                  value={ficha.diagnosisNotes ?? ""}
++                  onChange={(e) =>
++                    setFicha((f) => ({ ...f, diagnosisNotes: e.target.value || null }))
++                  }
++                />
++              </div>
++            </CardContent>
++          </Card>
++
++          {/* Tratamiento */}
++          <Card>
++            <CardHeader>
++              <CardTitle>Tratamiento</CardTitle>
++            </CardHeader>
++            <CardContent className="grid gap-4 sm:grid-cols-2">
++              <div className="space-y-1.5">
++                <Label htmlFor="appliance">Aparatología</Label>
++                <EnumSelect
++                  id="appliance"
++                  value={treatment.applianceType}
++                  labels={APPLIANCE_TYPE_LABELS}
++                  onChange={(v) => setTreatment((t) => ({ ...t, applianceType: v }))}
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="arch">Arcada</Label>
++                <EnumSelect
++                  id="arch"
++                  value={treatment.arch}
++                  labels={ORTHO_ARCH_LABELS}
++                  onChange={(v) => setTreatment((t) => ({ ...t, arch: v }))}
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="months">Duración estimada (meses)</Label>
++                <Input
++                  id="months"
++                  type="number"
++                  value={treatment.estimatedMonths ?? ""}
++                  onChange={(e) =>
++                    setTreatment((t) => ({ ...t, estimatedMonths: numberOrNull(e.target.value) }))
++                  }
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="startDate">Fecha de inicio</Label>
++                <Input
++                  id="startDate"
++                  type="date"
++                  value={treatment.startDate ?? ""}
++                  onChange={(e) =>
++                    setTreatment((t) => ({ ...t, startDate: e.target.value || null }))
++                  }
++                />
++              </div>
++              <div className="space-y-1.5">
++                <Label htmlFor="status">Estado</Label>
++                <EnumSelect
++                  id="status"
++                  value={treatment.status}
++                  labels={ORTHO_STATUS_LABELS}
++                  onChange={(v) => setTreatment((t) => ({ ...t, status: v }))}
++                />
++              </div>
++              <div className="space-y-1.5 sm:col-span-2">
++                <Label htmlFor="objectives">Objetivos</Label>
++                <Textarea
++                  id="objectives"
++                  value={treatment.objectives ?? ""}
++                  onChange={(e) =>
++                    setTreatment((t) => ({ ...t, objectives: e.target.value || null }))
++                  }
++                />
++              </div>
++            </CardContent>
++          </Card>
++
++          <div className="flex items-center gap-3">
++            <Button onClick={handleSaveData} disabled={saveData.isPending}>
++              {saveData.isPending ? "Guardando…" : "Guardar ficha y tratamiento"}
++            </Button>
++            {saveData.isError && (
++              <span className="text-sm text-destructive">
++                {(saveData.error as Error).message}
++              </span>
++            )}
+           </div>
+-        </CardContent>
+-      </Card>
++        </div>
++      )}
+ 
+-      <div className="flex items-center gap-3">
+-        <Button onClick={handleSaveData} disabled={saveData.isPending}>
+-          {saveData.isPending ? "Guardando…" : "Guardar ficha y tratamiento"}
+-        </Button>
+-        {saveData.isError && (
+-          <span className="text-sm text-destructive">
+-            {(saveData.error as Error).message}
+-          </span>
+-        )}
+-      </div>
++      {tab === "seguimiento" && (
++        <OrthoVisitsCard
++          visits={visitsQuery.data ?? []}
++          onAdd={(input) => addVisit.mutate(input)}
++          onDelete={(id) => deleteVisit.mutate(id)}
++          adding={addVisit.isPending}
++        />
++      )}
+ 
+-      {/* Timeline de visitas */}
+-      <OrthoVisitsCard
+-        visits={visitsQuery.data ?? []}
+-        onAdd={(input) => addVisit.mutate(input)}
+-        onDelete={(id) => deleteVisit.mutate(id)}
+-        adding={addVisit.isPending}
+-      />
++      {tab === "consentimiento" && (
++        <Card>
++          <CardHeader>
++            <CardTitle>Consentimiento de ortodoncia</CardTitle>
++          </CardHeader>
++          <CardContent className="space-y-4">
++            <Button
++              variant="outline"
++              onClick={() => createConsent.mutate({ customerId, type: "ortodoncia" })}
++              disabled={createConsent.isPending}
++            >
++              {createConsent.isPending ? "Creando…" : "Crear consentimiento de ortodoncia"}
++            </Button>
++            <ConsentList
++              salonId={salonId}
++              customerId={customerId}
++              consents={consentsQuery.data ?? []}
++            />
++          </CardContent>
++        </Card>
++      )}
+ 
+-      {/* Consentimiento (reutiliza el flujo existente) */}
+-      <Card>
+-        <CardHeader>
+-          <CardTitle>Consentimiento de ortodoncia</CardTitle>
+-        </CardHeader>
+-        <CardContent className="space-y-4">
+-          <Button
+-            variant="outline"
+-            onClick={() => createConsent.mutate({ customerId, type: "ortodoncia" })}
+-            disabled={createConsent.isPending}
+-          >
+-            {createConsent.isPending ? "Creando…" : "Crear consentimiento de ortodoncia"}
+-          </Button>
+-          <ConsentList
+-            salonId={salonId}
+-            customerId={customerId}
+-            consents={consentsQuery.data ?? []}
+-          />
+-        </CardContent>
+-      </Card>
++      {tab === "pago" && <OrthoPaymentPlanCard salonId={salonId} customerId={customerId} />}
+ 
+-      {/* Plan de pago */}
+-      <OrthoPaymentPlanCard salonId={salonId} customerId={customerId} />
++      {tab === "radiografias" && (
++        <OrthoImagingCard salonId={salonId} customerId={customerId} />
++      )}
+     </div>
+   );
+ }
+ 
+ // --- Timeline de visitas ------------------------------------------------------
+ 
+ const EMPTY_VISIT_ACTIONS: OrthoVisitActions = {
+   wireChange: false,
+   wireDetail: null,
+   ligatures: false,
+diff --git a/src/components/dental/upload-image-form.tsx b/src/components/dental/upload-image-form.tsx
+new file mode 100644
+index 0000000..783307a
+--- /dev/null
++++ b/src/components/dental/upload-image-form.tsx
+@@ -0,0 +1,156 @@
++"use client";
++
++import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
++import { AlertCircle, Loader2, Upload } from "lucide-react";
++
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { useUploadPatientImage } from "@/hooks/use-patient-images";
++import { IMAGE_MODALITIES, IMAGE_MODALITY_LABELS } from "@/lib/dental/consents";
++import type { ImageModality } from "@/types/database";
++
++export interface UploadImageFormProps {
++  salonId: string;
++  customerId: string;
++  /** Modalidad preseleccionada (p. ej. "cefalometrica" en la sección de ortodoncia). */
++  defaultModality?: ImageModality;
++}
++
++const UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,application/pdf";
++
++export function UploadImageForm({
++  salonId,
++  customerId,
++  defaultModality = "periapical",
++}: UploadImageFormProps): React.ReactElement {
++  const uploadMutation = useUploadPatientImage(salonId, customerId);
++  const fileInputRef = useRef<HTMLInputElement>(null);
++
++  const [modality, setModality] = useState<ImageModality>(defaultModality);
++  const [fdiCode, setFdiCode] = useState("");
++  const [note, setNote] = useState("");
++  const [file, setFile] = useState<File | null>(null);
++  const [error, setError] = useState<string | null>(null);
++
++  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
++    setFile(e.target.files?.[0] ?? null);
++  }
++
++  function handleSubmit(e: FormEvent) {
++    e.preventDefault();
++    setError(null);
++
++    if (file === null) {
++      setError("Selecciona un archivo.");
++      return;
++    }
++
++    const formData = new FormData();
++    formData.set("file", file);
++    formData.set("customerId", customerId);
++    formData.set("modality", modality);
++    const trimmedFdi = fdiCode.trim();
++    if (trimmedFdi !== "") formData.set("fdiCode", trimmedFdi);
++    const trimmedNote = note.trim();
++    if (trimmedNote !== "") formData.set("note", trimmedNote);
++
++    uploadMutation.mutate(formData, {
++      onSuccess: () => {
++        setFile(null);
++        setFdiCode("");
++        setNote("");
++        if (fileInputRef.current !== null) fileInputRef.current.value = "";
++      },
++      onError: (err: unknown) => {
++        setError(err instanceof Error ? err.message : "Error al subir el archivo.");
++      },
++    });
++  }
++
++  return (
++    <Card>
++      <CardHeader className="pb-2">
++        <CardTitle className="text-sm font-medium text-muted-foreground">Subir archivo</CardTitle>
++      </CardHeader>
++      <CardContent>
++        <form className="space-y-3" onSubmit={handleSubmit}>
++          <div className="space-y-1">
++            <Label htmlFor="image-file">Archivo (imagen o PDF)</Label>
++            <input
++              ref={fileInputRef}
++              id="image-file"
++              type="file"
++              accept={UPLOAD_ACCEPT}
++              onChange={handleFileChange}
++              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-accent-foreground hover:file:bg-accent/80"
++            />
++          </div>
++
++          <div className="grid gap-3 sm:grid-cols-2">
++            <div className="space-y-1">
++              <Label htmlFor="image-modality">Modalidad</Label>
++              <Select value={modality} onValueChange={(v) => setModality(v as ImageModality)}>
++                <SelectTrigger id="image-modality">
++                  <SelectValue />
++                </SelectTrigger>
++                <SelectContent>
++                  {IMAGE_MODALITIES.map((m) => (
++                    <SelectItem key={m} value={m}>
++                      {IMAGE_MODALITY_LABELS[m]}
++                    </SelectItem>
++                  ))}
++                </SelectContent>
++              </Select>
++            </div>
++
++            <div className="space-y-1">
++              <Label htmlFor="image-fdi">Diente (FDI, opcional)</Label>
++              <Input
++                id="image-fdi"
++                inputMode="numeric"
++                value={fdiCode}
++                onChange={(e) => setFdiCode(e.target.value)}
++                placeholder="Ej. 11"
++              />
++            </div>
++          </div>
++
++          <div className="space-y-1">
++            <Label htmlFor="image-note">Nota (opcional)</Label>
++            <Input
++              id="image-note"
++              value={note}
++              onChange={(e) => setNote(e.target.value)}
++              placeholder="Ej. registro inicial de ortodoncia"
++            />
++          </div>
++
++          {error !== null && (
++            <p className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive">
++              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++              {error}
++            </p>
++          )}
++
++          <Button type="submit" size="sm" disabled={uploadMutation.isPending} className="gap-1.5">
++            {uploadMutation.isPending ? (
++              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++            ) : (
++              <Upload className="h-3.5 w-3.5" aria-hidden="true" />
++            )}
++            Subir archivo
++          </Button>
++        </form>
++      </CardContent>
++    </Card>
++  );
++}
+diff --git a/src/components/ui/pill-tabs.tsx b/src/components/ui/pill-tabs.tsx
+new file mode 100644
+index 0000000..d0731ee
+--- /dev/null
++++ b/src/components/ui/pill-tabs.tsx
+@@ -0,0 +1,51 @@
++// src/components/ui/pill-tabs.tsx
++"use client";
++
++import { cn } from "@/lib/utils";
++
++export interface PillTab {
++  id: string;
++  label: string;
++}
++
++export interface PillTabsProps {
++  tabs: readonly PillTab[];
++  active: string;
++  onChange: (id: string) => void;
++  ariaLabel?: string;
++  className?: string;
++}
++
++/**
++ * Barra de pestañas tipo "pill" (botones redondeados). Mismo patrón visual que el
++ * conmutador día/semana/mes de la agenda. Conmuta subsecciones sin cambiar de ruta.
++ */
++export function PillTabs({
++  tabs,
++  active,
++  onChange,
++  ariaLabel,
++  className,
++}: PillTabsProps): React.ReactElement {
++  return (
++    <div role="tablist" aria-label={ariaLabel} className={cn("flex flex-wrap gap-2", className)}>
++      {tabs.map((tab) => (
++        <button
++          key={tab.id}
++          type="button"
++          role="tab"
++          aria-selected={active === tab.id}
++          onClick={() => onChange(tab.id)}
++          className={cn(
++            "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-200 ease-apple-out",
++            active === tab.id
++              ? "border-primary bg-primary text-primary-foreground shadow-sm"
++              : "border-border text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-accent-foreground",
++          )}
++        >
++          {tab.label}
++        </button>
++      ))}
++    </div>
++  );
++}
+diff --git a/src/hooks/use-schedules.ts b/src/hooks/use-schedules.ts
+index f205a6b..3c112cb 100644
+--- a/src/hooks/use-schedules.ts
++++ b/src/hooks/use-schedules.ts
+@@ -1,39 +1,70 @@
+ "use client";
+ 
+ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ 
+ import {
+   createException,
+   deleteException,
++  saveSalonSchedule,
+   saveWeeklySchedule,
+ } from "@/app/(dashboard)/ajustes/horarios/actions";
+ import {
++  fetchSalonSchedule,
+   fetchScheduleExceptions,
+   fetchWeeklySchedule,
+   scheduleKeys,
+ } from "@/lib/queries/schedules";
+ import type {
+   ExceptionInput,
++  SalonWeeklyScheduleInput,
+   WeeklyScheduleInput,
+ } from "@/lib/validations/schedule";
+ import type { ScheduleException } from "@/types/database";
+ 
+ /** Horario semanal (tramos) de un profesional. */
+ export function useWeeklySchedule(salonId: string, professionalId: string) {
+   return useQuery({
+     queryKey: scheduleKeys.weekly(salonId, professionalId),
+     queryFn: () => fetchWeeklySchedule(salonId, professionalId),
+     enabled: professionalId !== "",
+   });
+ }
+ 
++/** Horario de apertura de la clínica (a nivel de salón). */
++export function useSalonSchedule(salonId: string) {
++  return useQuery({
++    queryKey: scheduleKeys.salon(salonId),
++    queryFn: () => fetchSalonSchedule(salonId),
++    enabled: salonId !== "",
++  });
++}
++
++/** Guarda (reemplaza) el horario de apertura de la clínica y refresca la caché. */
++export function useSaveSalonSchedule(salonId: string) {
++  const queryClient = useQueryClient();
++  return useMutation({
++    mutationFn: async (input: SalonWeeklyScheduleInput): Promise<null> => {
++      const result = await saveSalonSchedule(input);
++      if (!result.ok) {
++        throw new Error(result.error);
++      }
++      return result.data;
++    },
++    onSuccess: () => {
++      void queryClient.invalidateQueries({
++        queryKey: scheduleKeys.salon(salonId),
++      });
++    },
++  });
++}
++
+ /** Excepciones de horario (días libres u horario especial) de un profesional. */
+ export function useScheduleExceptions(salonId: string, professionalId: string) {
+   return useQuery({
+     queryKey: scheduleKeys.exceptions(salonId, professionalId),
+     queryFn: () => fetchScheduleExceptions(salonId, professionalId),
+     enabled: professionalId !== "",
+   });
+ }
+ 
+ /** Guarda (reemplaza) el horario semanal de un profesional y refresca la caché. */
+diff --git a/src/lib/booking/availability.ts b/src/lib/booking/availability.ts
+index 6323514..d4585e0 100644
+--- a/src/lib/booking/availability.ts
++++ b/src/lib/booking/availability.ts
+@@ -41,20 +41,32 @@ export interface GenerateSlotsInput {
+   serviceDurationMinutes: number;
+   /**
+    * Duración total de la cita en minutos
+    * (application_min + exposure_min + post_exposure_min).
+    * Se usa para `lastStart` (encaje en horario laboral) y `endsAt` del hueco.
+    * Si se omite, iguala `serviceDurationMinutes` (comportamiento legacy).
+    */
+   appointmentDurationMinutes?: number;
+   /** Horario recurrente del profesional (puede tener varios tramos/día). */
+   schedules: ScheduleSlot[];
++  /**
++   * Horario de apertura de la CLÍNICA/salón (recurrente, hora local del salón).
++   * Cuando se pasa, los tramos del profesional se INTERSECTAN con el horario del
++   * salón: solo hay hueco si la clínica está abierta Y el profesional trabaja.
++   *
++   * Semántica de opcionalidad (retrocompatibilidad):
++   * · `undefined` → el salón no usa horario de clínica; se ignora por completo y
++   *   la disponibilidad es la del profesional (comportamiento previo).
++   * · array (aunque esté vacío) → el salón SÍ define horario de clínica; un día sin
++   *   tramos de salón significa CLÍNICA CERRADA ese día (no hay huecos).
++   */
++  salonSchedules?: ScheduleSlot[];
+   /** Excepción de ese día, si existe. */
+   exception?: ExceptionSlot | null;
+   /** Bloques ocupados del profesional ese día (UTC). Fuente: appointment_blocks. */
+   busy: BusyInterval[];
+   /** Paso entre inicios de hueco, en minutos (por defecto 15). */
+   slotIntervalMinutes?: number;
+   /** Antelación mínima en minutos desde "ahora" (por defecto 0). */
+   minLeadMinutes?: number;
+   /** Instante de referencia (por defecto, ahora). Inyectable para test. */
+   now?: Date;
+@@ -109,45 +121,85 @@ function minutesToTime(total: number): string {
+ }
+ 
+ /**
+  * Tramos laborables del día en minutos desde medianoche (hora local del salón),
+  * ordenados por inicio. La excepción del día, si existe, tiene PRIORIDAD sobre el
+  * horario recurrente. Devuelve `[]` si el día no es laborable.
+  *
+  * FUENTE ÚNICA de los tramos: la comparten `generateSlots` y `generateDaySlots`,
+  * de modo que ambos parten exactamente de la misma jornada.
+  */
++/**
++ * Intersección de dos conjuntos de rangos `[start, end)` (minutos). Como cada
++ * lado no tiene solapes internos, las piezas resultantes tampoco solapan entre sí.
++ * Devuelve solo los solapes con duración positiva, ordenados por inicio.
++ */
++function intersectRanges(
++  a: Array<{ start: number; end: number }>,
++  b: Array<{ start: number; end: number }>,
++): Array<{ start: number; end: number }> {
++  const out: Array<{ start: number; end: number }> = [];
++  for (const r1 of a) {
++    for (const r2 of b) {
++      const start = Math.max(r1.start, r2.start);
++      const end = Math.min(r1.end, r2.end);
++      if (end > start) out.push({ start, end });
++    }
++  }
++  return out.sort((x, y) => x.start - y.start);
++}
++
+ function resolveWorkingRanges(
+   date: string,
+   schedules: ScheduleSlot[],
+   exception: ExceptionSlot | null,
++  salonSchedules?: ScheduleSlot[],
+ ): Array<{ start: number; end: number }> {
++  const weekday = weekdayOfLocalDate(date);
++
++  // Tramos del PROFESIONAL: la excepción del día tiene prioridad sobre el horario
++  // recurrente.
++  let professionalRanges: Array<{ start: number; end: number }>;
+   if (exception) {
+-    if (!exception.is_available || !exception.start_time || !exception.end_time) {
+-      return []; // Día no laborable.
+-    }
+-    return [
+-      {
+-        start: timeToMinutes(exception.start_time),
+-        end: timeToMinutes(exception.end_time),
+-      },
+-    ];
++    professionalRanges =
++      !exception.is_available || !exception.start_time || !exception.end_time
++        ? [] // Día no laborable para el profesional.
++        : [
++            {
++              start: timeToMinutes(exception.start_time),
++              end: timeToMinutes(exception.end_time),
++            },
++          ];
++  } else {
++    professionalRanges = schedules
++      .filter((s) => s.weekday === weekday)
++      .map((s) => ({
++        start: timeToMinutes(s.start_time),
++        end: timeToMinutes(s.end_time),
++      }))
++      .sort((a, b) => a.start - b.start);
+   }
+ 
+-  const weekday = weekdayOfLocalDate(date);
+-  return schedules
++  // Sin horario de clínica configurado → disponibilidad del profesional a secas.
++  if (salonSchedules === undefined) return professionalRanges;
++
++  // Con horario de clínica: intersectar. La clínica debe estar abierta Y el
++  // profesional debe trabajar. Un día sin tramos de salón = clínica cerrada.
++  const salonRanges = salonSchedules
+     .filter((s) => s.weekday === weekday)
+     .map((s) => ({
+       start: timeToMinutes(s.start_time),
+       end: timeToMinutes(s.end_time),
+     }))
+     .sort((a, b) => a.start - b.start);
++
++  return intersectRanges(professionalRanges, salonRanges);
+ }
+ 
+ /**
+  * ¿La ventana de bloqueo `[startMs, checkEndMs)` de una cita candidata solapa
+  * algún bloque ocupado del profesional? `busy` proviene de `appointment_blocks`,
+  * que SOLO contiene las fases application y post_exposure (la exposición ajena no
+  * genera bloque, por eso no aparece aquí y no bloquea).
+  *
+  * FUENTE ÚNICA de verdad del solape: la usan por igual `generateSlots` (solo-libres)
+  * y `generateDaySlots` (jornada completa), así que el criterio no puede divergir.
+@@ -168,35 +220,37 @@ function overlapsBusy(
+  * Genera los huecos reservables de un profesional para un día, respetando su
+  * horario, las excepciones, las citas ya ocupadas y la antelación mínima.
+  */
+ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
+   const {
+     date,
+     timeZone,
+     serviceDurationMinutes,
+     appointmentDurationMinutes,
+     schedules,
++    salonSchedules,
+     exception = null,
+     busy,
+     slotIntervalMinutes = 15,
+     minLeadMinutes = 0,
+     now = new Date(),
+   } = input;
+ 
+   // totalDuration: duración completa de la cita (para encaje en horario y endsAt).
+   // serviceDurationMinutes: ventana de bloqueo efectivo (para chequeo de solapamiento).
+   const totalDuration = appointmentDurationMinutes ?? serviceDurationMinutes;
+ 
+   if (serviceDurationMinutes <= 0) return [];
+ 
+-  // 1. Determinar los tramos laborables del día (excepción tiene prioridad).
+-  const workingRanges = resolveWorkingRanges(date, schedules, exception);
++  // 1. Determinar los tramos laborables del día (excepción tiene prioridad; si el
++  //    salón define horario de clínica, se intersecta con él).
++  const workingRanges = resolveWorkingRanges(date, schedules, exception, salonSchedules);
+   if (workingRanges.length === 0) return [];
+ 
+   // 2. Umbral de antelación mínima (instante UTC).
+   const earliest = new Date(now.getTime() + minLeadMinutes * MINUTE_MS);
+ 
+   // 3. Generar candidatos y filtrar solapes.
+   const slots: AvailableSlot[] = [];
+ 
+   for (const range of workingRanges) {
+     // El último inicio posible deja sitio a la duración total de la cita.
+@@ -246,32 +300,33 @@ export function generateSlots(input: GenerateSlotsInput): AvailableSlot[] {
+  * El tiempo manda primero (un inicio pasado nunca es reservable); entre los futuros,
+  * se prioriza la ocupación real frente al residual de fin de jornada (`closed`).
+  */
+ export function generateDaySlots(input: GenerateSlotsInput): DaySlot[] {
+   const {
+     date,
+     timeZone,
+     serviceDurationMinutes,
+     appointmentDurationMinutes,
+     schedules,
++    salonSchedules,
+     exception = null,
+     busy,
+     slotIntervalMinutes = 15,
+     minLeadMinutes = 0,
+     now = new Date(),
+   } = input;
+ 
+   const totalDuration = appointmentDurationMinutes ?? serviceDurationMinutes;
+ 
+   if (serviceDurationMinutes <= 0) return [];
+ 
+-  const workingRanges = resolveWorkingRanges(date, schedules, exception);
++  const workingRanges = resolveWorkingRanges(date, schedules, exception, salonSchedules);
+   if (workingRanges.length === 0) return [];
+ 
+   const earliest = new Date(now.getTime() + minLeadMinutes * MINUTE_MS);
+ 
+   const slots: DaySlot[] = [];
+ 
+   for (const range of workingRanges) {
+     // Último inicio que deja sitio a la cita completa (idéntico a generateSlots).
+     const lastStart = range.end - totalDuration;
+ 
+diff --git a/src/lib/booking/server.ts b/src/lib/booking/server.ts
+index fc94b98..9cd7eba 100644
+--- a/src/lib/booking/server.ts
++++ b/src/lib/booking/server.ts
+@@ -290,55 +290,69 @@ async function loadProfessionalDayInputs(
+     .eq("salon_id", salon.id)
+     .filter("occupied_range", "ov", `["${startIso}","${endIso}")`);
+   if (!salon.singleResource) {
+     blocksQuery = blocksQuery.eq("professional_id", professionalId);
+   }
+   // Al reprogramar, la PROPIA cita no debe contarse a sí misma como ocupación.
+   if (excludeAppointmentId) {
+     blocksQuery = blocksQuery.neq("appointment_id", excludeAppointmentId);
+   }
+ 
+-  const [schedulesRes, exceptionRes, blocksRes] = await Promise.all([
++  const [schedulesRes, exceptionRes, blocksRes, salonHoursRes] = await Promise.all([
+     admin
+       .from("professional_schedules")
+       .select("weekday, start_time, end_time")
+       .eq("salon_id", salon.id)
+       .eq("professional_id", professionalId),
+     admin
+       .from("schedule_exceptions")
+       .select("is_available, start_time, end_time")
+       .eq("salon_id", salon.id)
+       .eq("professional_id", professionalId)
+       .eq("exception_date", date)
+       .maybeSingle(),
+     blocksQuery,
++    // Horario de apertura de la clínica (a nivel de salón). Se INTERSECTA con el
++    // horario del profesional en el motor. Ver `salonSchedules` más abajo.
++    admin
++      .from("salon_opening_hours")
++      .select("weekday, start_time, end_time")
++      .eq("salon_id", salon.id),
+   ]);
+ 
+   if (schedulesRes.error || blocksRes.error) {
+     throw new BookingError(500, "Error al cargar la disponibilidad.");
+   }
+ 
++  // Horario de clínica: FALLA EN ABIERTO. Si la consulta falla (p. ej. la tabla aún
++  // no existe en un despliegue en curso) o el salón no tiene horario de clínica
++  // configurado (0 filas), se pasa `undefined` → el motor ignora la intersección y
++  // usa solo el horario del profesional (comportamiento previo, sin romper nada).
++  const salonRows = salonHoursRes.error ? [] : salonHoursRes.data ?? [];
++  const salonSchedules = salonRows.length > 0 ? salonRows : undefined;
++
+   const busy: BusyInterval[] = (blocksRes.data ?? []).map((b) =>
+     parseTstzRange(b.occupied_range),
+   );
+ 
+   // Duración de bloqueo efectivo: solo las fases activas que generan bloques.
+   const blockingMin = applicationMin + postExposureMin;
+   // Duración total: encaje en horario laboral y endsAt del hueco devuelto al cliente.
+   const totalMin = applicationMin + exposureMin + postExposureMin;
+ 
+   return {
+     date,
+     timeZone: salon.timezone,
+     serviceDurationMinutes: blockingMin,
+     appointmentDurationMinutes: totalMin,
+     schedules: schedulesRes.data ?? [],
++    salonSchedules,
+     exception: exceptionRes.data ?? null,
+     busy,
+     slotIntervalMinutes: salon.slotIntervalMinutes,
+     minLeadMinutes: salon.minLeadMinutes,
+   };
+ }
+ 
+ /**
+  * Huecos LIBRES de un profesional para un día (vista por defecto del endpoint). Delega en
+  * {@link loadProfessionalDayInputs} + `generateSlots`. `excludeAppointmentId` se propaga
+@@ -526,20 +540,43 @@ export async function getDayAvailability(
+   slug: string,
+   serviceId: string,
+   date: string,
+   professionalId: string,
+ ): Promise<PublicDaySlot[]> {
+   const admin = createAdminClient();
+   const salon = await loadSalon(admin, slug);
+   return dayAvailabilityForSalonConfig(admin, salon, serviceId, date, professionalId);
+ }
+ 
++/**
++ * Horario de apertura del salón (tabla `salon_opening_hours`), acotado por `salonId`.
++ * Lo consume el endpoint de recepción para que la recepcionista de voz anuncie el
++ * horario REAL del negocio sin hardcodearlo en su prompt: así, cuando el propietario
++ * cambia el horario en el panel, la recepcionista lo refleja sola. Devuelve los tramos
++ * crudos (`HH:MM:SS`), ordenados por día y hora; `[]` si el salón no tiene horario.
++ */
++export async function getOpeningHoursForSalon(
++  salonId: string,
++): Promise<Array<{ weekday: number; start_time: string; end_time: string }>> {
++  const admin = createAdminClient();
++  const { data, error } = await admin
++    .from("salon_opening_hours")
++    .select("weekday, start_time, end_time")
++    .eq("salon_id", salonId)
++    .order("weekday", { ascending: true })
++    .order("start_time", { ascending: true });
++  if (error) {
++    throw new BookingError(500, "Error al cargar el horario de la clínica.");
++  }
++  return data ?? [];
++}
++
+ /**
+  * Disponibilidad ACOTADA por `salonId` (no por slug). Es EXACTAMENTE el mismo motor
+  * que la reserva pública —resuelve el salón, carga las fases del servicio y genera
+  * los huecos con `generateSlots`— pero entra por el id del salón: el que la
+  * RECEPCIÓN (`GET /api/reception/availability`) obtiene de su clave de servicio
+  * (`x-api-key`), ya validada por el guard. Comparte `availabilityForSalonConfig`
+  * con {@link getAvailability}, así que devuelve los MISMOS huecos que vería la
+  * reserva pública para ese salón; no recalcula disponibilidad a mano.
+  */
+ export async function getAvailabilityForSalon(
+diff --git a/src/lib/queries/schedules.ts b/src/lib/queries/schedules.ts
+index 21c1501..8e48069 100644
+--- a/src/lib/queries/schedules.ts
++++ b/src/lib/queries/schedules.ts
+@@ -1,31 +1,60 @@
+ import { createClient } from "@/lib/supabase/client";
+-import type { ProfessionalSchedule, ScheduleException } from "@/types/database";
++import type {
++  ProfessionalSchedule,
++  SalonOpeningHour,
++  ScheduleException,
++} from "@/types/database";
+ 
+ /**
+  * Fábrica de claves de caché para TanStack Query.
+  * Todo se scopea por `salonId` (aislamiento de tenants) y por `professionalId`
+  * (cada profesional tiene su propio horario y sus propias excepciones).
+  */
+ export const scheduleKeys = {
+   all: (salonId: string) => ["schedules", salonId] as const,
+   professional: (salonId: string, professionalId: string) =>
+     [...scheduleKeys.all(salonId), professionalId] as const,
+   weekly: (salonId: string, professionalId: string) =>
+     [...scheduleKeys.professional(salonId, professionalId), "weekly"] as const,
+   exceptions: (salonId: string, professionalId: string) =>
+     [
+       ...scheduleKeys.professional(salonId, professionalId),
+       "exceptions",
+     ] as const,
++  /** Horario de apertura de la clínica (a nivel de salón). */
++  salon: (salonId: string) =>
++    [...scheduleKeys.all(salonId), "salon-opening-hours"] as const,
+ };
+ 
++/**
++ * Horario de apertura de la clínica/salón, ordenado por día y hora de inicio.
++ * Horas tal cual las guarda Postgres (`HH:MM:SS`); la UI las normaliza a `HH:MM`.
++ */
++export async function fetchSalonSchedule(
++  salonId: string,
++): Promise<SalonOpeningHour[]> {
++  const supabase = createClient();
++
++  const { data, error } = await supabase
++    .from("salon_opening_hours")
++    .select("*")
++    .eq("salon_id", salonId)
++    .order("weekday", { ascending: true })
++    .order("start_time", { ascending: true });
++
++  if (error !== null) {
++    throw new Error(error.message);
++  }
++  return data;
++}
++
+ /**
+  * Tramos del horario semanal de un profesional, ordenados por día y hora de
+  * inicio. Devuelve las horas tal cual las guarda Postgres (`HH:MM:SS`); la capa
+  * de UI las normaliza a `HH:MM` para los inputs de tipo `time`.
+  */
+ export async function fetchWeeklySchedule(
+   salonId: string,
+   professionalId: string,
+ ): Promise<ProfessionalSchedule[]> {
+   const supabase = createClient();
+diff --git a/src/lib/validations/schedule.ts b/src/lib/validations/schedule.ts
+index a16c951..64c3a06 100644
+--- a/src/lib/validations/schedule.ts
++++ b/src/lib/validations/schedule.ts
+@@ -92,20 +92,64 @@ export const weeklyScheduleSchema = z
+             path: ["slots", currentSlot.index, "start_time"],
+           });
+         }
+       }
+     }
+   });
+ 
+ /** Valores de entrada del horario semanal (lo que envía el formulario). */
+ export type WeeklyScheduleInput = z.input<typeof weeklyScheduleSchema>;
+ 
++/**
++ * Horario de apertura de la CLÍNICA/salón (a nivel de salón, sin profesional).
++ * Mismo modelo de tramos por día que el horario del profesional, pero se guarda en
++ * `salon_opening_hours` y el motor de disponibilidad lo intersecta con el horario
++ * de cada profesional. Se valida como unidad porque el guardado reemplaza todos
++ * los tramos del salón a la vez. Comprueba `end_time > start_time` (heredado) y que
++ * los tramos de un mismo día no se solapen.
++ */
++export const salonWeeklyScheduleSchema = z
++  .object({
++    slots: z.array(scheduleSlotSchema),
++  })
++  .superRefine((value, ctx) => {
++    const byWeekday = new Map<
++      number,
++      { index: number; start: string; end: string }[]
++    >();
++    value.slots.forEach((slot, index) => {
++      const current = byWeekday.get(slot.weekday) ?? [];
++      current.push({ index, start: slot.start_time, end: slot.end_time });
++      byWeekday.set(slot.weekday, current);
++    });
++
++    for (const daySlots of byWeekday.values()) {
++      const ordered = [...daySlots].sort((a, b) =>
++        a.start.localeCompare(b.start),
++      );
++      for (let i = 1; i < ordered.length; i += 1) {
++        const previous = ordered[i - 1]!;
++        const currentSlot = ordered[i]!;
++        if (currentSlot.start < previous.end) {
++          ctx.addIssue({
++            code: z.ZodIssueCode.custom,
++            message: "Los tramos de un mismo día no pueden solaparse",
++            path: ["slots", currentSlot.index, "start_time"],
++          });
++        }
++      }
++    }
++  });
++
++/** Valores de entrada del horario de la clínica (lo que envía el formulario). */
++export type SalonWeeklyScheduleInput = z.input<typeof salonWeeklyScheduleSchema>;
++
+ /** Hora opcional que normaliza cadena vacía a `undefined`. */
+ const optionalTime = z
+   .string()
+   .trim()
+   .optional()
+   .transform((value) => (value === undefined || value === "" ? undefined : value));
+ 
+ /** Motivo opcional; vacío → `undefined` (→ `null` en BD). */
+ const optionalReason = z
+   .string()
+diff --git a/src/tests/unit/availability.test.ts b/src/tests/unit/availability.test.ts
+index db418f4..225ee24 100644
+--- a/src/tests/unit/availability.test.ts
++++ b/src/tests/unit/availability.test.ts
+@@ -11,20 +11,133 @@ import {
+ 
+ // Fixed reference time: Monday 2025-06-09 08:00 UTC (10:00 Europe/Madrid CEST)
+ const NOW = new Date("2025-06-09T08:00:00.000Z");
+ const DATE = "2025-06-09"; // Lunes (weekday 1)
+ const TZ = "Europe/Madrid";
+ 
+ const MONDAY_SCHEDULE: ScheduleSlot[] = [
+   { weekday: 1, start_time: "09:00:00", end_time: "17:00:00" },
+ ];
+ 
++// Medianoche del día de prueba → todos los huecos quedan en el futuro.
++const MIDNIGHT = new Date("2025-06-09T00:00:00.000Z");
++
++describe("salonSchedules (horario de clínica intersectado)", () => {
++  it("undefined → NO intersecta: disponibilidad igual a la del profesional", () => {
++    const slots = generateSlots({
++      date: DATE,
++      timeZone: TZ,
++      serviceDurationMinutes: 60,
++      schedules: MONDAY_SCHEDULE, // 09–17
++      salonSchedules: undefined,
++      busy: [],
++      slotIntervalMinutes: 60,
++      now: MIDNIGHT,
++    });
++    expect(slots.length).toBe(8); // 09..16
++  });
++
++  it("intersecta profesional 09–17 con clínica 10–14 → solo 10–14", () => {
++    const slots = generateSlots({
++      date: DATE,
++      timeZone: TZ,
++      serviceDurationMinutes: 60,
++      schedules: MONDAY_SCHEDULE, // 09–17
++      salonSchedules: [{ weekday: 1, start_time: "10:00:00", end_time: "14:00:00" }],
++      busy: [],
++      slotIntervalMinutes: 60,
++      now: MIDNIGHT,
++    });
++    expect(slots.length).toBe(4); // 10, 11, 12, 13
++    expect(new Date(slots[0]!.startsAt).getUTCHours()).toBe(8); // 10:00 Madrid = 08:00 UTC
++    expect(new Date(slots[slots.length - 1]!.startsAt).getUTCHours()).toBe(11); // 13:00 Madrid
++  });
++
++  it("clínica cerrada ese día (array sin tramos para el weekday) → sin huecos", () => {
++    const slots = generateSlots({
++      date: DATE, // lunes (weekday 1)
++      timeZone: TZ,
++      serviceDurationMinutes: 60,
++      schedules: MONDAY_SCHEDULE,
++      salonSchedules: [{ weekday: 2, start_time: "10:00:00", end_time: "14:00:00" }], // solo martes
++      busy: [],
++      slotIntervalMinutes: 60,
++      now: MIDNIGHT,
++    });
++    expect(slots).toEqual([]);
++  });
++
++  it("array vacío (clínica sin horario ese día) → sin huecos", () => {
++    const slots = generateSlots({
++      date: DATE,
++      timeZone: TZ,
++      serviceDurationMinutes: 60,
++      schedules: MONDAY_SCHEDULE,
++      salonSchedules: [],
++      busy: [],
++      slotIntervalMinutes: 60,
++      now: MIDNIGHT,
++    });
++    expect(slots).toEqual([]);
++  });
++
++  it("horario partido: profesional 09–20 ∩ clínica [10–14, 17–20] → dos tramos", () => {
++    const slots = generateSlots({
++      date: DATE,
++      timeZone: TZ,
++      serviceDurationMinutes: 60,
++      schedules: [{ weekday: 1, start_time: "09:00:00", end_time: "20:00:00" }],
++      salonSchedules: [
++        { weekday: 1, start_time: "10:00:00", end_time: "14:00:00" },
++        { weekday: 1, start_time: "17:00:00", end_time: "20:00:00" },
++      ],
++      busy: [],
++      slotIntervalMinutes: 60,
++      now: MIDNIGHT,
++    });
++    // 10,11,12,13 (mañana) + 17,18,19 (tarde) = 7
++    expect(slots.length).toBe(7);
++    const horasMadrid = slots.map((s) => (new Date(s.startsAt).getUTCHours() + 2) % 24);
++    expect(horasMadrid).toEqual([10, 11, 12, 13, 17, 18, 19]);
++  });
++
++  it("clínica cierra a las 14 → no ofrece las 18 aunque el profesional trabaje (regla Biodental)", () => {
++    const slots = generateSlots({
++      date: DATE,
++      timeZone: TZ,
++      serviceDurationMinutes: 30,
++      schedules: [{ weekday: 1, start_time: "10:00:00", end_time: "20:00:00" }], // profesional todo el día
++      salonSchedules: [{ weekday: 1, start_time: "10:00:00", end_time: "14:00:00" }], // clínica 10–14
++      busy: [],
++      slotIntervalMinutes: 30,
++      now: MIDNIGHT,
++    });
++    const horasMadrid = slots.map((s) => (new Date(s.startsAt).getUTCHours() + 2) % 24);
++    expect(horasMadrid.some((h) => h >= 14)).toBe(false); // nada a partir de las 14
++    expect(horasMadrid).toContain(13); // 13:00 sí (termina 13:30)
++  });
++
++  it("generateDaySlots también respeta el horario de clínica (día cerrado → vacío)", () => {
++    const day = generateDaySlots({
++      date: DATE,
++      timeZone: TZ,
++      serviceDurationMinutes: 60,
++      schedules: MONDAY_SCHEDULE,
++      salonSchedules: [],
++      busy: [],
++      slotIntervalMinutes: 60,
++      now: MIDNIGHT,
++    });
++    expect(day).toEqual([]);
++  });
++});
++
+ describe("generateSlots", () => {
+   it("returns empty array when serviceDurationMinutes <= 0", () => {
+     expect(
+       generateSlots({
+         date: DATE,
+         timeZone: TZ,
+         serviceDurationMinutes: 0,
+         schedules: MONDAY_SCHEDULE,
+         busy: [],
+         now: NOW,
+diff --git a/src/tests/unit/expediente-actions.test.ts b/src/tests/unit/expediente-actions.test.ts
+index e6d183b..2fe01a1 100644
+--- a/src/tests/unit/expediente-actions.test.ts
++++ b/src/tests/unit/expediente-actions.test.ts
+@@ -447,21 +447,51 @@ describe("uploadPatientImage", () => {
+     expect(result).toEqual({ ok: true, data: inserted });
+     expect(storageFromMock).toHaveBeenCalledWith("patient-media");
+     expect(uploadMock).toHaveBeenCalledTimes(1);
+     const call = uploadMock.mock.calls[0] as unknown as [string, unknown, Record<string, unknown>];
+     const [path, , options] = call;
+     expect(path.startsWith(`${SALON_ID}/${CUSTOMER_ID}/`)).toBe(true);
+     expect(path.endsWith(".png")).toBe(true);
+     expect(options.contentType).toBe("image/png");
+   });
+ 
+-  it("MIME no admitido ⇒ { ok:false } sin llamar a Storage ni a la BD", async () => {
++  it("sube un PDF a patient-media y crea la fila de metadatos", async () => {
++    salon("odontologia");
++    membership("staff");
++
++    const uploadMock = vi.fn(async () => ({ error: null }));
++    storageFromMock.mockReturnValue({ upload: uploadMock });
++
++    const inserted = imageRow({ mime: "application/pdf", storage_path: `${SALON_ID}/${CUSTOMER_ID}/report.pdf` });
++    fromMock.mockImplementation((table: string) => {
++      if (table === "patient_images") return chain({ data: inserted, error: null });
++      throw new Error(`tabla inesperada: ${table}`);
++    });
++
++    const formData = new FormData();
++    formData.set("file", new File([new Uint8Array(100)], "report.pdf", { type: "application/pdf" }));
++    formData.set("customerId", CUSTOMER_ID);
++    formData.set("modality", "periapical");
++
++    const result = await uploadPatientImage(formData);
++
++    expect(result).toEqual({ ok: true, data: inserted });
++    expect(storageFromMock).toHaveBeenCalledWith("patient-media");
++    expect(uploadMock).toHaveBeenCalledTimes(1);
++    const call = uploadMock.mock.calls[0] as unknown as [string, unknown, Record<string, unknown>];
++    const [path, , options] = call;
++    expect(path.startsWith(`${SALON_ID}/${CUSTOMER_ID}/`)).toBe(true);
++    expect(path.endsWith(".pdf")).toBe(true);
++    expect(options.contentType).toBe("application/pdf");
++  });
++
++  it("MIME no admitido (image/gif) ⇒ { ok:false } sin llamar a Storage ni a la BD", async () => {
+     salon("odontologia");
+     membership("staff");
+ 
+     const formData = new FormData();
+     formData.set("file", new File([new Uint8Array(10)], "rx.gif", { type: "image/gif" }));
+     formData.set("customerId", CUSTOMER_ID);
+     formData.set("modality", "periapical");
+ 
+     const result = await uploadPatientImage(formData);
+ 
+diff --git a/src/types/database.ts b/src/types/database.ts
+index 5243c9f..0d33e4b 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -1796,20 +1796,58 @@ export interface Database {
+           },
+           {
+             foreignKeyName: "professional_schedules_professional_id_fkey";
+             columns: ["professional_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "professionals";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      salon_opening_hours: {
++        Row: {
++          id: string;
++          salon_id: string;
++          weekday: number;
++          start_time: string;
++          end_time: string;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          weekday: number;
++          start_time: string;
++          end_time: string;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          weekday?: number;
++          start_time?: string;
++          end_time?: string;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [
++          {
++            foreignKeyName: "salon_opening_hours_salon_id_fkey";
++            columns: ["salon_id"];
++            isOneToOne: false;
++            referencedRelation: "salons";
++            referencedColumns: ["id"];
++          },
++        ];
++      };
+       schedule_exceptions: {
+         Row: {
+           id: string;
+           salon_id: string;
+           professional_id: string;
+           exception_date: string;
+           is_available: boolean;
+           start_time: string | null;
+           end_time: string | null;
+           reason: string | null;
+@@ -4139,20 +4177,21 @@ export type TablesUpdate<T extends keyof PublicSchema["Tables"]> =
+ export type Salon = Tables<"salons">;
+ export type SalonMember = Tables<"salon_members">;
+ export type Location = Tables<"locations">;
+ export type Service = Tables<"services">;
+ export type Professional = Tables<"professionals">;
+ export type Customer = Tables<"customers">;
+ export type Product = Tables<"products">;
+ export type Appointment = Tables<"appointments">;
+ export type Visit = Tables<"visits">;
+ export type ProfessionalSchedule = Tables<"professional_schedules">;
++export type SalonOpeningHour = Tables<"salon_opening_hours">;
+ export type ScheduleException = Tables<"schedule_exceptions">;
+ export type AppointmentHistoryEntry = Tables<"appointment_history">;
+ export type CustomerHistoryEntry = Tables<"customer_history">;
+ export type WhatsappReminderQueueEntry = Tables<"whatsapp_reminder_queue">;
+ // TPV (Terminal Punto de Venta)
+ export type PosPaymentMethodRow = Tables<"pos_payment_methods">;
+ export type PosSession = Tables<"pos_sessions">;
+ export type PosSale = Tables<"pos_sales">;
+ export type PosSaleLine = Tables<"pos_sale_lines">;
+ export type PosPayment = Tables<"pos_payments">;
+diff --git a/supabase/migrations/20260810150000_salon_opening_hours.sql b/supabase/migrations/20260810150000_salon_opening_hours.sql
+new file mode 100644
+index 0000000..61f8795
+--- /dev/null
++++ b/supabase/migrations/20260810150000_salon_opening_hours.sql
+@@ -0,0 +1,64 @@
++-- =============================================================================
++-- salon-os — Horario de apertura de la CLÍNICA/salón
++--
++-- Horario semanal recurrente a nivel de SALÓN (no de profesional). El motor de
++-- disponibilidad lo INTERSECTA con el horario de cada profesional: solo hay hueco
++-- si la clínica está abierta Y el profesional trabaja. Es la fuente de verdad de
++-- "cuándo abre el negocio" que edita el propietario (p. ej. Nadia en Biodental) y
++-- a la que se ciñe la recepcionista de voz.
++--
++-- Retrocompatibilidad: los salones que NO tengan filas aquí siguen calculando la
++-- disponibilidad solo con el horario por profesional (el motor ignora la
++-- intersección cuando no hay horario de clínica). Ver src/lib/booking/server.ts
++-- (loadProfessionalDayInputs) y src/lib/booking/availability.ts (resolveWorkingRanges).
++--
++-- Convención de día de semana: 0 = domingo … 6 = sábado (igual que
++-- JavaScript `Date.getUTCDay()`). Horas en `time`, zona del salón (salons.timezone).
++-- Permite varios tramos por día (p. ej. mañana y tarde) → sin UNIQUE por weekday.
++-- =============================================================================
++
++create table public.salon_opening_hours (
++  id          uuid primary key default gen_random_uuid(),
++  salon_id    uuid not null references public.salons (id) on delete cascade,
++  weekday     smallint not null check (weekday between 0 and 6),
++  start_time  time not null,
++  end_time    time not null,
++  created_at  timestamptz not null default now(),
++  updated_at  timestamptz not null default now(),
++  check (end_time > start_time)
++);
++
++create index idx_salon_opening_hours_lookup
++  on public.salon_opening_hours (salon_id, weekday);
++
++comment on table public.salon_opening_hours is
++  'Horario de apertura recurrente a nivel de salón. weekday: 0=domingo … 6=sábado. Horas en la zona del salón. Se intersecta con el horario por profesional en el cálculo de disponibilidad.';
++
++-- updated_at automático (reutiliza el helper app.set_updated_at()).
++create trigger trg_salon_opening_hours_updated_at
++  before update on public.salon_opening_hours
++  for each row execute function app.set_updated_at();
++
++-- ------------------------------------------------------------------------------
++-- RLS — lectura: cualquier miembro del salón; escritura: owner/manager.
++-- La reserva pública y la recepción NO usan estas políticas: acceden vía service
++-- role en el servidor, acotando por salon_id a mano.
++-- ------------------------------------------------------------------------------
++alter table public.salon_opening_hours enable row level security;
++
++create policy "members_select_salon_opening_hours"
++  on public.salon_opening_hours for select to authenticated
++  using (salon_id in (select app.user_salon_ids()));
++
++create policy "managers_insert_salon_opening_hours"
++  on public.salon_opening_hours for insert to authenticated
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++create policy "managers_update_salon_opening_hours"
++  on public.salon_opening_hours for update to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]))
++  with check (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));
++
++create policy "managers_delete_salon_opening_hours"
++  on public.salon_opening_hours for delete to authenticated
++  using (app.has_salon_role(salon_id, array['owner','manager']::public.member_role[]));

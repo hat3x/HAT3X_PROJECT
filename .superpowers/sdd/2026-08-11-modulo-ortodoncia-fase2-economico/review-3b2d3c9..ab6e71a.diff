@@ -1,0 +1,443 @@
+# Review package: 3b2d3c9..ab6e71a
+
+## Commits
+ab6e71a fix(ortodoncia): plan de pago — errores por-llamada y cierre en onSuccess
+
+## Files changed
+ src/components/dental/ortho-payment-plan-card.tsx | 120 +++++++++++++++-------
+ 1 file changed, 85 insertions(+), 35 deletions(-)
+
+## Diff
+diff --git a/src/components/dental/ortho-payment-plan-card.tsx b/src/components/dental/ortho-payment-plan-card.tsx
+index c794128..6ad95a1 100644
+--- a/src/components/dental/ortho-payment-plan-card.tsx
++++ b/src/components/dental/ortho-payment-plan-card.tsx
+@@ -1,13 +1,13 @@
+ "use client";
+ 
+-import { useEffect, useMemo, useState } from "react";
++import { useMemo, useState } from "react";
+ import {
+   AlertCircle,
+   AlertTriangle,
+   Ban,
+   CalendarDays,
+   CheckCircle2,
+   Loader2,
+   Undo2,
+   Wallet,
+ } from "lucide-react";
+@@ -126,29 +126,33 @@ export function OrthoPaymentPlanCard({
+               planQuery.error instanceof Error
+                 ? planQuery.error.message
+                 : "No se pudo cargar el plan de pago."
+             }
+             onRetry={() => void planQuery.refetch()}
+           />
+         ) : planQuery.data ? (
+           <ActivePlan
+             plan={planQuery.data.plan}
+             installments={planQuery.data.installments}
++            // `mutateAsync` (no `mutate`): cada acción resuelve/rechaza su propia
++            // promesa, así `ActivePlan` puede enganchar éxito/error POR LLAMADA
++            // (cerrar diálogo, mostrar error) en vez de depender del estado
++            // compartido de la mutación (que persiste entre filas/aperturas) o
++            // del siguiente refetch. Ver fix round 1 en task-7-report.md.
+             onPay={(installmentId, method) =>
+-              payMut.mutate({ installmentId, input: { method } })
++              payMut.mutateAsync({ installmentId, input: { method } })
+             }
+-            onUnpay={(id) => unpayMut.mutate(id)}
+-            onCancel={(planId) => cancelMut.mutate(planId)}
++            onUnpay={(id) => unpayMut.mutateAsync(id)}
++            onCancel={(planId) => cancelMut.mutateAsync(planId)}
+             payPending={payMut.isPending}
+             unpayPending={unpayMut.isPending}
+             cancelPending={cancelMut.isPending}
+-            payError={payMut.isError ? (payMut.error as Error).message : null}
+           />
+         ) : (
+           <NewPlanForm
+             onCreate={(input) => createPlan.mutate(input)}
+             creating={createPlan.isPending}
+             error={createPlan.isError ? (createPlan.error as Error).message : null}
+           />
+         )}
+       </CardContent>
+     </Card>
+@@ -223,20 +227,21 @@ function NewPlanForm({
+     const totalCents = eurosToCents(total);
+     const downPaymentCents = eurosToCents(down);
+     const installmentCount = Number(count);
+     const dayOfMonth = Number(day);
+     if (
+       totalCents <= 0 ||
+       downPaymentCents < 0 ||
+       downPaymentCents > totalCents ||
+       !Number.isInteger(installmentCount) ||
+       installmentCount < 1 ||
++      installmentCount > 120 ||
+       !Number.isInteger(dayOfMonth) ||
+       dayOfMonth < 1 ||
+       dayOfMonth > 31 ||
+       totalCents - downPaymentCents < installmentCount ||
+       start.trim() === ""
+     ) {
+       return null;
+     }
+     return computeInstallmentSchedule({
+       totalCents,
+@@ -253,20 +258,23 @@ function NewPlanForm({
+     if (total.trim() === "" && count.trim() === "") return null;
+     const totalCents = eurosToCents(total);
+     const downPaymentCents = eurosToCents(down);
+     const installmentCount = Number(count);
+     const dayOfMonth = Number(day);
+     if (totalCents <= 0) return "Introduce el total del tratamiento.";
+     if (downPaymentCents > totalCents) return "La entrada no puede superar el total.";
+     if (!Number.isInteger(installmentCount) || installmentCount < 1) {
+       return "Indica un número de cuotas válido (mínimo 1).";
+     }
++    if (installmentCount > 120) {
++      return "Máximo 120 cuotas.";
++    }
+     if (totalCents - downPaymentCents < installmentCount) {
+       return "El importe a financiar es menor que el número de cuotas: sube el total, baja la entrada o reduce las cuotas.";
+     }
+     if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
+       return "El día de cobro debe estar entre 1 y 31.";
+     }
+     return null;
+   }, [total, down, count, day]);
+ 
+   function submit(): void {
+@@ -292,20 +300,21 @@ function NewPlanForm({
+         <MoneyField id="ortho-total" label="Total del tratamiento" required value={total} onChange={setTotal} />
+         <MoneyField id="ortho-down" label="Entrada (pago inicial)" value={down} onChange={setDown} />
+         <div className="space-y-1.5">
+           <Label htmlFor="ortho-count">
+             Nº de cuotas <span className="text-destructive">*</span>
+           </Label>
+           <Input
+             id="ortho-count"
+             type="number"
+             min={1}
++            max={120}
+             inputMode="numeric"
+             value={count}
+             onChange={(e) => setCount(e.target.value)}
+           />
+         </div>
+         <div className="space-y-1.5">
+           <Label htmlFor="ortho-day">
+             Día de cobro <span className="text-destructive">*</span>
+           </Label>
+           <Input
+@@ -444,64 +453,97 @@ function SchedulePreview({ schedule }: { schedule: ScheduledInstallment[] }): Re
+ 
+ function ActivePlan({
+   plan,
+   installments,
+   onPay,
+   onUnpay,
+   onCancel,
+   payPending,
+   unpayPending,
+   cancelPending,
+-  payError,
+ }: {
+   plan: OrthoPaymentPlan;
+   installments: readonly OrthoInstallment[];
+-  onPay: (installmentId: string, method: OrthoPaymentMethod) => void;
+-  onUnpay: (installmentId: string) => void;
+-  onCancel: (planId: string) => void;
++  // `Promise<unknown>` (no `void`): cada acción resuelve/rechaza para poder
++  // enganchar éxito (cerrar diálogo) y error (mostrarlo) POR LLAMADA, en vez de
++  // leer el estado compartido de la mutación (persiste entre filas/aperturas)
++  // o esperar al siguiente refetch. Mismo espíritu que `ConsentList`, que
++  // resetea su error local antes de cada `.mutate()` y lo fija en `onError`.
++  onPay: (installmentId: string, method: OrthoPaymentMethod) => Promise<unknown>;
++  onUnpay: (installmentId: string) => Promise<unknown>;
++  onCancel: (planId: string) => Promise<unknown>;
+   payPending: boolean;
+   unpayPending: boolean;
+   cancelPending: boolean;
+-  payError: string | null;
+ }): React.ReactElement {
+   const today = todayIso();
+   const balance = useMemo(
+     () =>
+       computePlanBalance(
+         installments.map((i) => ({
+           status: i.status,
+           dueDate: i.due_date,
+           amountCents: i.amount_cents,
+           paidAmountCents: i.paid_amount_cents,
+         })),
+         today,
+       ),
+     [installments, today],
+   );
+ 
++  // Cobrar: diálogo con su propio error, reseteado cada vez que se abre para
++  // una cuota (evita mostrar el error de un cobro anterior al reabrir).
+   const [payTarget, setPayTarget] = useState<OrthoInstallment | null>(null);
+   const [payMethod, setPayMethod] = useState<OrthoPaymentMethod>("efectivo");
++  const [payDialogError, setPayDialogError] = useState<string | null>(null);
++
++  // Deshacer: sin diálogo (acción directa), error propio mostrado arriba de la tabla.
++  const [unpayError, setUnpayError] = useState<string | null>(null);
++
++  // Cancelar plan: diálogo con su propio error, reseteado al abrir.
+   const [confirmCancel, setConfirmCancel] = useState(false);
++  const [cancelError, setCancelError] = useState<string | null>(null);
+ 
+-  // Cierra el diálogo de cobro en cuanto la cuota objetivo pasa a "pagada" en
+-  // los datos frescos (tras invalidar la query). Si el cobro falla, la cuota
+-  // sigue "pendiente" y el diálogo permanece abierto mostrando `payError`.
+-  useEffect(() => {
+-    if (payTarget !== null) {
+-      const updated = installments.find((i) => i.id === payTarget.id);
+-      if (updated !== undefined && updated.status === "pagada") {
+-        setPayTarget(null);
+-      }
+-    }
+-    // Solo debe reaccionar a datos nuevos de cuotas, no a cambios de `payTarget`.
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [installments]);
++  function openPayDialog(installment: OrthoInstallment): void {
++    setPayMethod("efectivo");
++    setPayDialogError(null);
++    setPayTarget(installment);
++  }
++
++  function handleConfirmPay(): void {
++    if (payTarget === null) return;
++    setPayDialogError(null);
++    onPay(payTarget.id, payMethod)
++      .then(() => setPayTarget(null))
++      .catch((err: unknown) => {
++        setPayDialogError(err instanceof Error ? err.message : "No se pudo cobrar la cuota.");
++      });
++  }
++
++  function handleUnpay(installmentId: string): void {
++    setUnpayError(null);
++    onUnpay(installmentId).catch((err: unknown) => {
++      setUnpayError(err instanceof Error ? err.message : "No se pudo deshacer el cobro.");
++    });
++  }
++
++  function openCancelDialog(): void {
++    setCancelError(null);
++    setConfirmCancel(true);
++  }
++
++  function handleConfirmCancel(): void {
++    setCancelError(null);
++    onCancel(plan.id).catch((err: unknown) => {
++      setCancelError(err instanceof Error ? err.message : "No se pudo cancelar el plan.");
++    });
++  }
+ 
+   return (
+     <div className="space-y-5">
+       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+         <BalanceStat label="Total" value={formatMoney(plan.total_cents, plan.currency)} />
+         <BalanceStat
+           label="Pagado"
+           value={formatMoney(balance.paidCents, plan.currency)}
+           valueClassName="text-success"
+         />
+@@ -513,27 +555,27 @@ function ActivePlan({
+               ? `${balance.overdueCount} cuota${balance.overdueCount !== 1 ? "s" : ""}`
+               : "Al día"
+           }
+           valueClassName={balance.overdueCount > 0 ? "text-destructive" : "text-success"}
+           className={balance.overdueCount > 0 ? "border-destructive/30 bg-destructive/5" : undefined}
+         />
+       </div>
+ 
+       <PaymentProgress paidCents={balance.paidCents} totalCents={plan.total_cents} />
+ 
+-      {payError !== null && (
++      {unpayError !== null && (
+         <p
+           role="alert"
+           className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
+         >
+           <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+-          {payError}
++          {unpayError}
+         </p>
+       )}
+ 
+       <div className="overflow-hidden rounded-xl border border-border/70">
+         <Table scrollRegionLabel="Cuotas del plan de pago">
+           <TableCaption className="sr-only">
+             Cuotas del plan de pago: entrada y cuotas mensuales, con fecha, importe y estado.
+           </TableCaption>
+           <TableHeader className="bg-muted/40">
+             <TableRow className="hover:bg-transparent">
+@@ -567,38 +609,35 @@ function ActivePlan({
+                     <InstallmentStatusBadge status={i.status} overdue={overdue} />
+                   </TableCell>
+                   <TableCell className="text-right">
+                     {i.status === "pagada" ? (
+                       <Button
+                         type="button"
+                         size="sm"
+                         variant="ghost"
+                         className="gap-1.5 text-muted-foreground hover:text-foreground"
+                         disabled={unpayPending}
+-                        onClick={() => onUnpay(i.id)}
++                        onClick={() => handleUnpay(i.id)}
+                       >
+                         {unpayPending ? (
+                           <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                         ) : (
+                           <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                         )}
+                         Deshacer
+                       </Button>
+                     ) : (
+                       <Button
+                         type="button"
+                         size="sm"
+                         disabled={payPending}
+-                        onClick={() => {
+-                          setPayMethod("efectivo");
+-                          setPayTarget(i);
+-                        }}
++                        onClick={() => openPayDialog(i)}
+                       >
+                         Cobrar
+                       </Button>
+                     )}
+                   </TableCell>
+                 </TableRow>
+               );
+             })}
+           </TableBody>
+         </Table>
+@@ -607,21 +646,21 @@ function ActivePlan({
+       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
+         <p className="text-xs text-muted-foreground">
+           Métodos de cobro: {Object.values(ORTHO_PAYMENT_METHOD_LABELS).join(" · ")}.
+         </p>
+         <Button
+           type="button"
+           variant="ghost"
+           size="sm"
+           className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+           disabled={cancelPending}
+-          onClick={() => setConfirmCancel(true)}
++          onClick={openCancelDialog}
+         >
+           <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+           Cancelar plan
+         </Button>
+       </div>
+ 
+       {/* Diálogo de cobro: elige método antes de confirmar (mejora sobre la referencia). */}
+       <Dialog
+         open={payTarget !== null}
+         onOpenChange={(open) => {
+@@ -657,46 +696,46 @@ function ActivePlan({
+                   <SelectContent>
+                     {(Object.keys(ORTHO_PAYMENT_METHOD_LABELS) as OrthoPaymentMethod[]).map((m) => (
+                       <SelectItem key={m} value={m}>
+                         {ORTHO_PAYMENT_METHOD_LABELS[m]}
+                       </SelectItem>
+                     ))}
+                   </SelectContent>
+                 </Select>
+               </div>
+ 
+-              {payError !== null && (
++              {payDialogError !== null && (
+                 <p
+                   role="alert"
+                   className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
+                 >
+                   <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+-                  {payError}
++                  {payDialogError}
+                 </p>
+               )}
+             </>
+           )}
+ 
+           <DialogFooter>
+             <Button
+               type="button"
+               variant="ghost"
+               onClick={() => setPayTarget(null)}
+               disabled={payPending}
+             >
+               Cancelar
+             </Button>
+             <Button
+               type="button"
+               className="gap-1.5"
+               disabled={payPending || payTarget === null}
+-              onClick={() => payTarget !== null && onPay(payTarget.id, payMethod)}
++              onClick={handleConfirmPay}
+             >
+               {payPending ? (
+                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+               ) : (
+                 <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+               )}
+               {payPending ? "Cobrando…" : "Confirmar cobro"}
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+@@ -711,35 +750,46 @@ function ActivePlan({
+             </div>
+             <DialogTitle>¿Cancelar el plan de pago?</DialogTitle>
+             <DialogDescription>
+               {balance.pendingCents > 0
+                 ? `Quedan ${formatMoney(balance.pendingCents, plan.currency)} pendientes. `
+                 : ""}
+               El histórico de cuotas se conserva, pero no podrás cobrar cuotas de este plan desde
+               aquí una vez cancelado.
+             </DialogDescription>
+           </DialogHeader>
++
++          {cancelError !== null && (
++            <p
++              role="alert"
++              className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
++            >
++              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++              {cancelError}
++            </p>
++          )}
++
+           <DialogFooter>
+             <Button
+               type="button"
+               variant="ghost"
+               onClick={() => setConfirmCancel(false)}
+               disabled={cancelPending}
+             >
+               Volver
+             </Button>
+             <Button
+               type="button"
+               variant="destructive"
+               className="gap-1.5"
+               disabled={cancelPending}
+-              onClick={() => onCancel(plan.id)}
++              onClick={handleConfirmCancel}
+             >
+               {cancelPending ? (
+                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+               ) : (
+                 <Ban className="h-4 w-4" aria-hidden="true" />
+               )}
+               {cancelPending ? "Cancelando…" : "Sí, cancelar plan"}
+             </Button>
+           </DialogFooter>
+         </DialogContent>
