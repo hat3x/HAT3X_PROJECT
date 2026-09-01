@@ -52,10 +52,20 @@ ElevenLabs, Retell y Twilio, y la `DATABASE_URL`.
 
 Van cifrados, en un único fichero `secretos.enc` que sí está versionado:
 
+Desde Git Bash:
+
 ```sh
 ./scripts/secretos.sh guardar     # empaqueta los .env y los cifra
 ./scripts/secretos.sh restaurar   # los devuelve a su sitio
 ./scripts/secretos.sh listar      # ve qué hay dentro, sin escribir nada
+```
+
+Desde `cmd` o PowerShell, lo mismo con el envoltorio:
+
+```
+scripts\secretos.bat guardar
+scripts\secretos.bat restaurar
+scripts\secretos.bat listar
 ```
 
 En una máquina nueva: clonas, ejecutas `restaurar`, escribes la contraseña y ya
