@@ -95,3 +95,98 @@ export const captureRequestSchema = z
   .strict();
 
 export type CaptureRequest = z.infer<typeof captureRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// DICOM (A1b) — el flujo de vuelta
+//
+// ── POR QUÉ EL DICOM NO ENCAJA EN EL MENSAJE DE CAPTURA ─────────────────────
+// Con la carpeta vigilada el navegador pide una captura y espera: hay alguien
+// delante. Un equipo DICOM no funciona así. El ortopantomógrafo pregunta por su
+// cuenta a quién le toca (lista de trabajo) y envía la imagen cuando termina,
+// que pueden ser cinco minutos después y con la ficha ya cerrada.
+//
+// Eso rompería la promesa de que el agente no guarda credenciales: para
+// responder a la lista tendría que consultar la base, y para subir la imagen
+// tendría que escribir en ella.
+//
+// Se resuelve invirtiendo quién lleva la iniciativa, con dos mensajes más:
+//
+//   · El navegador EMPUJA la lista de trabajo del día al agente, que la guarda
+//     para poder contestarle al equipo aunque en ese momento no haya nadie.
+//   · El agente ENCOLA en disco lo que reciba, y el navegador se lo lleva y lo
+//     sube cuando alguien abre Kairos.
+//
+// El agente sigue sin llaves: solo tiene una copia de la agenda del día y unos
+// ficheros esperando a que alguien autenticado se los lleve.
+// ---------------------------------------------------------------------------
+
+/**
+ * Un registro de la lista de trabajo, tal y como el navegador se lo pasa al
+ * agente. Es la salida de `buildWorklistItem`, ya construida en el servidor:
+ * el agente no compone datos clínicos, solo los repite.
+ */
+const worklistEntrySchema = z
+  .object({
+    accession: z.string().min(1),
+    studyInstanceUid: z.string().min(1),
+    patientId: z.string().min(1),
+    patientName: z.string(),
+    patientBirthDate: z.string(),
+    patientSex: z.string(),
+    modality: z.string().min(1),
+    scheduledDate: z.string().min(1),
+    scheduledTime: z.string().min(1),
+    procedureDescription: z.string(),
+  })
+  .strict();
+
+export type WorklistEntry = z.infer<typeof worklistEntrySchema>;
+
+/**
+ * «Esta es la lista de trabajo de hoy».
+ *
+ * Se manda entera y sustituye a la anterior, en vez de ir por diferencias: una
+ * lista de un día son unas decenas de registros, y reconciliar altas y bajas
+ * sería inventar un problema para ahorrar unos kilobytes. Además, sustituir
+ * completo hace imposible que quede un paciente fantasma de ayer.
+ */
+export const worklistPushSchema = z
+  .object({
+    type: z.literal("worklist-push"),
+    token: pairingToken,
+    entries: z.array(worklistEntrySchema).max(500),
+  })
+  .strict();
+
+export type WorklistPush = z.infer<typeof worklistPushSchema>;
+
+/** «¿Ha llegado alguna imagen mientras no había nadie?» */
+export const queueListSchema = z
+  .object({ type: z.literal("queue-list"), token: pairingToken })
+  .strict();
+
+/** «Dame los bytes de esta, que la subo». */
+export const queueFetchSchema = z
+  .object({
+    type: z.literal("queue-fetch"),
+    token: pairingToken,
+    /** Nombre del fichero en la cola, tal y como lo devolvió `queue-list`. */
+    item: z.string().min(1),
+  })
+  .strict();
+
+/**
+ * «Ya está subida, bórrala».
+ *
+ * El borrado lo ordena el navegador y no el agente al entregarla: si el agente
+ * borrara al servirla, un corte de red entre la entrega y la subida perdería
+ * una radiografía. Confirmar después cuesta un mensaje y hace que lo peor que
+ * pueda pasar sea subirla dos veces.
+ */
+export const queueAckSchema = z
+  .object({
+    type: z.literal("queue-ack"),
+    token: pairingToken,
+    item: z.string().min(1),
+  })
+  .strict();
