@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Informe comercial de Kairos para clinicas dentales: que hace, que no hace todavia y en que se diferencia del software del sector.">
+<title>Kairos frente al mercado</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap">
+
+<style>
+  /* ─────────────────────────────────────────────────────────────────────────
+     Paleta de marca Kairos v1 — la misma que los informes que ya recibe la
+     clínica. El latón, con cuentagotas.
+     ───────────────────────────────────────────────────────────────────────── */
+  :root {
+    --ground:      #F4F1EA;
+    --surface:     #FBFAF7;
+    --surface-alt: #EFEBE1;
+    --text:        #16181F;
+    --text-soft:   #4C505C;
+    --text-faint:  #7C808B;
+    --rule:        #DED8CB;
+    --rule-soft:   #E8E3D8;
+    --accent:      #B4884D;
+    --accent-text: #866226;
+    --exito:       #3E8E6E;
+    --aviso:       #B37E29;
+    --alerta:      #BE543F;
+    --aviso-fondo: #FBF3E2;
+    --exito-fondo: #E9F3EE;
+    --sombra:      0 1px 2px rgba(22, 24, 31, .04), 0 8px 24px rgba(22, 24, 31, .05);
+  }
+
+  /* El tema del visor manda. Sin marca explícita solo separa prefers-color-scheme. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #131419;
+      --surface:     #1A1C22;
+      --surface-alt: #22242B;
+      --text:        #F3F0E9;
+      --text-soft:   #B5B3AC;
+      --text-faint:  #8A8880;
+      --rule:        #32343C;
+      --rule-soft:   #292B32;
+      --accent:      #D2A76A;
+      --accent-text: #E3BE85;
+      --exito:       #6BB795;
+      --aviso:       #D6A24B;
+      --alerta:      #E0806A;
+      --aviso-fondo: #2A2418;
+      --exito-fondo: #17251F;
+      --sombra:      0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .28);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #131419;
+    --surface:     #1A1C22;
+    --surface-alt: #22242B;
+    --text:        #F3F0E9;
+    --text-soft:   #B5B3AC;
+    --text-faint:  #8A8880;
+    --rule:        #32343C;
+    --rule-soft:   #292B32;
+    --accent:      #D2A76A;
+    --accent-text: #E3BE85;
+    --exito:       #6BB795;
+    --aviso:       #D6A24B;
+    --alerta:      #E0806A;
+    --aviso-fondo: #2A2418;
+    --exito-fondo: #17251F;
+    --sombra:      0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .28);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 15.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .hoja {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 4vw, 4rem) clamp(1.1rem, 4vw, 3.25rem) 5rem;
+  }
+
+  h1, h2, h3 { font-family: "Source Serif 4", Georgia, serif; text-wrap: balance; margin: 0; }
+  h1 { font-weight: 700; font-size: clamp(2.1rem, 6vw, 3.4rem); line-height: 1.06; letter-spacing: -.015em; }
+  h2 { font-weight: 600; font-size: clamp(1.5rem, 3.4vw, 2.05rem); line-height: 1.18; letter-spacing: -.01em; }
+  h3 { font-weight: 600; font-size: 1.12rem; line-height: 1.3; }
+
+  p { margin: 0 0 1rem; max-width: 40em; }
+  strong { font-weight: 600; }
+  a { color: var(--accent-text); text-underline-offset: .2em; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .66rem; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--accent-text); margin: 0 0 .6rem;
+  }
+  .lead { font-size: 1.16rem; line-height: 1.55; color: var(--text-soft); max-width: 36em; }
+
+  /* ── Cabecera ───────────────────────────────────────────────────────────── */
+  header { padding-bottom: 2.5rem; border-bottom: 1px solid var(--rule); }
+  .marca { display: flex; align-items: center; gap: .8rem; margin-bottom: 2.75rem; }
+  .marca span { font-family: "Source Serif 4", Georgia, serif; font-size: 1.18rem; font-weight: 600; }
+  .marca small {
+    font-family: "IBM Plex Mono", monospace; font-size: .62rem; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--text-faint);
+    border-left: 1px solid var(--rule); padding-left: .8rem;
+  }
+  .fecha {
+    font-family: "IBM Plex Mono", monospace; font-size: .68rem; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--text-faint); margin-top: 1.75rem;
+  }
+
+  /* ── Secciones ──────────────────────────────────────────────────────────── */
+  section { padding-top: 3.25rem; }
+  section + section { border-top: 1px solid var(--rule-soft); margin-top: 3.25rem; }
+  section > h2 { margin-bottom: 1.1rem; }
+
+  /* ── Banda de cifras ────────────────────────────────────────────────────── */
+  .cifras {
+    display: grid; gap: 1px; background: var(--rule);
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    border: 1px solid var(--rule); border-radius: 3px; overflow: hidden;
+    margin: 1.75rem 0;
+  }
+  .cifra { background: var(--surface); padding: 1.15rem 1.1rem; }
+  .cifra b {
+    display: block; font-family: "Source Serif 4", Georgia, serif;
+    font-size: 1.85rem; font-weight: 600; line-height: 1.05;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  .cifra span {
+    display: block; margin-top: .35rem; font-size: .77rem; line-height: 1.35;
+    color: var(--text-faint);
+  }
+
+  /* ── Tablas ─────────────────────────────────────────────────────────────── */
+  .tabla-scroll { overflow-x: auto; margin: 1.6rem 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 34rem; font-size: .89rem; }
+  caption {
+    text-align: left; font-family: "IBM Plex Mono", monospace; font-size: .66rem;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--text-faint);
+    padding-bottom: .7rem;
+  }
+  th, td { text-align: left; padding: .72rem .85rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  thead th {
+    font-family: "IBM Plex Mono", monospace; font-size: .64rem; font-weight: 500;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--text-faint);
+    border-bottom: 1px solid var(--rule);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  th[scope="row"] { font-weight: 600; }
+  .col-kairos { background: var(--surface); }
+  thead .col-kairos { color: var(--accent-text); }
+
+  /* ── Rejilla de módulos ─────────────────────────────────────────────────── */
+  .modulos {
+    display: grid; gap: .55rem; margin: 1.6rem 0;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  }
+  .modulo {
+    background: var(--surface); border: 1px solid var(--rule-soft);
+    border-radius: 3px; padding: .8rem .95rem;
+  }
+  .modulo b { display: block; font-size: .92rem; font-weight: 600; }
+  .modulo span { display: block; margin-top: .18rem; font-size: .8rem; color: var(--text-faint); line-height: 1.45; }
+
+  /* ── Notas ──────────────────────────────────────────────────────────────── */
+  .nota {
+    border-left: 2px solid var(--accent); background: var(--surface);
+    padding: 1.05rem 1.25rem; margin: 1.6rem 0; border-radius: 0 3px 3px 0;
+  }
+  .nota p:last-child { margin-bottom: 0; }
+  .nota.franca { border-left-color: var(--aviso); background: var(--aviso-fondo); }
+
+  .pastilla {
+    display: inline-block; font-family: "IBM Plex Mono", monospace;
+    font-size: .6rem; letter-spacing: .1em; text-transform: uppercase;
+    padding: .18rem .5rem; border-radius: 2px; border: 1px solid currentColor;
+    vertical-align: .1em; white-space: nowrap;
+  }
+  .pastilla.listo    { color: var(--exito); }
+  .pastilla.enobras  { color: var(--aviso); }
+  .pastilla.previsto { color: var(--text-faint); }
+
+  ul.limpia { margin: 1rem 0; padding-left: 1.15rem; max-width: 40em; }
+  ul.limpia li { margin-bottom: .5rem; }
+
+  /* ── Diagrama ───────────────────────────────────────────────────────────── */
+  figure { margin: 1.9rem 0; }
+  figure svg { display: block; width: 100%; max-width: 100%; height: auto; color: var(--text-soft); }
+  figcaption { margin-top: .75rem; font-size: .8rem; color: var(--text-faint); max-width: 40em; }
+
+  /* ── Precio ─────────────────────────────────────────────────────────────── */
+  .precio {
+    display: grid; gap: 1px; background: var(--rule);
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; margin: 1.75rem 0;
+  }
+  .precio > div { background: var(--surface); padding: 1.3rem 1.25rem; }
+  .precio b {
+    display: block; font-family: "Source Serif 4", Georgia, serif;
+    font-size: 2rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  }
+  .precio em { display: block; font-style: normal; font-size: .72rem; font-family: "IBM Plex Mono", monospace;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--text-faint); margin-bottom: .45rem; }
+  .precio span { display: block; margin-top: .4rem; font-size: .84rem; color: var(--text-soft); line-height: 1.45; }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.75rem; border-top: 1px solid var(--rule);
+    font-size: .8rem; color: var(--text-faint);
+  }
+  footer h3 { font-size: .95rem; margin-bottom: .6rem; }
+  footer ul { padding-left: 1.1rem; margin: .5rem 0; }
+  footer li { margin-bottom: .3rem; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+<style>
+  /* El documento se envia suelto: aqui va el minimo que en el visor de
+     artefactos ya venia puesto. */
+  html { -webkit-text-size-adjust: 100%; }
+  img { max-width: 100%; height: auto; }
+  @media print {
+    body { background: #fff; }
+    section { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+<div class="hoja">
+
+  <header>
+    <div class="marca">
+      <svg width="38" height="38" viewBox="0 0 48 48" role="img" aria-label="Kairos">
+        <circle cx="24" cy="24" r="19" fill="none" stroke="var(--text-soft)" stroke-width="1.25"/>
+        <line x1="24" y1="24" x2="24" y2="9.5" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="24" y1="24" x2="33" y2="29" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="24" cy="24" r="1.7" fill="var(--accent)"/>
+      </svg>
+      <span>Kairos</span>
+      <small>HAT3X</small>
+    </div>
+
+    <p class="eyebrow">Informe comercial · Sector odontológico</p>
+    <h1>Kairos frente<br>al mercado</h1>
+    <p class="lead" style="margin-top:1.5rem">
+      Qué hace Kairos hoy, qué no hace todavía, y en qué se diferencia
+      realmente del software que una clínica dental puede contratar ahora
+      mismo en España.
+    </p>
+    <p class="fecha">2 de septiembre de 2026</p>
+  </header>
+
+  <!-- ── 1. La tesis ────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">La idea</p>
+    <h2>Un programa que se escribe dentro de una clínica, no para una clínica</h2>
+    <p>
+      Kairos no nació de un catálogo de funciones. Nació trabajando dentro de
+      una clínica dental en funcionamiento, resolviendo lo que se rompía ese
+      día: una cita que no se podía solapar, un presupuesto que no se podía
+      cobrar, una firma que no se veía en pantalla, una receta que la farmacia
+      no aceptaría.
+    </p>
+    <p>
+      Eso tiene una consecuencia que se nota al usarlo. Las cosas están donde
+      alguien que trabaja en una clínica las buscaría, porque las colocó
+      alguien que estaba mirando cómo las buscaba.
+    </p>
+
+    <div class="cifras">
+      <div class="cifra"><b>73</b><span>tablas de datos clínicos y de gestión</span></div>
+      <div class="cifra"><b>2.498</b><span>pruebas automáticas, en verde</span></div>
+      <div class="cifra"><b>246</b><span>cambios entregados solo en agosto</span></div>
+      <div class="cifra"><b>19</b><span>áreas de trabajo en la aplicación</span></div>
+    </div>
+    <p style="font-size:.82rem;color:var(--text-faint);max-width:40em">
+      Cifras del propio sistema a 2 de septiembre de 2026. Las pruebas
+      automáticas son comprobaciones que se ejecutan solas cada vez que se
+      toca el programa: es lo que impide que arreglar una cosa rompa otra sin
+      que nadie se entere.
+    </p>
+  </section>
+
+  <!-- ── 2. La foto del sector ──────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">El punto de partida</p>
+    <h2>Cómo está hoy el mercado español</h2>
+    <p>
+      Antes de comparar conviene mirar qué se encuentra una clínica cuando
+      busca software. Dos cosas llaman la atención, y las dos se pueden
+      comprobar en las webs de los propios fabricantes.
+    </p>
+
+    <h3 style="margin-top:1.75rem">Casi nadie publica el precio</h3>
+    <p>
+      El líder histórico del mercado español remite a su red comercial:
+      <em>«Consulta con tu coordinadora de zona la mejor oferta»</em>. Una de
+      las plataformas en la nube más conocidas muestra tres planes sin una
+      sola cifra: <em>«Solicita tu cotización»</em>. Para saber cuánto cuesta
+      hay que dar tus datos y esperar a que te llamen.
+    </p>
+    <p>
+      No es un detalle menor: significa que el precio depende de la
+      negociación, y que dos clínicas parecidas pueden estar pagando cosas
+      distintas por lo mismo.
+    </p>
+
+    <h3 style="margin-top:1.75rem">Buena parte del sector sigue instalada en Windows</h3>
+    <p>
+      El programa más extendido en España declara literalmente que
+      <em>«está diseñado exclusivamente para funcionar en ordenadores PC
+      Compatibles con Windows 10 o superior»</em>. Eso implica un ordenador
+      concreto, en una mesa concreta, con sus copias de seguridad, sus
+      actualizaciones y su día en que no arranca.
+    </p>
+    <div class="nota">
+      <p>
+        <strong>Que quede claro lo que no se está diciendo.</strong> Hay
+        plataformas dentales en la nube perfectamente serias, y llevan años
+        funcionando. Kairos no es la única que se abre en un navegador. Lo que
+        aquí se compara es el precio, la manera de trabajar y quién se
+        adapta a quién.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── 3. Qué hace hoy ────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Lo que ya funciona</p>
+    <h2>Todo el día de la clínica, en un solo sitio</h2>
+    <p>
+      Nada de esta lista está anunciado: está construido, probado y en uso.
+      Lo que todavía no lo está tiene su propio apartado más abajo, y no se
+      esconde.
+    </p>
+
+    <div class="modulos">
+      <div class="modulo"><b>Agenda y sala de espera</b><span>Citas por gabinete y por profesional, panel del día, lista de espera</span></div>
+      <div class="modulo"><b>Ficha del paciente</b><span>Datos, historia clínica, notas de evolución y documentos</span></div>
+      <div class="modulo"><b>Odontograma</b><span>Hallazgos diente a diente, con su estado y su presupuesto</span></div>
+      <div class="modulo"><b>Periodontograma</b><span>Sondaje por diente y por sitio</span></div>
+      <div class="modulo"><b>Planes y presupuestos</b><span>Por fases, con el estado de cada tratamiento</span></div>
+      <div class="modulo"><b>Cobro y caja</b><span>TPV, apertura y arqueo, métodos de pago, sesiones</span></div>
+      <div class="modulo"><b>Tickets y facturas</b><span>Emisión, impresión y facturas rectificativas</span></div>
+      <div class="modulo"><b>Ortodoncia</b><span>Visitas, plan de pagos a plazos y pedidos de laboratorio</span></div>
+      <div class="modulo"><b>Mutuas</b><span>Aseguradora, póliza y tarifa por servicio</span></div>
+      <div class="modulo"><b>Consentimientos</b><span>Plantillas versionadas y firma en tableta</span></div>
+      <div class="modulo"><b>Recetas</b><span>Emisión e impresión con los datos legales del prescriptor</span></div>
+      <div class="modulo"><b>Imágenes del paciente</b><span>Siete modalidades, con sus metadatos</span></div>
+      <div class="modulo"><b>Recordatorios</b><span>Avisos automáticos de cita por WhatsApp y SMS</span></div>
+      <div class="modulo"><b>Fichaje del personal</b><span>Entradas y salidas del equipo</span></div>
+      <div class="modulo"><b>Analítica</b><span>Actividad, producción y cobro</span></div>
+      <div class="modulo"><b>Varias sedes</b><span>Sedes, gabinetes y personal por centro</span></div>
+    </div>
+
+    <div class="nota">
+      <p>
+        <strong>Una decisión que se nota todos los días:</strong> el estado
+        clínico y el estado de cobro van por separado. Un tratamiento puede
+        estar hecho y sin cobrar, o cobrado y sin hacer, porque en una clínica
+        real pasan las dos cosas. Y si se anula un ticket, sus tratamientos
+        vuelven solos a estar pendientes de cobro: no hay que acordarse de
+        deshacer nada a mano.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── 4. La prueba ───────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">La prueba</p>
+    <h2>Una clínica real, con sus datos reales dentro</h2>
+    <p>
+      Kairos está en producción en <strong>Clínica Dental Biodental</strong>.
+      No con datos de demostración: con el historial que traían de su sistema
+      anterior, migrado y enlazado.
+    </p>
+
+    <div class="cifras">
+      <div class="cifra"><b>1.198</b><span>pacientes migrados</span></div>
+      <div class="cifra"><b>1.997</b><span>planes de tratamiento</span></div>
+      <div class="cifra"><b>7.932</b><span>líneas de tratamiento</span></div>
+      <div class="cifra"><b>5.255</b><span>hallazgos en el odontograma</span></div>
+    </div>
+
+    <p>
+      El dato del que más orgullosos estamos no es ninguno de esos cuatro. Es
+      este: <strong>4.622 de esas líneas de tratamiento están enlazadas al
+      diente y al hallazgo exacto</strong> del que salieron — el 87 % —.
+      Cuando llegaron, esa relación se había perdido en la migración: el
+      presupuesto decía «obturación» y no decía de qué muela.
+    </p>
+    <p>
+      Reconstruirlo no fue buscar, fue emparejar: cruzar superficies, fechas y
+      tipo de tratamiento para decidir a qué hallazgo pertenecía cada línea, y
+      hacerlo sin asignar dos veces el mismo. Eso es lo que separa una
+      migración de un volcado.
+    </p>
+    <p style="font-size:.82rem;color:var(--text-faint);max-width:40em">
+      Cifras consultadas en la base de datos de producción el 2 de septiembre
+      de 2026. Se muestran volúmenes de actividad clínica; ninguna cifra
+      económica de la clínica aparece en este documento.
+    </p>
+  </section>
+
+  <!-- ── 5. Comparativa ─────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">La comparación</p>
+    <h2>En qué se diferencia de verdad</h2>
+    <p>
+      Comparar función por función es un juego amañado: cualquiera puede
+      alargar su lista. Estas cinco diferencias son estructurales, se pueden
+      comprobar y cambian el día a día.
+    </p>
+
+    <div class="tabla-scroll">
+      <table>
+        <caption>Kairos frente a lo que se encuentra hoy una clínica</caption>
+        <thead>
+          <tr>
+            <th scope="col">&nbsp;</th>
+            <th scope="col" class="col-kairos">Kairos</th>
+            <th scope="col">Lo habitual en el sector</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">El precio</th>
+            <td class="col-kairos">Publicado y cerrado. Se sabe antes de hablar con nadie.</td>
+            <td>Presupuesto a medida tras contactar con la red comercial. Ni el líder del mercado ni una de las principales plataformas en la nube publican cifras.</td>
+          </tr>
+          <tr>
+            <th scope="row">Dónde funciona</th>
+            <td class="col-kairos">En un navegador. El ordenador de recepción, el del gabinete, una tableta o el móvil, a la vez.</td>
+            <td>Una parte importante del sector sigue siendo software instalado en Windows, atado a un ordenador y a sus copias de seguridad.</td>
+          </tr>
+          <tr>
+            <th scope="row">Quién se adapta</th>
+            <td class="col-kairos">El programa a la clínica. Se cambió el sistema de citas porque una doctora necesitaba solapar dos, y se hizo solo para ella y con aviso.</td>
+            <td>La clínica al programa. Los cambios entran en la versión que toque, cuando toque.</td>
+          </tr>
+          <tr>
+            <th scope="row">A qué ritmo cambia</th>
+            <td class="col-kairos">246 cambios entregados en agosto de 2026. Lo que se pide un martes suele estar el jueves.</td>
+            <td>Versiones periódicas, con su calendario de actualización.</td>
+          </tr>
+          <tr>
+            <th scope="row">El equipo de rayos</th>
+            <td class="col-kairos">Un programa propio que se instala en el ordenador de rayos, arranca solo y lleva la radiografía a la ficha. <span class="pastilla enobras">En obras</span></td>
+            <td>Habitualmente, exportar a una carpeta y subir el fichero a mano, o una integración específica por fabricante.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── 6. Radiología ──────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">La diferencia que estamos construyendo</p>
+    <h2>La radiografía llega sola a la ficha</h2>
+    <p>
+      Hoy, en la mayoría de clínicas, hacer una radiografía son dos programas
+      abiertos a la vez: se dispara en el del fabricante, se exporta a una
+      carpeta, se busca el fichero y se sube. Kairos queda de segunda
+      pantalla, y el nombre del paciente se teclea otra vez — con lo que eso
+      tiene de poder equivocarse.
+    </p>
+
+    <figure>
+      <svg viewBox="0 0 760 200" role="img" aria-label="La cita en Kairos llega al equipo de rayos como lista de trabajo; el profesional dispara y la imagen vuelve sola a la ficha del paciente, sin que nadie exporte ni teclee nada.">
+        <defs>
+          <marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- Fila de cajas -->
+        <g fill="none" stroke="currentColor" stroke-width="1.1">
+          <rect x="8"   y="52" width="150" height="62" rx="3"/>
+          <rect x="222" y="52" width="150" height="62" rx="3"/>
+          <rect x="436" y="52" width="150" height="62" rx="3"/>
+          <rect x="650" y="52" width="102" height="62" rx="3" stroke="var(--accent)" stroke-width="1.5"/>
+        </g>
+
+        <g font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="currentColor" text-anchor="middle">
+          <text x="83"  y="79">Se abre la ficha</text>
+          <text x="83"  y="96" font-size="11" fill="var(--text-faint)">en Kairos</text>
+          <text x="297" y="79">El equipo de rayos</text>
+          <text x="297" y="96" font-size="11" fill="var(--text-faint)">ya sabe quién es</text>
+          <text x="511" y="79">Se dispara</text>
+          <text x="511" y="96" font-size="11" fill="var(--text-faint)">como siempre</text>
+          <text x="701" y="79" fill="var(--accent-text)">En su ficha</text>
+          <text x="701" y="96" font-size="11" fill="var(--text-faint)">sola</text>
+        </g>
+
+        <!-- Flechas -->
+        <g stroke="currentColor" stroke-width="1.1" marker-end="url(#fl)">
+          <line x1="160" y1="83" x2="218" y2="83"/>
+          <line x1="374" y1="83" x2="432" y2="83"/>
+          <line x1="588" y1="83" x2="646" y2="83" stroke="var(--accent)" stroke-width="1.4"/>
+        </g>
+
+        <g font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--text-faint)" text-anchor="middle">
+          <text x="189" y="74">lista de trabajo</text>
+          <text x="403" y="74">sin teclear nada</text>
+          <text x="617" y="74">la imagen vuelve</text>
+        </g>
+
+        <!-- Lo que ya no hace falta -->
+        <g font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--text-faint)" text-anchor="middle">
+          <text x="380" y="160">Sin exportar a una carpeta · sin buscar el fichero · sin volver a escribir el nombre</text>
+        </g>
+        <line x1="150" y1="140" x2="610" y2="140" stroke="var(--rule)" stroke-width="1"/>
+      </svg>
+      <figcaption>
+        El recorrido completo. La cita que ya está en Kairos viaja al equipo
+        como lista de trabajo, y la imagen vuelve por el mismo camino.
+      </figcaption>
+    </figure>
+
+    <p>
+      Para eso hay un programa propio que se instala en el ordenador de rayos.
+      Se instala una vez, <strong>arranca solo cada vez que se enciende el
+      ordenador</strong> y no guarda ninguna contraseña de Kairos: si ese
+      ordenador se viera comprometido, allí no hay ninguna llave que robar.
+    </p>
+
+    <div class="tabla-scroll">
+      <table>
+        <caption>Estado real de la radiología, sin adornos</caption>
+        <thead>
+          <tr><th scope="col">Pieza</th><th scope="col">Estado</th><th scope="col">Qué significa</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Programa instalable</th><td><span class="pastilla listo">Hecho</span></td><td>Se instala y arranca solo con el ordenador. No hay que abrir nada por las mañanas.</td></tr>
+          <tr><th scope="row">Captura desde la ficha</th><td><span class="pastilla listo">Hecho</span></td><td>Se dispara en el equipo y se pulsa un botón en la ficha: la imagen sube sola.</td></tr>
+          <tr><th scope="row">Lista de trabajo</th><td><span class="pastilla enobras">En obras</span></td><td>Es lo que quita también ese botón: el paciente aparece en la pantalla del propio equipo.</td></tr>
+          <tr><th scope="row">Pantalla de radiología</th><td><span class="pastilla previsto">Previsto</span></td><td>Las imágenes en la ficha y una bandeja para las que lleguen sin asignar.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── 7. Honestidad ──────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Lo que conviene saber antes</p>
+    <h2>Lo que Kairos todavía no hace</h2>
+    <p>
+      Esto va en el informe comercial a propósito. Una clínica que descubre un
+      límite después de firmar tiene razón en enfadarse; una que lo sabía
+      antes decide con la información delante.
+    </p>
+
+    <ul class="limpia">
+      <li>
+        <strong>No emite recetas electrónicas.</strong> Emite e imprime
+        recetas con todos los datos legales del prescriptor, pero la receta
+        electrónica privada requiere darse de alta en el sistema del Consejo
+        General de Dentistas. Ese trámite está abierto y no depende de
+        nosotros.
+      </li>
+      <li>
+        <strong>El registro de facturación de Verifactu está planificado, no
+        entregado.</strong> Tiene fecha propia, y llega antes que la
+        obligación: ver el apartado siguiente.
+      </li>
+      <li>
+        <strong>La radiología está a medias.</strong> Lo que funciona y lo que
+        no está detallado arriba, pieza por pieza.
+      </li>
+      <li>
+        <strong>Es un producto joven.</strong> El primer commit es del 11 de
+        julio de 2026. Lo que compensa esa juventud es el ritmo — 246 cambios
+        en un solo mes — y las 2.498 pruebas automáticas que impiden que ese
+        ritmo rompa cosas.
+      </li>
+    </ul>
+  </section>
+
+  <!-- ── 8. Verifactu ───────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">El calendario que viene</p>
+    <h2>Verifactu, con fechas reales</h2>
+    <p>
+      El Real Decreto-ley 15/2025 aplazó la entrada en vigor. Las fechas que
+      afectan a una clínica son estas:
+    </p>
+
+    <div class="tabla-scroll">
+      <table>
+        <caption>Obligación de Verifactu</caption>
+        <thead><tr><th scope="col">Quién</th><th scope="col">Desde</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Sociedades (Impuesto sobre Sociedades)</th><td>1 de enero de 2027</td></tr>
+          <tr><th scope="row">Autónomos y profesionales</th><td>1 de julio de 2027</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Las clínicas dentales aparecen señaladas de forma explícita en las guías
+      del regulador, porque emiten factura simplificada en volumen. Kairos
+      tiene el registro encadenado, el QR y la remisión a la AEAT
+      <strong>planificados para el último trimestre de 2026</strong>, es
+      decir, entregados antes de que la obligación empiece.
+    </p>
+    <div class="nota franca">
+      <p>
+        <strong>Dicho con todas las letras:</strong> hoy Kairos no hace
+        Verifactu. Está fechado y no está hecho. Si una clínica necesita ese
+        cumplimiento funcionando esta semana, este documento no debe hacerle
+        creer lo contrario.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── 9. Precio ──────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">El precio</p>
+    <h2>Publicado, y con el primer mes a cero</h2>
+
+    <div class="precio">
+      <div>
+        <em>Implantación</em>
+        <b>290 €</b>
+        <span>Pago único. Alta, carga de los datos que traiga la clínica, formación del equipo y ajustes iniciales.</span>
+      </div>
+      <div>
+        <em>Cuota</em>
+        <b>60 € <span style="font-size:.9rem;font-family:'IBM Plex Sans';font-weight:400">/ mes</span></b>
+        <span>Todo lo que aparece en este documento, actualizaciones incluidas.</span>
+      </div>
+      <div>
+        <em>Primer mes</em>
+        <b style="color:var(--exito)">0 €</b>
+        <span>El primer mes de servicio no se factura. Se ve funcionando con los datos propios antes de pagar la primera cuota.</span>
+      </div>
+    </div>
+
+    <p>
+      La carga de datos no es un extra ni un presupuesto aparte: entra en la
+      implantación. Es exactamente el trabajo descrito más arriba —los 1.198
+      pacientes y las 4.622 líneas enlazadas a su diente— y es la parte que
+      decide si un cambio de programa sale bien o se queda a medias.
+    </p>
+    <p style="font-size:.82rem;color:var(--text-faint);max-width:40em">
+      Importes de la tarifa vigente a septiembre de 2026, los mismos que
+      figuran en el presupuesto de Clínica Dental Biodental. Sin permanencia.
+    </p>
+  </section>
+
+  <!-- ── 10. Cierre ─────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">En una línea</p>
+    <h2>Lo que se está comprando</h2>
+    <p class="lead" style="margin-bottom:1.25rem">
+      Un programa completo para el día a día de una clínica dental, con el
+      precio a la vista, que se abre en cualquier navegador, que cambia en
+      días cuando la clínica lo pide, y que va camino de hacer algo que hoy
+      casi nadie hace: que la radiografía llegue sola a la ficha del paciente.
+    </p>
+    <p>
+      Y con una lista escrita de lo que todavía no hace, para que nadie se
+      lleve una sorpresa después de firmar.
+    </p>
+  </section>
+
+  <footer>
+    <h3>Cómo se ha hecho este documento</h3>
+    <p>
+      Todas las cifras de Kairos salen del propio sistema y de su base de
+      datos de producción, consultadas el 2 de septiembre de 2026. Las
+      afirmaciones sobre otras plataformas son citas literales de sus webs
+      públicas, y no se compara ninguna función que no se haya podido
+      verificar. Lo que está planificado y no entregado aparece marcado como
+      tal en todos los casos.
+    </p>
+    <h3 style="margin-top:1.5rem">Fuentes consultadas</h3>
+    <ul>
+      <li><a href="https://www.infomedsoftware.com/software/gesden/gesden-g5/">Infomed — Gesden G5</a>, requisitos y tarifas</li>
+      <li><a href="https://www.softwaredentalink.com/es/planes">Dentalink — Planes y precios</a></li>
+      <li><a href="https://www.verifactu.com/plazos-verifactu/">Plazos de Verifactu</a> y <a href="https://palenciaasesores.es/verifactu-aplazamiento-2027/">aplazamiento por el RD-ley 15/2025</a></li>
+    </ul>
+    <p style="margin-top:1.5rem">HAT3X · Kairos · Informe comercial · 2 de septiembre de 2026</p>
+  </footer>
+
+</div>
+</body>
+</html>
