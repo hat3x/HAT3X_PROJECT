@@ -128,33 +128,48 @@ concreto no bloquee nada:
 - **A1b — adaptadores TWAIN y DICOM.** Requieren un equipo real para validar. Se cierran
   cuando haya acceso a uno.
 
-**Los equipos de Biodental — lo que dijo la clínica y lo que dice la máquina.** No
-coinciden, y hasta resolverlo no se puede dar de alta ningún equipo:
+**Los equipos de Biodental — resuelto por el diagnóstico del 31/08/2026.** Lo que Nadia
+nombró de palabra el 28/08 (Owandy + Gendex) no es lo que hay en el puesto. Manda la
+máquina: `agent/tools/resultados/biodental-BIOPC002-2026-08-31-pasada-3.txt`.
 
-| Fuente | Fecha | Sensor intraoral | Panorámico |
+| Programa | Dónde deja las imágenes | Volumen | Última | Estado |
+|---|---|---|---|---|
+| **ImageSensor 3.0.2.8** (intraoral) | `C:\Program Files (x86)\ImageSensor\Images\<estudio>\<serie>\` | 1.376 `.dcm` + 1.375 `.jpg` | 31/08 13:21 | **el de diario** |
+| **Ez3D2009** (Vatech, raíz UID `1.2.410.200028`) | `C:\Ez3D2009\Patient\<UID de estudio>\` | 8.550 `.dcm` | 24/08 | en uso |
+| Gendex VixWin Platinum | `C:\VXIMAGES`**`old`** | — | — | **retirado** |
+
+Ambos escriben una carpeta por estudio, nunca ficheros sueltos. Eso obligó a que la
+captura por carpeta vigilada baje a las subcarpetas: con el listado de un solo nivel
+no veía más que directorios y vencía a los 30 segundos culpando al equipo.
+
+**Los dos equipos están dados de alta en `salon_imaging_device` (02/09/2026),** los dos
+con adaptador `carpeta`.
+
+**ImageSensor habla Modality Worklist, y el hueco está libre.** Sus tres nodos DICOM,
+que no son el mismo y conviene no confundir:
+
+| Fichero | Nodo | Estado | Qué es |
 |---|---|---|---|
-| Nadia, de palabra | 2026-08-28 | Owandy / QuickVision | Gendex / VixWin |
-| Diagnóstico sobre el PC de rayos (3ª pasada) | 2026-08-31 | **ImageSensor 3.0.2.8** + detector de red **Vieworks** — es lo que usan a diario | Gendex VixWin Platinum, con las imágenes en `C:\VXIMAGES`**`old`** — tiene toda la pinta de estar **retirado** |
+| `Conf\LocalArchiveConfig.xml` | `XP-STR-SCP` · `0.0.0.0:104` | **activo** | Su propio archivo local. Ya funciona; no hay nada que activar |
+| `Conf\ArchiveNodes.xml` | `STR-SCP-` · `192.168.0.1:104` | apagado | Destino de archivado externo |
+| `Conf\MWLNodes.xml` | `DVTK_MW_SCP` · `192.168.0.1:107` | **apagado** | **La lista de trabajo.** Es el hueco que ocupa el agente |
 
-**Manda la máquina.** Dar de alta un equipo con la carpeta del sistema retirado se
-guarda sin protestar y falla el día que alguien dispara con el paciente en el
-sillón: la captura vigila un directorio donde ya no aparece nada y vence a los 30
-segundos. Un dato de configuración equivocado no da la cara al escribirlo, sino en
-el peor momento posible.
+`DVTK_MW_SCP` es la entrada de fábrica del kit de validación DICOM: nunca se configuró,
+y apunta a `192.168.0.1` cuando el PC está en `192.168.1.58/24` —otra subred—. O sea que
+no es que la worklist falle: es que no hay ninguna.
 
-**Lo único que falta para desbloquear A1 en Biodental:** dónde deja ImageSensor las
-imágenes y cómo identifica al paciente. Es justo lo que la 3ª pasada del
-diagnóstico va a buscar (`agent/tools/diagnostico-kairos-3-UNICO.bat`, se ejecuta en
-el PC de rayos y deja `diagnostico-kairos-3.txt` en el Escritorio). **Su resultado no
-consta en el repositorio**: o no se ha llegado a ejecutar, o el fichero no volvió.
+`Conf\MWLQueryCriteriaItem.xml` enumera exactamente lo que ImageSensor va a pedir, y por
+tanto lo que el MWL SCP del agente tiene que devolver: `PatientName`, `PatientID`,
+`PatientBirthDate`, `PatientSex`, `StudyInstanceUID` y, dentro de
+`ScheduledProcedureStepSequence`, `ScheduledStationAETitle`, fecha y hora de inicio,
+descripción, `Modality` y `ScheduledPerformingPhysicianName`.
 
-Con esa ruta, el panorámico entra por **carpeta vigilada**, que es el adaptador ya
-construido y probado de punta a punta —botón en la ficha, agente, subida—, sin tocar
-A1b.
+**Lo que queda para que Biodental capture de verdad**, en orden:
 
-El nodo de recepción DICOM que se vio en la configuración del equipo (`XP-STR-SCP`,
-`192.168.0.1:104`) sigue **sin habilitar**. En las notas no consta a cuál de los dos
-aparatos pertenece esa pantalla, así que no se da por sabido.
+1. Instalar el agente en BIOPC002 — el instalador solo configura **un** equipo por
+   ejecución y aquí hay dos: hay que admitir varios antes de ir.
+2. Con eso, la captura por botón desde la ficha ya funciona para los dos.
+3. El MWL SCP del agente, que es lo que quita también el botón.
 
 TWAIN es Windows y captura de imagen suelta: es el suelo del producto, no el techo. Los SDK de
 fabricante entran después, uno a uno y solo donde haya clientes que lo pidan.
