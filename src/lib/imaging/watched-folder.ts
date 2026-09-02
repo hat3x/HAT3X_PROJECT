@@ -12,9 +12,31 @@
 
 /** Una entrada de la carpeta, con lo justo para decidir. */
 export interface FolderEntry {
+  /**
+   * Camino RELATIVO a la carpeta vigilada, con `/` como separador.
+   *
+   * Casi nunca es un nombre suelto. Los equipos serios no dejan las imágenes
+   * tiradas en un directorio: abren una carpeta por estudio. ImageSensor, sin ir
+   * más lejos, escribe en `Images/<estudio>/<serie>/`. Por eso la identidad de
+   * una entrada es su camino y no su nombre — dos estudios distintos pueden
+   * tener dentro un fichero que se llama igual.
+   */
   name: string;
   size: number;
   mtimeMs: number;
+}
+
+/**
+ * El nombre del fichero, sin el camino que lleva hasta él.
+ *
+ * Vive aquí y no en el agente porque es una decisión, no una operación de disco:
+ * es el nombre con el que la radiografía va a quedar archivada en la ficha del
+ * paciente, y `Images/202604140052510003/2608310052510004/rx.dcm` no es un
+ * nombre de fichero, es un camino de otro ordenador.
+ */
+export function fileNameOf(path: string): string {
+  const corte = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return corte === -1 ? path : path.slice(corte + 1);
 }
 
 /**
@@ -34,8 +56,16 @@ const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "tif", "tiff", "bmp", "d
  */
 const PARTIAL_EXTENSIONS = new Set(["tmp", "part", "crdownload", "temp", "download"]);
 
-/** ¿Este fichero puede ser la captura que esperamos? */
-export function isCaptureCandidate(name: string): boolean {
+/**
+ * ¿Este fichero puede ser la captura que esperamos?
+ *
+ * Admite tanto un nombre suelto como un camino relativo, y decide siempre sobre
+ * el NOMBRE: `estudio/.oculto.jpg` está tan oculto como `.oculto.jpg`, y mirar
+ * el camino entero dejaría pasar el primero.
+ */
+export function isCaptureCandidate(path: string): boolean {
+  const name = fileNameOf(path);
+
   // Ficheros ocultos y basura del sistema: no son de nadie.
   if (name.startsWith(".")) return false;
   if (name.toLowerCase() === "thumbs.db" || name.toLowerCase() === "desktop.ini") return false;

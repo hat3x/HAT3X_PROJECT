@@ -1,7 +1,13 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { hasSettled, pickCapturedFile, type FolderEntry } from "@/lib/imaging/watched-folder";
+import {
+  fileNameOf,
+  hasSettled,
+  isCaptureCandidate,
+  pickCapturedFile,
+  type FolderEntry,
+} from "@/lib/imaging/watched-folder";
 
 import type { AgentDevice } from "./config.js";
 
@@ -64,23 +70,76 @@ function mimeFor(filename: string): string {
   return MIME_BY_EXTENSION[extension] ?? "application/octet-stream";
 }
 
-/** Lista la carpeta con lo justo para decidir. */
-async function snapshot(folder: string): Promise<FolderEntry[]> {
-  const names = await readdir(folder);
-  const entries = await Promise.all(
-    names.map(async (name) => {
-      try {
-        const info = await stat(join(folder, name));
-        if (!info.isFile()) return null;
-        return { name, size: info.size, mtimeMs: info.mtimeMs };
-      } catch {
-        // Puede desaparecer entre el listado y el stat (un temporal que el
-        // equipo acaba de renombrar). No es un fallo: simplemente ya no está.
-        return null;
+/**
+ * Cuántos niveles se baja por debajo de la carpeta configurada.
+ *
+ * Hay que bajar porque los equipos no dejan las imágenes sueltas: abren una
+ * carpeta por estudio. ImageSensor escribe en `Images/<estudio>/<serie>/`, y
+ * mirar solo el primer nivel no encuentra ni una radiografía — se ve una lista
+ * de directorios y se concluye que el equipo no guarda nada.
+ *
+ * Y hay que ponerle tope porque esto se recorre entero cada 400 ms con el
+ * paciente en el sillón. Tres niveles cubren lo que hemos visto en clínica con
+ * margen; sin tope, apuntar sin querer a `C:\` congelaría la captura.
+ */
+const MAX_PROFUNDIDAD = 3;
+
+/**
+ * Recorre un nivel y baja a los siguientes.
+ *
+ * `estricto` distingue los dos errores que NO son el mismo: que no se pueda leer
+ * la carpeta configurada —que es un fallo de configuración y hay que decirlo— y
+ * que no se pueda leer una subcarpeta cualquiera, que puede ser un estudio que
+ * el equipo está creando justo ahora y no es noticia.
+ */
+async function recorre(
+  raiz: string,
+  prefijo: string,
+  profundidad: number,
+  estricto: boolean,
+  salida: FolderEntry[],
+): Promise<void> {
+  let entradas;
+  try {
+    entradas = await readdir(prefijo === "" ? raiz : join(raiz, prefijo), {
+      withFileTypes: true,
+    });
+  } catch (error) {
+    if (estricto) throw error;
+    return;
+  }
+
+  for (const entrada of entradas) {
+    const relativo = prefijo === "" ? entrada.name : `${prefijo}/${entrada.name}`;
+
+    if (entrada.isDirectory()) {
+      if (profundidad < MAX_PROFUNDIDAD) {
+        await recorre(raiz, relativo, profundidad + 1, false, salida);
       }
-    }),
-  );
-  return entries.filter((entry): entry is FolderEntry => entry !== null);
+      continue;
+    }
+    if (!entrada.isFile()) continue;
+
+    // Se filtra ANTES de preguntar al disco por el tamaño: una carpeta de
+    // equipo tiene miles de ficheros que no son imágenes, y este recorrido se
+    // repite cada 400 ms.
+    if (!isCaptureCandidate(relativo)) continue;
+
+    try {
+      const info = await stat(join(raiz, relativo));
+      salida.push({ name: relativo, size: info.size, mtimeMs: info.mtimeMs });
+    } catch {
+      // Puede desaparecer entre el listado y el stat (un temporal que el
+      // equipo acaba de renombrar). No es un fallo: simplemente ya no está.
+    }
+  }
+}
+
+/** Lista la carpeta y sus subcarpetas con lo justo para decidir. */
+async function snapshot(folder: string): Promise<FolderEntry[]> {
+  const encontrados: FolderEntry[] = [];
+  await recorre(folder, "", 0, true, encontrados);
+  return encontrados;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -137,7 +196,8 @@ export async function captureFromWatchedFolder(
 
     if (hasSettled(previousSize, current.size)) {
       const bytes = await readFile(join(folder, current.name));
-      return { filename: current.name, mime: mimeFor(current.name), bytes };
+      const nombre = fileNameOf(current.name);
+      return { filename: nombre, mime: mimeFor(nombre), bytes };
     }
 
     previousSize = current.size;
