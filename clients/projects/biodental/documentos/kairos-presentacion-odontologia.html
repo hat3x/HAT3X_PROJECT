@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kairos para clínicas dentales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  /* Reinicio mínimo: el visor de artifacts lo aporta, un fichero suelto no. */
+  html { color-scheme: light dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<style>
+  /* ─────────────────────────────────────────────────────────────────────
+     Kairos — paleta de marca v1. Tinta, Porcelana, Latón, Grafito.
+     El latón se usa con cuentagotas: es el punto al que apunta la aguja.
+     ───────────────────────────────────────────────────────────────────── */
+  :root {
+    --tinta:        #16181F;
+    --porcelana:    #F4F1EA;
+    --grafito:      #4C505C;
+    --laton:        #B4884D;
+    --laton-texto:  #866226;
+    --exito:        #3E8E6E;
+    --aviso:        #B37E29;
+    --alerta:       #BE543F;
+
+    --ground:       var(--porcelana);
+    --surface:      #FBFAF7;
+    --surface-alt:  #EFEBE1;
+    --text:         var(--tinta);
+    --text-soft:    var(--grafito);
+    --text-faint:   #7C808B;
+    --rule:         #DED8CB;
+    --rule-soft:    #E8E3D8;
+    --accent:       var(--laton);
+    --accent-text:  var(--laton-texto);
+    --shadow:       0 1px 2px rgba(22, 24, 31, .05), 0 8px 24px -12px rgba(22, 24, 31, .16);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #101218;
+      --surface:     #191C24;
+      --surface-alt: #21252F;
+      --text:        #ECE8DF;
+      --text-soft:   #A8ADB9;
+      --text-faint:  #7C818E;
+      --rule:        #2C313C;
+      --rule-soft:   #232833;
+      --accent:      #C99A5C;
+      --accent-text: #D9AE71;
+      --exito:       #57A98A;
+      --aviso:       #CB9540;
+      --alerta:      #D46F5A;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #101218;
+    --surface:     #191C24;
+    --surface-alt: #21252F;
+    --text:        #ECE8DF;
+    --text-soft:   #A8ADB9;
+    --text-faint:  #7C818E;
+    --rule:        #2C313C;
+    --rule-soft:   #232833;
+    --accent:      #C99A5C;
+    --accent-text: #D9AE71;
+    --exito:       #57A98A;
+    --aviso:       #CB9540;
+    --alerta:      #D46F5A;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .hoja {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.25rem, 4vw, 3rem) 5rem;
+  }
+
+  /* ── Tipografía ─────────────────────────────────────────────────── */
+  h1, h2, h3 {
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -.01em;
+  }
+  h1 { font-size: clamp(2.1rem, 5vw, 3.1rem); line-height: 1.12; }
+  h2 { font-size: clamp(1.5rem, 3vw, 1.95rem); line-height: 1.2; }
+  h3 { font-size: 1.1rem; line-height: 1.3; }
+  p  { margin: 0; max-width: 68ch; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    color: var(--accent-text);
+    margin: 0;
+  }
+
+  .entradilla {
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: clamp(1.1rem, 2.2vw, 1.3rem);
+    line-height: 1.55;
+    color: var(--text-soft);
+    max-width: 56ch;
+  }
+
+  /* ── Cabecera ───────────────────────────────────────────────────── */
+  header { display: flex; flex-direction: column; gap: 1.5rem; }
+
+  .marca { display: flex; align-items: center; gap: .8rem; }
+  .marca svg { display: block; }
+  .marca span {
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 1.25rem;
+    letter-spacing: .02em;
+  }
+  .marca small {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .68rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border-left: 1px solid var(--rule);
+    padding-left: .8rem;
+    margin-left: .2rem;
+  }
+
+  .kairos-nota {
+    border-left: 2px solid var(--accent);
+    padding-left: 1.1rem;
+    color: var(--text-soft);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 1.02rem;
+    max-width: 52ch;
+  }
+  .kairos-nota em { color: var(--text); font-style: italic; }
+
+  /* ── Secciones ──────────────────────────────────────────────────── */
+  section { margin-top: clamp(3rem, 7vw, 4.75rem); }
+  .cabecera-seccion { display: flex; flex-direction: column; gap: .6rem; margin-bottom: 2rem; }
+  .cabecera-seccion p { color: var(--text-soft); }
+
+  hr.regla { border: 0; border-top: 1px solid var(--rule); margin: 0; }
+
+  /* ── Fichas de módulo ───────────────────────────────────────────── */
+  .rejilla {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: 1px;
+    background: var(--rule-soft);
+    border: 1px solid var(--rule-soft);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .ficha {
+    background: var(--surface);
+    padding: 1.5rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+  }
+  .ficha h3 { color: var(--text); }
+  .ficha p { font-size: .93rem; color: var(--text-soft); }
+  .ficha .donde {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .7rem;
+    letter-spacing: .08em;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    margin-top: auto;
+    padding-top: .8rem;
+  }
+
+  /* ── Recorrido del día ──────────────────────────────────────────── */
+  .recorrido { display: grid; gap: 0; counter-reset: paso; }
+  .paso {
+    display: grid;
+    grid-template-columns: 3.2rem 1fr;
+    gap: 1.2rem;
+    padding: 1.4rem 0;
+    border-top: 1px solid var(--rule-soft);
+    align-items: start;
+  }
+  .paso:first-child { border-top: 0; }
+  .paso .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .78rem;
+    color: var(--accent-text);
+    padding-top: .28rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .paso h3 { margin-bottom: .3rem; }
+  .paso p { font-size: .95rem; color: var(--text-soft); }
+
+  /* ── Tabla ──────────────────────────────────────────────────────── */
+  .tabla-envoltorio { overflow-x: auto; border: 1px solid var(--rule-soft); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; background: var(--surface); }
+  th, td { text-align: left; padding: .8rem 1rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--text-faint);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.estado { white-space: nowrap; }
+
+  .pastilla {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .68rem;
+    letter-spacing: .06em;
+    padding: .18rem .5rem;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+  }
+  .pastilla.listo    { color: var(--exito); }
+  .pastilla.encurso  { color: var(--aviso); }
+  .pastilla.previsto { color: var(--text-faint); }
+
+  /* ── Cierre ─────────────────────────────────────────────────────── */
+  .cierre {
+    background: var(--tinta);
+    color: var(--porcelana);
+    border-radius: 3px;
+    padding: clamp(1.75rem, 4vw, 2.75rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .cierre h2 { color: var(--porcelana); }
+  .cierre p  { color: #B9BCC6; }
+  .cierre .laton { color: var(--laton); }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .72rem;
+    letter-spacing: .06em;
+    color: var(--text-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.5rem;
+    justify-content: space-between;
+  }
+
+  a { color: var(--accent-text); }
+  a:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .aguja { transform-origin: 24px 24px; animation: giro 24s linear infinite; }
+    @keyframes giro { to { transform: rotate(360deg); } }
+  }
+</style>
+
+<div class="hoja">
+
+  <header>
+    <div class="marca">
+      <!-- Símbolo v1: esfera de reloj (anillo + aguja) apuntando al punto de latón. -->
+      <svg width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="Kairos">
+        <circle cx="24" cy="24" r="19" fill="none" stroke="var(--text-soft)" stroke-width="1.25"/>
+        <g class="aguja">
+          <line x1="24" y1="24" x2="24" y2="9.5" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round"/>
+        </g>
+        <circle cx="24" cy="9.5" r="2.6" fill="var(--accent)"/>
+        <circle cx="24" cy="24" r="1.6" fill="var(--text)"/>
+      </svg>
+      <span>Kairos</span>
+      <small>Odontología</small>
+    </div>
+
+    <h1>El programa de la clínica, no una agenda con un odontograma encima.</h1>
+
+    <p class="entradilla">
+      Kairos lleva la clínica entera: la boca del paciente, su presupuesto, su cobro y su
+      documentación. Sin saltar entre programas y sin que el mismo dato se escriba dos veces.
+    </p>
+
+    <p class="kairos-nota">
+      <em>Kairós</em> es el momento oportuno, frente a <em>chronos</em>, el tiempo que
+      simplemente pasa. Una clínica no necesita que le cuenten las horas: necesita llegar
+      a tiempo a la que importa.
+    </p>
+  </header>
+
+  <section>
+    <div class="cabecera-seccion">
+      <p class="eyebrow">Lo clínico</p>
+      <h2>La boca del paciente, con su historia</h2>
+      <p>
+        No es un dibujo que se rellena a mano: cada hallazgo es un hecho fechado, y el
+        odontograma se reconstruye a la fecha que se le pida.
+      </p>
+    </div>
+
+    <div class="rejilla">
+      <article class="ficha">
+        <h3>Odontograma</h3>
+        <p>
+          Por diente FDI y por superficie. Cada hallazgo queda con su fecha, así que se puede
+          ver la boca como estaba hace dos años sin perder lo de hoy.
+        </p>
+        <p class="donde">Odontograma</p>
+      </article>
+      <article class="ficha">
+        <h3>Periodontograma</h3>
+        <p>
+          Sondaje por diente y por sitio, con su evolución. La carta periodontal completa,
+          no una nota de texto.
+        </p>
+        <p class="donde">Periodontograma</p>
+      </article>
+      <article class="ficha">
+        <h3>Historia clínica</h3>
+        <p>
+          Expediente del paciente con notas de evolución, imágenes en siete modalidades y
+          metadatos DICOM.
+        </p>
+        <p class="donde">Ficha del paciente · Expediente</p>
+      </article>
+      <article class="ficha">
+        <h3>Consentimientos</h3>
+        <p>
+          Nueve tipos con plantilla versionada. El paciente firma a mano en pantalla, y el PDF
+          sellado guarda el texto exacto que firmó y un sello que lo demuestra.
+        </p>
+        <p class="donde">Expediente · Consentimientos</p>
+      </article>
+      <article class="ficha">
+        <h3>Recetas</h3>
+        <p>
+          Con los datos que exige el Real Decreto 1718/2010. Si a una le falta algo para ser
+          dispensable, el documento lo dice antes de dárselo al paciente.
+        </p>
+        <p class="donde">Expediente · Recetas</p>
+      </article>
+      <article class="ficha">
+        <h3>Ortodoncia</h3>
+        <p>
+          Visitas, plan de pagos con sus cuotas y órdenes de laboratorio. Un tratamiento largo
+          se lleva distinto que una obturación, y aquí se lleva distinto.
+        </p>
+        <p class="donde">Ortodoncia</p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <div class="cabecera-seccion">
+      <p class="eyebrow">El dinero</p>
+      <h2>Del diente al cobro, sin volver a teclearlo</h2>
+      <p>
+        Un presupuesto que se acepta acaba en caja, y el cobro vuelve a la ficha. Es el mismo
+        recorrido que ya hace la clínica; lo que cambia es que no hay que escribirlo tres veces.
+      </p>
+    </div>
+
+    <div class="recorrido">
+      <div class="paso">
+        <div class="num">01</div>
+        <div>
+          <h3>Se presupuesta sobre el diente</h3>
+          <p>
+            Al pulsar una pieza en el odontograma sale lo presupuestado en ella, venga del plan
+            que venga: la endodoncia de marzo y la corona de septiembre son el mismo diente.
+          </p>
+        </div>
+      </div>
+      <div class="paso">
+        <div class="num">02</div>
+        <div>
+          <h3>El plan lleva dos ejes, no uno</h3>
+          <p>
+            Tratamiento y cobro van por separado, porque en una clínica se cobra antes de hacer
+            y se hace antes de cobrar según el caso. Una endodoncia puede estar prevista y
+            cobrada a la vez sin que el programa mienta.
+          </p>
+        </div>
+      </div>
+      <div class="paso">
+        <div class="num">03</div>
+        <div>
+          <h3>Las líneas aceptadas pasan a caja</h3>
+          <p>
+            Se marcan las que toca y se crea un ticket abierto. Si el tratamiento se hizo en dos
+            días, sus tickets se funden en uno: el paciente paga una vez.
+          </p>
+        </div>
+      </div>
+      <div class="paso">
+        <div class="num">04</div>
+        <div>
+          <h3>Se cobra en caja y se factura</h3>
+          <p>
+            Con su método de pago, su exención de IVA cuando la asistencia sanitaria lo permite
+            —con la mención legal en la factura— y su arqueo al cerrar el día.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="cabecera-seccion">
+      <p class="eyebrow">El día</p>
+      <h2>La agenda y lo que la rodea</h2>
+    </div>
+
+    <div class="rejilla">
+      <article class="ficha">
+        <h3>Agenda por profesional</h3>
+        <p>
+          Cruza el horario de la clínica con el de cada profesional, y los gabinetes como
+          recurso. Quien tenga permiso puede solapar una cita a propósito, avisado y confirmando.
+        </p>
+        <p class="donde">Citas · Panel del día</p>
+      </article>
+      <article class="ficha">
+        <h3>Reserva online</h3>
+        <p>
+          El paciente reserva desde su móvil sobre los huecos reales, no sobre una plantilla.
+        </p>
+        <p class="donde">Página pública de reserva</p>
+      </article>
+      <article class="ficha">
+        <h3>Recordatorios y recall</h3>
+        <p>
+          Confirmación por WhatsApp o SMS, y aviso de revisión cuando toca volver.
+        </p>
+        <p class="donde">Recordatorios</p>
+      </article>
+      <article class="ficha">
+        <h3>Recepcionista de voz</h3>
+        <p>
+          Atiende el teléfono, consulta huecos y cita. Cuando nadie puede coger la llamada,
+          la llamada no se pierde.
+        </p>
+        <p class="donde">Add-on</p>
+      </article>
+      <article class="ficha">
+        <h3>Mutuas</h3>
+        <p>
+          Aseguradora, póliza y tarifa por servicio, aplicadas al presupuesto del paciente.
+        </p>
+        <p class="donde">Ficha del paciente</p>
+      </article>
+      <article class="ficha">
+        <h3>Almacén y fichaje</h3>
+        <p>
+          Material por lote y caducidad, consumo por servicio, y las horas del equipo.
+        </p>
+        <p class="donde">Productos · Fichaje</p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <div class="cabecera-seccion">
+      <p class="eyebrow">Dónde está cada cosa</p>
+      <h2>Qué hay hoy y qué está en camino</h2>
+      <p>
+        Lo de la izquierda funciona hoy en clínicas reales. Lo de la derecha está fechado, no
+        prometido: si algo no está, aquí lo pone.
+      </p>
+    </div>
+
+    <div class="tabla-envoltorio">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Capacidad</th>
+            <th scope="col">Estado</th>
+            <th scope="col">Detalle</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Odontograma, periodontograma, expediente</td>
+            <td class="estado"><span class="pastilla listo">En uso</span></td>
+            <td>Con evolución por fecha e imágenes del paciente.</td>
+          </tr>
+          <tr>
+            <td>Presupuestos, caja, facturación y arqueo</td>
+            <td class="estado"><span class="pastilla listo">En uso</span></td>
+            <td>Con exención de IVA sanitaria y su mención legal.</td>
+          </tr>
+          <tr>
+            <td>Consentimientos firmados y sellados</td>
+            <td class="estado"><span class="pastilla listo">En uso</span></td>
+            <td>Firma manuscrita en pantalla y PDF verificable.</td>
+          </tr>
+          <tr>
+            <td>Ortodoncia y mutuas</td>
+            <td class="estado"><span class="pastilla listo">En uso</span></td>
+            <td>Cuotas, laboratorio, aseguradora y tarifa.</td>
+          </tr>
+          <tr>
+            <td>Captura de radiología desde el equipo</td>
+            <td class="estado"><span class="pastilla encurso">En curso</span></td>
+            <td>Carpeta vigilada disponible; TWAIN y DICOM en construcción.</td>
+          </tr>
+          <tr>
+            <td>Receta electrónica homologada (SREP)</td>
+            <td class="estado"><span class="pastilla previsto">Previsto</span></td>
+            <td>Depende de un trámite externo. La receta en papel ya cumple el RD 1718/2010.</td>
+          </tr>
+          <tr>
+            <td>Verifactu</td>
+            <td class="estado"><span class="pastilla previsto">Previsto</span></td>
+            <td>Comprometido antes del 1 de enero de 2027.</td>
+          </tr>
+          <tr>
+            <td>Presupuesto que el paciente firma desde el móvil</td>
+            <td class="estado"><span class="pastilla previsto">Previsto</span></td>
+            <td>Con el odontograma dentro y pago o señal en línea.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="cierre">
+      <p class="eyebrow laton">Cómo se empieza</p>
+      <h2>La clínica no se para para cambiar de programa</h2>
+      <p>
+        Se vuelca lo que ya hay —pacientes, historia, presupuestos y facturación— y se trabaja
+        sobre ello desde el primer día. Kairos se instala con los datos de la clínica dentro,
+        no vacío.
+      </p>
+      <p>
+        Formación al equipo, acompañamiento las primeras semanas y una guía de uso escrita para
+        la clínica concreta, no un manual genérico.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <span>HAT3X · Kairos para odontología</span>
+    <span>Septiembre de 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>

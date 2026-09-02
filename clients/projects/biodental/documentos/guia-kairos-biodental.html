@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guía de Kairos · Biodental</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  /* Reinicio mínimo: el visor de artifacts lo aporta, un fichero suelto no. */
+  html { color-scheme: light dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<style>
+  /* Paleta de marca Kairos v1. El latón, con cuentagotas. */
+  :root {
+    --ground:      #F4F1EA;
+    --surface:     #FBFAF7;
+    --surface-alt: #EFEBE1;
+    --text:        #16181F;
+    --text-soft:   #4C505C;
+    --text-faint:  #7C808B;
+    --rule:        #DED8CB;
+    --rule-soft:   #E8E3D8;
+    --accent:      #B4884D;
+    --accent-text: #866226;
+    --exito:       #3E8E6E;
+    --aviso:       #B37E29;
+    --alerta:      #BE543F;
+    --aviso-fondo: #FBF3E2;
+    --alerta-fondo:#FBEDEA;
+    --exito-fondo: #E9F3EE;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #101218;
+      --surface:     #191C24;
+      --surface-alt: #21252F;
+      --text:        #ECE8DF;
+      --text-soft:   #A8ADB9;
+      --text-faint:  #7C818E;
+      --rule:        #2C313C;
+      --rule-soft:   #232833;
+      --accent:      #C99A5C;
+      --accent-text: #D9AE71;
+      --exito:       #57A98A;
+      --aviso:       #CB9540;
+      --alerta:      #D46F5A;
+      --aviso-fondo: #241E12;
+      --alerta-fondo:#2A1815;
+      --exito-fondo: #14231D;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #101218;
+    --surface:     #191C24;
+    --surface-alt: #21252F;
+    --text:        #ECE8DF;
+    --text-soft:   #A8ADB9;
+    --text-faint:  #7C818E;
+    --rule:        #2C313C;
+    --rule-soft:   #232833;
+    --accent:      #C99A5C;
+    --accent-text: #D9AE71;
+    --exito:       #57A98A;
+    --aviso:       #CB9540;
+    --alerta:      #D46F5A;
+    --aviso-fondo: #241E12;
+    --alerta-fondo:#2A1815;
+    --exito-fondo: #14231D;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-weight: 600;
+    margin: 0;
+    text-wrap: balance;
+    letter-spacing: -.01em;
+  }
+  h1 { font-size: clamp(1.9rem, 4.2vw, 2.6rem); line-height: 1.14; }
+  h2 { font-size: clamp(1.35rem, 2.6vw, 1.65rem); line-height: 1.22; }
+  h3 { font-size: 1.02rem; line-height: 1.32; }
+  p, li { margin: 0; }
+  p { max-width: 68ch; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    color: var(--accent-text);
+  }
+
+  /* ── Estructura ─────────────────────────────────────────────────── */
+  .hoja { max-width: 76rem; margin: 0 auto; padding: clamp(1.75rem, 4vw, 3.5rem) clamp(1.1rem, 3.5vw, 2.5rem) 5rem; }
+
+  .portada { display: flex; flex-direction: column; gap: 1.1rem; padding-bottom: 2.25rem; border-bottom: 1px solid var(--rule); }
+  .marca { display: flex; align-items: center; gap: .75rem; }
+  .marca span { font-family: "Source Serif 4", Georgia, serif; font-size: 1.15rem; }
+  .marca small {
+    font-family: "IBM Plex Mono", monospace; font-size: .66rem; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--text-faint);
+    border-left: 1px solid var(--rule); padding-left: .75rem;
+  }
+  .portada .entradilla {
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: clamp(1.05rem, 2vw, 1.2rem);
+    color: var(--text-soft); max-width: 56ch; line-height: 1.55;
+  }
+
+  .cuerpo { display: grid; grid-template-columns: 1fr; gap: 2.5rem; margin-top: 2.5rem; }
+  @media (min-width: 62rem) {
+    .cuerpo { grid-template-columns: 15rem 1fr; gap: 3.5rem; align-items: start; }
+    nav.indice { position: sticky; top: 2rem; }
+  }
+
+  nav.indice ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .1rem; counter-reset: idx; }
+  nav.indice a {
+    display: flex; gap: .7rem; align-items: baseline;
+    text-decoration: none; color: var(--text-soft);
+    padding: .35rem .5rem; border-radius: 2px; font-size: .88rem;
+    border-left: 2px solid transparent;
+  }
+  nav.indice a:hover { color: var(--text); background: var(--surface-alt); }
+  nav.indice a .n {
+    font-family: "IBM Plex Mono", monospace; font-size: .7rem;
+    color: var(--text-faint); font-variant-numeric: tabular-nums;
+  }
+  nav.indice .titulo-indice {
+    font-family: "IBM Plex Mono", monospace; font-size: .68rem;
+    text-transform: uppercase; letter-spacing: .14em; color: var(--text-faint);
+    padding: 0 .5rem .6rem; border-bottom: 1px solid var(--rule-soft); margin-bottom: .6rem;
+  }
+
+  /* ── Tareas ─────────────────────────────────────────────────────── */
+  .tarea { padding: 2.25rem 0; border-top: 1px solid var(--rule-soft); scroll-margin-top: 2rem; }
+  .tarea:first-of-type { border-top: 0; padding-top: 0; }
+  .tarea-cabecera { display: flex; gap: 1rem; align-items: baseline; margin-bottom: .9rem; }
+  .tarea-cabecera .n {
+    font-family: "IBM Plex Mono", monospace; font-size: .78rem; color: var(--accent-text);
+    font-variant-numeric: tabular-nums; flex: none; padding-top: .2rem;
+  }
+  .tarea-cuerpo { display: flex; flex-direction: column; gap: .9rem; }
+  .tarea p { color: var(--text-soft); }
+
+  .ruta {
+    font-family: "IBM Plex Mono", monospace; font-size: .74rem;
+    color: var(--text-faint); letter-spacing: .04em;
+  }
+  .ruta b { color: var(--accent-text); font-weight: 500; }
+
+  ol.pasos { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .45rem; color: var(--text-soft); font-size: .95rem; }
+  ol.pasos strong { color: var(--text); font-weight: 600; }
+  ul.puntos { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .4rem; color: var(--text-soft); font-size: .95rem; }
+
+  /* ── Avisos ─────────────────────────────────────────────────────── */
+  .nota {
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    padding: .9rem 1.1rem;
+    display: flex; flex-direction: column; gap: .35rem;
+    border-radius: 0 3px 3px 0;
+  }
+  .nota.ojo   { border-left-color: var(--aviso);  background: var(--aviso-fondo); }
+  .nota.stop  { border-left-color: var(--alerta); background: var(--alerta-fondo); }
+  .nota.bien  { border-left-color: var(--exito);  background: var(--exito-fondo); }
+  .nota .etiqueta {
+    font-family: "IBM Plex Mono", monospace; font-size: .66rem;
+    text-transform: uppercase; letter-spacing: .14em; color: var(--text-faint);
+  }
+  .nota.ojo  .etiqueta { color: var(--aviso); }
+  .nota.stop .etiqueta { color: var(--alerta); }
+  .nota.bien .etiqueta { color: var(--exito); }
+  .nota p { font-size: .92rem; color: var(--text-soft); }
+
+  /* ── Tabla ──────────────────────────────────────────────────────── */
+  .tabla-envoltorio { overflow-x: auto; border: 1px solid var(--rule-soft); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; background: var(--surface); }
+  th, td { text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: .66rem; text-transform: uppercase;
+    letter-spacing: .12em; color: var(--text-faint); font-weight: 500; white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  code {
+    font-family: "IBM Plex Mono", monospace; font-size: .86em;
+    background: var(--surface-alt); padding: .1rem .35rem; border-radius: 2px; color: var(--text);
+  }
+
+  footer {
+    margin-top: 3.5rem; padding-top: 1.4rem; border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", monospace; font-size: .72rem; color: var(--text-faint);
+    display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; justify-content: space-between;
+  }
+
+  a { color: var(--accent-text); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>
+
+<div class="hoja">
+
+  <header class="portada">
+    <div class="marca">
+      <svg width="40" height="40" viewBox="0 0 48 48" role="img" aria-label="Kairos">
+        <circle cx="24" cy="24" r="19" fill="none" stroke="var(--text-soft)" stroke-width="1.25"/>
+        <line x1="24" y1="24" x2="24" y2="9.5" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="24" cy="9.5" r="2.6" fill="var(--accent)"/>
+        <circle cx="24" cy="24" r="1.6" fill="var(--text)"/>
+      </svg>
+      <span>Kairos</span>
+      <small>Clínica Dental Biodental</small>
+    </div>
+
+    <h1>Guía de uso, escrita para esta clínica</h1>
+    <p class="entradilla">
+      Está ordenada como transcurre el día: primero la agenda, luego el paciente en el sillón,
+      y al final el cobro y el cierre. Cada apartado dice dónde se hace y qué esperar.
+    </p>
+  </header>
+
+  <div class="cuerpo">
+
+    <nav class="indice" aria-label="Índice">
+      <p class="titulo-indice">El día, por orden</p>
+      <ol>
+        <li><a href="#agenda"><span class="n">01</span><span>Abrir el día</span></a></li>
+        <li><a href="#citar"><span class="n">02</span><span>Citar a un paciente</span></a></li>
+        <li><a href="#solapar"><span class="n">03</span><span>Solapar una cita</span></a></li>
+        <li><a href="#recordatorios"><span class="n">04</span><span>Recordatorios y recall</span></a></li>
+        <li><a href="#ficha"><span class="n">05</span><span>La ficha del paciente</span></a></li>
+        <li><a href="#odontograma"><span class="n">06</span><span>Odontograma</span></a></li>
+        <li><a href="#presupuesto"><span class="n">07</span><span>Presupuestar</span></a></li>
+        <li><a href="#consentimiento"><span class="n">08</span><span>Consentimientos</span></a></li>
+        <li><a href="#receta"><span class="n">09</span><span>Recetas</span></a></li>
+        <li><a href="#cobrar"><span class="n">10</span><span>Cobrar</span></a></li>
+        <li><a href="#facturar"><span class="n">11</span><span>Facturación</span></a></li>
+        <li><a href="#cerrar"><span class="n">12</span><span>Cerrar el día</span></a></li>
+        <li><a href="#pendiente"><span class="n">13</span><span>Lo que aún no hace</span></a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- 01 -->
+      <section class="tarea" id="agenda">
+        <div class="tarea-cabecera"><span class="n">01</span><h2>Abrir el día</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Panel del día</b> · <b>Citas</b></p>
+          <p>
+            El <strong>Panel del día</strong> es la pantalla para tener puesta: las citas de hoy,
+            en qué estado está cada una y quién queda por llegar. <strong>Citas</strong> es la
+            agenda completa, por profesional y por semana.
+          </p>
+          <p>
+            La agenda cruza el horario de la clínica con el de cada profesional, así que solo
+            ofrece huecos en los que esa persona trabaja de verdad.
+          </p>
+        </div>
+      </section>
+
+      <!-- 02 -->
+      <section class="tarea" id="citar">
+        <div class="tarea-cabecera"><span class="n">02</span><h2>Citar a un paciente</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Citas</b> → Nueva cita</p>
+          <ol class="pasos">
+            <li>Elige <strong>servicio</strong> y <strong>profesional</strong>.</li>
+            <li>Elige el hueco de la rejilla, o pulsa <strong>«Poner hora y duración a mano»</strong>
+                si la cita no encaja en la duración del servicio — una revisión de cinco minutos,
+                por ejemplo.</li>
+            <li>Busca al paciente por nombre o teléfono. Si es nuevo, escribe nombre y teléfono
+                y se crea solo.</li>
+            <li><strong>Crear cita</strong>. Queda confirmada.</li>
+          </ol>
+          <div class="nota">
+            <span class="etiqueta">Por qué a mano</span>
+            <p>
+              La rejilla va en múltiplos de quince minutos y con la duración que dicta el
+              servicio. Una clínica no siempre hace eso, y por eso existe la hora a mano.
+              Escribirla no se salta ninguna regla: el solape se sigue comprobando.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 03 -->
+      <section class="tarea" id="solapar">
+        <div class="tarea-cabecera"><span class="n">03</span><h2>Solapar una cita</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Citas</b> → Nueva cita → aviso rojo</p>
+          <p>
+            Si el hueco está ocupado, Kairos lo dice y no crea la cita. Pero a veces hace falta
+            ponerla igual: un control corto que entra dentro de otra cita.
+          </p>
+          <ol class="pasos">
+            <li>Rellena la cita como siempre y pulsa <strong>Crear cita</strong>.</li>
+            <li>Si choca con otra, sale un <strong>aviso rojo</strong> diciendo con qué hora
+                choca.</li>
+            <li>Pulsa <strong>«Solapar de todas formas»</strong>, o
+                <strong>«Elegir otra hora»</strong> si te lo has pensado.</li>
+          </ol>
+          <div class="nota ojo">
+            <span class="etiqueta">Solo Nadia</span>
+            <p>
+              Este permiso está concedido únicamente a Nadia. A Nicolás y a Kristel ni siquiera
+              les aparece el botón: verán el aviso de hueco ocupado y tendrán que elegir otra
+              hora. Nunca se solapa en el primer intento — siempre hay que confirmarlo.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 04 -->
+      <section class="tarea" id="recordatorios">
+        <div class="tarea-cabecera"><span class="n">04</span><h2>Recordatorios y recall</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Recordatorios</b></p>
+          <p>
+            La confirmación de la cita sale sola por WhatsApp o SMS. En esta pantalla se ve qué
+            se ha enviado, qué está en cola y qué ha fallado.
+          </p>
+          <p>
+            El <strong>recall</strong> es el aviso de revisión: pacientes a los que toca volver
+            y todavía no tienen cita.
+          </p>
+        </div>
+      </section>
+
+      <!-- 05 -->
+      <section class="tarea" id="ficha">
+        <div class="tarea-cabecera"><span class="n">05</span><h2>La ficha del paciente</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Pacientes</b> → abrir uno</p>
+          <p>La ficha tiene cinco pestañas, y cada una responde una pregunta distinta:</p>
+          <div class="tabla-envoltorio">
+            <table>
+              <thead>
+                <tr><th scope="col">Pestaña</th><th scope="col">Para qué</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Resumen</strong></td><td>Datos de contacto, próxima cita, aseguradora.</td></tr>
+                <tr><td><strong>Ficha clínica</strong></td><td>Antecedentes, alergias y avisos médicos.</td></tr>
+                <tr><td><strong>Facturación</strong></td><td>Sus facturas y tickets, y los que quedan por cobrar.</td></tr>
+                <tr><td><strong>Planes</strong></td><td>Sus presupuestos, con su estado de tratamiento y de cobro.</td></tr>
+                <tr><td><strong>Expediente</strong></td><td>Consentimientos, imágenes y recetas.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="nota">
+            <span class="etiqueta">Rellena el NIF</span>
+            <p>
+              El campo <strong>NIF / CIF</strong> del paciente es el mismo número que hace falta
+              en la factura y en la receta. Hoy lo tienen 461 de los 1.197 pacientes; cuando
+              falta, la receta sale marcada como no válida para la farmacia.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 06 -->
+      <section class="tarea" id="odontograma">
+        <div class="tarea-cabecera"><span class="n">06</span><h2>Odontograma</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Odontograma</b> · o desde la ficha, <b>Ver odontograma</b></p>
+          <ol class="pasos">
+            <li>Pulsa un <strong>diente</strong>. Se abre el panel del hallazgo.</li>
+            <li>Elige el <strong>tipo</strong> (caries, obturación, endodoncia, corona…) y las
+                <strong>superficies</strong> afectadas.</li>
+            <li><strong>Guardar</strong>. El hallazgo queda con su fecha.</li>
+          </ol>
+          <p>
+            Debajo del panel sale <strong>lo presupuestado en ese diente</strong>, cruzando todos
+            los planes del paciente: la endodoncia de marzo y la corona de septiembre aparecen
+            juntas, porque en la boca son la misma pieza.
+          </p>
+          <div class="nota bien">
+            <span class="etiqueta">La boca en una fecha</span>
+            <p>
+              Con el selector de fecha se ve el odontograma tal y como estaba ese día. En modo
+              histórico no se edita nada: no se cambian hallazgos «en el pasado».
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 07 -->
+      <section class="tarea" id="presupuesto">
+        <div class="tarea-cabecera"><span class="n">07</span><h2>Presupuestar</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Pacientes</b> → ficha → <b>Planes</b></p>
+          <ol class="pasos">
+            <li><strong>Nuevo plan</strong>, y dentro las <strong>fases</strong> si el tratamiento
+                las tiene.</li>
+            <li>Añade líneas: servicio, diente, cantidad y precio.</li>
+            <li>Cada línea se mueve por su estado: <strong>Proponer → Aceptar → Iniciar →
+                Marcar realizado</strong>. Rechazar y anular son las salidas.</li>
+          </ol>
+          <div class="nota">
+            <span class="etiqueta">Dos ejes, no uno</span>
+            <p>
+              El estado del <strong>tratamiento</strong> y el del <strong>cobro</strong> van por
+              separado, porque en una clínica se cobra antes de hacer y se hace antes de cobrar
+              según el caso. Una endodoncia puede estar «prevista» y «cobrada» a la vez sin que
+              nada esté mal.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 08 -->
+      <section class="tarea" id="consentimiento">
+        <div class="tarea-cabecera"><span class="n">08</span><h2>Consentimientos</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Ficha</b> → <b>Expediente</b> → Consentimientos</p>
+          <ol class="pasos">
+            <li>Elige el <strong>tipo</strong> y créalo. Queda pendiente de firma.</li>
+            <li>Pulsa <strong>Firmar</strong>, escribe el nombre del paciente y dale el ratón,
+                el dedo o el lápiz para que firme.</li>
+            <li><strong>Confirmar firma</strong>.</li>
+            <li>Para dárselo en papel: <strong>Imprimir</strong>. Abre el PDF y desde ahí se
+                imprime con la ventana de siempre, eligiendo la impresora.</li>
+          </ol>
+          <div class="nota bien">
+            <span class="etiqueta">Qué guarda ese PDF</span>
+            <p>
+              El texto exacto que se firmó, el trazo de la firma, la fecha y un sello que permite
+              comprobar después que nadie lo ha tocado. No es una captura de pantalla: es el
+              documento.
+            </p>
+          </div>
+          <div class="nota ojo">
+            <span class="etiqueta">Los antiguos</span>
+            <p>
+              Los consentimientos firmados antes de que existiera la firma manuscrita no tienen
+              PDF, así que en esos no aparece el botón de imprimir.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 09 -->
+      <section class="tarea" id="receta">
+        <div class="tarea-cabecera"><span class="n">09</span><h2>Recetas</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Ficha</b> → <b>Expediente</b> → Recetas</p>
+          <ol class="pasos">
+            <li>En <strong>Nueva receta</strong>, elige el <strong>prescriptor</strong> y escribe
+                el diagnóstico si procede.</li>
+            <li>Rellena la medicación y pulsa <strong>Añadir renglón</strong>. Repite por cada
+                medicamento.</li>
+            <li><strong>Guardar</strong>. La receta nace como borrador.</li>
+            <li><strong>Emitir</strong> cuando esté lista. Ya no se puede modificar.</li>
+            <li><strong>Imprimir</strong> para dársela al paciente.</li>
+          </ol>
+          <div class="nota stop">
+            <span class="etiqueta">Sin renglones no se guarda</span>
+            <p>
+              Hay que pulsar <strong>Añadir renglón</strong> antes de guardar. Una receta sin
+              medicación no es una receta, así que el formulario no la deja crear.
+            </p>
+          </div>
+          <div class="nota stop">
+            <span class="etiqueta">Cuándo NO vale en la farmacia</span>
+            <p>
+              Si a la receta le falta el <strong>número de colegiado</strong> del prescriptor,
+              el <strong>DNI del paciente</strong> o el <strong>principio activo</strong> de
+              alguna medicación, el PDF sale con una franja roja arriba: <em>«No válida para
+              dispensación en farmacia»</em>. Sirve como indicación de tratamiento, pero el
+              farmacéutico no la despachará.
+            </p>
+            <p>
+              Esa franja desaparece sola en cuanto esos tres datos estén. Lo que no se puede
+              hacer todavía es receta <strong>electrónica</strong>: eso exige homologación en el
+              SREP, que es un trámite con el Consejo General de Colegios de Farmacéuticos.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section class="tarea" id="cobrar">
+        <div class="tarea-cabecera"><span class="n">10</span><h2>Cobrar</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Planes</b> → Pasar a caja &nbsp;·&nbsp; <b>Ficha</b> → Facturación → Cobrar &nbsp;·&nbsp; <b>Caja</b></p>
+          <p>El cobro de un tratamiento tiene dos momentos, y son distintos a propósito:</p>
+          <ol class="pasos">
+            <li><strong>Pasar a caja</strong>, desde el plan. Marca las líneas que quieras cobrar
+                y pulsa el botón. Se crea un <strong>ticket abierto</strong>. Esto todavía no
+                cobra nada.</li>
+            <li><strong>Cobrar</strong>, desde la pestaña Facturación de la ficha. El ticket
+                pendiente aparece como <strong>«Sin cobrar»</strong> con su botón. Te lleva a la
+                Caja con todo cargado.</li>
+            <li>En la <strong>Caja</strong>, elige método de pago y cobra. La factura y el ticket
+                salen de ahí.</li>
+          </ol>
+          <div class="nota bien">
+            <span class="etiqueta">Dos días, un solo cobro</span>
+            <p>
+              Si la limpieza se hizo un día y el blanqueamiento otro, cada uno dejó su ticket.
+              Se pueden <strong>fundir en uno</strong> para que el paciente pague una sola vez y
+              reciba una sola factura.
+            </p>
+          </div>
+          <div class="nota ojo">
+            <span class="etiqueta">La casilla de IVA</span>
+            <p>
+              La asistencia sanitaria dental está <strong>exenta</strong> de IVA, pero un
+              blanqueamiento es estética y va al 21 %. Por eso la casilla
+              <strong>«Operación exenta de IVA»</strong> se marca en cada cobro y no de forma
+              automática: solo marcándola sale en la factura la mención legal del artículo
+              20.Uno.3.º. Cobrar con «tipo 0 %» no es lo mismo y deja la factura coja.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section class="tarea" id="facturar">
+        <div class="tarea-cabecera"><span class="n">11</span><h2>Facturación</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Facturación</b> · <b>Facturación → Tickets</b></p>
+          <p>
+            Todas las facturas y tickets de la clínica, con su documento imprimible. Desde la
+            ficha del paciente se ven solo los suyos, mezclados con lo importado del programa
+            anterior — que es solo de consulta.
+          </p>
+        </div>
+      </section>
+
+      <!-- 12 -->
+      <section class="tarea" id="cerrar">
+        <div class="tarea-cabecera"><span class="n">12</span><h2>Cerrar el día</h2></div>
+        <div class="tarea-cuerpo">
+          <p class="ruta"><b>Arqueo</b> · <b>Fichaje</b> · <b>Analítica</b></p>
+          <ul class="puntos">
+            <li><strong>Arqueo</strong> — cierre de caja, con los totales por método de pago.</li>
+            <li><strong>Fichaje</strong> — entradas y salidas del equipo.</li>
+            <li><strong>Analítica</strong> — ingresos, servicios más vendidos y ocupación.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 13 -->
+      <section class="tarea" id="pendiente">
+        <div class="tarea-cabecera"><span class="n">13</span><h2>Lo que aún no hace</h2></div>
+        <div class="tarea-cuerpo">
+          <p>
+            Para que nadie lo busque y no lo encuentre, o peor, dé por hecho que funciona:
+          </p>
+          <div class="tabla-envoltorio">
+            <table>
+              <thead>
+                <tr><th scope="col">Qué</th><th scope="col">Situación</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Disparar la radiografía desde la ficha</strong></td>
+                  <td>La carpeta vigilada funciona con cualquier equipo que exporte a disco.
+                      El sensor por TWAIN y el DICOM están en construcción.</td>
+                </tr>
+                <tr>
+                  <td><strong>Receta electrónica</strong></td>
+                  <td>Pendiente de homologación en el SREP. La receta en papel ya cumple el
+                      Real Decreto 1718/2010 en cuanto estén el colegiado y el principio activo.</td>
+                </tr>
+                <tr>
+                  <td><strong>Número de colegiado</strong></td>
+                  <td>El dato existe en la base, pero todavía no hay pantalla donde escribirlo.
+                      Hasta entonces la receta sale marcada como no válida.</td>
+                </tr>
+                <tr>
+                  <td><strong>Documento del presupuesto</strong></td>
+                  <td>Todavía no se imprime como el ticket o la factura.</td>
+                </tr>
+                <tr>
+                  <td><strong>Verifactu</strong></td>
+                  <td>Comprometido antes del 1 de enero de 2027.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <span>HAT3X · Guía de Kairos para Clínica Dental Biodental</span>
+    <span>2 de septiembre de 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>
