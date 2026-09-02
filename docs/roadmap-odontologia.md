@@ -128,27 +128,33 @@ concreto no bloquee nada:
 - **A1b — adaptadores TWAIN y DICOM.** Requieren un equipo real para validar. Se cierran
   cuando haya acceso a uno.
 
-**Los equipos de Biodental (confirmado por Nadia, 2026-08-28).** Son dos, y caen en caminos
-distintos — lo que reordena la fase:
+**Los equipos de Biodental — lo que dijo la clínica y lo que dice la máquina.** No
+coinciden, y hasta resolverlo no se puede dar de alta ningún equipo:
 
-| Equipo | Marca | Software | Camino | Estado |
-|---|---|---|---|---|
-| Sensor intraoral (periapicales) | **Owandy** | QuickVision | TWAIN | A1b |
-| Ortopantomógrafo | **Gendex** | VixWin | **Carpeta vigilada** | **ya construido** |
+| Fuente | Fecha | Sensor intraoral | Panorámico |
+|---|---|---|---|
+| Nadia, de palabra | 2026-08-28 | Owandy / QuickVision | Gendex / VixWin |
+| Diagnóstico sobre el PC de rayos (3ª pasada) | 2026-08-31 | **ImageSensor 3.0.2.8** + detector de red **Vieworks** — es lo que usan a diario | Gendex VixWin Platinum, con las imágenes en `C:\VXIMAGES`**`old`** — tiene toda la pinta de estar **retirado** |
 
-- **Owandy** documenta driver TWAIN además de sus integraciones directas, y Dentrix Ascend
-  publica guía de instalación para sus sensores ONE y OPTEO. El camino TWAIN es el correcto y
-  está disponible; falta saber el modelo exacto, porque el nombre de la fuente TWAIN va en la
-  configuración del equipo.
-- **Gendex** va con VixWin, que es la aplicación de captura de sus propios equipos: no expone la
-  panorámica como fuente TWAIN a terceros. Pero VixWin **exporta a JPEG, BMP, TIFF y DICOM**, así
-  que la panorámica entra por la carpeta vigilada — el adaptador que ya está construido y
-  probado. **Media clínica queda cubierta sin tocar A1b.**
+**Manda la máquina.** Dar de alta un equipo con la carpeta del sistema retirado se
+guarda sin protestar y falla el día que alguien dispara con el paciente en el
+sillón: la captura vigila un directorio donde ya no aparece nada y vence a los 30
+segundos. Un dato de configuración equivocado no da la cara al escribirlo, sino en
+el peor momento posible.
 
-**Lo que hay que comprobar en la clínica, no por internet:** si VixWin puede exportar a una
-carpeta de forma AUTOMÁTICA o si hay que darle a «Exportar» cada vez. Si es manual, son dos
-clics por radiografía — funciona, pero no es el gesto que promete la fase, y entonces conviene
-mirar si el Gendex habla DICOM por red (Storage SCP), que sería el camino limpio.
+**Lo único que falta para desbloquear A1 en Biodental:** dónde deja ImageSensor las
+imágenes y cómo identifica al paciente. Es justo lo que la 3ª pasada del
+diagnóstico va a buscar (`agent/tools/diagnostico-kairos-3-UNICO.bat`, se ejecuta en
+el PC de rayos y deja `diagnostico-kairos-3.txt` en el Escritorio). **Su resultado no
+consta en el repositorio**: o no se ha llegado a ejecutar, o el fichero no volvió.
+
+Con esa ruta, el panorámico entra por **carpeta vigilada**, que es el adaptador ya
+construido y probado de punta a punta —botón en la ficha, agente, subida—, sin tocar
+A1b.
+
+El nodo de recepción DICOM que se vio en la configuración del equipo (`XP-STR-SCP`,
+`192.168.0.1:104`) sigue **sin habilitar**. En las notas no consta a cuál de los dos
+aparatos pertenece esa pantalla, así que no se da por sabido.
 
 TWAIN es Windows y captura de imagen suelta: es el suelo del producto, no el techo. Los SDK de
 fabricante entran después, uno a uno y solo donde haya clientes que lo pidan.
