@@ -46,4 +46,6 @@ supabase/.temp/
 # (agent.config.example.json) sí va al repo.
 agent/agent.config.json
 agent/dist/
+# El paquete del instalador se regenera con `npm run build:instalador`.
+agent/dist-instalador/
 agent/node_modules/

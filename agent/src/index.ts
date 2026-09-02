@@ -201,9 +201,17 @@ async function main(): Promise<void> {
 
 // Solo arranca si se ejecuta directamente; importarlo desde un test no levanta
 // ningún servidor.
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))
-) {
+// Hay que preguntarlo de dos maneras porque el agente vive en dos mundos: en
+// desarrollo es un módulo ESM y en el paquete de la clínica es CommonJS, donde
+// `import.meta` sencillamente no existe. Leer `import.meta.url` allí no da
+// `undefined` de forma benigna: revienta con un TypeError nada más cargar el
+// fichero, o sea que el agente instalado no llegaría a escuchar nunca.
+const ejecutadoDirectamente =
+  typeof require !== "undefined" && typeof module !== "undefined"
+    ? require.main === module
+    : process.argv[1] !== undefined &&
+      import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"));
+
+if (ejecutadoDirectamente) {
   void main();
 }

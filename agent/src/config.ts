@@ -77,6 +77,28 @@ function assertConfig(value: unknown): asserts value is AgentConfig {
 }
 
 /**
+ * Dónde se busca `agent.config.json` cuando nadie dice lo contrario.
+ *
+ * Los dos mundos en los que corre esto no se parecen en nada:
+ *
+ *   · En desarrollo el módulo vive en `src/` y la configuración está un nivel
+ *     por encima, en la raíz del agente.
+ *   · Instalado en la clínica no hay `src/`: hay un único fichero empaquetado
+ *     con su configuración AL LADO.
+ *
+ * Y no comparten la forma de saber dónde están: `import.meta.url` no existe en
+ * el paquete (es CommonJS) y `__dirname` no existe en desarrollo (es ESM). Usar
+ * solo uno de los dos deja al agente arrancando aquí y muerto allí, que es la
+ * peor combinación: no se nota hasta que ya está instalado en el gabinete.
+ */
+function rutaPorDefecto(): string {
+  if (typeof __dirname === "string") {
+    return resolve(__dirname, "agent.config.json");
+  }
+  return resolve(dirname(fileURLToPath(import.meta.url)), "..", "agent.config.json");
+}
+
+/**
  * Carga `agent.config.json` de junto al ejecutable.
  *
  * Falla en cerrado: si el fichero no existe, no es JSON o le falta algo
@@ -84,8 +106,7 @@ function assertConfig(value: unknown): asserts value is AgentConfig {
  * conexiones es peor que un agente que no está.
  */
 export async function loadConfig(path?: string): Promise<AgentConfig> {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const configPath = path ?? resolve(here, "..", "agent.config.json");
+  const configPath = path ?? rutaPorDefecto();
 
   let raw: string;
   try {
