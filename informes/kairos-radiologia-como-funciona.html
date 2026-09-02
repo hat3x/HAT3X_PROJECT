@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La radiografía en Kairos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  html { color-scheme: light dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<style>
+  /* Paleta de marca Kairos v1. El latón, con cuentagotas. */
+  :root {
+    --ground:      #F4F1EA;
+    --surface:     #FBFAF7;
+    --surface-alt: #EFEBE1;
+    --text:        #16181F;
+    --text-soft:   #4C505C;
+    --text-faint:  #7C808B;
+    --rule:        #DED8CB;
+    --rule-soft:   #E8E3D8;
+    --accent:      #B4884D;
+    --accent-text: #866226;
+    --exito:       #3E8E6E;
+    --aviso:       #B37E29;
+    --alerta:      #BE543F;
+    --aviso-fondo: #FBF3E2;
+    --exito-fondo: #E9F3EE;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #101218; --surface: #191C24; --surface-alt: #21252F;
+      --text: #ECE8DF; --text-soft: #A8ADB9; --text-faint: #7C818E;
+      --rule: #2C313C; --rule-soft: #232833;
+      --accent: #C99A5C; --accent-text: #D9AE71;
+      --exito: #57A98A; --aviso: #CB9540; --alerta: #D46F5A;
+      --aviso-fondo: #241E12; --exito-fondo: #14231D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #101218; --surface: #191C24; --surface-alt: #21252F;
+    --text: #ECE8DF; --text-soft: #A8ADB9; --text-faint: #7C818E;
+    --rule: #2C313C; --rule-soft: #232833;
+    --accent: #C99A5C; --accent-text: #D9AE71;
+    --exito: #57A98A; --aviso: #CB9540; --alerta: #D46F5A;
+    --aviso-fondo: #241E12; --exito-fondo: #14231D;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    background: var(--ground); color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px; line-height: 1.62; -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 {
+    font-family: "Source Serif 4", Georgia, serif; font-weight: 600;
+    margin: 0; text-wrap: balance; letter-spacing: -.01em;
+  }
+  h1 { font-size: clamp(1.9rem, 4.2vw, 2.6rem); line-height: 1.14; }
+  h2 { font-size: clamp(1.35rem, 2.6vw, 1.7rem); line-height: 1.22; }
+  h3 { font-size: 1.02rem; }
+  p, li { margin: 0; }
+  p { max-width: 68ch; color: var(--text-soft); }
+  strong { color: var(--text); font-weight: 600; }
+
+  .hoja { max-width: 60rem; margin: 0 auto; padding: clamp(1.75rem, 4vw, 3.5rem) clamp(1.1rem, 3.5vw, 2.5rem) 5rem; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: .7rem;
+    text-transform: uppercase; letter-spacing: .16em; color: var(--accent-text);
+  }
+
+  header { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 2rem; border-bottom: 1px solid var(--rule); }
+  .marca { display: flex; align-items: center; gap: .75rem; }
+  .marca span { font-family: "Source Serif 4", Georgia, serif; font-size: 1.15rem; }
+  .marca small {
+    font-family: "IBM Plex Mono", monospace; font-size: .66rem; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--text-faint);
+    border-left: 1px solid var(--rule); padding-left: .75rem;
+  }
+  .entradilla {
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: clamp(1.05rem, 2vw, 1.2rem); color: var(--text-soft);
+    max-width: 56ch; line-height: 1.55;
+  }
+
+  section { margin-top: clamp(2.5rem, 6vw, 3.75rem); display: flex; flex-direction: column; gap: 1.1rem; }
+
+  figure { margin: .5rem 0 0; display: flex; flex-direction: column; gap: .7rem; }
+  .lienzo { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule-soft); border-radius: 3px; padding: 1.2rem; }
+  svg { max-width: 100%; height: auto; display: block; color: var(--text); }
+  figcaption { font-size: .85rem; color: var(--text-faint); max-width: 66ch; }
+
+  ol.pasos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0; }
+  ol.pasos li {
+    display: grid; grid-template-columns: 2.3rem 1fr; gap: 1rem;
+    padding: .85rem 0; border-top: 1px solid var(--rule-soft); align-items: start;
+  }
+  ol.pasos li:first-child { border-top: 0; }
+  ol.pasos .n {
+    font-family: "IBM Plex Mono", monospace; font-size: .78rem; color: var(--accent-text);
+    font-variant-numeric: tabular-nums; padding-top: .18rem;
+  }
+  ol.pasos p { font-size: .95rem; }
+  ol.pasos h3 { margin-bottom: .2rem; }
+
+  .tabla-envoltorio { overflow-x: auto; border: 1px solid var(--rule-soft); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; background: var(--surface); }
+  th, td { text-align: left; padding: .75rem .9rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: .66rem; text-transform: uppercase;
+    letter-spacing: .12em; color: var(--text-faint); font-weight: 500; white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td { color: var(--text-soft); }
+  td strong { color: var(--text); }
+  code {
+    font-family: "IBM Plex Mono", monospace; font-size: .85em;
+    background: var(--surface-alt); padding: .1rem .35rem; border-radius: 2px; color: var(--text);
+  }
+
+  .pastilla {
+    display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: .66rem;
+    letter-spacing: .06em; padding: .15rem .45rem; border-radius: 2px; border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .pastilla.listo { color: var(--exito); }
+  .pastilla.falta { color: var(--aviso); }
+
+  .nota {
+    border-left: 3px solid var(--accent); background: var(--surface);
+    padding: .95rem 1.1rem; border-radius: 0 3px 3px 0;
+    display: flex; flex-direction: column; gap: .35rem;
+  }
+  .nota.ojo { border-left-color: var(--aviso); background: var(--aviso-fondo); }
+  .nota .etiqueta {
+    font-family: "IBM Plex Mono", monospace; font-size: .66rem;
+    text-transform: uppercase; letter-spacing: .14em; color: var(--text-faint);
+  }
+  .nota.ojo .etiqueta { color: var(--aviso); }
+  .nota p { font-size: .92rem; }
+
+  footer {
+    margin-top: 3.5rem; padding-top: 1.4rem; border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", monospace; font-size: .72rem; color: var(--text-faint);
+    display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; justify-content: space-between;
+  }
+</style>
+
+<div class="hoja">
+
+  <header>
+    <div class="marca">
+      <svg width="40" height="40" viewBox="0 0 48 48" role="img" aria-label="Kairos">
+        <circle cx="24" cy="24" r="19" fill="none" stroke="var(--text-soft)" stroke-width="1.25"/>
+        <line x1="24" y1="24" x2="24" y2="9.5" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="24" cy="9.5" r="2.6" fill="var(--accent)"/>
+        <circle cx="24" cy="24" r="1.6" fill="var(--text)"/>
+      </svg>
+      <span>Kairos</span>
+      <small>Radiología</small>
+    </div>
+    <h1>Cómo viaja una radiografía, y por qué así</h1>
+    <p class="entradilla">
+      El dentista dispara desde la ficha del paciente y la imagen aparece en esa misma ficha.
+      En medio hay cuatro piezas y una línea que nadie cruza.
+    </p>
+  </header>
+
+
+  <!-- ── Paso a paso, desde el mostrador ───────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Lo primero</p>
+    <h2>Qué hace exactamente una persona</h2>
+    <p>
+      Antes de cómo funciona por dentro, lo que de verdad importa: qué tiene que hacer
+      Kristel, qué tiene que hacer Nadia, y qué pasa solo.
+    </p>
+
+    <h3 style="margin-top:.8rem">Una vez, el día del montaje</h3>
+    <p>Esto no lo hacen ellas.</p>
+    <ol class="pasos">
+      <li><span class="n">—</span><div><p>Se instala el <strong>agente</strong> en el ordenador del gabinete, el que ya tiene el equipo de rayos conectado.</p></div></li>
+      <li><span class="n">—</span><div><p>En la configuración del equipo se apunta al agente, para que sepa a quién preguntar y a quién entregar las imágenes.</p></div></li>
+      <li><span class="n">—</span><div><p>En la app, en <strong>Ajustes → Equipos</strong>, se da de alta ese equipo.</p></div></li>
+    </ol>
+
+    <h3 style="margin-top:1.4rem">Cuando llega un paciente</h3>
+    <ol class="pasos">
+      <li>
+        <span class="n">01</span>
+        <div>
+          <h3>Kristel abre la ficha en la app</h3>
+          <p>Como siempre. Nada nuevo, y no hace falta que la deje abierta.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">02</span>
+        <div>
+          <h3>En la pantalla DEL EQUIPO, elige al paciente de una lista</h3>
+          <p>
+            Ahí están todos los del día, ya escritos. <strong>Esto es lo que cambia de
+            verdad:</strong> hoy hay que teclear el nombre a mano en el equipo, y ahí es donde
+            se cuelan las erratas que luego hacen que la radiografía no case con nadie.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">03</span>
+        <div>
+          <h3>Dispara</h3>
+          <p>Y ya está. No exporta, no busca el fichero, no lo sube. No hace nada más.</p>
+        </div>
+      </li>
+    </ol>
+
+    <h3 style="margin-top:1.4rem">Lo que pasa solo</h3>
+    <p>
+      El equipo entrega la imagen al agente. El agente no puede subirla —no tiene la
+      contraseña de nadie, y eso es a propósito—, así que la deja en el disco de ese
+      ordenador. Como <strong>ese mismo ordenador tiene la app abierta</strong>, el navegador
+      que está ahí mismo la recoge y la sube a la base de datos con la sesión de quien esté
+      dentro. El de recepción hace de segundo, por si el del gabinete estuviera cerrado.
+    </p>
+
+    <h3 style="margin-top:1.4rem">Lo que ve Nadia</h3>
+    <p>
+      Ficha del paciente → <strong>Expediente</strong>, y la radiografía está ahí con su fecha.
+      Si alguna volviera sin poder saber de quién es, aparece en la <strong>bandeja de sin
+      asignar</strong> con el motivo, para colocarla en dos clics.
+    </p>
+
+    <div class="nota">
+      <span class="etiqueta">Dos condiciones, y las dos se cumplen</span>
+      <p>
+        El ordenador del gabinete tiene que estar <strong>encendido</strong>, porque el agente
+        vive ahí; y tiene que haber <strong>alguna sesión de la app abierta</strong> para que
+        las imágenes suban. En Biodental hay Kairos abierto tanto en recepción como en el
+        propio ordenador de rayos, así que las dos se cumplen todo el día sin que nadie piense
+        en ello.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── El problema ───────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">El problema</p>
+    <h2>Una página web no puede hablar con un sensor</h2>
+    <p>
+      El navegador no tiene acceso al puerto USB donde está el sensor intraoral, ni puede
+      escuchar en la red local a la que el ortopantomógrafo manda las imágenes. Es una
+      limitación deliberada de los navegadores, y está bien que exista.
+    </p>
+    <p>
+      Por eso hace falta un <strong>agente</strong>: un programa pequeño que se instala en el
+      ordenador de la clínica —el que ya tiene el equipo conectado— y hace de puente. Sin él,
+      la clínica tiene que abrir el programa del fabricante en paralelo, exportar a una
+      carpeta y subir el fichero a mano.
+    </p>
+  </section>
+
+  <!-- ── Las piezas ────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Las piezas</p>
+    <h2>Quién es quién, y dónde vive cada uno</h2>
+
+    <div class="tabla-envoltorio">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Pieza</th>
+            <th scope="col">Dónde vive</th>
+            <th scope="col">Qué puede hacer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Kairos</strong></td>
+            <td>En la nube</td>
+            <td>Guarda pacientes, citas e imágenes. Solo escribe en él quien está identificado.</td>
+          </tr>
+          <tr>
+            <td><strong>El navegador</strong></td>
+            <td>El ordenador de recepción</td>
+            <td>La sesión de Nadia. Es lo único de esta lista que puede escribir en Kairos.</td>
+          </tr>
+          <tr>
+            <td><strong>El agente</strong></td>
+            <td>El PC del gabinete, junto al equipo</td>
+            <td>Habla con el equipo de rayos. <strong>No tiene credenciales de Kairos.</strong></td>
+          </tr>
+          <tr>
+            <td><strong>El equipo</strong></td>
+            <td>El gabinete</td>
+            <td>Dispara y entrega la imagen. Habla DICOM o exporta a una carpeta.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="nota">
+      <span class="etiqueta">La decisión que lo explica todo</span>
+      <p>
+        El agente <strong>no guarda ninguna llave</strong>. Podría parecer más cómodo que
+        subiera él las imágenes, pero eso obligaría a repartir credenciales de la clínica por
+        todos los ordenadores de todos los gabinetes. Si uno se ve comprometido —y el PC de un
+        gabinete es de los que más manos tocan—, ahí no hay nada que robar.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── El recorrido ──────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">El recorrido</p>
+    <h2>El viaje completo, en orden</h2>
+
+    <figure>
+      <div class="lienzo">
+        <svg viewBox="0 0 900 560" role="img"
+             aria-label="La imagen entra en Kairos siempre por el navegador: el agente nunca cruza la línea de las credenciales.">
+          <defs>
+            <marker id="pf" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+            <marker id="pfl" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#B4884D"/>
+            </marker>
+          </defs>
+
+          <!-- Actores -->
+          <g font-family="IBM Plex Sans, sans-serif" font-size="12.5" text-anchor="middle">
+            <rect x="20"  y="16" width="160" height="42" rx="3" fill="none" stroke="currentColor" stroke-width="1.1"/>
+            <text x="100" y="42" fill="currentColor">Kairos (nube)</text>
+
+            <rect x="245" y="16" width="160" height="42" rx="3" fill="none" stroke="currentColor" stroke-width="1.1"/>
+            <text x="325" y="36" fill="currentColor">Navegador</text>
+            <text x="325" y="51" fill="currentColor" font-size="10.5" opacity=".7">sesión de Nadia</text>
+
+            <rect x="495" y="16" width="160" height="42" rx="3" fill="none" stroke="currentColor" stroke-width="1.1"/>
+            <text x="575" y="36" fill="currentColor">Agente</text>
+            <text x="575" y="51" fill="currentColor" font-size="10.5" opacity=".7">PC del gabinete</text>
+
+            <rect x="720" y="16" width="160" height="42" rx="3" fill="none" stroke="currentColor" stroke-width="1.1"/>
+            <text x="800" y="42" fill="currentColor">Equipo de rayos</text>
+          </g>
+
+          <!-- Líneas de vida -->
+          <g stroke="currentColor" stroke-width=".7" opacity=".28">
+            <line x1="100" y1="58" x2="100" y2="530"/>
+            <line x1="325" y1="58" x2="325" y2="530"/>
+            <line x1="575" y1="58" x2="575" y2="530"/>
+            <line x1="800" y1="58" x2="800" y2="530"/>
+          </g>
+
+          <!-- La línea de las credenciales -->
+          <line x1="450" y1="8" x2="450" y2="545" stroke="#B4884D" stroke-width="1.2" stroke-dasharray="5 4"/>
+          <text x="443" y="300" fill="#866226" font-family="IBM Plex Mono, monospace"
+                font-size="10.5" text-anchor="middle" transform="rotate(-90 443 300)"
+                letter-spacing="1.5">A LA DERECHA NO HAY CREDENCIALES</text>
+
+          <!-- Banda IDA -->
+          <text x="30" y="88" fill="#866226" font-family="IBM Plex Mono, monospace"
+                font-size="10" letter-spacing="1.5">IDA — QUIÉN ENTRA HOY</text>
+
+          <g font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor">
+            <line x1="100" y1="112" x2="316" y2="112" stroke="currentColor" stroke-width="1.2" marker-end="url(#pf)"/>
+            <text x="208" y="106" text-anchor="middle">1 · las citas del día</text>
+
+            <line x1="325" y1="150" x2="566" y2="150" stroke="currentColor" stroke-width="1.2" marker-end="url(#pf)"/>
+            <text x="445" y="144" text-anchor="middle">2 · empuja la lista de trabajo</text>
+
+            <line x1="800" y1="188" x2="584" y2="188" stroke="currentColor" stroke-width="1.2" marker-end="url(#pf)"/>
+            <text x="692" y="182" text-anchor="middle">3 · «¿a quién le toca?»</text>
+
+            <line x1="575" y1="222" x2="791" y2="222" stroke="currentColor" stroke-width="1.2" marker-end="url(#pf)"/>
+            <text x="683" y="216" text-anchor="middle">4 · la lista, con su código</text>
+          </g>
+
+          <!-- Separador -->
+          <line x1="20" y1="262" x2="880" y2="262" stroke="currentColor" stroke-width=".6" opacity=".2"/>
+
+          <!-- Banda VUELTA -->
+          <text x="30" y="292" fill="#866226" font-family="IBM Plex Mono, monospace"
+                font-size="10" letter-spacing="1.5">VUELTA — LA IMAGEN</text>
+
+          <g font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="currentColor">
+            <line x1="800" y1="322" x2="584" y2="322" stroke="currentColor" stroke-width="1.2" marker-end="url(#pf)"/>
+            <text x="692" y="316" text-anchor="middle">5 · la imagen, cuando acaba</text>
+
+            <rect x="500" y="342" width="150" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3"/>
+            <text x="575" y="363" text-anchor="middle" font-size="11">6 · cola en disco</text>
+
+            <line x1="325" y1="410" x2="566" y2="410" stroke="currentColor" stroke-width="1.2" marker-end="url(#pf)"/>
+            <text x="445" y="404" text-anchor="middle">7 · «¿hay algo esperando?»</text>
+
+            <line x1="575" y1="446" x2="334" y2="446" stroke="currentColor" stroke-width="1.2" marker-end="url(#pf)"/>
+            <text x="455" y="440" text-anchor="middle">los bytes</text>
+
+            <line x1="325" y1="492" x2="109" y2="492" stroke="#B4884D" stroke-width="1.6" marker-end="url(#pfl)"/>
+            <text x="217" y="486" text-anchor="middle" fill="#866226" font-weight="600">8 · sube la imagen a la ficha</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>
+        Las ocho flechas del viaje. La única que escribe en Kairos es la 8, y sale del
+        navegador: el agente entrega los bytes, pero nunca cruza la línea dorada.
+      </figcaption>
+    </figure>
+
+    <ol class="pasos">
+      <li>
+        <span class="n">01</span>
+        <div>
+          <h3>Kairos le da al navegador las citas del día</h3>
+          <p>Quién viene hoy, a qué hora, con qué profesional y para qué.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">02</span>
+        <div>
+          <h3>El navegador empuja la lista al agente</h3>
+          <p>
+            Se manda <strong>la agenda entera del día</strong>, no el paciente que alguien
+            tenga abierto. Tiene que ser así porque Kristel está en el gabinete y decide allí:
+            si dependiera de qué ficha hay en pantalla, alguien tendría que tener el paciente
+            correcto abierto en otra habitación justo en el momento del disparo.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">03</span>
+        <div>
+          <h3>El equipo pregunta a quién le toca</h3>
+          <p>
+            Es lo que en DICOM se llama <em>lista de trabajo</em>. El profesional ve los
+            pacientes del día en la pantalla del equipo y elige, en vez de teclear el nombre.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">04</span>
+        <div>
+          <h3>El agente le responde con la lista</h3>
+          <p>
+            Cada paciente viaja con un <strong>código que Kairos ha emitido</strong>. Ese código
+            es lo único que garantiza después que la imagen vuelva a la ficha correcta.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">05</span>
+        <div>
+          <h3>Se dispara, y el equipo manda la imagen</h3>
+          <p>
+            Cuando le viene bien: puede ser cinco minutos después, con la ficha ya cerrada. El
+            equipo no espera a nadie.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">06</span>
+        <div>
+          <h3>El agente la guarda en disco y espera</h3>
+          <p>
+            No la puede subir: no tiene llaves. Así que la deja en una cola local hasta que
+            alguien identificado pase a recogerla.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">07</span>
+        <div>
+          <h3>El navegador pregunta si hay algo</h3>
+          <p>Cuando alguien abre Kairos, su navegador recoge lo que se haya acumulado.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">08</span>
+        <div>
+          <h3>Y la sube a la ficha del paciente</h3>
+          <p>
+            Con la sesión de quien esté delante. La imagen queda en el expediente, con su
+            modalidad y su fecha. Solo entonces el agente la borra de la cola.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ── La ficha correcta ─────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Lo que más importa</p>
+    <h2>Que la radiografía acabe en la ficha correcta</h2>
+    <p>
+      Los dos errores posibles no cuestan lo mismo, ni de lejos. Una radiografía sin asignar es
+      un incordio que alguien resuelve en dos clics. Una radiografía en la <strong>ficha
+      equivocada</strong> es un dentista diagnosticando sobre la boca de otra persona, sin que
+      nada avise.
+    </p>
+
+    <figure>
+      <div class="lienzo">
+        <svg viewBox="0 0 900 250" role="img"
+             aria-label="Una imagen solo entra en una ficha si los identificadores que Kairos emitió vuelven intactos; si algo no cuadra, va a la bandeja de sin asignar.">
+          <defs>
+            <marker id="pf2" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <g font-family="IBM Plex Sans, sans-serif" font-size="12.5" fill="currentColor">
+            <rect x="20" y="96" width="170" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="1.1"/>
+            <text x="105" y="118" text-anchor="middle">Imagen recibida</text>
+            <text x="105" y="135" text-anchor="middle" font-size="10.5" opacity=".7">con sus identificadores</text>
+
+            <line x1="190" y1="122" x2="266" y2="122" stroke="currentColor" stroke-width="1.2" marker-end="url(#pf2)"/>
+
+            <polygon points="400,72 530,122 400,172 270,122" fill="none" stroke="currentColor" stroke-width="1.1"/>
+            <text x="400" y="112" text-anchor="middle" font-size="11.5">¿vuelven intactos</text>
+            <text x="400" y="128" text-anchor="middle" font-size="11.5">y coherentes</text>
+            <text x="400" y="144" text-anchor="middle" font-size="11.5">entre sí?</text>
+
+            <line x1="530" y1="104" x2="686" y2="72" stroke="#3E8E6E" stroke-width="1.4" marker-end="url(#pf2)"/>
+            <text x="600" y="76" text-anchor="middle" font-size="11" fill="#3E8E6E">sí</text>
+            <rect x="694" y="46" width="186" height="46" rx="3" fill="none" stroke="#3E8E6E" stroke-width="1.2"/>
+            <text x="787" y="74" text-anchor="middle" fill="#3E8E6E">Ficha del paciente</text>
+
+            <line x1="530" y1="140" x2="686" y2="176" stroke="#B37E29" stroke-width="1.4" marker-end="url(#pf2)"/>
+            <text x="600" y="176" text-anchor="middle" font-size="11" fill="#B37E29">cualquier duda</text>
+            <rect x="694" y="152" width="186" height="46" rx="3" fill="none" stroke="#B37E29" stroke-width="1.2"/>
+            <text x="787" y="172" text-anchor="middle" fill="#B37E29">Bandeja de sin asignar</text>
+            <text x="787" y="188" text-anchor="middle" font-size="10.5" fill="#B37E29" opacity=".85">con el motivo a la vista</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>
+        No hay término medio ni «aproximado»: o los identificadores que Kairos emitió vuelven
+        enteros, o la imagen espera a que una persona la coloque.
+      </figcaption>
+    </figure>
+
+    <div class="nota ojo">
+      <span class="etiqueta">Lo que a propósito NO hace</span>
+      <p>
+        No busca por nombre. Sería fácil añadir «y si no, busca un paciente que se llame
+        igual», pero en cualquier clínica hay dos García Fernández, y un empate resuelto por
+        parecido es exactamente el fallo que esta pieza existe para impedir.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── El agente por dentro ──────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">El agente, por dentro</p>
+    <h2>Un puerto en el ordenador de la clínica, con cuatro cerraduras</h2>
+    <p>
+      El agente escucha en <code>127.0.0.1:7345</code>. Un puerto local lo alcanza
+      <strong>cualquier página abierta en ese ordenador</strong>: sin protección, una web
+      cualquiera en otra pestaña podría disparar radiografías o leerse las recién capturadas.
+      Se cierra por cuadruplicado.
+    </p>
+
+    <div class="tabla-envoltorio">
+      <table>
+        <thead>
+          <tr><th scope="col">Cerradura</th><th scope="col">Qué impide</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Solo escucha en <code>127.0.0.1</code></strong></td>
+            <td>Que alguien de la red de la clínica —o del wifi de invitados— llegue al agente.</td>
+          </tr>
+          <tr>
+            <td><strong>Origen exacto</strong></td>
+            <td>
+              Que otra web hable con él. Comparación exacta, no «empieza por»: ese es el fallo
+              clásico, porque <code>kairosmanager.app</code> como prefijo también acepta
+              <code>kairosmanager.app.ejemplo.com</code>, que lo registra cualquiera.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Token de emparejamiento</strong></td>
+            <td>Que valga con adivinar el puerto. Se genera al instalar y viaja en cada mensaje.</td>
+          </tr>
+          <tr>
+            <td><strong>El navegador manda un equipo, nunca una ruta</strong></td>
+            <td>
+              Que el agente se convierta en un lector de ficheros a la carta. Lo peor que se
+              puede obtener es una imagen de una carpeta que la propia clínica configuró.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Estado ────────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Dónde estamos</p>
+    <h2>Qué funciona ya y qué falta</h2>
+
+    <div class="tabla-envoltorio">
+      <table>
+        <thead>
+          <tr><th scope="col">Pieza</th><th scope="col">Estado</th><th scope="col">Detalle</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Carpeta vigilada</strong></td>
+            <td><span class="pastilla listo">Hecho</span></td>
+            <td>
+              Funciona con cualquier equipo capaz de exportar a disco, incluidos
+              ortopantomógrafos y escáneres. Es el suelo: ninguna clínica se queda fuera.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Identidad del paciente</strong></td>
+            <td><span class="pastilla listo">Hecho</span></td>
+            <td>El código que viaja al equipo y vuelve. 5.794 fichas numeradas, sin duplicados.</td>
+          </tr>
+          <tr>
+            <td><strong>Lista de trabajo</strong></td>
+            <td><span class="pastilla listo">Hecho</span></td>
+            <td>Convierte una cita en el registro exacto que pide su equipo.</td>
+          </tr>
+          <tr>
+            <td><strong>Emparejador de vuelta</strong></td>
+            <td><span class="pastilla listo">Hecho</span></td>
+            <td>Decide ficha o bandeja, con el criterio de arriba.</td>
+          </tr>
+          <tr>
+            <td><strong>Cola en disco</strong></td>
+            <td><span class="pastilla listo">Hecho</span></td>
+            <td>Lo que permite que el equipo entregue sin nadie delante.</td>
+          </tr>
+          <tr>
+            <td><strong>Servidor DICOM del agente</strong></td>
+            <td><span class="pastilla falta">Falta</span></td>
+            <td>Los pasos 3, 4 y 5 del recorrido. Es lo que estoy escribiendo ahora.</td>
+          </tr>
+          <tr>
+            <td><strong>La pantalla</strong></td>
+            <td><span class="pastilla falta">Falta</span></td>
+            <td>Las radiografías en la ficha y la bandeja de sin asignar.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="nota ojo">
+      <span class="etiqueta">Y algo que no depende de nosotros</span>
+      <p>
+        En la configuración del equipo de Biodental, el nodo de recepción
+        (<code>XP-STR-SCP</code>, <code>192.168.0.1:104</code>) está <strong>sin
+        habilitar</strong>. Hasta que alguien lo active y use el botón de «Conexión de prueba»
+        del propio equipo, se puede escribir todo pero no se puede demostrar que funciona
+        contra hierro real.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── El resultado ──────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">El resultado</p>
+    <h2>Qué cambia en el día de la clínica</h2>
+    <p>
+      Hoy: se abre el programa del fabricante en paralelo, se dispara, se exporta a una
+      carpeta, se busca el fichero y se sube a la ficha. Kairos queda de segunda pantalla.
+    </p>
+    <p>
+      Después: el profesional elige al paciente <strong>en la pantalla del propio equipo</strong>,
+      dispara, y la imagen aparece sola en su expediente, con su fecha y su modalidad. Sin
+      exportar, sin buscar el fichero y sin teclear un nombre que se puede equivocar.
+    </p>
+    <p>
+      Y una consecuencia que no se ve al principio: con las radiografías dentro de Kairos y
+      atadas a la ficha, se abre lo siguiente del roadmap —la IA sobre la radiografía—, que sin
+      esto no tiene de dónde partir.
+    </p>
+  </section>
+
+  <footer>
+    <span>HAT3X · Kairos · Cómo funciona la radiología</span>
+    <span>2 de septiembre de 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>
