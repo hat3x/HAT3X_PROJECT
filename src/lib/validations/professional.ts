@@ -76,6 +76,16 @@ export const professionalSchema = z.object({
     .max(200, "El nombre no puede superar 200 caracteres"),
   email: optionalEmail,
   phone: optionalText(30),
+  /**
+   * Datos que el impreso de receta del Colegio pide del prescriptor.
+   *
+   * Opcionales: no todo el personal receta —una higienista no— y obligar a
+   * rellenarlos para dar de alta a nadie sería trabajo inútil. Lo que sí hace
+   * la receta es AVISAR cuando faltan, en vez de salir muda.
+   */
+  license_number: optionalText(40),
+  license_authority: optionalText(200),
+  address: optionalText(300),
   location_id: z
     .string({ required_error: "Selecciona una sede" })
     .trim()

@@ -3,35 +3,46 @@ import { PDFDocument, StandardFonts, rgb, type PDFPage } from "pdf-lib";
 import { formatLongDateTime, toWinAnsi, wrap } from "@/lib/dental/pdf-text";
 
 /**
- * PDF de la receta privada.
+ * Hoja para transcribir a la receta oficial del Colegio.
  *
- * ── QUÉ TIENE QUE LLEVAR ────────────────────────────────────────────────────
- * El Real Decreto 1718/2010 fija los datos mínimos para que una farmacia
- * dispense: identificación del prescriptor CON SU NÚMERO DE COLEGIADO, datos
- * del paciente, y de cada medicamento su principio activo, forma farmacéutica,
- * vía, dosis, frecuencia y duración.
+ * ── QUÉ ES Y QUÉ NO ES ──────────────────────────────────────────────────────
+ * NO es una receta. La receta es el impreso del Ilustre Colegio Oficial de
+ * Odontólogos y Estomatólogos, que viene con su número, su código de barras y
+ * su QR ya impresos: los asigna el Colegio. Fabricarlos sería falsificar un
+ * documento oficial, así que Kairos no imita ese impreso.
  *
- * ── Y QUÉ PASA SI FALTAN ────────────────────────────────────────────────────
- * El documento lo DICE, en vez de salir bonito y que el paciente se lleve el
- * chasco en el mostrador. Un papel que parece una receta y no lo es hace más
- * daño que no imprimir nada: el paciente se va convencido de que tiene su
- * medicación resuelta.
+ * En Biodental el impreso se rellena a mano. Lo que aporta Kairos es esta hoja:
+ * los mismos datos, en el MISMO ORDEN y con las MISMAS PALABRAS que el impreso,
+ * para que copiarlos sea mecánico y no haya que ir buscando cada dato por la
+ * ficha.
  *
- * ── LO QUE ESTO NO ES ───────────────────────────────────────────────────────
- * No es receta electrónica. Esa necesita homologación en el SREP, el sistema
- * del Consejo General de Colegios de Farmacéuticos, que es un trámite con un
- * tercero. Esto es la receta en papel, firmada a mano por el prescriptor.
+ * ── UN IMPRESO POR MEDICAMENTO ──────────────────────────────────────────────
+ * El impreso tiene UN bloque de prescripción y su pie dice que vale para una
+ * única dispensación. Una receta de Kairos con tres medicamentos necesita tres
+ * impresos. La hoja lo dice arriba, porque es el error fácil de cometer.
+ *
+ * ── Y SI FALTAN DATOS ───────────────────────────────────────────────────────
+ * Los enumera antes de la tabla. Enterarse de que falta el DNI mientras se
+ * copia es mucho mejor que enterarse en el mostrador de la farmacia.
  */
 
 export interface PrescriptionPdfMedication {
+  /** DCI (principio activo) o marca, como lo pide el impreso. */
   medication: string;
   activeIngredient: string | null;
   pharmaceuticalForm: string | null;
   route: string | null;
+  /** Dosis por unidad. */
   dose: string | null;
+  /** Unidades por envase, p. ej. "12 comprimidos". */
+  unitsPerPackage: string | null;
+  /** Pauta: "cada 8 horas". */
   frequency: string | null;
+  /** Duración del tratamiento. */
   duration: string | null;
+  /** Núm. de envases o unidades. */
   quantity: string | null;
+  /** Va a "Información al Farmacéutico". */
   instructions: string | null;
 }
 
@@ -45,6 +56,9 @@ export interface PrescriptionPdfInput {
   prescriberName: string | null;
   prescriberLicense: string | null;
   prescriberAuthority: string | null;
+  prescriberAddress: string | null;
+  prescriberEmail: string | null;
+  prescriberPhone: string | null;
   diagnosis: string | null;
   notes: string | null;
   issuedAt: string | null;
@@ -52,44 +66,38 @@ export interface PrescriptionPdfInput {
 }
 
 const PAGE = { width: 595.28, height: 841.89 };
-const MARGIN = 56;
-const BODY_SIZE = 10.5;
-const LINE_HEIGHT = 14;
+const MARGIN = 52;
+const BODY = 10;
+const LINE = 13.5;
 
 /**
- * Qué le falta a esta receta para ser dispensable.
+ * Qué datos le faltan a esta receta para poder copiarla al impreso.
  *
  * Se calcula aparte y se exporta para poder probarlo sin generar un PDF, y para
- * que la pantalla pueda avisar ANTES de imprimir en vez de después.
+ * que la pantalla pueda avisar antes de imprimir.
  */
 export function missingLegalFields(input: PrescriptionPdfInput): string[] {
   const faltan: string[] = [];
+  const vacio = (x: string | null): boolean => (x ?? "").trim() === "";
 
-  if ((input.prescriberName ?? "").trim() === "") faltan.push("el nombre del prescriptor");
-  if ((input.prescriberLicense ?? "").trim() === "") faltan.push("su número de colegiado");
-  if ((input.patientTaxId ?? "").trim() === "") faltan.push("el DNI del paciente");
+  if (vacio(input.prescriberName)) faltan.push("el nombre del prescriptor");
+  if (vacio(input.prescriberLicense)) faltan.push("su número de colegiado");
+  if (vacio(input.patientTaxId)) faltan.push("el DNI del paciente");
+  if (input.patientBirthDate === null) faltan.push("el año de nacimiento del paciente");
 
-  // Basta que UNA línea no tenga principio activo: la farmacia no puede
-  // dispensar equivalente de lo que no sabe qué es.
-  const sinPrincipio = input.medications.some(
-    (m) => (m.activeIngredient ?? "").trim() === "",
-  );
-  if (sinPrincipio) faltan.push("el principio activo de alguna medicación");
+  // Basta que UNA línea no tenga principio activo: el impreso pide "DCI o
+  // marca", y sin la DCI la farmacia no puede dispensar un equivalente.
+  if (input.medications.some((m) => vacio(m.activeIngredient))) {
+    faltan.push("el principio activo de alguna medicación");
+  }
 
   return faltan;
 }
 
-function formatBirthDate(iso: string | null): string {
+/** El impreso pide el AÑO de nacimiento, no la fecha completa. */
+function birthYear(iso: string | null): string {
   if (iso === null) return "—";
-  return new Intl.DateTimeFormat("es-ES", { dateStyle: "long" }).format(new Date(iso));
-}
-
-/** Une los datos de posología que existan, en el orden en que se leen. */
-function posologia(m: PrescriptionPdfMedication): string {
-  return [m.dose, m.frequency, m.duration]
-    .map((x) => (x ?? "").trim())
-    .filter((x) => x !== "")
-    .join(" · ");
+  return String(new Date(iso).getFullYear());
 }
 
 export async function buildPrescriptionPdf(
@@ -99,162 +107,200 @@ export async function buildPrescriptionPdf(
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
 
-  const contentWidth = PAGE.width - MARGIN * 2;
+  const ancho = PAGE.width - MARGIN * 2;
   let page: PDFPage = doc.addPage([PAGE.width, PAGE.height]);
   let y = PAGE.height - MARGIN;
 
-  const ensureSpace = (needed: number): void => {
-    if (y - needed >= MARGIN) return;
+  const hueco = (necesario: number): void => {
+    if (y - necesario >= MARGIN) return;
     page = doc.addPage([PAGE.width, PAGE.height]);
     y = PAGE.height - MARGIN;
   };
 
-  const writeLine = (text: string, size = BODY_SIZE, useBold = false): void => {
-    ensureSpace(LINE_HEIGHT);
-    page.drawText(toWinAnsi(text), {
-      x: MARGIN,
+  const linea = (texto: string, size = BODY, negrita = false, sangria = 0): void => {
+    hueco(LINE);
+    page.drawText(toWinAnsi(texto), {
+      x: MARGIN + sangria,
       y,
       size,
-      font: useBold ? bold : font,
+      font: negrita ? bold : font,
       color: rgb(0.07, 0.1, 0.11),
     });
-    y -= LINE_HEIGHT;
+    y -= LINE;
   };
 
-  const separador = (): void => {
-    ensureSpace(12);
-    page.drawLine({
-      start: { x: MARGIN, y },
-      end: { x: PAGE.width - MARGIN, y },
-      thickness: 0.5,
-      color: rgb(0.8, 0.85, 0.85),
+  /** Etiqueta y valor en la misma fila, como en las casillas del impreso. */
+  const campo = (etiqueta: string, valor: string | null, sangria = 0): void => {
+    hueco(LINE);
+    const x = MARGIN + sangria;
+    page.drawText(toWinAnsi(etiqueta), { x, y, size: 8, font, color: rgb(0.42, 0.45, 0.5) });
+    page.drawText(toWinAnsi((valor ?? "").trim() === "" ? "—" : valor!), {
+      x: x + 132,
+      y,
+      size: BODY,
+      font: bold,
+      color: rgb(0.07, 0.1, 0.11),
     });
-    y -= 16;
+    y -= LINE;
   };
 
-  // ── Cabecera: la clínica ──────────────────────────────────────────────────
-  writeLine(input.salonName, 12, true);
-  if (input.salonAddress !== null) writeLine(input.salonAddress, 9);
-  if (input.salonTaxId !== null) writeLine(`NIF: ${input.salonTaxId}`, 9);
-  y -= 8;
+  const bloque = (titulo: string): void => {
+    y -= 6;
+    hueco(LINE + 8);
+    page.drawLine({
+      start: { x: MARGIN, y: y + 11 },
+      end: { x: PAGE.width - MARGIN, y: y + 11 },
+      thickness: 0.5,
+      color: rgb(0.8, 0.84, 0.85),
+    });
+    linea(titulo, 8.5, true);
+    y -= 2;
+  };
 
-  ensureSpace(24);
-  page.drawText("RECETA", { x: MARGIN, y, size: 18, font: bold });
-  y -= 26;
+  // ── Cabecera ──────────────────────────────────────────────────────────────
+  linea(input.salonName, 11, true);
+  if (input.salonAddress !== null) linea(input.salonAddress, 8.5);
+  y -= 6;
 
-  // ── El aviso, ARRIBA ──────────────────────────────────────────────────────
-  // Va antes que nada a propósito: si el documento no sirve, quien lo imprime
-  // tiene que verlo antes de dárselo al paciente, no en la última página.
+  hueco(24);
+  page.drawText(toWinAnsi("HOJA PARA TRANSCRIBIR A LA RECETA OFICIAL"), {
+    x: MARGIN,
+    y,
+    size: 15,
+    font: bold,
+  });
+  y -= 20;
+
+  for (const l of wrap(
+    "Este papel NO es una receta. Copia estos datos al impreso del Colegio, que es el que " +
+      "lleva su numero, su codigo de barras y la validez ante la farmacia.",
+    font,
+    8.5,
+    ancho,
+  )) {
+    linea(l, 8.5);
+  }
+  y -= 4;
+
+  // ── Cuántos impresos hacen falta ──────────────────────────────────────────
+  // El impreso tiene un solo bloque de prescripcion: un medicamento por hoja.
+  const n = input.medications.length;
+  if (n > 1) {
+    hueco(30);
+    page.drawRectangle({
+      x: MARGIN - 5,
+      y: y - 16,
+      width: ancho + 10,
+      height: 26,
+      color: rgb(0.99, 0.96, 0.9),
+      borderColor: rgb(0.7, 0.53, 0.16),
+      borderWidth: 0.8,
+    });
+    linea(
+      `ATENCION: ${n} medicamentos = ${n} impresos. Cada impreso vale para UNA dispensacion.`,
+      9,
+      true,
+    );
+    y -= 12;
+  }
+
+  // ── Lo que falta ──────────────────────────────────────────────────────────
   const faltan = missingLegalFields(input);
   if (faltan.length > 0) {
-    ensureSpace(46);
+    hueco(40);
     page.drawRectangle({
-      x: MARGIN - 6,
-      y: y - 34,
-      width: contentWidth + 12,
-      height: 44,
+      x: MARGIN - 5,
+      y: y - 24,
+      width: ancho + 10,
+      height: 34,
       color: rgb(0.99, 0.93, 0.93),
       borderColor: rgb(0.75, 0.2, 0.2),
-      borderWidth: 1,
+      borderWidth: 0.9,
     });
-    y -= 4;
-    writeLine("NO VALIDA PARA DISPENSACION EN FARMACIA", 10, true);
-    for (const linea of wrap(
-      `Faltan ${faltan.join(", ")}. Sirve como indicacion de tratamiento, no como receta.`,
-      font,
-      8.5,
-      contentWidth,
-    )) {
-      writeLine(linea, 8.5);
-    }
+    linea("FALTAN DATOS PARA QUE LA FARMACIA LA ACEPTE", 9, true);
+    for (const l of wrap(`Sin ${faltan.join(", ")}.`, font, 8.5, ancho)) linea(l, 8.5);
     y -= 12;
   }
 
   // ── Paciente ──────────────────────────────────────────────────────────────
-  separador();
-  writeLine("PACIENTE", 8, true);
-  writeLine(input.patientName, 11);
-  writeLine(`DNI/NIF: ${input.patientTaxId ?? "—"}`, 9);
-  writeLine(`Fecha de nacimiento: ${formatBirthDate(input.patientBirthDate)}`, 9);
-  y -= 6;
+  // Mismo orden y mismas palabras que el impreso, para que copiar sea mecanico.
+  bloque("PACIENTE  (nombre, apellidos, ano de nacimiento y n.o de DNI / NIE / pasaporte)");
+  campo("Nombre y apellidos", input.patientName);
+  campo("Ano de nacimiento", birthYear(input.patientBirthDate));
+  campo("DNI / NIE", input.patientTaxId);
 
   // ── Prescriptor ───────────────────────────────────────────────────────────
-  writeLine("PRESCRIPTOR", 8, true);
-  writeLine(input.prescriberName ?? "—", 11);
-  writeLine(`N.o de colegiado: ${input.prescriberLicense ?? "—"}`, 9);
-  if (input.prescriberAuthority !== null) writeLine(input.prescriberAuthority, 9);
-  writeLine(`Fecha de emision: ${formatLongDateTime(input.issuedAt)}`, 9);
-  y -= 6;
-
-  if (input.diagnosis !== null && input.diagnosis.trim() !== "") {
-    writeLine("DIAGNOSTICO", 8, true);
-    for (const linea of wrap(input.diagnosis, font, BODY_SIZE, contentWidth)) {
-      writeLine(linea);
-    }
-    y -= 6;
+  bloque("PRESCRIPTOR  (datos de identificacion y firma)");
+  campo("Dr. / Dra.", input.prescriberName);
+  campo("Num. Colegiado", input.prescriberLicense);
+  campo("Direccion", input.prescriberAddress);
+  campo("Email", input.prescriberEmail);
+  campo("Tlfno / Fax", input.prescriberPhone);
+  campo("Fecha de prescripcion", formatLongDateTime(input.issuedAt));
+  if (input.prescriberAuthority !== null) {
+    for (const l of wrap(input.prescriberAuthority, font, 8, ancho)) linea(l, 8);
   }
 
-  // ── Medicación ────────────────────────────────────────────────────────────
-  separador();
-  writeLine("MEDICACION", 8, true);
-  y -= 4;
+  if ((input.diagnosis ?? "").trim() !== "") {
+    bloque("DIAGNOSTICO  (no va en el impreso; para la historia clinica)");
+    for (const l of wrap(input.diagnosis!, font, BODY, ancho)) linea(l);
+  }
 
+  // ── Prescripción, un bloque por medicamento ───────────────────────────────
   input.medications.forEach((m, i) => {
-    // Cada medicamento entero o en la página siguiente: partir una posología
-    // entre dos hojas es como se toma mal una medicación.
-    ensureSpace(LINE_HEIGHT * 5);
+    bloque(
+      n > 1
+        ? `PRESCRIPCION ${i + 1} de ${n}  ->  IMPRESO ${i + 1}`
+        : "PRESCRIPCION",
+    );
+    // Entero en la misma pagina: una posologia partida en dos hojas es como se
+    // copia mal una medicacion.
+    hueco(LINE * 7);
 
-    // El principio activo manda: es lo que la farmacia dispensa. El nombre
-    // comercial va detrás, entre paréntesis, como referencia.
-    const principio = (m.activeIngredient ?? "").trim();
-    const titulo =
-      principio === "" ? m.medication : `${principio} (${m.medication})`;
-    writeLine(`${i + 1}. ${titulo}`, 11, true);
-
-    const forma = [m.pharmaceuticalForm, m.route]
-      .map((x) => (x ?? "").trim())
-      .filter((x) => x !== "")
-      .join(" · ");
-    if (forma !== "") writeLine(`   ${forma}`, 9);
-
-    const pauta = posologia(m);
-    if (pauta !== "") writeLine(`   ${pauta}`, 9);
-
-    if ((m.quantity ?? "").trim() !== "") writeLine(`   Cantidad: ${m.quantity}`, 9);
+    campo("DCI o marca", m.activeIngredient ?? m.medication);
+    if ((m.activeIngredient ?? "").trim() !== "" && m.medication.trim() !== "") {
+      campo("Marca comercial", m.medication);
+    }
+    campo("Forma farmaceutica", m.pharmaceuticalForm);
+    campo("Via de administracion", m.route);
+    campo("Dosis por unidad", m.dose);
+    campo("Unidades por envase", m.unitsPerPackage);
+    campo("Num. envases / unidades", m.quantity);
+    campo("Duracion del tratamiento", m.duration);
+    campo("Posologia (pauta)", m.frequency);
 
     if ((m.instructions ?? "").trim() !== "") {
-      for (const linea of wrap(`   ${m.instructions}`, font, 9, contentWidth)) {
-        writeLine(linea, 9);
-      }
+      y -= 2;
+      linea("Informacion al Farmaceutico", 8, true);
+      for (const l of wrap(m.instructions!, font, 9, ancho)) linea(l, 9);
     }
-    y -= 8;
   });
 
-  if (input.notes !== null && input.notes.trim() !== "") {
-    separador();
-    writeLine("OBSERVACIONES", 8, true);
-    for (const linea of wrap(input.notes, font, 9, contentWidth)) writeLine(linea, 9);
+  if ((input.notes ?? "").trim() !== "") {
+    bloque("OBSERVACIONES  (no van en el impreso)");
+    for (const l of wrap(input.notes!, font, 9, ancho)) linea(l, 9);
   }
 
-  // ── Firma ─────────────────────────────────────────────────────────────────
-  // A mano, sobre el papel: la receta la firma el prescriptor, y ese trazo es
-  // lo que la farmacia comprueba. La aplicación no lo puede suplantar.
-  y -= 20;
-  ensureSpace(80);
+  // ── Pie ───────────────────────────────────────────────────────────────────
+  y -= 10;
+  hueco(30);
   page.drawLine({
-    start: { x: PAGE.width - MARGIN - 200, y },
+    start: { x: MARGIN, y },
     end: { x: PAGE.width - MARGIN, y },
-    thickness: 0.7,
-    color: rgb(0.4, 0.45, 0.45),
+    thickness: 0.5,
+    color: rgb(0.8, 0.84, 0.85),
   });
   y -= 12;
-  page.drawText(toWinAnsi("Firma del prescriptor"), {
-    x: PAGE.width - MARGIN - 200,
-    y,
-    size: 8,
+  for (const l of wrap(
+    "La receta la firma el prescriptor sobre el impreso del Colegio. Segun su pie, la validez " +
+      "expira a los 10 dias naturales de la fecha prevista de dispensacion o, en su defecto, de " +
+      "la fecha de prescripcion.",
     font,
-    color: rgb(0.45, 0.5, 0.5),
-  });
+    7.5,
+    ancho,
+  )) {
+    linea(l, 7.5);
+  }
 
   return doc.save();
 }

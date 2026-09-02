@@ -28,6 +28,10 @@ export interface ProfessionalFormDefaults {
   color: string;
   /** Especialidades como texto separado por comas. */
   specialties: string;
+  /** Datos que el impreso de receta del Colegio pide del prescriptor. */
+  license_number: string;
+  license_authority: string;
+  address: string;
   /** Ids de los servicios que presta el profesional. */
   service_ids: string[];
   active: boolean;
@@ -40,6 +44,9 @@ const EMPTY_DEFAULTS: ProfessionalFormDefaults = {
   location_id: "",
   color: "#6366f1",
   specialties: "",
+  license_number: "",
+  license_authority: "",
+  address: "",
   service_ids: [],
   active: true,
 };
@@ -103,6 +110,9 @@ export function ProfessionalForm({
       location_id: values.location_id,
       color: values.color,
       specialties: values.specialties,
+      license_number: values.license_number,
+      license_authority: values.license_authority,
+      address: values.address,
       service_ids: values.service_ids,
       active: values.active,
     });
@@ -170,6 +180,47 @@ export function ProfessionalForm({
           />
         </div>
       </div>
+
+      {/* Datos de receta. Van agrupados y explicados porque quien rellena esta
+          ficha no tiene por qué saber que la farmacia mira el colegiado. */}
+      <fieldset className="grid gap-4 rounded-lg border p-4">
+        <legend className="px-1 text-sm font-medium">Datos para recetas</legend>
+        <p className="-mt-1 text-xs text-muted-foreground">
+          Solo hacen falta si esta persona receta. Sin el número de colegiado, la farmacia no
+          dispensa: la receta se imprime igual, pero avisando de que no es válida.
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="license_number">N.º de colegiado</Label>
+            <Input
+              id="license_number"
+              value={values.license_number}
+              onChange={(e) => update("license_number", e.target.value)}
+              placeholder="28016882"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="license_authority">Colegio profesional</Label>
+            <Input
+              id="license_authority"
+              value={values.license_authority}
+              onChange={(e) => update("license_authority", e.target.value)}
+              placeholder="Ilustre Colegio Oficial de Odontólogos y Estomatólogos de la 1.ª Región"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="address">Dirección profesional</Label>
+          <Input
+            id="address"
+            value={values.address}
+            onChange={(e) => update("address", e.target.value)}
+            placeholder="Calle y localidad que aparecen en la receta"
+          />
+        </div>
+      </fieldset>
 
       <div className="grid gap-2">
         <Label htmlFor="specialties">Especialidades</Label>

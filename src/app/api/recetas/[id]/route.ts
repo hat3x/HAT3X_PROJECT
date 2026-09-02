@@ -44,6 +44,9 @@ interface FilaReceta {
   prescriber_name: string | null;
   prescriber_license: string | null;
   prescriber_authority: string | null;
+  prescriber_address: string | null;
+  prescriber_email: string | null;
+  prescriber_phone: string | null;
   customers: { full_name: string; tax_id: string | null; birth_date: string | null } | null;
   prescription_item: {
     position: number;
@@ -52,6 +55,7 @@ interface FilaReceta {
     pharmaceutical_form: string | null;
     route: string | null;
     dose: string | null;
+    units_per_package: string | null;
     frequency: string | null;
     duration: string | null;
     quantity: string | null;
@@ -82,8 +86,9 @@ export async function GET(
     .from("prescription")
     .select(
       "id, status, issued_at, diagnosis, notes, prescriber_name, prescriber_license, prescriber_authority, " +
+        "prescriber_address, prescriber_email, prescriber_phone, " +
         "customers(full_name, tax_id, birth_date), " +
-        "prescription_item(position, medication, active_ingredient, pharmaceutical_form, route, dose, frequency, duration, quantity, instructions)",
+        "prescription_item(position, medication, active_ingredient, pharmaceutical_form, route, dose, units_per_package, frequency, duration, quantity, instructions)",
     )
     .eq("id", params.id)
     .eq("salon_id", salon.id)
@@ -120,6 +125,9 @@ export async function GET(
     prescriberName: receta.prescriber_name,
     prescriberLicense: receta.prescriber_license,
     prescriberAuthority: receta.prescriber_authority,
+    prescriberAddress: receta.prescriber_address,
+    prescriberEmail: receta.prescriber_email,
+    prescriberPhone: receta.prescriber_phone,
     diagnosis: receta.diagnosis,
     notes: receta.notes,
     issuedAt: receta.issued_at,
@@ -129,6 +137,7 @@ export async function GET(
       pharmaceuticalForm: r.pharmaceutical_form,
       route: r.route,
       dose: r.dose,
+      unitsPerPackage: r.units_per_package,
       frequency: r.frequency,
       duration: r.duration,
       quantity: r.quantity,

@@ -571,6 +571,8 @@ export interface Database {
           license_authority: string | null;
           // Colegiado: sin él una receta privada no es dispensable (RD 1718/2010).
           license_number: string | null;
+          // Direccion profesional; la pide el impreso de receta del Colegio.
+          address: string | null;
           id: string;
           salon_id: string;
           location_id: string;
@@ -587,6 +589,7 @@ export interface Database {
         Insert: {
           license_authority?: string | null;
           license_number?: string | null;
+          address?: string | null;
           id?: string;
           salon_id: string;
           location_id: string;
@@ -603,6 +606,7 @@ export interface Database {
         Update: {
           license_authority?: string | null;
           license_number?: string | null;
+          address?: string | null;
           id?: string;
           salon_id?: string;
           location_id?: string;
@@ -4067,6 +4071,9 @@ export interface Database {
           prescriber_authority: string | null;
           // Foto del colegiado al emitir, para que una reimpresión no cambie.
           prescriber_license: string | null;
+          prescriber_address: string | null;
+          prescriber_email: string | null;
+          prescriber_phone: string | null;
           id: string;
           salon_id: string;
           customer_id: string;
@@ -4084,6 +4091,9 @@ export interface Database {
         Insert: {
           prescriber_authority?: string | null;
           prescriber_license?: string | null;
+          prescriber_address?: string | null;
+          prescriber_email?: string | null;
+          prescriber_phone?: string | null;
           id?: string;
           salon_id: string;
           customer_id: string;
@@ -4101,6 +4111,9 @@ export interface Database {
         Update: {
           prescriber_authority?: string | null;
           prescriber_license?: string | null;
+          prescriber_address?: string | null;
+          prescriber_email?: string | null;
+          prescriber_phone?: string | null;
           id?: string;
           salon_id?: string;
           customer_id?: string;
@@ -4295,6 +4308,7 @@ export interface Database {
           route: string | null;
           pharmaceutical_form: string | null;
           // Exigidos por el RD 1718/2010 para que la farmacia pueda dispensar.
+          units_per_package: string | null;
           active_ingredient: string | null;
           id: string;
           salon_id: string;
@@ -4311,6 +4325,7 @@ export interface Database {
           route?: string | null;
           pharmaceutical_form?: string | null;
           active_ingredient?: string | null;
+          units_per_package?: string | null;
           id?: string;
           salon_id: string;
           prescription_id: string;
@@ -4326,6 +4341,7 @@ export interface Database {
           route?: string | null;
           pharmaceutical_form?: string | null;
           active_ingredient?: string | null;
+          units_per_package?: string | null;
           id?: string;
           salon_id?: string;
           prescription_id?: string;
