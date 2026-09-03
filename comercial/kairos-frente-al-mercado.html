@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="Informe comercial de Kairos para clinicas dentales: que hace, que no hace todavia y en que se diferencia del software del sector.">
+<meta name="description" content="Informe comercial de Kairos como plataforma multisector: que hace, que no hace todavia y en que se diferencia del software del mercado.">
 <title>Kairos frente al mercado</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,8 +12,8 @@
 
 <style>
   /* ─────────────────────────────────────────────────────────────────────────
-     Paleta de marca Kairos v1 — la misma que los informes que ya recibe la
-     clínica. El latón, con cuentagotas.
+     Paleta de marca Kairos v1 — la misma que los informes que ya reciben los
+     clientes. El latón, con cuentagotas.
      ───────────────────────────────────────────────────────────────────────── */
   :root {
     --ground:      #F4F1EA;
@@ -30,8 +30,6 @@
     --aviso:       #B37E29;
     --alerta:      #BE543F;
     --aviso-fondo: #FBF3E2;
-    --exito-fondo: #E9F3EE;
-    --sombra:      0 1px 2px rgba(22, 24, 31, .04), 0 8px 24px rgba(22, 24, 31, .05);
   }
 
   /* El tema del visor manda. Sin marca explícita solo separa prefers-color-scheme. */
@@ -51,8 +49,6 @@
       --aviso:       #D6A24B;
       --alerta:      #E0806A;
       --aviso-fondo: #2A2418;
-      --exito-fondo: #17251F;
-      --sombra:      0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .28);
     }
   }
   :root[data-theme="dark"] {
@@ -70,8 +66,6 @@
     --aviso:       #D6A24B;
     --alerta:      #E0806A;
     --aviso-fondo: #2A2418;
-    --exito-fondo: #17251F;
-    --sombra:      0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .28);
   }
 
   * { box-sizing: border-box; }
@@ -107,6 +101,7 @@
     color: var(--accent-text); margin: 0 0 .6rem;
   }
   .lead { font-size: 1.16rem; line-height: 1.55; color: var(--text-soft); max-width: 36em; }
+  .apunte { font-size: .82rem; color: var(--text-faint); max-width: 42em; }
 
   /* ── Cabecera ───────────────────────────────────────────────────────────── */
   header { padding-bottom: 2.5rem; border-bottom: 1px solid var(--rule); }
@@ -122,7 +117,6 @@
     text-transform: uppercase; color: var(--text-faint); margin-top: 1.75rem;
   }
 
-  /* ── Secciones ──────────────────────────────────────────────────────────── */
   section { padding-top: 3.25rem; }
   section + section { border-top: 1px solid var(--rule-soft); margin-top: 3.25rem; }
   section > h2 { margin-bottom: 1.1rem; }
@@ -140,10 +134,7 @@
     font-size: 1.85rem; font-weight: 600; line-height: 1.05;
     font-variant-numeric: tabular-nums; letter-spacing: -.02em;
   }
-  .cifra span {
-    display: block; margin-top: .35rem; font-size: .77rem; line-height: 1.35;
-    color: var(--text-faint);
-  }
+  .cifra span { display: block; margin-top: .35rem; font-size: .77rem; line-height: 1.35; color: var(--text-faint); }
 
   /* ── Tablas ─────────────────────────────────────────────────────────────── */
   .tabla-scroll { overflow-x: auto; margin: 1.6rem 0; }
@@ -161,22 +152,30 @@
   }
   tbody tr:last-child td { border-bottom: none; }
   th[scope="row"] { font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", monospace; font-size: .84rem; }
   .col-kairos { background: var(--surface); }
   thead .col-kairos { color: var(--accent-text); }
 
-  /* ── Rejilla de módulos ─────────────────────────────────────────────────── */
-  .modulos {
-    display: grid; gap: .55rem; margin: 1.6rem 0;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  /* ── Verticales ─────────────────────────────────────────────────────────── */
+  .verticales { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); margin: 1.75rem 0; }
+  .vertical {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 3px;
+    padding: 1.3rem 1.35rem; display: flex; flex-direction: column; gap: .55rem;
   }
-  .modulo {
-    background: var(--surface); border: 1px solid var(--rule-soft);
-    border-radius: 3px; padding: .8rem .95rem;
+  .vertical > header { border: none; padding: 0; display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
+  .vertical h3 { font-size: 1.18rem; }
+  .vertical ul { margin: .35rem 0 0; padding-left: 1.05rem; font-size: .86rem; line-height: 1.55; }
+  .vertical li { margin-bottom: .3rem; }
+  .vertical .idioma {
+    font-family: "IBM Plex Mono", monospace; font-size: .68rem; color: var(--text-faint);
+    border-top: 1px solid var(--rule-soft); padding-top: .7rem; margin-top: auto; line-height: 1.5;
   }
+
+  .modulos { display: grid; gap: .55rem; margin: 1.6rem 0; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+  .modulo { background: var(--surface); border: 1px solid var(--rule-soft); border-radius: 3px; padding: .8rem .95rem; }
   .modulo b { display: block; font-size: .92rem; font-weight: 600; }
   .modulo span { display: block; margin-top: .18rem; font-size: .8rem; color: var(--text-faint); line-height: 1.45; }
 
-  /* ── Notas ──────────────────────────────────────────────────────────────── */
   .nota {
     border-left: 2px solid var(--accent); background: var(--surface);
     padding: 1.05rem 1.25rem; margin: 1.6rem 0; border-radius: 0 3px 3px 0;
@@ -195,39 +194,26 @@
   .pastilla.previsto { color: var(--text-faint); }
 
   ul.limpia { margin: 1rem 0; padding-left: 1.15rem; max-width: 40em; }
-  ul.limpia li { margin-bottom: .5rem; }
+  ul.limpia li { margin-bottom: .55rem; }
 
-  /* ── Diagrama ───────────────────────────────────────────────────────────── */
   figure { margin: 1.9rem 0; }
   figure svg { display: block; width: 100%; max-width: 100%; height: auto; color: var(--text-soft); }
   figcaption { margin-top: .75rem; font-size: .8rem; color: var(--text-faint); max-width: 40em; }
 
-  /* ── Precio ─────────────────────────────────────────────────────────────── */
   .precio {
     display: grid; gap: 1px; background: var(--rule);
     grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
     border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; margin: 1.75rem 0;
   }
   .precio > div { background: var(--surface); padding: 1.3rem 1.25rem; }
-  .precio b {
-    display: block; font-family: "Source Serif 4", Georgia, serif;
-    font-size: 2rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
-  }
-  .precio em { display: block; font-style: normal; font-size: .72rem; font-family: "IBM Plex Mono", monospace;
-    letter-spacing: .13em; text-transform: uppercase; color: var(--text-faint); margin-bottom: .45rem; }
+  .precio b { display: block; font-family: "Source Serif 4", Georgia, serif; font-size: 2rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .precio em { display: block; font-style: normal; font-size: .72rem; font-family: "IBM Plex Mono", monospace; letter-spacing: .13em; text-transform: uppercase; color: var(--text-faint); margin-bottom: .45rem; }
   .precio span { display: block; margin-top: .4rem; font-size: .84rem; color: var(--text-soft); line-height: 1.45; }
 
-  footer {
-    margin-top: 4rem; padding-top: 1.75rem; border-top: 1px solid var(--rule);
-    font-size: .8rem; color: var(--text-faint);
-  }
+  footer { margin-top: 4rem; padding-top: 1.75rem; border-top: 1px solid var(--rule); font-size: .8rem; color: var(--text-faint); }
   footer h3 { font-size: .95rem; margin-bottom: .6rem; }
   footer ul { padding-left: 1.1rem; margin: .5rem 0; }
   footer li { margin-bottom: .3rem; }
-
-  @media (prefers-reduced-motion: no-preference) {
-    html { scroll-behavior: smooth; }
-  }
 </style>
 <style>
   /* El documento se envia suelto: aqui va el minimo que en el visor de
@@ -255,12 +241,12 @@
       <small>HAT3X</small>
     </div>
 
-    <p class="eyebrow">Informe comercial · Sector odontológico</p>
+    <p class="eyebrow">Informe comercial · La plataforma</p>
     <h1>Kairos frente<br>al mercado</h1>
     <p class="lead" style="margin-top:1.5rem">
-      Qué hace Kairos hoy, qué no hace todavía, y en qué se diferencia
-      realmente del software que una clínica dental puede contratar ahora
-      mismo en España.
+      Un solo sistema para gestionar un negocio de cita y mostrador —
+      peluquería, clínica dental o restaurante —. Qué hace hoy, qué no hace
+      todavía, y en qué se diferencia de verdad de lo que hay a la venta.
     </p>
     <p class="fecha">2 de septiembre de 2026</p>
   </header>
@@ -268,156 +254,222 @@
   <!-- ── 1. La tesis ────────────────────────────────────────────────────── -->
   <section>
     <p class="eyebrow">La idea</p>
-    <h2>Un programa que se escribe dentro de una clínica, no para una clínica</h2>
+    <h2>El mismo motor, hablando el idioma de cada negocio</h2>
     <p>
-      Kairos no nació de un catálogo de funciones. Nació trabajando dentro de
-      una clínica dental en funcionamiento, resolviendo lo que se rompía ese
-      día: una cita que no se podía solapar, un presupuesto que no se podía
-      cobrar, una firma que no se veía en pantalla, una receta que la farmacia
-      no aceptaría.
+      Una peluquería, una clínica dental y un restaurante parecen negocios
+      distintos, y en la parte de arriba lo son. Debajo hacen exactamente lo
+      mismo: llenan un hueco de agenda, atienden a alguien, le cobran, y
+      quieren que vuelva.
     </p>
     <p>
-      Eso tiene una consecuencia que se nota al usarlo. Las cosas están donde
-      alguien que trabaja en una clínica las buscaría, porque las colocó
-      alguien que estaba mirando cómo las buscaba.
+      Kairos construye ese fondo una sola vez —agenda, ficha, caja,
+      facturación, fidelización, personal, analítica— y encima le pone el
+      vocabulario y las herramientas de cada oficio. No es un producto
+      genérico con la palabra cambiada: la clínica ve un odontograma y el
+      restaurante ve las mesas, pero el ticket, el arqueo y la factura son el
+      mismo código, probado por los tres.
+    </p>
+    <p>
+      Eso tiene una consecuencia práctica: <strong>lo que se arregla para uno,
+      lo arregla para todos</strong>. Un fallo en el cobro que aparece en una
+      peluquería se corrige también en la clínica dental antes de que allí
+      llegue a pasar.
     </p>
 
     <div class="cifras">
-      <div class="cifra"><b>73</b><span>tablas de datos clínicos y de gestión</span></div>
+      <div class="cifra"><b>3</b><span>sectores en producción o construidos</span></div>
+      <div class="cifra"><b>73</b><span>tablas de datos</span></div>
       <div class="cifra"><b>2.498</b><span>pruebas automáticas, en verde</span></div>
       <div class="cifra"><b>246</b><span>cambios entregados solo en agosto</span></div>
-      <div class="cifra"><b>19</b><span>áreas de trabajo en la aplicación</span></div>
     </div>
-    <p style="font-size:.82rem;color:var(--text-faint);max-width:40em">
+    <p class="apunte">
       Cifras del propio sistema a 2 de septiembre de 2026. Las pruebas
-      automáticas son comprobaciones que se ejecutan solas cada vez que se
-      toca el programa: es lo que impide que arreglar una cosa rompa otra sin
-      que nadie se entere.
+      automáticas son comprobaciones que se ejecutan solas cada vez que se toca
+      el programa: es lo que impide que arreglar una cosa rompa otra sin que
+      nadie se entere.
     </p>
   </section>
 
-  <!-- ── 2. La foto del sector ──────────────────────────────────────────── -->
+  <!-- ── 2. El núcleo ───────────────────────────────────────────────────── -->
   <section>
-    <p class="eyebrow">El punto de partida</p>
-    <h2>Cómo está hoy el mercado español</h2>
-    <p>
-      Antes de comparar conviene mirar qué se encuentra una clínica cuando
-      busca software. Dos cosas llaman la atención, y las dos se pueden
-      comprobar en las webs de los propios fabricantes.
-    </p>
-
-    <h3 style="margin-top:1.75rem">Casi nadie publica el precio</h3>
-    <p>
-      El líder histórico del mercado español remite a su red comercial:
-      <em>«Consulta con tu coordinadora de zona la mejor oferta»</em>. Una de
-      las plataformas en la nube más conocidas muestra tres planes sin una
-      sola cifra: <em>«Solicita tu cotización»</em>. Para saber cuánto cuesta
-      hay que dar tus datos y esperar a que te llamen.
-    </p>
-    <p>
-      No es un detalle menor: significa que el precio depende de la
-      negociación, y que dos clínicas parecidas pueden estar pagando cosas
-      distintas por lo mismo.
-    </p>
-
-    <h3 style="margin-top:1.75rem">Buena parte del sector sigue instalada en Windows</h3>
-    <p>
-      El programa más extendido en España declara literalmente que
-      <em>«está diseñado exclusivamente para funcionar en ordenadores PC
-      Compatibles con Windows 10 o superior»</em>. Eso implica un ordenador
-      concreto, en una mesa concreta, con sus copias de seguridad, sus
-      actualizaciones y su día en que no arranca.
-    </p>
-    <div class="nota">
-      <p>
-        <strong>Que quede claro lo que no se está diciendo.</strong> Hay
-        plataformas dentales en la nube perfectamente serias, y llevan años
-        funcionando. Kairos no es la única que se abre en un navegador. Lo que
-        aquí se compara es el precio, la manera de trabajar y quién se
-        adapta a quién.
-      </p>
-    </div>
-  </section>
-
-  <!-- ── 3. Qué hace hoy ────────────────────────────────────────────────── -->
-  <section>
-    <p class="eyebrow">Lo que ya funciona</p>
-    <h2>Todo el día de la clínica, en un solo sitio</h2>
-    <p>
-      Nada de esta lista está anunciado: está construido, probado y en uso.
-      Lo que todavía no lo está tiene su propio apartado más abajo, y no se
-      esconde.
-    </p>
+    <p class="eyebrow">El fondo común</p>
+    <h2>Lo que todo negocio se lleva, sea del sector que sea</h2>
 
     <div class="modulos">
-      <div class="modulo"><b>Agenda y sala de espera</b><span>Citas por gabinete y por profesional, panel del día, lista de espera</span></div>
-      <div class="modulo"><b>Ficha del paciente</b><span>Datos, historia clínica, notas de evolución y documentos</span></div>
-      <div class="modulo"><b>Odontograma</b><span>Hallazgos diente a diente, con su estado y su presupuesto</span></div>
-      <div class="modulo"><b>Periodontograma</b><span>Sondaje por diente y por sitio</span></div>
-      <div class="modulo"><b>Planes y presupuestos</b><span>Por fases, con el estado de cada tratamiento</span></div>
-      <div class="modulo"><b>Cobro y caja</b><span>TPV, apertura y arqueo, métodos de pago, sesiones</span></div>
-      <div class="modulo"><b>Tickets y facturas</b><span>Emisión, impresión y facturas rectificativas</span></div>
-      <div class="modulo"><b>Ortodoncia</b><span>Visitas, plan de pagos a plazos y pedidos de laboratorio</span></div>
-      <div class="modulo"><b>Mutuas</b><span>Aseguradora, póliza y tarifa por servicio</span></div>
-      <div class="modulo"><b>Consentimientos</b><span>Plantillas versionadas y firma en tableta</span></div>
-      <div class="modulo"><b>Recetas</b><span>Emisión e impresión con los datos legales del prescriptor</span></div>
-      <div class="modulo"><b>Imágenes del paciente</b><span>Siete modalidades, con sus metadatos</span></div>
-      <div class="modulo"><b>Recordatorios</b><span>Avisos automáticos de cita por WhatsApp y SMS</span></div>
-      <div class="modulo"><b>Fichaje del personal</b><span>Entradas y salidas del equipo</span></div>
+      <div class="modulo"><b>Agenda</b><span>Citas por profesional y por espacio, panel del día, sala de espera, lista de espera</span></div>
+      <div class="modulo"><b>Ficha del cliente</b><span>Datos, historial de visitas, notas y documentos</span></div>
+      <div class="modulo"><b>Caja y TPV</b><span>Cobro, apertura y arqueo, métodos de pago, sesiones de caja</span></div>
+      <div class="modulo"><b>Tickets y facturas</b><span>Emisión, impresión y rectificativas</span></div>
+      <div class="modulo"><b>Fidelización</b><span>Puntos, recompensas y cupón de bienvenida</span></div>
+      <div class="modulo"><b>Servicios y precios</b><span>Catálogo, duración, precio y quién los presta</span></div>
+      <div class="modulo"><b>Productos y almacén</b><span>Venta de producto y movimientos de existencias</span></div>
+      <div class="modulo"><b>Personal</b><span>Horarios, excepciones, permisos y fichaje de entrada y salida</span></div>
+      <div class="modulo"><b>Varias sedes</b><span>Centros, espacios de trabajo y equipo por sede</span></div>
       <div class="modulo"><b>Analítica</b><span>Actividad, producción y cobro</span></div>
-      <div class="modulo"><b>Varias sedes</b><span>Sedes, gabinetes y personal por centro</span></div>
+      <div class="modulo"><b>Marca propia</b><span>Logo y aspecto del negocio dentro de la aplicación</span></div>
+      <div class="modulo"><b>Se enciende lo que se usa</b><span>Cada negocio activa solo los módulos que necesita</span></div>
     </div>
 
     <div class="nota">
       <p>
-        <strong>Una decisión que se nota todos los días:</strong> el estado
-        clínico y el estado de cobro van por separado. Un tratamiento puede
-        estar hecho y sin cobrar, o cobrado y sin hacer, porque en una clínica
-        real pasan las dos cosas. Y si se anula un ticket, sus tratamientos
-        vuelven solos a estar pendientes de cobro: no hay que acordarse de
+        <strong>Una decisión que se nota todos los días:</strong> lo que se ha
+        hecho y lo que se ha cobrado van por caminos separados. Un servicio
+        puede estar hecho y sin cobrar, o cobrado y sin hacer, porque en un
+        negocio real pasan las dos cosas. Y si se anula un ticket, sus líneas
+        vuelven solas a estar pendientes de cobro: no hay que acordarse de
         deshacer nada a mano.
       </p>
     </div>
   </section>
 
-  <!-- ── 4. La prueba ───────────────────────────────────────────────────── -->
+  <!-- ── 3. Las tres verticales ─────────────────────────────────────────── -->
   <section>
-    <p class="eyebrow">La prueba</p>
-    <h2>Una clínica real, con sus datos reales dentro</h2>
-    <p>
-      Kairos está en producción en <strong>Clínica Dental Biodental</strong>.
-      No con datos de demostración: con el historial que traían de su sistema
-      anterior, migrado y enlazado.
-    </p>
+    <p class="eyebrow">Encima del fondo común</p>
+    <h2>Lo que añade cada oficio</h2>
 
-    <div class="cifras">
-      <div class="cifra"><b>1.198</b><span>pacientes migrados</span></div>
-      <div class="cifra"><b>1.997</b><span>planes de tratamiento</span></div>
-      <div class="cifra"><b>7.932</b><span>líneas de tratamiento</span></div>
-      <div class="cifra"><b>5.255</b><span>hallazgos en el odontograma</span></div>
+    <div class="verticales">
+
+      <article class="vertical">
+        <header>
+          <h3>Peluquería</h3>
+          <span class="pastilla listo">En producción</span>
+        </header>
+        <ul>
+          <li>Agenda por profesional y por puesto</li>
+          <li>Fidelización con puntos y recompensas</li>
+          <li>Cupón de bienvenida para captación</li>
+          <li>Venta de producto sobre el mismo ticket</li>
+          <li>Historial de visitas del cliente</li>
+        </ul>
+        <p class="idioma">Cliente · Servicio · Profesional · «tu salón»</p>
+      </article>
+
+      <article class="vertical">
+        <header>
+          <h3>Odontología</h3>
+          <span class="pastilla listo">En producción</span>
+        </header>
+        <ul>
+          <li>Odontograma con hallazgos diente a diente</li>
+          <li>Periodontograma por diente y por sitio</li>
+          <li>Planes de tratamiento por fases y presupuestos</li>
+          <li>Ortodoncia con plan de pagos a plazos</li>
+          <li>Mutuas: aseguradora, póliza y tarifa</li>
+          <li>Consentimientos con firma en tableta</li>
+          <li>Recetas con los datos legales del prescriptor</li>
+          <li>Imágenes del paciente y pedidos de laboratorio</li>
+        </ul>
+        <p class="idioma">Paciente · Tratamiento · Dentista · «tu clínica»</p>
+      </article>
+
+      <article class="vertical">
+        <header>
+          <h3>Restauración</h3>
+          <span class="pastilla enobras">Construida, sin cliente aún</span>
+        </header>
+        <ul>
+          <li>Carta por categorías, con combos</li>
+          <li>Modificadores: «sin cebolla», «poco hecho»</li>
+          <li>Mesas y zonas de sala</li>
+          <li>Comandas y pantalla de cocina</li>
+          <li>Mostrador para pedidos sin mesa</li>
+        </ul>
+        <p class="idioma">Cliente · Producto · Empleado · «tu restaurante»</p>
+      </article>
+
     </div>
 
     <p>
-      El dato del que más orgullosos estamos no es ninguno de esos cuatro. Es
-      este: <strong>4.622 de esas líneas de tratamiento están enlazadas al
-      diente y al hallazgo exacto</strong> del que salieron — el 87 % —.
-      Cuando llegaron, esa relación se había perdido en la migración: el
-      presupuesto decía «obturación» y no decía de qué muela.
-    </p>
-    <p>
-      Reconstruirlo no fue buscar, fue emparejar: cruzar superficies, fechas y
-      tipo de tratamiento para decidir a qué hallazgo pertenecía cada línea, y
-      hacerlo sin asignar dos veces el mismo. Eso es lo que separa una
-      migración de un volcado.
-    </p>
-    <p style="font-size:.82rem;color:var(--text-faint);max-width:40em">
-      Cifras consultadas en la base de datos de producción el 2 de septiembre
-      de 2026. Se muestran volúmenes de actividad clínica; ninguna cifra
-      económica de la clínica aparece en este documento.
+      El cambio de vocabulario no es cosmético: lo declara el propio sistema,
+      en un solo sitio. Por eso la clínica no lee nunca «cliente» ni el
+      restaurante «servicio», sin que haya tres versiones del programa que
+      mantener por separado.
     </p>
   </section>
 
-  <!-- ── 5. Comparativa ─────────────────────────────────────────────────── -->
+  <!-- ── 4. La prueba ───────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">La prueba</p>
+    <h2>Negocios reales, con sus datos reales dentro</h2>
+    <p>
+      Kairos no se enseña con datos de demostración. Estos son los negocios
+      que están dentro y lo que tienen cargado, consultado en la base de datos
+      de producción el 2 de septiembre de 2026.
+    </p>
+
+    <div class="tabla-scroll">
+      <table>
+        <caption>Datos vivos en la plataforma</caption>
+        <thead>
+          <tr>
+            <th scope="col">Negocio</th>
+            <th scope="col">Sector</th>
+            <th scope="col" style="text-align:right">Clientes</th>
+            <th scope="col" style="text-align:right">Citas</th>
+            <th scope="col" style="text-align:right">Tickets</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Espiral</th><td>Peluquería</td><td class="num">4.445</td><td class="num">152</td><td class="num">34.883</td></tr>
+          <tr><th scope="row">Bella Studio</th><td>Peluquería</td><td class="num">122</td><td class="num">8.756</td><td class="num">2.017</td></tr>
+          <tr><th scope="row">Biodental</th><td>Odontología</td><td class="num">1.198</td><td class="num">124</td><td class="num">10</td></tr>
+          <tr><th scope="row" style="color:var(--accent-text)">Total plataforma</th><td>3 sectores · 7 sedes</td><td class="num">5.796</td><td class="num">9.120</td><td class="num">36.910</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cifras">
+      <div class="cifra"><b>68.804</b><span>visitas de historial</span></div>
+      <div class="cifra"><b>2.188</b><span>cobros registrados</span></div>
+      <div class="cifra"><b>2.017</b><span>movimientos de puntos de fidelización</span></div>
+      <div class="cifra"><b>32</b><span>profesionales dados de alta</span></div>
+    </div>
+
+    <div class="nota franca">
+      <p>
+        <strong>Dicho con precisión, porque la cifra grande engaña.</strong>
+        De esos 36.910 tickets, <strong>34.883 son historial migrado</strong> —
+        Espiral trajo cinco años y medio de ventas, desde enero de 2021— y
+        <strong>2.027 nacieron dentro de Kairos</strong>. Las dos cosas son
+        reales y significan cosas distintas: la primera demuestra que la
+        migración funciona, la segunda que el sistema se usa a diario.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── 5. La migración ────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Lo que casi nadie cuenta</p>
+    <h2>Cambiar de programa sin empezar de cero</h2>
+    <p>
+      El motivo por el que un negocio aguanta años con un software que no le
+      gusta casi nunca es el precio: es el miedo a perder el historial. Y con
+      razón, porque una migración mal hecha deja los datos dentro pero sin
+      relación entre ellos, que es como no tenerlos.
+    </p>
+    <p>
+      El mejor ejemplo está en Biodental. Llegaron 1.198 pacientes, 1.997
+      presupuestos y 7.932 líneas de tratamiento — y con la relación
+      importante rota: el presupuesto decía «obturación» pero ya no decía de
+      qué muela.
+    </p>
+
+    <div class="cifras">
+      <div class="cifra"><b>5.255</b><span>hallazgos del odontograma cargados</span></div>
+      <div class="cifra"><b>4.622</b><span>líneas reconectadas a su diente exacto</span></div>
+      <div class="cifra"><b>87 %</b><span>del total, desde un 28 % inicial</span></div>
+      <div class="cifra"><b>0</b><span>asignadas dos veces</span></div>
+    </div>
+
+    <p>
+      Reconstruirlo no fue buscar, fue emparejar: cruzar superficies, fechas y
+      tipo de tratamiento para decidir a qué hallazgo pertenecía cada línea, y
+      hacerlo sin que ninguna se asignara dos veces. Eso es lo que separa una
+      migración de un volcado, y va incluido en la implantación.
+    </p>
+  </section>
+
+  <!-- ── 6. Comparativa ─────────────────────────────────────────────────── -->
   <section>
     <p class="eyebrow">La comparación</p>
     <h2>En qué se diferencia de verdad</h2>
@@ -429,7 +481,7 @@
 
     <div class="tabla-scroll">
       <table>
-        <caption>Kairos frente a lo que se encuentra hoy una clínica</caption>
+        <caption>Kairos frente a lo que se encuentra hoy un negocio</caption>
         <thead>
           <tr>
             <th scope="col">&nbsp;</th>
@@ -441,43 +493,54 @@
           <tr>
             <th scope="row">El precio</th>
             <td class="col-kairos">Publicado y cerrado. Se sabe antes de hablar con nadie.</td>
-            <td>Presupuesto a medida tras contactar con la red comercial. Ni el líder del mercado ni una de las principales plataformas en la nube publican cifras.</td>
+            <td>Presupuesto a medida tras contactar con la red comercial. En el sector dental, ni el líder del mercado ni una de las principales plataformas en la nube publican cifras.</td>
           </tr>
           <tr>
             <th scope="row">Dónde funciona</th>
-            <td class="col-kairos">En un navegador. El ordenador de recepción, el del gabinete, una tableta o el móvil, a la vez.</td>
+            <td class="col-kairos">En un navegador. El mostrador, el gabinete, una tableta o el móvil, a la vez.</td>
             <td>Una parte importante del sector sigue siendo software instalado en Windows, atado a un ordenador y a sus copias de seguridad.</td>
           </tr>
           <tr>
+            <th scope="row">Un solo sistema</th>
+            <td class="col-kairos">El mismo programa sirve a una peluquería, una clínica y un restaurante. Lo que se arregla en uno queda arreglado en todos.</td>
+            <td>Productos separados por sector, cada uno con su versión, su calendario y sus fallos propios.</td>
+          </tr>
+          <tr>
             <th scope="row">Quién se adapta</th>
-            <td class="col-kairos">El programa a la clínica. Se cambió el sistema de citas porque una doctora necesitaba solapar dos, y se hizo solo para ella y con aviso.</td>
-            <td>La clínica al programa. Los cambios entran en la versión que toque, cuando toque.</td>
+            <td class="col-kairos">El programa al negocio. Se cambió el sistema de citas porque una doctora necesitaba solapar dos, y se hizo solo para ella y con aviso en pantalla.</td>
+            <td>El negocio al programa. Los cambios entran en la versión que toque, cuando toque.</td>
           </tr>
           <tr>
             <th scope="row">A qué ritmo cambia</th>
             <td class="col-kairos">246 cambios entregados en agosto de 2026. Lo que se pide un martes suele estar el jueves.</td>
             <td>Versiones periódicas, con su calendario de actualización.</td>
           </tr>
-          <tr>
-            <th scope="row">El equipo de rayos</th>
-            <td class="col-kairos">Un programa propio que se instala en el ordenador de rayos, arranca solo y lleva la radiografía a la ficha. <span class="pastilla enobras">En obras</span></td>
-            <td>Habitualmente, exportar a una carpeta y subir el fichero a mano, o una integración específica por fabricante.</td>
-          </tr>
         </tbody>
       </table>
     </div>
+
+    <div class="nota">
+      <p>
+        <strong>Que quede claro lo que no se está diciendo.</strong> Hay
+        plataformas de gestión perfectamente serias, y llevan años
+        funcionando. Kairos no es la única que se abre en un navegador. Lo que
+        aquí se compara es el precio, la manera de trabajar y quién se adapta
+        a quién — no se afirma nada sobre funciones de nadie que no se haya
+        podido verificar.
+      </p>
+    </div>
   </section>
 
-  <!-- ── 6. Radiología ──────────────────────────────────────────────────── -->
+  <!-- ── 7. Radiología ──────────────────────────────────────────────────── -->
   <section>
-    <p class="eyebrow">La diferencia que estamos construyendo</p>
-    <h2>La radiografía llega sola a la ficha</h2>
+    <p class="eyebrow">Lo que estamos construyendo ahora</p>
+    <h2>Que la radiografía llegue sola a la ficha</h2>
     <p>
-      Hoy, en la mayoría de clínicas, hacer una radiografía son dos programas
-      abiertos a la vez: se dispara en el del fabricante, se exporta a una
-      carpeta, se busca el fichero y se sube. Kairos queda de segunda
-      pantalla, y el nombre del paciente se teclea otra vez — con lo que eso
-      tiene de poder equivocarse.
+      Es la pieza más ambiciosa en marcha, y de momento vive en la vertical
+      dental. Hoy, en la mayoría de clínicas, hacer una radiografía son dos
+      programas abiertos a la vez: se dispara en el del fabricante, se exporta
+      a una carpeta, se busca el fichero y se sube. El nombre del paciente se
+      teclea otra vez, con lo que eso tiene de poder equivocarse.
     </p>
 
     <figure>
@@ -488,7 +551,6 @@
           </marker>
         </defs>
 
-        <!-- Fila de cajas -->
         <g fill="none" stroke="currentColor" stroke-width="1.1">
           <rect x="8"   y="52" width="150" height="62" rx="3"/>
           <rect x="222" y="52" width="150" height="62" rx="3"/>
@@ -507,7 +569,6 @@
           <text x="701" y="96" font-size="11" fill="var(--text-faint)">sola</text>
         </g>
 
-        <!-- Flechas -->
         <g stroke="currentColor" stroke-width="1.1" marker-end="url(#fl)">
           <line x1="160" y1="83" x2="218" y2="83"/>
           <line x1="374" y1="83" x2="432" y2="83"/>
@@ -520,11 +581,10 @@
           <text x="617" y="74">la imagen vuelve</text>
         </g>
 
-        <!-- Lo que ya no hace falta -->
+        <line x1="150" y1="140" x2="610" y2="140" stroke="var(--rule)" stroke-width="1"/>
         <g font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--text-faint)" text-anchor="middle">
           <text x="380" y="160">Sin exportar a una carpeta · sin buscar el fichero · sin volver a escribir el nombre</text>
         </g>
-        <line x1="150" y1="140" x2="610" y2="140" stroke="var(--rule)" stroke-width="1"/>
       </svg>
       <figcaption>
         El recorrido completo. La cita que ya está en Kairos viaja al equipo
@@ -542,9 +602,7 @@
     <div class="tabla-scroll">
       <table>
         <caption>Estado real de la radiología, sin adornos</caption>
-        <thead>
-          <tr><th scope="col">Pieza</th><th scope="col">Estado</th><th scope="col">Qué significa</th></tr>
-        </thead>
+        <thead><tr><th scope="col">Pieza</th><th scope="col">Estado</th><th scope="col">Qué significa</th></tr></thead>
         <tbody>
           <tr><th scope="row">Programa instalable</th><td><span class="pastilla listo">Hecho</span></td><td>Se instala y arranca solo con el ordenador. No hay que abrir nada por las mañanas.</td></tr>
           <tr><th scope="row">Captura desde la ficha</th><td><span class="pastilla listo">Hecho</span></td><td>Se dispara en el equipo y se pulsa un botón en la ficha: la imagen sube sola.</td></tr>
@@ -555,49 +613,57 @@
     </div>
   </section>
 
-  <!-- ── 7. Honestidad ──────────────────────────────────────────────────── -->
+  <!-- ── 8. Honestidad ──────────────────────────────────────────────────── -->
   <section>
     <p class="eyebrow">Lo que conviene saber antes</p>
     <h2>Lo que Kairos todavía no hace</h2>
     <p>
-      Esto va en el informe comercial a propósito. Una clínica que descubre un
-      límite después de firmar tiene razón en enfadarse; una que lo sabía
-      antes decide con la información delante.
+      Esto va en el informe comercial a propósito. Un negocio que descubre un
+      límite después de firmar tiene razón en enfadarse; uno que lo sabía antes
+      decide con la información delante.
     </p>
 
     <ul class="limpia">
       <li>
-        <strong>No emite recetas electrónicas.</strong> Emite e imprime
-        recetas con todos los datos legales del prescriptor, pero la receta
-        electrónica privada requiere darse de alta en el sistema del Consejo
-        General de Dentistas. Ese trámite está abierto y no depende de
-        nosotros.
+        <strong>La vertical de restauración no tiene todavía ningún cliente en
+        producción.</strong> Carta, mesas, comandas y cocina están construidas
+        y funcionan, pero solo se han probado en un negocio de demostración.
+        Un restaurante que entre ahora sería el primero, con lo bueno y lo
+        malo que eso tiene.
+      </li>
+      <li>
+        <strong>Los recordatorios automáticos de cita no se están enviando.</strong>
+        El módulo está construido y la cola tiene los avisos preparados, pero
+        el envío está apagado: hoy no sale ningún recordatorio solo. Es lo
+        primero de la lista.
+      </li>
+      <li>
+        <strong>No emite recetas electrónicas.</strong> Emite e imprime recetas
+        con todos los datos legales del prescriptor, pero la receta electrónica
+        privada requiere darse de alta en el sistema del Consejo General de
+        Dentistas. Ese trámite está abierto y no depende de nosotros.
       </li>
       <li>
         <strong>El registro de facturación de Verifactu está planificado, no
-        entregado.</strong> Tiene fecha propia, y llega antes que la
-        obligación: ver el apartado siguiente.
-      </li>
-      <li>
-        <strong>La radiología está a medias.</strong> Lo que funciona y lo que
-        no está detallado arriba, pieza por pieza.
+        entregado.</strong> Tiene fecha propia y llega antes que la obligación:
+        ver el apartado siguiente.
       </li>
       <li>
         <strong>Es un producto joven.</strong> El primer commit es del 11 de
-        julio de 2026. Lo que compensa esa juventud es el ritmo — 246 cambios
-        en un solo mes — y las 2.498 pruebas automáticas que impiden que ese
-        ritmo rompa cosas.
+        julio de 2026. Lo que compensa esa juventud es el ritmo —246 cambios en
+        un solo mes— y las 2.498 pruebas automáticas que impiden que ese ritmo
+        rompa cosas.
       </li>
     </ul>
   </section>
 
-  <!-- ── 8. Verifactu ───────────────────────────────────────────────────── -->
+  <!-- ── 9. Verifactu ───────────────────────────────────────────────────── -->
   <section>
     <p class="eyebrow">El calendario que viene</p>
     <h2>Verifactu, con fechas reales</h2>
     <p>
-      El Real Decreto-ley 15/2025 aplazó la entrada en vigor. Las fechas que
-      afectan a una clínica son estas:
+      Afecta a cualquier negocio que emita facturas, sea del sector que sea. El
+      Real Decreto-ley 15/2025 aplazó la entrada en vigor:
     </p>
 
     <div class="tabla-scroll">
@@ -612,23 +678,23 @@
     </div>
 
     <p>
-      Las clínicas dentales aparecen señaladas de forma explícita en las guías
-      del regulador, porque emiten factura simplificada en volumen. Kairos
-      tiene el registro encadenado, el QR y la remisión a la AEAT
-      <strong>planificados para el último trimestre de 2026</strong>, es
-      decir, entregados antes de que la obligación empiece.
+      Los negocios que emiten factura simplificada en volumen —una peluquería,
+      una clínica, un restaurante— aparecen señalados de forma explícita en las
+      guías del regulador. Kairos tiene el registro encadenado, el código QR y
+      la remisión a la AEAT <strong>planificados para el último trimestre de
+      2026</strong>, es decir, entregados antes de que la obligación empiece.
     </p>
     <div class="nota franca">
       <p>
         <strong>Dicho con todas las letras:</strong> hoy Kairos no hace
-        Verifactu. Está fechado y no está hecho. Si una clínica necesita ese
+        Verifactu. Está fechado y no está hecho. Si un negocio necesita ese
         cumplimiento funcionando esta semana, este documento no debe hacerle
         creer lo contrario.
       </p>
     </div>
   </section>
 
-  <!-- ── 9. Precio ──────────────────────────────────────────────────────── -->
+  <!-- ── 10. Precio ─────────────────────────────────────────────────────── -->
   <section>
     <p class="eyebrow">El precio</p>
     <h2>Publicado, y con el primer mes a cero</h2>
@@ -637,7 +703,7 @@
       <div>
         <em>Implantación</em>
         <b>290 €</b>
-        <span>Pago único. Alta, carga de los datos que traiga la clínica, formación del equipo y ajustes iniciales.</span>
+        <span>Pago único. Alta, carga de los datos que traiga el negocio, formación del equipo y ajustes iniciales.</span>
       </div>
       <div>
         <em>Cuota</em>
@@ -653,25 +719,25 @@
 
     <p>
       La carga de datos no es un extra ni un presupuesto aparte: entra en la
-      implantación. Es exactamente el trabajo descrito más arriba —los 1.198
-      pacientes y las 4.622 líneas enlazadas a su diente— y es la parte que
-      decide si un cambio de programa sale bien o se queda a medias.
+      implantación. Es exactamente el trabajo descrito más arriba —los cinco
+      años y medio de tickets de Espiral, las 4.622 líneas reconectadas a su
+      diente en Biodental— y es la parte que decide si un cambio de programa
+      sale bien o se queda a medias.
     </p>
-    <p style="font-size:.82rem;color:var(--text-faint);max-width:40em">
+    <p class="apunte">
       Importes de la tarifa vigente a septiembre de 2026, los mismos que
       figuran en el presupuesto de Clínica Dental Biodental. Sin permanencia.
     </p>
   </section>
 
-  <!-- ── 10. Cierre ─────────────────────────────────────────────────────── -->
+  <!-- ── 11. Cierre ─────────────────────────────────────────────────────── -->
   <section>
     <p class="eyebrow">En una línea</p>
     <h2>Lo que se está comprando</h2>
     <p class="lead" style="margin-bottom:1.25rem">
-      Un programa completo para el día a día de una clínica dental, con el
-      precio a la vista, que se abre en cualquier navegador, que cambia en
-      días cuando la clínica lo pide, y que va camino de hacer algo que hoy
-      casi nadie hace: que la radiografía llegue sola a la ficha del paciente.
+      Un solo programa para todo el día de un negocio de cita y mostrador, con
+      el precio a la vista, que se abre en cualquier navegador, que se trae el
+      historial de donde estuviera, y que cambia en días cuando se lo piden.
     </p>
     <p>
       Y con una lista escrita de lo que todavía no hace, para que nadie se
@@ -682,12 +748,13 @@
   <footer>
     <h3>Cómo se ha hecho este documento</h3>
     <p>
-      Todas las cifras de Kairos salen del propio sistema y de su base de
-      datos de producción, consultadas el 2 de septiembre de 2026. Las
-      afirmaciones sobre otras plataformas son citas literales de sus webs
-      públicas, y no se compara ninguna función que no se haya podido
-      verificar. Lo que está planificado y no entregado aparece marcado como
-      tal en todos los casos.
+      Todas las cifras de Kairos salen del propio sistema y de su base de datos
+      de producción, consultadas el 2 de septiembre de 2026. Se muestran
+      volúmenes de actividad; ninguna cifra económica de ningún negocio aparece
+      en este documento, ni ningún dato personal. Las afirmaciones sobre otras
+      plataformas son citas literales de sus webs públicas, y no se compara
+      ninguna función que no se haya podido verificar. Lo que está planificado
+      y no entregado aparece marcado como tal en todos los casos.
     </p>
     <h3 style="margin-top:1.5rem">Fuentes consultadas</h3>
     <ul>
