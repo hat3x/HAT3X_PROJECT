@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { SectionPlaceholder } from "@/app/(dashboard)/ajustes/section-placeholder";
 import { SalonDatosForm } from "@/app/(dashboard)/ajustes/datos/salon-datos-form";
@@ -10,6 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default async function DatosPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("datos");
+
   const salonId = await getActiveSalonId();
   if (salonId === null) {
     return (

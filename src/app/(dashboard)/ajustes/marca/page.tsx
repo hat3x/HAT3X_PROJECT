@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { SectionPlaceholder } from "@/app/(dashboard)/ajustes/section-placeholder";
 import { SalonMarcaForm } from "@/app/(dashboard)/ajustes/marca/salon-marca-form";
@@ -18,6 +19,8 @@ export const metadata: Metadata = {
  * ese caso el formulario arranca con los valores por defecto.
  */
 export default async function MarcaPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("marca");
+
   const salon = await getActiveSalon();
   if (salon === null) {
     return (

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { SectionPlaceholder } from "@/app/(dashboard)/ajustes/section-placeholder";
 import { SalonFiscalForm } from "@/app/(dashboard)/ajustes/fiscal/salon-fiscal-form";
@@ -10,6 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default async function FiscalPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("fiscal");
+
   const salonId = await getActiveSalonId();
   if (salonId === null) {
     return (

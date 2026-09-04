@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AjustesNav } from "@/app/(dashboard)/ajustes/ajustes-nav";
-import { canManageSettings, getActiveMembership, getActiveSalonSector } from "@/lib/salon";
+import { getActiveMembership, getActiveSalonSector } from "@/lib/salon";
+import { canEnterSettings } from "@/lib/settings/access";
 import { sectorTerms } from "@/lib/sector/registry";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,7 +19,11 @@ export const metadata: Metadata = {
  *
  * Guard de ruta (defensa en profundidad, como el resto de páginas del panel):
  * - Sin sesión → redirige a /login conservando el destino.
- * - Rol distinto de owner/manager (p. ej. staff) → redirige al panel.
+ * - Rol sin NINGUNA sección accesible → redirige al panel.
+ *
+ * Ya no basta con ser owner/manager: `staff` entra, pero solo verá las
+ * secciones que le corresponden (ver `@/lib/settings/access`). Cada sección
+ * repite su propia comprobación, porque este guard solo protege la puerta.
  *
  * Renderiza la navegación entre secciones y el contenido de la sección activa.
  */
@@ -35,7 +40,7 @@ export default async function AjustesLayout({
   }
 
   const membership = await getActiveMembership();
-  if (!canManageSettings(membership?.role)) {
+  if (!canEnterSettings(membership?.role)) {
     redirect("/dashboard");
   }
 
@@ -57,7 +62,7 @@ export default async function AjustesLayout({
       <div className="flex flex-col gap-8 md:flex-row md:gap-10">
         <aside className="md:w-56 md:shrink-0">
           <div className="md:sticky md:top-8">
-            <AjustesNav />
+            <AjustesNav role={membership?.role ?? null} />
           </div>
         </aside>
         <div className="min-w-0 flex-1">{children}</div>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getActiveMembership } from "@/lib/salon";
+import { canEditProfessionalSchedule } from "@/lib/settings/access";
 import { createClient } from "@/lib/supabase/server";
 import {
   exceptionSchema,
@@ -40,6 +41,53 @@ async function requireManagerSalonId(): Promise<
   }
   if (membership.role !== "owner" && membership.role !== "manager") {
     return { ok: false, error: "No tienes permiso para gestionar los horarios" };
+  }
+  return { ok: true, salonId: membership.salonId };
+}
+
+/**
+ * Resuelve el permiso para tocar el horario de UN profesional concreto.
+ *
+ * ── POR QUÉ NO VALE `requireManagerSalonId` PARA ESTO ───────────────────────
+ * Desde que `staff` entra a Ajustes (Kristel necesitaba llegar a su horario),
+ * "quien gestiona horarios" dejó de ser una sola cosa. Owner y manager tocan el
+ * de cualquiera; staff, solo el suyo.
+ *
+ * Y esto se comprueba AQUÍ, en el servidor, no ocultando profesionales en la
+ * pantalla: ocultarlos es cosmética, y quien sepa mandar una petición a mano
+ * puede pedir cualquier id. Esta función es la que decide.
+ *
+ * "El suyo" sale de `professionals.user_id`. Un staff sin ese vínculo no edita
+ * ninguno: sin él no hay forma de saber cuál le corresponde, y adivinarlo sería
+ * peor que negarlo.
+ */
+async function requireOwnScheduleAccess(
+  professionalId: string,
+): Promise<{ ok: true; salonId: string } | { ok: false; error: string }> {
+  const membership = await getActiveMembership();
+  if (membership === null) {
+    return { ok: false, error: "No tienes un salón asignado" };
+  }
+
+  let ownProfessionalId: string | null = null;
+  if (membership.role === "staff") {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("professionals")
+      .select("id")
+      .eq("salon_id", membership.salonId)
+      .eq("user_id", (await supabase.auth.getUser()).data.user?.id ?? "")
+      .maybeSingle();
+    // Falla en CERRADO: si no se puede saber cuál es su profesional, no se
+    // permite editar ninguno.
+    if (error !== null) {
+      return { ok: false, error: "No se pudo comprobar tu ficha de profesional" };
+    }
+    ownProfessionalId = data?.id ?? null;
+  }
+
+  if (!canEditProfessionalSchedule(membership.role, ownProfessionalId, professionalId)) {
+    return { ok: false, error: "Solo puedes editar tu propio horario" };
   }
   return { ok: true, salonId: membership.salonId };
 }
@@ -87,7 +135,7 @@ export async function saveWeeklySchedule(
     return { ok: false, error: firstIssue(parsed.error) };
   }
 
-  const auth = await requireManagerSalonId();
+  const auth = await requireOwnScheduleAccess(parsed.data.professional_id);
   if (!auth.ok) {
     return { ok: false, error: auth.error };
   }
@@ -251,7 +299,7 @@ export async function createException(
     return { ok: false, error: firstIssue(parsed.error) };
   }
 
-  const auth = await requireManagerSalonId();
+  const auth = await requireOwnScheduleAccess(parsed.data.professional_id);
   if (!auth.ok) {
     return { ok: false, error: auth.error };
   }
@@ -293,12 +341,30 @@ export async function createException(
 export async function deleteException(
   exceptionId: string,
 ): Promise<ActionResult<null>> {
-  const auth = await requireManagerSalonId();
+  // A diferencia de las demás, esta acción recibe el id de la EXCEPCIÓN y no el
+  // del profesional, así que primero hay que averiguar de quién es. Sin este
+  // paso, un staff podría borrar la excepción de un compañero pasando su id.
+  const supabase = createClient();
+  const { data: excepcion, error: lookupError } = await supabase
+    .from("schedule_exceptions")
+    .select("professional_id")
+    .eq("id", exceptionId)
+    .maybeSingle();
+
+  if (lookupError !== null) {
+    return { ok: false, error: "No se pudo comprobar la excepción" };
+  }
+  if (excepcion === null) {
+    // La RLS ya acota al salón, así que no encontrarla significa que no existe
+    // o que no es de esta clínica. Mismo mensaje para no distinguir los casos.
+    return { ok: false, error: "Esa excepción no existe o no es de tu clínica" };
+  }
+
+  const auth = await requireOwnScheduleAccess(excepcion.professional_id);
   if (!auth.ok) {
     return { ok: false, error: auth.error };
   }
 
-  const supabase = createClient();
   const { error } = await supabase
     .from("schedule_exceptions")
     .delete()

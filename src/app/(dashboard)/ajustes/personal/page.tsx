@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { ProfessionalsView } from "@/app/(dashboard)/ajustes/personal/professionals-view";
 import { getActiveSalonId } from "@/lib/salon";
@@ -14,6 +15,8 @@ export const metadata: Metadata = {
  * por lo que aquí solo resolvemos el salón activo para scopear la vista.
  */
 export default async function PersonalPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("personal");
+
   const salonId = await getActiveSalonId();
 
   if (salonId === null) {

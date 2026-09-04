@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { MutuasView } from "@/app/(dashboard)/ajustes/mutuas/mutuas-view";
 import { getActiveSalonId, getActiveSalonSector } from "@/lib/salon";
@@ -18,6 +19,8 @@ export const metadata: Metadata = {
  * directamente aunque `ajustes-nav.tsx` ya oculte el enlace fuera de odontología.
  */
 export default async function MutuasPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("mutuas");
+
   const [salonId, sector] = await Promise.all([
     getActiveSalonId(),
     getActiveSalonSector(),

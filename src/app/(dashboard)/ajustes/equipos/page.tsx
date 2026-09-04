@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { EquiposView } from "@/app/(dashboard)/ajustes/equipos/equipos-view";
 import { getActiveSalonId, getActiveSalonSector } from "@/lib/salon";
@@ -17,6 +18,8 @@ export const metadata: Metadata = {
  * `ajustes-nav.tsx` oculte el enlace fuera de odontología.
  */
 export default async function EquiposPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("equipos");
+
   const [salonId, sector] = await Promise.all([getActiveSalonId(), getActiveSalonSector()]);
 
   if (sector !== "odontologia") {

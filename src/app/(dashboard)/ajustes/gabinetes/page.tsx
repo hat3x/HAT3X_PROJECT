@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { GabinetesView } from "@/app/(dashboard)/ajustes/gabinetes/gabinetes-view";
 import { getActiveSalon } from "@/lib/salon";
@@ -13,6 +14,8 @@ export const metadata: Metadata = {
  * aquí solo queda la puerta de sector: un gabinete es de una clínica dental.
  */
 export default async function GabinetesPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("gabinetes");
+
   const salon = await getActiveSalon();
   if (salon === null) {
     return (

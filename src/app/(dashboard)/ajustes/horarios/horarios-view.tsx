@@ -29,6 +29,18 @@ import { useProfessionals } from "@/hooks/use-professionals";
 
 interface HorariosViewProps {
   salonId: string;
+  /**
+   * Si el usuario puede tocar el horario de la CLÍNICA (semanal y días
+   * sueltos). `staff` no: entra a esta sección para su propio horario, pero
+   * abrir o cerrar la clínica afecta a la agenda de todo el mundo.
+   */
+  canManageSalon?: boolean;
+  /**
+   * Profesional al que se limita la vista. `null` = todos (owner/manager).
+   * Para `staff` es el suyo, y entonces ni se pinta el selector: no hay nada
+   * que elegir.
+   */
+  onlyProfessionalId?: string | null;
 }
 
 const HORARIO_TABS = [
@@ -53,13 +65,25 @@ function hoyLocal(): string {
 
 export function HorariosView({
   salonId,
+  canManageSalon = true,
+  onlyProfessionalId = null,
 }: HorariosViewProps): React.ReactElement {
-  const { data: professionals, isPending, isError, error } = useProfessionals(
-    salonId,
-    "",
-  );
+  const { data: todos, isPending, isError, error } = useProfessionals(salonId, "");
+
+  // Ocultar aquí es COSMÉTICA: las server actions comprueban el permiso por su
+  // cuenta (`requireOwnScheduleAccess`). Esto solo evita enseñar puertas que
+  // están cerradas.
+  const professionals =
+    onlyProfessionalId === null
+      ? todos
+      : todos?.filter((p) => p.id === onlyProfessionalId);
   const [selectedId, setSelectedId] = useState("");
-  const [tab, setTab] = useState<string>("clinica");
+  // Sin permiso para el horario de la clínica no hay dos pestañas: solo la
+  // suya. Y arranca ahí, no en una pestaña vacía.
+  const tabs = canManageSalon
+    ? HORARIO_TABS
+    : HORARIO_TABS.filter((t) => t.id === "profesional");
+  const [tab, setTab] = useState<string>(canManageSalon ? "clinica" : "profesional");
 
   // Selecciona el primer profesional en cuanto llega la lista (o si el
   // seleccionado deja de existir, p. ej. tras eliminarlo en otra pestaña).
@@ -82,14 +106,14 @@ export function HorariosView({
       />
 
       <PillTabs
-        tabs={HORARIO_TABS}
+        tabs={tabs}
         active={tab}
         onChange={setTab}
         ariaLabel="Tipos de horario"
         className="mb-6"
       />
 
-      {tab === "clinica" ? (
+      {tab === "clinica" && canManageSalon ? (
         <Card className="animate-fade-up">
           <CardHeader>
             <CardTitle className="text-lg">Horario de la clínica</CardTitle>
@@ -107,7 +131,7 @@ export function HorariosView({
       {/* Días sueltos. Va justo debajo del horario semanal porque es donde se
           busca cuando el semanal no encaja: "esta tarde concreta sí abrimos".
           Antes, ese caso obligaba a abrir todos los martes del año. */}
-      {tab === "clinica" ? (
+      {tab === "clinica" && canManageSalon ? (
         <Card className="mt-4 animate-fade-up">
           <CardHeader>
             <CardTitle className="text-lg">Días sueltos</CardTitle>

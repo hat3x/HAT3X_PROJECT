@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { SedesView } from "@/app/(dashboard)/ajustes/sedes/sedes-view";
 import {
@@ -18,6 +19,8 @@ export const metadata: Metadata = {
  * vive en `ajustes/layout.tsx`; aquí solo resolvemos el salón activo.
  */
 export default async function SedesPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("sedes");
+
   const salonId = await getActiveSalonId();
 
   if (salonId === null) {

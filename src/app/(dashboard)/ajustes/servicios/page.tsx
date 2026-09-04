@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireSettingsSection } from "@/lib/settings/guard";
 
 import { ServicesView } from "@/app/(dashboard)/ajustes/servicios/services-view";
 import { getActiveSalonId } from "@/lib/salon";
@@ -14,6 +15,8 @@ export const metadata: Metadata = {
  * por lo que aquí solo resolvemos el salón activo para scopear la vista.
  */
 export default async function ServiciosPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("servicios");
+
   const salonId = await getActiveSalonId();
 
   if (salonId === null) {

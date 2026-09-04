@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ComplementosView } from "@/app/(dashboard)/ajustes/complementos/complementos-view";
 import { SectionPlaceholder } from "@/app/(dashboard)/ajustes/section-placeholder";
 import { getActiveSalonId } from "@/lib/salon";
+import { requireSettingsSection } from "@/lib/settings/guard";
 import { getReceptionistName, listSalonFeatures } from "@/lib/salon-features";
 import { createClient } from "@/lib/supabase/server";
 
@@ -22,6 +23,8 @@ export const metadata: Metadata = {
  * que la BD rechazaría. Ver `supabase/migrations/20260718100000_salon_features.sql`.
  */
 export default async function ComplementosPage(): Promise<React.ReactElement> {
+  await requireSettingsSection("complementos");
+
   const salonId = await getActiveSalonId();
   if (salonId === null) {
     return (

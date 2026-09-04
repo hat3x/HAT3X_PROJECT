@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 
 import { useSector, useTerms } from "@/components/providers/sector-provider";
+import { canAccessSettingsSection, type SettingsSection } from "@/lib/settings/access";
+import type { MemberRole } from "@/types/database";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -45,7 +47,12 @@ const NAV_ITEMS: readonly NavItem[] = [
  * en `md+` como una barra lateral vertical. Marca la sección activa con
  * `aria-current="page"` y un fondo de acento.
  */
-export function AjustesNav(): React.ReactElement {
+export interface AjustesNavProps {
+  /** Rol del usuario. Decide qué secciones se pintan. */
+  role: MemberRole | null;
+}
+
+export function AjustesNav({ role }: AjustesNavProps): React.ReactElement {
   const pathname = usePathname();
   const sector = useSector();
   const terms = useTerms();
@@ -83,12 +90,22 @@ export function AjustesNav(): React.ReactElement {
     );
   }
 
+  // Filtro de permisos AL FINAL, después del relabel por sector y de las
+  // inserciones de odontología: así una sección nueva pasa por el mismo tamiz
+  // sin que haya que acordarse de filtrarla en su sitio.
+  //
+  // Esto es cosmética, no seguridad: el layout y cada página comprueban el rol
+  // por su cuenta. Aquí solo se evita enseñar puertas que están cerradas.
+  const visibles = items.filter((item) =>
+    canAccessSettingsSection(item.href.replace("/ajustes/", "") as SettingsSection, role),
+  );
+
   return (
     <nav
       aria-label="Secciones de ajustes"
       className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2 md:mx-0 md:flex-col md:gap-1 md:overflow-x-visible md:px-0 md:pb-0"
     >
-      {items.map(({ href, label, icon: Icon }) => {
+      {visibles.map(({ href, label, icon: Icon }) => {
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
 
         return (
