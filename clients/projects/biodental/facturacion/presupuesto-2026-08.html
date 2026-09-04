@@ -218,6 +218,43 @@
     .todo { background: transparent; border-bottom: 1px solid #999; color: inherit; }
   }
   @page { size: A4; margin: 0; }
+
+  /* Distintivo de cortesía y línea de descuento */
+  .gratis {
+    display: inline-block;
+    font-size: 7pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #fff;
+    background: #12A150;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .cortesia td { background: #F2FBF5; }
+  .cortesia td:last-child { color: #12A150; }
+  .subtotal-fila td {
+    border-bottom: 1px solid var(--linea);
+    font-size: 10pt;
+    font-weight: 600;
+    color: var(--suave);
+  }
+  .subtotal-fila td:first-child { text-align: right; }
+  .subtotal-fila td:last-child { color: var(--tinta); }
+
+  /* Resultado del servicio */
+  .resultado { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+  .hito {
+    border: 1px solid var(--linea);
+    border-left: 3px solid var(--naranja);
+    border-radius: 0 9px 9px 0;
+    padding: 11px 14px;
+    background: #fff;
+  }
+  .hito .dato { font-size: 13pt; font-weight: 800; color: var(--violeta); line-height: 1.2; }
+  .hito .texto { font-size: 9pt; color: #47506A; margin-top: 3px; line-height: 1.4; }
 </style>
 
 <div class="cabecera">
@@ -229,7 +266,7 @@
     <h1>Presupuesto mensual</h1>
     <div class="doc-meta">
       Nº <strong>BIO-2026-08</strong><br>
-      Fecha de emisión: <strong>4 de agosto de 2026</strong>
+      Fecha de emisión: <strong>31 de agosto de 2026</strong>
     </div>
   </div>
 </div>
@@ -278,7 +315,7 @@
     </tr>
     <tr>
       <td>
-        <div class="concepto">App de gestión Kairos <span class="nuevo">Nuevo</span></div>
+        <div class="concepto">Cuota mensual — App de gestión Kairos <span class="nuevo">Nuevo</span></div>
         <div class="detalle">
           Acceso a la plataforma Kairos para la gestión de la clínica: agenda de citas,
           ficha de pacientes, tratamientos y facturación. Alta el 5 de agosto de 2026.
@@ -287,9 +324,24 @@
       </td>
       <td>60,00 €</td>
     </tr>
+    <tr class="cortesia">
+      <td>
+        <div class="concepto">Primer mes de Kairos sin coste <span class="gratis">Cortesía</span></div>
+        <div class="detalle">
+          Mes de puesta en marcha de la aplicación: alta, carga de datos de la clínica,
+          formación del equipo y ajustes iniciales. HAT3X no repercute la cuota de agosto.
+          La cuota de Kairos comienza a facturarse a partir de septiembre de 2026.
+        </div>
+      </td>
+      <td>− 60,00 €</td>
+    </tr>
+    <tr class="subtotal-fila">
+      <td>Cuota Kairos aplicada este periodo</td>
+      <td>0,00 €</td>
+    </tr>
     <tr class="total-fila">
       <td>Total del periodo</td>
-      <td class="total-importe">350,00 €</td>
+      <td class="total-importe">290,00 €</td>
     </tr>
   </tbody>
 </table>
@@ -300,32 +352,97 @@
   <li>Gestión completa de la agenda: comprobación de disponibilidad real, creación, modificación y cancelación de citas sobre Google Calendar.</li>
   <li>Registro de todas las citas en la hoja de control de la clínica.</li>
   <li>Envío automático de SMS de confirmación al paciente tras cada cita creada.</li>
+  <li>Recordatorio automático por SMS el día previo a la cita, para reducir ausencias.</li>
+  <li>Aviso por SMS al paciente cuando su cita se cancela o se modifica.</li>
+  <li>Envío de mensajes de recuperación a pacientes sin visita reciente.</li>
+  <li>Identificación del paciente que llama y consulta de su historial de citas.</li>
   <li>Derivación de solicitudes de ortodoncia al responsable del tratamiento.</li>
   <li>App Kairos: agenda, ficha de pacientes, tratamientos y facturación de la clínica.</li>
+  <li>Puesta en marcha de Kairos: alta, carga de datos, formación del equipo y ajustes iniciales.</li>
   <li>Mantenimiento correctivo, ajustes de horario y actualización de servicios.</li>
   <li>Supervisión del funcionamiento y corrección de incidencias.</li>
 </ul>
 
-<h3 class="seccion">Actividad del periodo <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--suave);font-size:8pt;">· se completa a fin de mes</span></h3>
+<h3 class="seccion">Actividad del periodo <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--suave);font-size:8pt;">· datos de 1 — 31 de agosto de 2026</span></h3>
 <div class="uso">
   <div class="metrica">
-    <div class="cifra todo">[—]</div>
+    <div class="cifra">114</div>
     <div class="etiqueta">Llamadas atendidas</div>
   </div>
   <div class="metrica">
-    <div class="cifra todo">[—]</div>
+    <div class="cifra">32</div>
     <div class="etiqueta">Citas gestionadas</div>
   </div>
   <div class="metrica">
-    <div class="cifra todo">[—]</div>
+    <div class="cifra">119</div>
     <div class="etiqueta">Minutos de conversación</div>
   </div>
+  <div class="metrica">
+    <div class="cifra">77</div>
+    <div class="etiqueta">SMS enviados</div>
+  </div>
+  <div class="metrica">
+    <div class="cifra">58</div>
+    <div class="etiqueta">Pacientes distintos</div>
+  </div>
+  <div class="metrica">
+    <div class="cifra">24</div>
+    <div class="etiqueta">Días con actividad</div>
+  </div>
 </div>
+<p style="font-size:8.5pt;color:var(--suave);margin:9px 2px 0;">
+  De las 114 llamadas de pacientes recibidas, 111 se atendieron y completaron, procedentes de
+  58 números distintos. Las 32 citas gestionadas se reparten en 27 altas nuevas, 3
+  modificaciones y 2 cancelaciones, además de 1 derivación de ortodoncia al responsable del
+  tratamiento. Los 77 SMS enviados incluyen 28 confirmaciones de cita, 36 recordatorios del
+  día previo, 5 avisos de cancelación y 8 mensajes de recuperación de pacientes sin visita
+  reciente. No se contabilizan las llamadas ni los mensajes de las pruebas técnicas de HAT3X.
+</p>
+
+<h3 class="seccion">Resultado para la clínica</h3>
+<div class="resultado">
+  <div class="hito">
+    <div class="dato">45 de 114 llamadas</div>
+    <div class="texto">
+      entraron con la clínica cerrada — el 39 % del total. Fuera de horario, antes de abrir,
+      en fin de semana o el día de cierre del 3 de agosto. Todas fueron atendidas.
+    </div>
+  </div>
+  <div class="hito">
+    <div class="dato">11 de las 27 citas nuevas</div>
+    <div class="texto">
+      se reservaron fuera del horario de atención — cuatro de cada diez. Una parte importante
+      de la agenda nueva del mes se llenó en momentos en que nadie podía coger el teléfono.
+    </div>
+  </div>
+  <div class="hito">
+    <div class="dato">111 llamadas atendidas al primer intento</div>
+    <div class="texto">
+      Sin espera, sin buzón de voz y sin línea ocupada, incluso con varias llamadas a la vez.
+    </div>
+  </div>
+  <div class="hito">
+    <div class="dato">36 recordatorios enviados</div>
+    <div class="texto">
+      Un SMS a cada paciente el día antes de su cita, para reducir las ausencias sin que la
+      clínica tenga que llamar una por una.
+    </div>
+  </div>
+</div>
+<p style="font-size:8.5pt;color:var(--suave);margin:10px 2px 0;">
+  Además, se contactó por SMS con 8 pacientes sin visita reciente para proponerles su revisión,
+  y se derivó 1 solicitud de ortodoncia al responsable del tratamiento.
+</p>
 
 <div class="nota">
   <p>
-    <strong>Novedad de agosto.</strong> Se incorpora la app de gestión Kairos (60 €/mes),
-    con alta el 5 de agosto de 2026. La cuota mensual pasa de 290 € a 350 €.
+    <strong>Novedad de agosto.</strong> Se incorpora la app de gestión Kairos, con alta el
+    5 de agosto de 2026. Su cuota es de 60 €/mes, pero el primer mes se ofrece sin coste:
+    el importe de agosto se mantiene en 290 €.
+  </p>
+  <p>
+    <strong>A partir de septiembre de 2026</strong> la cuota mensual conjunta pasa a ser de
+    350 € (290 € de la recepcionista «Sara» + 60 € de la app Kairos).
   </p>
   <p>
     <strong>Nota:</strong> el presente documento detalla los servicios prestados y su importe.
