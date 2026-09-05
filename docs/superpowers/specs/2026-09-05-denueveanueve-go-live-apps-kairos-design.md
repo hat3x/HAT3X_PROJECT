@@ -184,14 +184,19 @@ mano sobre datos reales.
 
 ## 5. Errores y casos límite
 
-- **Invitar un email que ya es usuario de otro salón.** Supabase devuelve el usuario
-  existente; la acción inserta la membresía sin crear cuenta nueva. Una persona puede
+- **Invitar un email que ya es usuario de otro salón.** `inviteUserByEmail` **falla** si el
+  email ya está registrado, así que la acción consulta primero si esa cuenta existe y, si la
+  hay, se limita a añadir la membresía de este salón sin invitar de nuevo. Una persona puede
   pertenecer a varios salones, que es el comportamiento correcto en multi-tenant.
+  `auth.users` no está expuesta por PostgREST: la consulta va por una función
+  `public.user_id_by_email(text)` `SECURITY DEFINER` que devuelve **solo** el uuid y cuyo
+  `EXECUTE` está revocado a todos salvo `service_role`.
 - **Revocar y volver a dar acceso.** La segunda invitación reutiliza el usuario; el
   histórico de la persona sigue ligado a su ficha de profesional, no a la membresía.
 - **Profesional con acceso que se elimina.** Borrar la ficha deja al usuario con membresía
-  pero sin ficha: entra en la app y no tiene agenda. La eliminación debe revocar primero, o
-  bloquearse mientras haya acceso vivo.
+  pero sin ficha: entra en la app y no tiene agenda, y ya nadie puede revocarle el acceso
+  desde la UI porque la fila desde la que se revoca ha desaparecido. `deleteProfessional`
+  se bloquea mientras haya acceso vivo y pide revocar primero.
 - **Usuario borrado en Supabase Auth.** La FK existente pone `user_id` a nulo por sí sola,
   pero la fila de `salon_members` quedaría huérfana. La revocación es siempre la vía
   correcta; el borrado directo de usuarios no forma parte de ningún flujo de la app.
