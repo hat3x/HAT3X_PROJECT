@@ -46,7 +46,7 @@ function makeItem(overrides: Partial<ProfessionalListItem> = {}): ProfessionalLi
 
 describe('PROFESSIONALS_SELECT', () => {
   it('pide las columnas base del listado', () => {
-    for (const col of ['id', 'salon_id', 'full_name', 'active', 'color', 'specialties']) {
+    for (const col of ['id', 'salon_id', 'full_name', 'active', 'color', 'specialties', 'user_id']) {
       expect(PROFESSIONALS_SELECT).toContain(col);
     }
   });
@@ -69,6 +69,11 @@ describe('mapProfessionalRow', () => {
       specialties: ['color'],
     });
     expect(item.services).toEqual([{ id: 'svc-1', name: 'Corte', active: true }]);
+  });
+
+  it('mapea user_id a userId cuando la ficha SÍ está ligada a una cuenta', () => {
+    const item = mapProfessionalRow(makeRow({ user_id: 'user-abc-123' }));
+    expect(item.userId).toBe('user-abc-123');
   });
 
   it('es null-safe: sin servicios ni specialties ⇒ arrays vacíos', () => {
