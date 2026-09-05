@@ -31,6 +31,7 @@ function makePro(overrides: Partial<ProfessionalListItem> = {}): ProfessionalLis
     active: true,
     color: '#22c55e',
     specialties: [],
+    userId: null,
     services: [{ id: 'svc-1', name: 'Corte' }],
     ...overrides,
   };

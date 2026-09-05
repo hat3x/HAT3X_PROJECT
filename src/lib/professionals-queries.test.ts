@@ -57,6 +57,7 @@ function makeRow(overrides: Partial<ProfessionalRow> = {}): ProfessionalRow {
     active: true,
     color: '#22c55e',
     specialties: null,
+    user_id: null,
     professional_services: null,
     ...overrides,
   };

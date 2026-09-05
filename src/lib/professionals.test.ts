@@ -22,6 +22,7 @@ function makeRow(overrides: Partial<ProfessionalRow> = {}): ProfessionalRow {
     active: true,
     color: '#22c55e',
     specialties: ['color'],
+    user_id: null,
     professional_services: [
       { service: { id: 'svc-1', name: 'Corte', active: true } },
     ],
@@ -37,6 +38,7 @@ function makeItem(overrides: Partial<ProfessionalListItem> = {}): ProfessionalLi
     active: true,
     color: '#22c55e',
     specialties: [],
+    userId: null,
     services: [],
     ...overrides,
   };

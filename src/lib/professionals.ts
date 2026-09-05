@@ -33,6 +33,7 @@ export const PROFESSIONALS_SELECT: string = `
   active,
   color,
   specialties,
+  user_id,
   professional_services (
     service:services!professional_services_service_id_fkey ( id, name, active )
   )
@@ -62,6 +63,8 @@ export interface ProfessionalRow {
   active: boolean;
   color: string | null;
   specialties: string[] | null;
+  /** Vínculo cuenta↔ficha: null si la ficha aún no está ligada a ninguna cuenta. */
+  user_id: string | null;
   professional_services: ProfessionalServiceEmbedRow[] | null;
 }
 
@@ -73,6 +76,8 @@ export interface ProfessionalListItem {
   active: boolean;
   color: string | null;
   specialties: string[];
+  /** Vínculo cuenta↔ficha (columna `user_id`): null si la ficha no está ligada a ninguna cuenta. */
+  userId: string | null;
   /** Servicios que presta, DEDUPLICADOS por id y ORDENADOS por nombre (collation ES). */
   services: ProfessionalServiceRef[];
 }
@@ -104,6 +109,7 @@ export function mapProfessionalRow(row: ProfessionalRow): ProfessionalListItem {
     active: row.active,
     color: row.color ?? null,
     specialties: row.specialties ?? [],
+    userId: row.user_id,
     services,
   };
 }
