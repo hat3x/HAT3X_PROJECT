@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tema por defecto (fallback): dorado sobre oscuro, estética de salón premium. NO es
+       la marca de ningún salón concreto: al resolver el salón en runtime, deriveSalonTheme
+       (src/lib/theme.ts) sobrescribe los tokens de marca con su color real. */
+    --background: 30 10% 6%;
+    --foreground: 40 20% 90%;
+
+    --card: 30 8% 10%;
+    --card-foreground: 40 20% 90%;
+
+    --popover: 30 8% 10%;
+    --popover-foreground: 40 20% 90%;
+
+    --primary: 38 60% 50%;
+    --primary-foreground: 30 10% 6%;
+
+    --secondary: 30 8% 14%;
+    --secondary-foreground: 40 20% 85%;
+
+    --muted: 30 6% 16%;
+    --muted-foreground: 30 10% 55%;
+
+    --accent: 38 45% 40%;
+    --accent-foreground: 40 20% 95%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 30 8% 18%;
+    --input: 30 8% 16%;
+    --ring: 38 60% 50%;
+
+    --radius: 0.75rem;
+
+    /* Custom tokens */
+    --gold: 38 60% 50%;
+    --gold-light: 38 55% 65%;
+    --gold-dark: 38 50% 35%;
+    --gold-muted: 38 30% 25%;
+    --surface-elevated: 30 8% 12%;
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 30 10% 6%;
+    --info: 210 80% 55%;
+    --info-foreground: 210 90% 95%;
+
+    /* Calendar day types */
+    --cal-available: 210 70% 50%;
+    --cal-vacation: 152 60% 40%;
+    --cal-sick: 0 72% 51%;
+    --cal-holiday: 45 93% 47%;
+
+    /* Gradients */
+    --gradient-gold: linear-gradient(135deg, hsl(38 60% 50%), hsl(42 55% 60%));
+    --gradient-dark: linear-gradient(180deg, hsl(30 10% 6%), hsl(30 8% 10%));
+    --gradient-card: linear-gradient(145deg, hsl(30 8% 12%), hsl(30 8% 9%));
+
+    /* Shadows */
+    --shadow-gold: 0 4px 20px -4px hsl(38 60% 50% / 0.25);
+    --shadow-elevated: 0 8px 32px -8px hsl(0 0% 0% / 0.5);
+    --shadow-card: 0 2px 12px -2px hsl(0 0% 0% / 0.3);
+
+    /* Fonts */
+    --font-display: 'Josefin Sans', sans-serif;
+    --font-body: 'Josefin Sans', sans-serif;
+
+    /* Sidebar */
+    --sidebar-background: 30 8% 8%;
+    --sidebar-foreground: 40 20% 85%;
+    --sidebar-primary: 38 60% 50%;
+    --sidebar-primary-foreground: 30 10% 6%;
+    --sidebar-accent: 30 8% 14%;
+    --sidebar-accent-foreground: 40 20% 90%;
+    --sidebar-border: 30 8% 15%;
+    --sidebar-ring: 38 60% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .gradient-gold {
+    background: var(--gradient-gold);
+  }
+
+  .gradient-dark {
+    background: var(--gradient-dark);
+  }
+
+  .shadow-gold {
+    box-shadow: var(--shadow-gold);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .text-gold {
+    color: hsl(var(--gold));
+  }
+
+  .text-gold-light {
+    color: hsl(var(--gold-light));
+  }
+
+  .border-gold {
+    border-color: hsl(var(--gold) / 0.3);
+  }
+
+  .bg-surface-elevated {
+    background-color: hsl(var(--surface-elevated));
+  }
+}

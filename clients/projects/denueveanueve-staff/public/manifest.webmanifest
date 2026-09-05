@@ -1,0 +1,21 @@
+{
+  "name": "Salón OS · Staff",
+  "short_name": "Staff",
+  "description": "Panel interno del equipo del salón (Salón OS). Acredita visitas y gestiona clientes.",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1610",
+  "theme_color": "#1a1610",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

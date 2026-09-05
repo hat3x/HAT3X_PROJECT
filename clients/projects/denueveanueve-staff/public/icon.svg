@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Salón OS Staff">
+  <!-- Icono NEUTRO por defecto (no específico de ningún salón). Maskable: el fondo llega
+       a bordes y el motivo queda dentro de la zona segura central (~80%). -->
+  <rect width="512" height="512" fill="#1a1610"/>
+  <g fill="none" stroke="#c8a24b" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Tijeras estilizadas (marca genérica de peluquería). -->
+    <circle cx="184" cy="336" r="36"/>
+    <circle cx="328" cy="336" r="36"/>
+    <path d="M210 312 L372 156"/>
+    <path d="M302 312 L140 156"/>
+    <circle cx="256" cy="250" r="9" fill="#c8a24b" stroke="none"/>
+  </g>
+</svg>

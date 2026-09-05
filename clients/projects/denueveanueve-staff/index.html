@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Título/marca NEUTROS: Salón OS es multi-tenant. El salón real (nombre, color,
+         icono) se resuelve en runtime y sobrescribe estos valores (ver src/lib/salon-context.tsx
+         y src/lib/pwa-manifest.ts). Aquí solo va el fallback pre-JS, sin cablear a ningún salón. -->
+    <title>Staff · Salón OS</title>
+    <meta name="description" content="Panel interno del equipo del salón (Salón OS)." />
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <meta property="og:title" content="Staff · Salón OS" />
+    <meta property="og:description" content="Panel interno del equipo del salón." />
+    <meta property="og:type" content="website" />
+
+    <!-- PWA: manifest estático neutro (instalable de por sí); en runtime se sustituye por
+         uno con la marca del salón. theme-color se actualiza también al resolver el salón. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <meta name="theme-color" content="#1a1610" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Staff" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
