@@ -38,8 +38,10 @@ interface AppSidebarProps {
   logoUrl?: string | null;
   /** Rol del usuario (reservado; el descriptor de cuenta se mostrará en Ajustes). */
   role: MemberRole | null;
-  /** Si el usuario puede ver la sección de ajustes (owner/manager). */
+  /** Si se le muestra el enlace a Ajustes. `staff` incluido: dentro tiene lo suyo. */
   showSettings: boolean;
+  /** Si ve materia de gestión (analítica, facturación, arqueo). Owner/manager. */
+  showManagement?: boolean;
 }
 
 /**
@@ -59,6 +61,7 @@ export function AppSidebar({
   brandName,
   logoUrl,
   showSettings,
+  showManagement = false,
 }: AppSidebarProps): React.ReactElement {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -70,7 +73,7 @@ export function AppSidebar({
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const hasPos = useHasPos();
   const sector = useSector();
-  const items = buildDashboardNavItems({ showSettings, hasPos, sector });
+  const items = buildDashboardNavItems({ showSettings, showManagement, hasPos, sector });
   const brand = brandName?.trim() ? brandName : "Kairos";
   const logo = logoUrl?.trim() ? logoUrl : null;
 

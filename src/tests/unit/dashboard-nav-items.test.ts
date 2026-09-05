@@ -34,7 +34,7 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
   });
 
   it("owner/manager con `pos`: Analítica, Facturación, Arqueo y Ajustes visibles", () => {
-    const items = hrefs(buildDashboardNavItems({ showSettings: true, hasPos: true }));
+    const items = hrefs(buildDashboardNavItems({ showSettings: true, showManagement: true, hasPos: true }));
 
     expect(items).toContain(ANALITICA_ITEM.href);
     expect(items).toContain(FACTURACION_ITEM.href);
@@ -43,7 +43,7 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
   });
 
   it("owner/manager SIN `pos`: Facturación OCULTA; Analítica y Ajustes permanecen", () => {
-    const items = hrefs(buildDashboardNavItems({ showSettings: true, hasPos: false }));
+    const items = hrefs(buildDashboardNavItems({ showSettings: true, showManagement: true, hasPos: false }));
 
     expect(items).not.toContain(FACTURACION_ITEM.href);
     // La analítica de gestión (ocupación) no depende de `pos` → sigue visible.
@@ -64,7 +64,7 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
   });
 
   it("Facturación se coloca entre Analítica y Ajustes (del «cómo va» al «papeleo»)", () => {
-    const items = hrefs(buildDashboardNavItems({ showSettings: true, hasPos: true }));
+    const items = hrefs(buildDashboardNavItems({ showSettings: true, showManagement: true, hasPos: true }));
 
     expect(items.indexOf(ANALITICA_ITEM.href)).toBeLessThan(
       items.indexOf(FACTURACION_ITEM.href),
@@ -82,7 +82,7 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
   });
 
   it("restauración: owner ve el item Carta y NO 'Próximamente'", () => {
-    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
+    const items = buildDashboardNavItems({ showSettings: true, showManagement: true, hasPos: true, sector: "restauracion" });
     const hrefs = items.map((i) => i.href);
     expect(hrefs).toContain("/carta");
     expect(hrefs).not.toContain("/proximamente");
@@ -99,7 +99,7 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
     expect(hrefs).not.toContain("/carta");
   });
   it("restauración: owner ve Mostrador y Carta", () => {
-    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
+    const items = buildDashboardNavItems({ showSettings: true, showManagement: true, hasPos: true, sector: "restauracion" });
     const hrefs = items.map((i) => i.href);
     expect(hrefs).toContain("/mostrador");
     expect(hrefs).toContain("/carta");
@@ -123,10 +123,65 @@ describe("buildDashboardNavItems · gating por rol y `pos`", () => {
     expect(hrefs).not.toContain("/carta");
   });
   it("restauración: manager ve Sala y conserva Arqueo; sigue sin Caja", () => {
-    const items = buildDashboardNavItems({ showSettings: true, hasPos: true, sector: "restauracion" });
+    const items = buildDashboardNavItems({ showSettings: true, showManagement: true, hasPos: true, sector: "restauracion" });
     const hrefs = items.map((i) => i.href);
     expect(hrefs).toContain("/sala");
     expect(hrefs).toContain("/arqueo");
     expect(hrefs).not.toContain("/tpv");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ajustes y gestión son DOS permisos distintos
+// ---------------------------------------------------------------------------
+
+describe("buildDashboardNavItems · Ajustes no arrastra la gestión", () => {
+  // La regresión que fija este bloque: `showSettings` era UNA bandera que
+  // controlaba cuatro cosas —Analítica, Facturación, Arqueo y Ajustes—. Al
+  // abrir Ajustes a `staff` para que Kristel llegara a su horario, se
+  // destaparon las otras tres de golpe. Son permisos distintos y ahora se piden
+  // por separado.
+  const gestion = ["/analitica", "/facturacion", "/arqueo"];
+
+  it("staff ve el enlace de Ajustes", () => {
+    const items = hrefs(buildDashboardNavItems({
+      showSettings: true, showManagement: false, hasPos: true,
+    }));
+    expect(items).toContain(SETTINGS_ITEM.href);
+  });
+
+  it("staff NO ve analitica, facturacion ni arqueo", () => {
+    const items = hrefs(buildDashboardNavItems({
+      showSettings: true, showManagement: false, hasPos: true,
+    }));
+    for (const href of gestion) {
+      expect(items, href).not.toContain(href);
+    }
+  });
+
+  it("owner y manager siguen viendolo todo", () => {
+    const items = hrefs(buildDashboardNavItems({
+      showSettings: true, showManagement: true, hasPos: true,
+    }));
+    for (const href of [...gestion, SETTINGS_ITEM.href]) {
+      expect(items, href).toContain(href);
+    }
+  });
+
+  it("sin ninguno de los dos permisos, ni gestion ni Ajustes", () => {
+    const items = hrefs(buildDashboardNavItems({
+      showSettings: false, showManagement: false, hasPos: true,
+    }));
+    for (const href of [...gestion, SETTINGS_ITEM.href]) {
+      expect(items, href).not.toContain(href);
+    }
+  });
+
+  it("facturacion sigue dependiendo ADEMAS del add-on de TPV", () => {
+    const items = hrefs(buildDashboardNavItems({
+      showSettings: true, showManagement: true, hasPos: false,
+    }));
+    expect(items).not.toContain(FACTURACION_ITEM.href);
+    expect(items).toContain(ANALITICA_ITEM.href);
   });
 });

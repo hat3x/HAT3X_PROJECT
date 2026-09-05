@@ -39,10 +39,16 @@ export default async function DashboardLayout({
     getActiveSalonBranding(),
     getActiveSalonFeatureFlags(),
   ]);
-  // La MISMA regla que usa el área de ajustes. Con `canManageSettings` el
-  // enlace se le ocultaba a `staff` aunque dentro sí tuviera secciones suyas:
-  // Kristel podía entrar escribiendo la URL, pero no había forma de llegar.
+  // DOS permisos distintos, y por eso dos banderas.
+  //
+  // `showSettings` es solo el enlace a Ajustes: `staff` entra, porque dentro
+  // tiene secciones suyas (su horario, gabinetes, apariencia).
+  //
+  // `showManagement` es la analítica, la facturación y el arqueo: dinero del
+  // negocio, owner/manager. Las dos eran la MISMA bandera, así que abrir
+  // Ajustes a staff destapó también las cuentas de la clínica.
   const showSettings = canEnterSettings(membership?.role);
+  const showManagement = canManageSettings(membership?.role);
   const sector = salon?.sector ?? "peluqueria";
 
   return (
@@ -62,6 +68,7 @@ export default async function DashboardLayout({
               logoUrl={buildLogoSrc(branding)}
               role={membership?.role ?? null}
               showSettings={showSettings}
+              showManagement={showManagement}
             />
             <main className="relative z-10 min-w-0 flex-1">{children}</main>
           </div>

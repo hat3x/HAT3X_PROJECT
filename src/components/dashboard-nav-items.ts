@@ -193,8 +193,22 @@ export const SALA_ITEM: NavItem = {
 
 /** Entradas del gate: rol de gestión, add-on `pos` contratado y activo, y sector. */
 export interface NavGating {
-  /** El usuario puede ver materia de gestión (owner/manager). */
+  /**
+   * El usuario puede ver el enlace a AJUSTES.
+   *
+   * Ojo: NO implica gestión. Desde que `staff` entra a Ajustes para su propio
+   * horario, esto es cierto para él — y sin embargo no puede ver la analítica
+   * de la clínica. Eran la misma bandera y por eso se destaparon de golpe.
+   */
   showSettings: boolean;
+  /**
+   * El usuario puede ver materia de GESTIÓN: analítica, facturación y arqueo.
+   * Owner/manager. Es dinero del negocio, no operativa del día.
+   *
+   * Por defecto `false`: quien no lo pida explícitamente no la ve. Abrirla por
+   * descuido es peor que ocultarla de más.
+   */
+  showManagement?: boolean;
   /** El salón tiene el add-on `pos` (TPV) contratado y activo. */
   hasPos: boolean;
   /** Sector del salón activo; determina labels y disponibilidad. Por defecto "peluqueria". */
@@ -205,7 +219,8 @@ export interface NavGating {
  * Compone la lista de secciones del panel según el rol y los add-ons contratados:
  *
  *   · Operativa diaria (PRIMARY) → siempre.
- *   · Analítica y Ajustes        → solo owner/manager (`showSettings`).
+ *   · Analítica, Facturación y Arqueo → solo owner/manager (`showManagement`).
+ *   · Ajustes                     → quien tenga alguna sección (`showSettings`).
  *   · Facturación                → owner/manager Y `pos`; sin TPV se OCULTA.
  *
  * Facturación se coloca entre Analítica y Ajustes (del «cómo va» al «papeleo»).
@@ -236,17 +251,21 @@ export interface NavGating {
  */
 export function buildDashboardNavItems({
   showSettings,
+  showManagement = false,
   hasPos,
   sector = "peluqueria",
 }: NavGating): NavItem[] {
   const items: NavItem[] = [...PRIMARY_NAV_ITEMS];
 
-  if (showSettings) {
+  // Gestión y Ajustes se piden por separado: son dos permisos, no uno.
+  if (showManagement) {
     items.push(ANALITICA_ITEM);
     if (hasPos) {
       items.push(FACTURACION_ITEM);
     }
     items.push(ARQUEO_ITEM);
+  }
+  if (showSettings) {
     items.push(SETTINGS_ITEM);
   }
 
@@ -294,7 +313,9 @@ export function buildDashboardNavItems({
     // miembros, staff incluido). "Carta" es gestión (owner/manager): solo si showSettings.
     const base = withSectorLabels.slice(0, 1); // Panel
     const rest = withSectorLabels.slice(1).filter((item) => item.href !== "/tpv");
-    const extras = showSettings
+    // "Carta" es gestión del catálogo (precios), no una preferencia: va con
+    // `showManagement`, no con el enlace de Ajustes.
+    const extras = showManagement
       ? [MOSTRADOR_ITEM, SALA_ITEM, COCINA_ITEM, CARTA_ITEM]
       : [MOSTRADOR_ITEM, SALA_ITEM, COCINA_ITEM];
     return [...base, ...extras, ...rest];
