@@ -1,0 +1,34 @@
+# Qué NO se sube a Vercel al desplegar.
+#
+# Sin este fichero, `vercel --prod` intenta subir el `.next/` de la compilación
+# local —879 MB de artefactos— y el despliegue se queda colgado sin decir nada:
+# ni error, ni progreso, ni despliegue creado del otro lado. Cuesta más
+# diagnosticarlo que arreglarlo, porque no falla: espera.
+#
+# Nada de lo de aquí hace falta en el servidor. Vercel instala las dependencias
+# y compila él a partir del código fuente, así que subir el resultado de una
+# compilación local no solo sobra: arriesga desplegar algo distinto de lo que
+# se compila allí.
+
+# Artefactos de compilación
+.next/
+out/
+agent/dist/
+
+# Dependencias: Vercel ejecuta su propio `npm ci`
+node_modules/
+agent/node_modules/
+
+# Informes y temporales
+coverage/
+supabase/.temp/
+
+# Documentación y planes: no intervienen en el build
+docs/
+
+# Secretos. `.env.local` lleva SUPABASE_SERVICE_ROLE_KEY, TWILIO_AUTH_TOKEN y
+# los tokens de Vercel: no tiene por qué salir de esta máquina. Las variables de
+# produccion se configuran en el panel del proyecto, no viajan en la subida.
+.env
+.env.*
+!.env.example

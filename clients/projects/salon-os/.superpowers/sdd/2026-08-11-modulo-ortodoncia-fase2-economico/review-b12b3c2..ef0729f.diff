@@ -1,0 +1,220 @@
+# Review package: b12b3c2a1987a292bb9d937fb39be425e2e5d9ea..ef0729f
+
+## Commits
+ef0729f fix(ortodoncia): morosidad solo planes activos + corte a hoy real + 23505
+
+## Files changed
+ .../(dashboard)/appointments/appointments-view.tsx |  2 +-
+ src/app/(dashboard)/ortodoncia/payment-actions.ts  | 10 +++++++-
+ src/hooks/use-ortho-payments.ts                    |  2 +-
+ src/lib/queries/ortho-payments.ts                  | 28 +++++++++++++++++++---
+ src/tests/unit/ortho-payment-actions.test.ts       | 17 +++++++++++++
+ 5 files changed, 53 insertions(+), 6 deletions(-)
+
+## Diff
+diff --git a/src/app/(dashboard)/appointments/appointments-view.tsx b/src/app/(dashboard)/appointments/appointments-view.tsx
+index d3ffba8..f110833 100644
+--- a/src/app/(dashboard)/appointments/appointments-view.tsx
++++ b/src/app/(dashboard)/appointments/appointments-view.tsx
+@@ -99,21 +99,21 @@ export function AppointmentsView({
+   }>({ open: false, appointment: null, draft: "" });
+ 
+   const appointmentsQuery = useAppointments(salonId, date, timezone, filterProfessionalId);
+   const dayCustomerIds = Array.from(
+     new Set(
+       (appointmentsQuery.data ?? [])
+         .map((a) => a.customer_id)
+         .filter((v): v is string => v !== null),
+     ),
+   );
+-  const overdueQuery = useOverdueOrtho(salonId, dayCustomerIds, date, sector === "odontologia");
++  const overdueQuery = useOverdueOrtho(salonId, dayCustomerIds, today, sector === "odontologia");
+   const overdueMap = overdueQuery.data ?? {};
+   const professionalsQuery = useProfessionals(salonId);
+   const statusMutation = useUpdateAppointmentStatus(salonId, date, filterProfessionalId);
+   const notesMutation = useUpdateAppointmentNotes(salonId, date, filterProfessionalId);
+   const deleteMutation = useDeleteAppointment(salonId, date, filterProfessionalId);
+   // Tiempo real: al crear/mover/cancelar una cita (p. ej. Sara la coge por teléfono),
+   // Supabase Realtime invalida la caché y la lista se actualiza sola, sin recargar.
+   const realtimeStatus = useDayPanelRealtime(salonId);
+   const reminderMutation = useSendAppointmentReminder();
+   const [reminderResult, setReminderResult] = useState<{
+diff --git a/src/app/(dashboard)/ortodoncia/payment-actions.ts b/src/app/(dashboard)/ortodoncia/payment-actions.ts
+index a6a29f2..99ff968 100644
+--- a/src/app/(dashboard)/ortodoncia/payment-actions.ts
++++ b/src/app/(dashboard)/ortodoncia/payment-actions.ts
+@@ -64,21 +64,29 @@ export async function createOrthoPaymentPlan(
+     p_down_payment_cents: parsed.data.downPaymentCents,
+     p_installment_count: parsed.data.installmentCount,
+     p_day_of_month: parsed.data.dayOfMonth,
+     p_start_date: parsed.data.startDate,
+     p_currency: "EUR",
+     p_notes: parsed.data.notes ?? null,
+     p_installments: schedule as unknown as Json,
+   });
+ 
+   if (error !== null) {
+-    if (error.message.includes("PLAN_EXISTS")) {
++    // La RPC comprueba "¿ya hay plan activo?" antes de insertar (PLAN_EXISTS),
++    // pero dos creaciones concurrentes pueden pasar ambas esa comprobación y
++    // chocar después contra el índice único parcial `ortho_payment_plan_one_active`
++    // (SQLSTATE 23505; el mensaje de Postgres es el nombre del índice, no "PLAN_EXISTS").
++    if (
++      error.code === "23505" ||
++      error.message.includes("PLAN_EXISTS") ||
++      error.message.includes("ortho_payment_plan_one_active")
++    ) {
+       return { ok: false, error: "Este paciente ya tiene un plan de pago activo" };
+     }
+     return { ok: false, error: error.message };
+   }
+ 
+   revalidatePath("/ortodoncia");
+   return { ok: true, data: { planId: data } };
+ }
+ 
+ /** Marca una cuota como cobrada (importe completo). Owner/manager/staff. */
+diff --git a/src/hooks/use-ortho-payments.ts b/src/hooks/use-ortho-payments.ts
+index f123c42..eeab286 100644
+--- a/src/hooks/use-ortho-payments.ts
++++ b/src/hooks/use-ortho-payments.ts
+@@ -23,21 +23,21 @@ export function useOrthoPaymentPlan(salonId: string, customerId: string) {
+   });
+ }
+ 
+ export function useOverdueOrtho(
+   salonId: string,
+   customerIds: readonly string[],
+   todayIso: string,
+   enabled: boolean,
+ ) {
+   return useQuery({
+-    queryKey: orthoPaymentKeys.overdue(salonId, customerIds),
++    queryKey: orthoPaymentKeys.overdue(salonId, customerIds, todayIso),
+     queryFn: () => fetchOverdueOrthoCounts(salonId, customerIds, todayIso),
+     enabled: enabled && customerIds.length > 0,
+   });
+ }
+ 
+ function useInvalidatePlan(salonId: string, customerId: string) {
+   const queryClient = useQueryClient();
+   return () =>
+     void queryClient.invalidateQueries({ queryKey: orthoPaymentKeys.plan(salonId, customerId) });
+ }
+diff --git a/src/lib/queries/ortho-payments.ts b/src/lib/queries/ortho-payments.ts
+index 277b2d1..13ac3b3 100644
+--- a/src/lib/queries/ortho-payments.ts
++++ b/src/lib/queries/ortho-payments.ts
+@@ -1,19 +1,24 @@
+ import { createClient } from "@/lib/supabase/client";
+ import type { OrthoInstallment, OrthoPaymentPlan } from "@/types/database";
+ 
+ export const orthoPaymentKeys = {
+   all: (salonId: string) => ["ortho-payments", salonId] as const,
+   plan: (salonId: string, customerId: string) =>
+     [...orthoPaymentKeys.all(salonId), "plan", customerId] as const,
+-  overdue: (salonId: string, customerIds: readonly string[]) =>
+-    [...orthoPaymentKeys.all(salonId), "overdue", [...customerIds].sort().join(",")] as const,
++  overdue: (salonId: string, customerIds: readonly string[], todayIso: string) =>
++    [
++      ...orthoPaymentKeys.all(salonId),
++      "overdue",
++      [...customerIds].sort().join(","),
++      todayIso,
++    ] as const,
+ };
+ 
+ /** Plan de pago ACTIVO del paciente + sus cuotas (ordenadas por seq). `null` si no hay. */
+ export async function fetchOrthoPaymentPlan(
+   salonId: string,
+   customerId: string,
+ ): Promise<{ plan: OrthoPaymentPlan; installments: OrthoInstallment[] } | null> {
+   const supabase = createClient();
+ 
+   const { data: plan, error: planErr } = await supabase
+@@ -34,34 +39,51 @@ export async function fetchOrthoPaymentPlan(
+     .eq("plan_id", plan.id)
+     .order("seq", { ascending: true });
+ 
+   if (instErr !== null) throw new Error(instErr.message);
+   return { plan, installments: installments ?? [] };
+ }
+ 
+ /**
+  * Nº de cuotas pendientes VENCIDAS por paciente, para el aviso de morosidad de la agenda.
+  * `todayIso` = "YYYY-MM-DD" (zona horaria del salón, resuelta por el llamante).
++ *
++ * Solo cuentan cuotas de planes ACTIVOS: un plan cancelado no debe generar
++ * morosidad aunque conserve cuotas pendientes viejas (histórico, no se borran).
++ * Dos consultas en vez de un embed sobre la FK compuesta (plan_id, salon_id) →
++ * más robusto que depender de que PostgREST resuelva ese `!inner` correctamente.
+  */
+ export async function fetchOverdueOrthoCounts(
+   salonId: string,
+   customerIds: readonly string[],
+   todayIso: string,
+ ): Promise<Record<string, number>> {
+   const result: Record<string, number> = {};
+   if (customerIds.length === 0) return result;
+ 
+   const supabase = createClient();
++
++  const { data: activePlans, error: plansErr } = await supabase
++    .from("ortho_payment_plan")
++    .select("id, customer_id")
++    .eq("salon_id", salonId)
++    .in("customer_id", [...customerIds])
++    .eq("status", "activo");
++
++  if (plansErr !== null) throw new Error(plansErr.message);
++  const activePlanIds = (activePlans ?? []).map((p) => p.id);
++  if (activePlanIds.length === 0) return result;
++
+   const { data, error } = await supabase
+     .from("ortho_installment")
+     .select("customer_id")
+     .eq("salon_id", salonId)
+-    .in("customer_id", [...customerIds])
++    .in("plan_id", activePlanIds)
+     .eq("status", "pendiente")
+     .lt("due_date", todayIso);
+ 
+   if (error !== null) throw new Error(error.message);
+   for (const row of data ?? []) {
+     result[row.customer_id] = (result[row.customer_id] ?? 0) + 1;
+   }
+   return result;
+ }
+diff --git a/src/tests/unit/ortho-payment-actions.test.ts b/src/tests/unit/ortho-payment-actions.test.ts
+index 0a54c54..7b56150 100644
+--- a/src/tests/unit/ortho-payment-actions.test.ts
++++ b/src/tests/unit/ortho-payment-actions.test.ts
+@@ -71,11 +71,28 @@ describe("createOrthoPaymentPlan", () => {
+   it("traduce el error PLAN_EXISTS de la RPC a un mensaje claro", async () => {
+     getActiveSalonMock.mockResolvedValue({ id: "s1", sector: "odontologia" });
+     getActiveMembershipMock.mockResolvedValue({ role: "owner" });
+     rpcMock.mockResolvedValue({ data: null, error: { message: "PLAN_EXISTS" } });
+     const res = await createOrthoPaymentPlan("c1", {
+       totalCents: 300000, downPaymentCents: 60000, installmentCount: 24, dayOfMonth: 5, startDate: "2026-08-20",
+     });
+     expect(res.ok).toBe(false);
+     if (!res.ok) expect(res.error).toMatch(/ya tiene un plan/i);
+   });
++
++  it("traduce el 23505 de carrera (índice único parcial) al mismo mensaje claro", async () => {
++    getActiveSalonMock.mockResolvedValue({ id: "s1", sector: "odontologia" });
++    getActiveMembershipMock.mockResolvedValue({ role: "owner" });
++    rpcMock.mockResolvedValue({
++      data: null,
++      error: {
++        code: "23505",
++        message: 'duplicate key value violates unique constraint "ortho_payment_plan_one_active"',
++      },
++    });
++    const res = await createOrthoPaymentPlan("c1", {
++      totalCents: 300000, downPaymentCents: 60000, installmentCount: 24, dayOfMonth: 5, startDate: "2026-08-20",
++    });
++    expect(res.ok).toBe(false);
++    if (!res.ok) expect(res.error).toMatch(/ya tiene un plan/i);
++  });
+ });

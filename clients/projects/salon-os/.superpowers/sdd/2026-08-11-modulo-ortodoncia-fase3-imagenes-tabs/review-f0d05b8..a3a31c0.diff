@@ -1,0 +1,98 @@
+# Review package: f0d05b866552d032f218f37bd6c7589d0d6cb13f..a3a31c0
+
+## Commits
+a3a31c0 feat(imagenes): galeria muestra PDF como 'Abrir' (pestana nueva)
+
+## Files changed
+ src/components/dental/image-gallery.tsx | 27 +++++++++++++++++++++++++--
+ 1 file changed, 25 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/src/components/dental/image-gallery.tsx b/src/components/dental/image-gallery.tsx
+index 09eba58..faeff88 100644
+--- a/src/components/dental/image-gallery.tsx
++++ b/src/components/dental/image-gallery.tsx
+@@ -1,15 +1,15 @@
+ "use client";
+ 
+ import { useMemo, useState } from "react";
+ import { useQuery } from "@tanstack/react-query";
+-import { AlertCircle, ImageOff, Loader2, Trash2 } from "lucide-react";
++import { AlertCircle, ExternalLink, FileText, ImageOff, Loader2, Trash2 } from "lucide-react";
+ 
+ import { signImageUrls } from "@/app/(dashboard)/expediente/actions";
+ import { Badge } from "@/components/ui/badge";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent } from "@/components/ui/card";
+ import { useDeletePatientImage } from "@/hooks/use-patient-images";
+ import { IMAGE_MODALITIES, IMAGE_MODALITY_LABELS } from "@/lib/dental/consents";
+ import type { ImageModality, PatientImage } from "@/types/database";
+ 
+ // ---------------------------------------------------------------------------
+@@ -38,20 +38,25 @@ function formatDate(iso: string): string {
+     month: "2-digit",
+     year: "numeric",
+   });
+ }
+ 
+ /** Path que se pinta para una imagen: preferentemente la miniatura, si existe. */
+ function displayPath(image: PatientImage): string {
+   return image.thumbnail_path ?? image.storage_path;
+ }
+ 
++/** Distingue los adjuntos PDF (p. ej. informes escaneados) de las imágenes reales. */
++function isPdf(image: PatientImage): boolean {
++  return image.mime === "application/pdf" || image.storage_path.toLowerCase().endsWith(".pdf");
++}
++
+ export function ImageGallery({
+   salonId,
+   customerId,
+   images,
+ }: ImageGalleryProps): React.ReactElement {
+   const [modalityFilter, setModalityFilter] = useState<ImageModality | typeof ALL_MODALITIES>(
+     ALL_MODALITIES,
+   );
+   const deleteMutation = useDeletePatientImage(salonId, customerId);
+   const [actionError, setActionError] = useState<string | null>(null);
+@@ -139,21 +144,39 @@ export function ImageGallery({
+         </p>
+       ) : (
+         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+           {filtered.map((image) => {
+             const url = urlByPath[displayPath(image)];
+             const modalityLabel = IMAGE_MODALITY_LABELS[image.modality];
+ 
+             return (
+               <Card key={image.id} className="overflow-hidden">
+                 <div className="flex aspect-square items-center justify-center bg-muted/30">
+-                  {url !== undefined ? (
++                  {isPdf(image) ? (
++                    url !== undefined ? (
++                      <a
++                        href={url}
++                        target="_blank"
++                        rel="noopener noreferrer"
++                        className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
++                      >
++                        <FileText className="h-8 w-8" aria-hidden="true" />
++                        <span className="inline-flex items-center gap-1 text-xs font-medium">
++                          Abrir PDF <ExternalLink className="h-3 w-3" aria-hidden="true" />
++                        </span>
++                      </a>
++                    ) : urlsQuery.isLoading ? (
++                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
++                    ) : (
++                      <FileText className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
++                    )
++                  ) : url !== undefined ? (
+                     // eslint-disable-next-line @next/next/no-img-element -- signed URL de Supabase Storage (bucket privado); next/image exigiría configurar remotePatterns dinámicos.
+                     <img
+                       src={url}
+                       alt={modalityLabel}
+                       className="h-full w-full object-cover"
+                     />
+                   ) : urlsQuery.isLoading ? (
+                     <Loader2
+                       className="h-5 w-5 animate-spin text-muted-foreground"
+                       aria-hidden="true"

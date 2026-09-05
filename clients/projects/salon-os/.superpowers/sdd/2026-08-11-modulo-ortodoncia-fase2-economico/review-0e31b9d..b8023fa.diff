@@ -1,0 +1,97 @@
+# Review package: 0e31b9d02d98460b8bfdb43ba90a2ace6369330b..b8023fa
+
+## Commits
+b8023fa feat(ortodoncia): esquemas Zod plan de pago
+
+## Files changed
+ src/lib/validations/ortho-payments.ts        | 28 +++++++++++++++++
+ src/tests/unit/ortho-payments-schema.test.ts | 46 ++++++++++++++++++++++++++++
+ 2 files changed, 74 insertions(+)
+
+## Diff
+diff --git a/src/lib/validations/ortho-payments.ts b/src/lib/validations/ortho-payments.ts
+new file mode 100644
+index 0000000..84b6674
+--- /dev/null
++++ b/src/lib/validations/ortho-payments.ts
+@@ -0,0 +1,28 @@
++import { z } from "zod";
++
++export const createOrthoPlanSchema = z
++  .object({
++    totalCents: z.number().int().min(1),
++    downPaymentCents: z.number().int().min(0),
++    installmentCount: z.number().int().min(1).max(120),
++    dayOfMonth: z.number().int().min(1).max(31),
++    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha no válida"),
++    notes: z.string().trim().max(2000).nullable().default(null),
++  })
++  .refine((v) => v.downPaymentCents <= v.totalCents, {
++    message: "La entrada no puede superar el total",
++    path: ["downPaymentCents"],
++  })
++  .refine((v) => v.totalCents - v.downPaymentCents >= v.installmentCount, {
++    message: "El importe a financiar es menor que el número de cuotas",
++    path: ["installmentCount"],
++  });
++
++export type CreateOrthoPlanInput = z.input<typeof createOrthoPlanSchema>;
++export type CreateOrthoPlanValues = z.output<typeof createOrthoPlanSchema>;
++
++export const payInstallmentSchema = z.object({
++  method: z.enum(["efectivo", "tarjeta", "transferencia", "otro"]),
++});
++
++export type PayInstallmentInput = z.input<typeof payInstallmentSchema>;
+diff --git a/src/tests/unit/ortho-payments-schema.test.ts b/src/tests/unit/ortho-payments-schema.test.ts
+new file mode 100644
+index 0000000..f7627a9
+--- /dev/null
++++ b/src/tests/unit/ortho-payments-schema.test.ts
+@@ -0,0 +1,46 @@
++import { describe, it, expect } from "vitest";
++
++import { createOrthoPlanSchema, payInstallmentSchema } from "@/lib/validations/ortho-payments";
++
++describe("createOrthoPlanSchema", () => {
++  const base = {
++    totalCents: 300000,
++    downPaymentCents: 60000,
++    installmentCount: 24,
++    dayOfMonth: 5,
++    startDate: "2026-08-20",
++  };
++
++  it("acepta un plan válido", () => {
++    expect(createOrthoPlanSchema.safeParse(base).success).toBe(true);
++  });
++
++  it("rechaza entrada mayor que el total", () => {
++    const r = createOrthoPlanSchema.safeParse({ ...base, downPaymentCents: 400000 });
++    expect(r.success).toBe(false);
++  });
++
++  it("rechaza si lo financiado es menor que el nº de cuotas (cuota < 1 céntimo)", () => {
++    const r = createOrthoPlanSchema.safeParse({
++      ...base,
++      totalCents: 10,
++      downPaymentCents: 0,
++      installmentCount: 24,
++    });
++    expect(r.success).toBe(false);
++  });
++
++  it("rechaza día de cobro fuera de 1..31", () => {
++    expect(createOrthoPlanSchema.safeParse({ ...base, dayOfMonth: 0 }).success).toBe(false);
++    expect(createOrthoPlanSchema.safeParse({ ...base, dayOfMonth: 32 }).success).toBe(false);
++  });
++});
++
++describe("payInstallmentSchema", () => {
++  it("acepta un método válido", () => {
++    expect(payInstallmentSchema.safeParse({ method: "tarjeta" }).success).toBe(true);
++  });
++  it("rechaza un método desconocido", () => {
++    expect(payInstallmentSchema.safeParse({ method: "bizum" }).success).toBe(false);
++  });
++});

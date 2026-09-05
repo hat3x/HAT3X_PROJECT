@@ -1,0 +1,39 @@
+# Review package: 71d1d19978d6c358eb9017019b987c5165cea5be..HEAD
+
+## Commits
+10122fe feat(ortodoncia): queries pedidos de laboratorio
+
+## Files changed
+ src/lib/queries/lab-orders.ts | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+## Diff
+diff --git a/src/lib/queries/lab-orders.ts b/src/lib/queries/lab-orders.ts
+new file mode 100644
+index 0000000..e3bdb9b
+--- /dev/null
++++ b/src/lib/queries/lab-orders.ts
+@@ -0,0 +1,23 @@
++import { createClient } from "@/lib/supabase/client";
++import type { LabOrder } from "@/types/database";
++
++export const labOrderKeys = {
++  all: (salonId: string) => ["lab-orders", salonId] as const,
++  list: (salonId: string, customerId: string) =>
++    [...labOrderKeys.all(salonId), "list", customerId] as const,
++};
++
++/** Pedidos a laboratorio del paciente (más reciente primero). */
++export async function fetchLabOrders(salonId: string, customerId: string): Promise<LabOrder[]> {
++  const supabase = createClient();
++  const { data, error } = await supabase
++    .from("lab_order")
++    .select("*")
++    .eq("salon_id", salonId)
++    .eq("customer_id", customerId)
++    .order("sent_at", { ascending: false })
++    .order("created_at", { ascending: false });
++
++  if (error !== null) throw new Error(error.message);
++  return data ?? [];
++}

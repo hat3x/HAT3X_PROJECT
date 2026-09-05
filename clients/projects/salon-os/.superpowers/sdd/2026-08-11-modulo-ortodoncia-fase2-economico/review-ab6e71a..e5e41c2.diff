@@ -1,0 +1,376 @@
+# Review package: ab6e71a75db63b805a3ce208e8ac9719fa95b9e5..e5e41c2
+
+## Commits
+e5e41c2 feat(ortodoncia): aviso de morosidad en la agenda (solo dental)
+
+## Files changed
+ .../(dashboard)/appointments/appointments-view.tsx | 120 ++++++++++++++++++++-
+ src/app/(dashboard)/appointments/page.tsx          |   1 +
+ 2 files changed, 118 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/src/app/(dashboard)/appointments/appointments-view.tsx b/src/app/(dashboard)/appointments/appointments-view.tsx
+index 3dfaf07..d3ffba8 100644
+--- a/src/app/(dashboard)/appointments/appointments-view.tsx
++++ b/src/app/(dashboard)/appointments/appointments-view.tsx
+@@ -30,74 +30,94 @@ import {
+ import { Button } from "@/components/ui/button";
+ import {
+   Dialog,
+   DialogContent,
+   DialogDescription,
+   DialogHeader,
+   DialogTitle,
+ } from "@/components/ui/dialog";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
++import { Textarea } from "@/components/ui/textarea";
+ import { Skeleton } from "@/components/ui/skeleton";
+ import { cn } from "@/lib/utils";
+ import { formatLongDate, formatPrice, formatSlotTime } from "@/lib/booking/format";
+ import { localDateInZone } from "@/lib/booking/timezone";
+ import {
+   useAppointments,
+   useDeleteAppointment,
+   useProfessionals,
+   useSendAppointmentReminder,
++  useUpdateAppointmentNotes,
+   useUpdateAppointmentStatus,
+ } from "@/hooks/use-appointments";
+ import { useDayPanelRealtime } from "@/hooks/use-day-panel-realtime";
++import { useOverdueOrtho } from "@/hooks/use-ortho-payments";
+ import type { AppointmentWithDetails } from "@/lib/queries/appointments";
+-import type { AppointmentStatus } from "@/types/database";
++import type { AppointmentStatus, SalonSector } from "@/types/database";
+ 
+ interface AppointmentsViewProps {
+   salonId: string;
+   salonSlug: string;
+   timezone: string;
++  sector: SalonSector;
+ }
+ 
+ function addDays(date: string, delta: number): string {
+   const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+   return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
+ }
+ 
+ export function AppointmentsView({
+   salonId,
+   salonSlug,
+   timezone,
++  sector,
+ }: AppointmentsViewProps): React.ReactElement {
+   const today = localDateInZone(timezone);
+ 
+   const [date, setDate] = useState<string>(today);
+   const [view, setView] = useState<"dia" | CalendarMode>("dia");
+   const [filterProfessionalId, setFilterProfessionalId] = useState<string | null>(null);
+   const [createOpen, setCreateOpen] = useState(false);
+   const [cancelState, setCancelState] = useState<{
+     open: boolean;
+     appointmentId: string;
+     reason: string;
+   }>({ open: false, appointmentId: "", reason: "" });
+   const [deleteState, setDeleteState] = useState<{
+     open: boolean;
+     appointment: AppointmentWithDetails | null;
+   }>({ open: false, appointment: null });
+   const [rescheduleState, setRescheduleState] = useState<{
+     open: boolean;
+     appointment: AppointmentWithDetails | null;
+   }>({ open: false, appointment: null });
++  const [notesState, setNotesState] = useState<{
++    open: boolean;
++    appointment: AppointmentWithDetails | null;
++    draft: string;
++  }>({ open: false, appointment: null, draft: "" });
+ 
+   const appointmentsQuery = useAppointments(salonId, date, timezone, filterProfessionalId);
++  const dayCustomerIds = Array.from(
++    new Set(
++      (appointmentsQuery.data ?? [])
++        .map((a) => a.customer_id)
++        .filter((v): v is string => v !== null),
++    ),
++  );
++  const overdueQuery = useOverdueOrtho(salonId, dayCustomerIds, date, sector === "odontologia");
++  const overdueMap = overdueQuery.data ?? {};
+   const professionalsQuery = useProfessionals(salonId);
+   const statusMutation = useUpdateAppointmentStatus(salonId, date, filterProfessionalId);
++  const notesMutation = useUpdateAppointmentNotes(salonId, date, filterProfessionalId);
+   const deleteMutation = useDeleteAppointment(salonId, date, filterProfessionalId);
+   // Tiempo real: al crear/mover/cancelar una cita (p. ej. Sara la coge por teléfono),
+   // Supabase Realtime invalida la caché y la lista se actualiza sola, sin recargar.
+   const realtimeStatus = useDayPanelRealtime(salonId);
+   const reminderMutation = useSendAppointmentReminder();
+   const [reminderResult, setReminderResult] = useState<{
+     appointmentId: string;
+     message: string;
+     isError: boolean;
+   } | null>(null);
+@@ -107,20 +127,35 @@ export function AppointmentsView({
+       setCancelState({ open: true, appointmentId: id, reason: "" });
+       return;
+     }
+     statusMutation.mutate({ id, status });
+   }
+ 
+   function handleDelete(appointment: AppointmentWithDetails): void {
+     setDeleteState({ open: true, appointment });
+   }
+ 
++  function handleEditNotes(appointment: AppointmentWithDetails): void {
++    setNotesState({ open: true, appointment, draft: appointment.notes ?? "" });
++  }
++
++  function confirmNotes(): void {
++    if (!notesState.appointment) return;
++    notesMutation.mutate(
++      { id: notesState.appointment.id, notes: notesState.draft },
++      {
++        onSuccess: () =>
++          setNotesState({ open: false, appointment: null, draft: "" }),
++      },
++    );
++  }
++
+   function handleSendReminder(appointmentId: string): void {
+     setReminderResult(null);
+     reminderMutation.mutate(appointmentId, {
+       onSuccess: (result) => {
+         setReminderResult(
+           result.ok
+             ? { appointmentId, message: result.data.message, isError: false }
+             : { appointmentId, message: result.error, isError: true },
+         );
+       },
+@@ -343,25 +378,27 @@ export function AppointmentsView({
+         <div className="space-y-3">
+           {appointmentsQuery.data.map((appt, i) => (
+             <div
+               key={appt.id}
+               className="animate-fade-up"
+               style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}
+             >
+               <AppointmentCard
+                 appointment={appt}
+                 timezone={timezone}
++                overdueCount={overdueMap[appt.customer_id ?? ""] ?? 0}
+                 onStatusChange={handleStatusChange}
+                 onReschedule={(a) =>
+                   setRescheduleState({ open: true, appointment: a })
+                 }
+                 onDelete={handleDelete}
++                onEditNotes={handleEditNotes}
+                 mutating={statusMutation.isPending}
+                 onSendReminder={handleSendReminder}
+                 reminderPending={
+                   reminderMutation.isPending && reminderMutation.variables === appt.id
+                 }
+                 reminderResult={
+                   reminderResult?.appointmentId === appt.id ? reminderResult : null
+                 }
+               />
+             </div>
+@@ -473,44 +510,97 @@ export function AppointmentsView({
+         <RescheduleDialog
+           open={rescheduleState.open}
+           appointment={rescheduleState.appointment}
+           salonId={salonId}
+           salonSlug={salonSlug}
+           timezone={timezone}
+           onSuccess={() => setRescheduleState({ open: false, appointment: null })}
+           onClose={() => setRescheduleState((s) => ({ ...s, open: false }))}
+         />
+       )}
++
++      {/* Dialog de notas de la cita — se abre al pulsar la cita */}
++      <Dialog
++        open={notesState.open}
++        onOpenChange={(open) => {
++          if (!open) setNotesState((s) => ({ ...s, open: false }));
++        }}
++      >
++        <DialogContent>
++          <DialogHeader>
++            <DialogTitle>Notas de la cita</DialogTitle>
++            <DialogDescription>
++              {notesState.appointment
++                ? `${notesState.appointment.customer?.full_name ?? "—"} · ${
++                    notesState.appointment.service?.name ?? "—"
++                  } · ${formatSlotTime(notesState.appointment.starts_at, timezone)}`
++                : "Añade o edita la nota de esta cita."}
++            </DialogDescription>
++          </DialogHeader>
++          <div className="space-y-4">
++            <Textarea
++              value={notesState.draft}
++              onChange={(e) =>
++                setNotesState((s) => ({ ...s, draft: e.target.value }))
++              }
++              rows={5}
++              placeholder="Tratamiento, observaciones, avisos… (p. ej. «Curetaje de los cuatro cuadrantes»)"
++              autoFocus
++            />
++            {notesMutation.isError && (
++              <p className="text-sm text-destructive">
++                {(notesMutation.error as Error).message}
++              </p>
++            )}
++            <div className="flex justify-end gap-3">
++              <Button
++                variant="outline"
++                onClick={() => setNotesState((s) => ({ ...s, open: false }))}
++                disabled={notesMutation.isPending}
++              >
++                Cancelar
++              </Button>
++              <Button onClick={confirmNotes} disabled={notesMutation.isPending}>
++                {notesMutation.isPending ? "Guardando…" : "Guardar nota"}
++              </Button>
++            </div>
++          </div>
++        </DialogContent>
++      </Dialog>
+     </main>
+   );
+ }
+ 
+ // --- Tarjeta individual de cita -----------------------------------------------
+ 
+ interface AppointmentCardProps {
+   appointment: AppointmentWithDetails;
+   timezone: string;
++  overdueCount: number;
+   onStatusChange: (id: string, status: AppointmentStatus) => void;
+   onReschedule: (appointment: AppointmentWithDetails) => void;
+   onDelete: (appointment: AppointmentWithDetails) => void;
++  onEditNotes: (appointment: AppointmentWithDetails) => void;
+   mutating: boolean;
+   onSendReminder: (id: string) => void;
+   reminderPending: boolean;
+   reminderResult: { message: string; isError: boolean } | null;
+ }
+ 
+ function AppointmentCard({
+   appointment: appt,
+   timezone,
++  overdueCount,
+   onStatusChange,
+   onReschedule,
+   onDelete,
++  onEditNotes,
+   mutating,
+   onSendReminder,
+   reminderPending,
+   reminderResult,
+ }: AppointmentCardProps): React.ReactElement {
+   const isPending = appt.status === "pending";
+   const isConfirmed = appt.status === "confirmed";
+   const isActive = isPending || isConfirmed;
+   const isCompleted = appt.status === "completed";
+   const isMuted = appt.status === "cancelled" || appt.status === "no_show";
+@@ -526,21 +616,34 @@ function AppointmentCard({
+       {/* Franja de acento por estado */}
+       <span
+         aria-hidden
+         className={cn(
+           "absolute inset-y-0 left-0 w-1",
+           appointmentStatusAccent(appt.status),
+         )}
+       />
+ 
+       <div className="flex flex-col gap-4 py-4 pl-6 pr-4 sm:flex-row sm:items-start sm:justify-between">
+-        <div className="min-w-0 space-y-2">
++        {/* Zona clicable: pulsar la cita abre el editor de notas. */}
++        <div
++          role="button"
++          tabIndex={0}
++          onClick={() => onEditNotes(appt)}
++          onKeyDown={(e) => {
++            if (e.key === "Enter" || e.key === " ") {
++              e.preventDefault();
++              onEditNotes(appt);
++            }
++          }}
++          aria-label={`Editar notas de la cita de ${appt.customer?.full_name ?? "cliente"}`}
++          className="-m-1.5 min-w-0 cursor-pointer space-y-2 rounded-lg p-1.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
++        >
+           <div className="flex flex-wrap items-center gap-2.5">
+             <span className="flex items-center gap-1.5 text-sm font-semibold tabular-nums">
+               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+               {formatSlotTime(appt.starts_at, timezone)}
+               <span className="text-muted-foreground">–</span>
+               {formatSlotTime(appt.ends_at, timezone)}
+             </span>
+             <AppointmentStatusBadge status={appt.status} />
+           </div>
+ 
+@@ -553,35 +656,46 @@ function AppointmentCard({
+             <span className="flex items-center gap-1.5">
+               <User className="h-3.5 w-3.5" />
+               {appt.customer?.full_name ?? "—"}
+             </span>
+             {appt.customer?.phone && (
+               <span className="flex items-center gap-1.5 tabular-nums">
+                 <Phone className="h-3.5 w-3.5" />
+                 {appt.customer.phone}
+               </span>
+             )}
++            {overdueCount > 0 && (
++              <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
++                ⚠ {overdueCount} cuota{overdueCount === 1 ? "" : "s"} vencida
++                {overdueCount === 1 ? "" : "s"}
++              </span>
++            )}
+           </div>
+ 
+           <p className="text-xs text-muted-foreground">
+             {appt.professional?.full_name ?? "—"}
+             <span className="mx-1.5 text-muted-foreground/50">·</span>
+             <span className="font-medium text-foreground/70 tabular-nums">
+               {formatPrice(appt.price_cents, appt.currency)}
+             </span>
+           </p>
+ 
+-          {appt.notes && appt.notes.trim() !== "" && (
++          {appt.notes && appt.notes.trim() !== "" ? (
+             <p className="flex items-start gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-foreground/80">
+               <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+               <span className="whitespace-pre-wrap">{appt.notes}</span>
+             </p>
++          ) : (
++            <p className="flex items-center gap-1.5 text-xs text-muted-foreground/70 opacity-0 transition-opacity group-hover:opacity-100">
++              <StickyNote className="h-3.5 w-3.5 shrink-0" />
++              Añadir nota
++            </p>
+           )}
+ 
+           {appt.status === "cancelled" && appt.cancelled_reason && (
+             <p className="text-xs italic text-muted-foreground">
+               Motivo: {appt.cancelled_reason}
+             </p>
+           )}
+ 
+           {reminderResult && (
+             <p
+diff --git a/src/app/(dashboard)/appointments/page.tsx b/src/app/(dashboard)/appointments/page.tsx
+index 75223f5..74be3a9 100644
+--- a/src/app/(dashboard)/appointments/page.tsx
++++ b/src/app/(dashboard)/appointments/page.tsx
+@@ -30,13 +30,14 @@ export default async function AppointmentsPage(): Promise<React.ReactElement> {
+         </p>
+       </main>
+     );
+   }
+ 
+   return (
+     <AppointmentsView
+       salonId={salon.id}
+       salonSlug={salon.slug}
+       timezone={salon.timezone}
++      sector={salon.sector}
+     />
+   );
+ }

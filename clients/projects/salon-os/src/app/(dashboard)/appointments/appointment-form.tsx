@@ -1,0 +1,573 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Loader2, Search, X } from "lucide-react";
+
+import { DaySlots, DaySlotsSkeleton } from "@/components/booking/day-slots";
+import { buildManualSlot } from "@/lib/booking/manual-slot";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { formatDuration, formatPrice, formatSlotTime } from "@/lib/booking/format";
+import { localDateInZone } from "@/lib/booking/timezone";
+import type { PublicSlot } from "@/lib/booking/types";
+import {
+  useAvailabilityDaySlots,
+  useCreateAppointment,
+  useProfessionals,
+  useServiceProfessionalsMap,
+  useServices,
+} from "@/hooks/use-appointments";
+import { useCustomerSearch } from "@/hooks/use-customers";
+import type { Customer } from "@/types/database";
+
+interface AppointmentFormProps {
+  salonId: string;
+  salonSlug: string;
+  timezone: string;
+  /**
+   * Si esta persona puede crear citas encima de otras. Lo decide el servidor
+   * (`salon_members.can_overlap_appointments`); aquí solo se usa para ofrecer o
+   * no la salida. Aunque llegara `true` de forma indebida, el servidor y el
+   * trigger de la base lo seguirían rechazando.
+   */
+  canOverlapAppointments?: boolean;
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+interface ContactState {
+  fullName: string;
+  phone: string;
+  email: string;
+  notes: string;
+}
+
+const EMPTY_CONTACT: ContactState = { fullName: "", phone: "", email: "", notes: "" };
+
+export function AppointmentForm({
+  salonId,
+  salonSlug,
+  timezone,
+  canOverlapAppointments = false,
+  onSuccess,
+  onCancel,
+}: AppointmentFormProps): React.ReactElement {
+  const today = localDateInZone(timezone);
+
+  const [serviceId, setServiceId] = useState<string>("");
+  const [professionalId, setProfessionalId] = useState<string>("any");
+  const [date, setDate] = useState<string>(today);
+  const [selectedSlot, setSelectedSlot] = useState<PublicSlot | null>(null);
+  /**
+   * Hora a mano. La rejilla del motor va bien para el caso normal, pero trabaja
+   * en múltiplos de 15 minutos y con la duración que dicta el servicio; una
+   * clínica no siempre hace eso —una revisión son dos minutos—. Este modo se
+   * salta la rejilla, NO las reglas: el solape lo sigue impidiendo la base.
+   */
+  const [manualMode, setManualMode] = useState(false);
+  const [manualTime, setManualTime] = useState("");
+  const [manualDuration, setManualDuration] = useState("");
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [contact, setContact] = useState<ContactState>(EMPTY_CONTACT);
+  /** Último hueco que se intentó reservar, para poder reintentarlo solapando. */
+  const [ultimoHueco, setUltimoHueco] = useState<PublicSlot | null>(null);
+
+  // Buscador de cliente existente (por nombre o teléfono). Si se selecciona uno,
+  // la cita se crea sobre ese cliente; si no, se crea/reutiliza por los datos manuales.
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [search, setSearch] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+  const customerSearch = useCustomerSearch(salonId, debouncedSearch);
+
+  function handlePickCustomer(c: Customer): void {
+    setSelectedCustomer(c);
+    setContact((prev) => ({
+      ...prev,
+      fullName: c.full_name,
+      phone: c.phone ?? "",
+      email: c.email ?? "",
+    }));
+    setSearch("");
+  }
+
+  function clearSelectedCustomer(): void {
+    setSelectedCustomer(null);
+    setContact((prev) => ({ ...prev, fullName: "", phone: "", email: "" }));
+  }
+
+  const servicesQuery = useServices(salonId);
+  const professionalsQuery = useProfessionals(salonId);
+  const serviceProfMap = useServiceProfessionalsMap(salonId);
+  const slotsQuery = useAvailabilityDaySlots(
+    salonSlug,
+    serviceId || null,
+    professionalId,
+    date,
+  );
+  const createMutation = useCreateAppointment(salonId);
+
+  const eligibleProfessionals = useMemo(() => {
+    if (!serviceId || !professionalsQuery.data || !serviceProfMap.data) return [];
+    const ids = new Set(serviceProfMap.data[serviceId] ?? []);
+    return professionalsQuery.data.filter((p) => ids.has(p.id));
+  }, [serviceId, professionalsQuery.data, serviceProfMap.data]);
+
+  const selectedService = servicesQuery.data?.find((s) => s.id === serviceId);
+
+  function handleServiceChange(id: string): void {
+    setServiceId(id);
+    setProfessionalId("any");
+    setSelectedSlot(null);
+  }
+
+  function handleProfessionalChange(id: string): void {
+    setProfessionalId(id);
+    setSelectedSlot(null);
+  }
+
+  function handleDateChange(value: string): void {
+    setDate(value);
+    setSelectedSlot(null);
+  }
+
+  const hayCliente =
+    selectedCustomer !== null ||
+    (contact.fullName.trim().length >= 2 && contact.phone.trim().length >= 6);
+
+  // En modo manual no hay hueco elegido: basta con hora y duración escritas.
+  // La validación de verdad ocurre al enviar, para poder explicar el motivo en
+  // lugar de dejar el botón apagado sin decir por qué.
+  const canSubmit = hayCliente && (manualMode ? manualTime !== "" : Boolean(selectedSlot));
+
+  /**
+   * Lanza el alta. `allowOverlap` solo viaja cuando la persona ha confirmado
+   * expresamente que quiere pisar otra cita: nunca se manda por defecto.
+   */
+  function crearCita(elegido: PublicSlot, allowOverlap: boolean): void {
+    createMutation.mutate(
+      {
+        serviceId,
+        professionalId: elegido.professionalId,
+        startsAt: elegido.startsAt,
+        endsAt: elegido.endsAt,
+        customerId: selectedCustomer?.id,
+        customer: {
+          fullName: contact.fullName,
+          phone: contact.phone,
+          email: contact.email || undefined,
+          notes: contact.notes || undefined,
+        },
+        ...(allowOverlap ? { allowOverlap: true } : {}),
+      },
+      {
+        onSuccess: (result) => {
+          if (result.ok) onSuccess();
+        },
+      },
+    );
+  }
+
+  function handleSubmit(e: React.FormEvent): void {
+    e.preventDefault();
+    if (!canSubmit) return;
+
+    let slot: PublicSlot | null = selectedSlot;
+    if (manualMode) {
+      const duracion = Number(manualDuration) || selectedService?.duration_minutes || 30;
+      const r = buildManualSlot({
+        date,
+        time: manualTime,
+        durationMin: duracion,
+        timeZone: timezone,
+        professionalId,
+      });
+      if (!r.ok) {
+        setManualError(r.error);
+        return;
+      }
+      setManualError(null);
+      slot = r.slot;
+    }
+    if (slot === null) return;
+
+    // Se guarda el hueco resuelto para poder reintentarlo si resulta estar
+    // ocupado y la persona decide solaparlo: sin esto habría que recalcularlo,
+    // y en modo manual eso significa volver a validar la hora escrita.
+    setUltimoHueco(slot);
+    crearCita(slot, false);
+  }
+
+  const mutationError =
+    createMutation.data && !createMutation.data.ok ? createMutation.data.error : null;
+
+  // El hueco está ocupado Y esta persona puede solaparlo: se le ofrece, con el
+  // aviso delante. Si no puede, solo ve el error normal y elige otra hora.
+  const ofrecerSolape =
+    canOverlapAppointments &&
+    createMutation.data !== undefined &&
+    !createMutation.data.ok &&
+    createMutation.data.code === "overlap" &&
+    ultimoHueco !== null;
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Servicio */}
+      <div className="space-y-2">
+        <Label htmlFor="form-service">Servicio *</Label>
+        <Select value={serviceId} onValueChange={handleServiceChange}>
+          <SelectTrigger id="form-service">
+            <SelectValue placeholder="Elige un servicio" />
+          </SelectTrigger>
+          <SelectContent>
+            {(servicesQuery.data ?? []).map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name} — {formatDuration(s.duration_minutes)} ·{" "}
+                {formatPrice(s.price_cents, s.currency)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Profesional */}
+      <div className="space-y-2">
+        <Label htmlFor="form-professional">Profesional</Label>
+        <Select
+          value={professionalId}
+          onValueChange={handleProfessionalChange}
+          disabled={!serviceId}
+        >
+          <SelectTrigger id="form-professional">
+            <SelectValue placeholder="Cualquier profesional" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Cualquier profesional</SelectItem>
+            {eligibleProfessionals.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.full_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Fecha */}
+      <div className="space-y-2">
+        <Label htmlFor="form-date">Fecha *</Label>
+        <Input
+          id="form-date"
+          type="date"
+          min={today}
+          value={date}
+          onChange={(e) => handleDateChange(e.target.value)}
+          disabled={!serviceId}
+          className="w-full sm:w-56"
+        />
+      </div>
+
+      {/* Huecos: MISMA rejilla que la reserva pública (libres + ocupados/pasados
+          deshabilitados). Solo las celdas libres son clicables, así que el panel sigue
+          reservando únicamente huecos disponibles. */}
+      {serviceId && date && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label>Hora *</Label>
+            {/* La rejilla sigue siendo lo primero: cubre el caso normal de un
+                toque. Este enlace abre la puerta a lo que la rejilla no puede
+                expresar — una hora que no cae en el cuarto de hora, o una cita
+                mucho mas corta que su servicio. */}
+            <button
+              type="button"
+              onClick={() => {
+                setManualMode((v) => !v);
+                setSelectedSlot(null);
+                setManualError(null);
+              }}
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {manualMode ? "Elegir de los huecos libres" : "Poner hora y duración a mano"}
+            </button>
+          </div>
+
+          {manualMode ? (
+            <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+              <div className="flex flex-wrap gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="manual-time" className="text-xs">
+                    Hora
+                  </Label>
+                  <Input
+                    id="manual-time"
+                    type="time"
+                    // Sin `step`, el navegador permite cualquier minuto: es
+                    // justo lo que la rejilla impedia.
+                    step={60}
+                    value={manualTime}
+                    onChange={(e) => setManualTime(e.target.value)}
+                    className="w-32"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="manual-duration" className="text-xs">
+                    Duración (min)
+                  </Label>
+                  <Input
+                    id="manual-duration"
+                    type="number"
+                    min={1}
+                    max={720}
+                    placeholder={String(selectedService?.duration_minutes ?? 30)}
+                    value={manualDuration}
+                    onChange={(e) => setManualDuration(e.target.value)}
+                    className="w-28"
+                  />
+                </div>
+              </div>
+
+              {professionalId === "any" ? (
+                <p className="text-xs text-muted-foreground">
+                  Elige arriba con qué profesional es la cita: al poner la hora a mano, hay que
+                  decir quién la tiene libre.
+                </p>
+              ) : null}
+
+              {manualError !== null ? (
+                <p className="text-sm text-destructive">{manualError}</p>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              {slotsQuery.isLoading && <DaySlotsSkeleton />}
+              {slotsQuery.isError && (
+                <p className="text-sm text-destructive">Error al cargar disponibilidad.</p>
+              )}
+              {slotsQuery.isSuccess && (
+                <DaySlots
+                  slots={slotsQuery.data}
+                  timeZone={timezone}
+                  selected={selectedSlot}
+                  anyProfessional={professionalId === "any"}
+                  onSelect={(slot) => setSelectedSlot(slot)}
+                />
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Resumen de la cita seleccionada */}
+      {selectedSlot && selectedService && (
+        <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm">
+          <span className="font-medium">{selectedService.name}</span>
+          <span className="text-muted-foreground">
+            {" · "}
+            {formatSlotTime(selectedSlot.startsAt, timezone)}
+            {" – "}
+            {formatSlotTime(selectedSlot.endsAt, timezone)}
+            {" · "}
+            {formatPrice(selectedService.price_cents, selectedService.currency)}
+          </span>
+        </div>
+      )}
+
+      {/* Cliente: buscar uno existente (por nombre o teléfono) o crear uno nuevo */}
+      <div className="space-y-4 border-t pt-4">
+        <p className="text-sm font-medium">Cliente *</p>
+
+        {selectedCustomer ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{selectedCustomer.full_name}</p>
+              <p className="truncate text-xs text-muted-foreground tabular-nums">
+                {selectedCustomer.phone ?? selectedCustomer.email ?? "Sin contacto"}
+              </p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={clearSelectedCustomer}>
+              <X className="mr-1 h-3.5 w-3.5" />
+              Cambiar
+            </Button>
+          </div>
+        ) : (
+          <>
+            {/* Buscador de cliente existente */}
+            <div className="relative">
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                className="pl-9"
+                placeholder="Buscar cliente por nombre o teléfono…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Buscar cliente por nombre o teléfono"
+              />
+            </div>
+
+            {search.trim().length >= 2 && (
+              <div className="max-h-56 divide-y overflow-y-auto rounded-md border">
+                {customerSearch.isFetching && !customerSearch.data ? (
+                  <p className="px-3 py-3 text-sm text-muted-foreground">Buscando…</p>
+                ) : (customerSearch.data ?? []).length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-muted-foreground">
+                    Sin coincidencias. Puedes crear un cliente nuevo abajo.
+                  </p>
+                ) : (
+                  (customerSearch.data ?? []).slice(0, 20).map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent"
+                      onClick={() => handlePickCustomer(c)}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{c.full_name}</p>
+                        <p className="truncate text-xs text-muted-foreground tabular-nums">
+                          {c.phone ?? c.email ?? ""}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* …o crear un cliente nuevo */}
+            <p className="pt-1 text-xs text-muted-foreground">…o crea un cliente nuevo:</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="form-name">Nombre y apellidos</Label>
+                <Input
+                  id="form-name"
+                  value={contact.fullName}
+                  onChange={(e) => setContact((c) => ({ ...c, fullName: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="form-phone">Teléfono</Label>
+                <Input
+                  id="form-phone"
+                  type="tel"
+                  value={contact.phone}
+                  onChange={(e) => setContact((c) => ({ ...c, phone: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="form-email">Email (opcional)</Label>
+              <Input
+                id="form-email"
+                type="email"
+                value={contact.email}
+                onChange={(e) => setContact((c) => ({ ...c, email: e.target.value }))}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Notas de la cita (siempre) */}
+        <div className="space-y-2">
+          <Label htmlFor="form-notes">Notas de la cita (opcional)</Label>
+          <Textarea
+            id="form-notes"
+            rows={2}
+            value={contact.notes}
+            onChange={(e) => setContact((c) => ({ ...c, notes: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      {/* Aviso de solape: grande y en rojo a propósito. Pisar una cita no es un
+          error que se corrige, es una decisión que se toma — y tiene que costar
+          verla, no pasarla por alto. Solo aparece a quien puede hacerlo. */}
+      {ofrecerSolape && ultimoHueco !== null ? (
+        <div
+          role="alert"
+          className="space-y-3 rounded-lg border-2 border-destructive bg-destructive/10 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle
+              className="mt-0.5 h-6 w-6 shrink-0 text-destructive"
+              aria-hidden="true"
+            />
+            <div className="space-y-1">
+              <p className="text-base font-bold text-destructive">
+                Vas a solapar esta cita con otra
+              </p>
+              <p className="text-sm text-destructive/90">
+                A las {formatSlotTime(ultimoHueco.startsAt, timezone)} ya hay otra cita con este
+                profesional. Si continúas, las dos quedarán a la misma hora.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setUltimoHueco(null);
+                createMutation.reset();
+              }}
+            >
+              Elegir otra hora
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={createMutation.isPending}
+              onClick={() => crearCita(ultimoHueco, true)}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+              )}
+              Solapar de todas formas
+            </Button>
+          </div>
+        </div>
+      ) : (
+        (mutationError ?? createMutation.isError) && (
+          <p className="text-sm text-destructive">
+            {mutationError ??
+              (createMutation.error instanceof Error
+                ? createMutation.error.message
+                : "Error al crear la cita")}
+          </p>
+        )
+      )}
+
+      <div className="flex justify-end gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={createMutation.isPending}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={!canSubmit || createMutation.isPending}>
+          {createMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Guardando…
+            </>
+          ) : (
+            "Crear cita"
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}

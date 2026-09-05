@@ -1,0 +1,51 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Supabase CLI local state (project ref, pooler cache) — no versionar
+supabase/.temp/
+.env*
+
+# APK/keystore de la PWA (NO commitear: la keystore es secreta)
+# apk/ se versiona: son los artefactos que suben a Play Store
+#apk/
+
+# Agente local de captura de imagen. `agent.config.json` lleva el pairingToken,
+# que es un SECRETO: se genera por instalación y nunca se versiona. El ejemplo
+# (agent.config.example.json) sí va al repo.
+agent/agent.config.json
+agent/dist/
+# El paquete del instalador se regenera con `npm run build:instalador`.
+agent/dist-instalador/
+agent/node_modules/

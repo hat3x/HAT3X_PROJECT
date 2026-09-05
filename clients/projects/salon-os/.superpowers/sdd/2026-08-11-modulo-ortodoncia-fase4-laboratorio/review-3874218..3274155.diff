@@ -1,0 +1,587 @@
+# Review package: 387421885a406d37b118facfcb4fded43b5a8ac8..HEAD
+
+## Commits
+3274155 feat(ortodoncia): UI tarjeta Laboratorio (ui-ux-pro-max)
+
+## Files changed
+ src/components/dental/ortho-lab-card.tsx | 571 +++++++++++++++++++++++++++++++
+ 1 file changed, 571 insertions(+)
+
+## Diff
+diff --git a/src/components/dental/ortho-lab-card.tsx b/src/components/dental/ortho-lab-card.tsx
+new file mode 100644
+index 0000000..a241baf
+--- /dev/null
++++ b/src/components/dental/ortho-lab-card.tsx
+@@ -0,0 +1,571 @@
++"use client";
++
++import { useState } from "react";
++import {
++  AlertCircle,
++  CalendarDays,
++  CheckCircle2,
++  FlaskConical,
++  Loader2,
++  PackageCheck,
++  Send,
++  Trash2,
++} from "lucide-react";
++
++import { Badge } from "@/components/ui/badge";
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from "@/components/ui/select";
++import { Skeleton } from "@/components/ui/skeleton";
++import { Textarea } from "@/components/ui/textarea";
++import {
++  useCreateLabOrder,
++  useDeleteLabOrder,
++  useLabOrders,
++  useMarkLabOrderDelivered,
++  useMarkLabOrderReceived,
++} from "@/hooks/use-lab-orders";
++import {
++  LAB_ORDER_KIND_LABELS,
++  LAB_ORDER_STATUS_LABELS,
++  labOrderStatus,
++  type LabOrderKind,
++  type LabOrderStatus,
++} from "@/lib/dental/lab-orders";
++import type { LabOrder } from "@/types/database";
++
++// ---------------------------------------------------------------------------
++// OrthoLabCard — pedidos a laboratorio (modelos, retenedores, alineadores...).
++// Componente CLIENTE (no importa de "@/lib/salon"; recibe salonId/customerId
++// por prop, resueltos en el page servidor). Mismo patrón que
++// OrthoPaymentPlanCard: formulario + lista, mutaciones con error local
++// por-acción, botones deshabilitados mientras están pendientes, diálogo de
++// confirmación para la acción destructiva (borrar).
++// ---------------------------------------------------------------------------
++
++export interface OrthoLabCardProps {
++  salonId: string;
++  customerId: string;
++}
++
++const KINDS: readonly LabOrderKind[] = [
++  "modelo",
++  "retenedor",
++  "alineadores",
++  "ortopedia",
++  "otro",
++];
++
++function todayIso(): string {
++  return new Date().toISOString().slice(0, 10);
++}
++
++/** Convención de fecha del módulo dental (igual que ConsentList/OrthoPaymentPlanCard). */
++function formatDate(iso: string): string {
++  return new Date(iso).toLocaleDateString("es-ES", {
++    day: "2-digit",
++    month: "2-digit",
++    year: "numeric",
++  });
++}
++
++export function OrthoLabCard({ salonId, customerId }: OrthoLabCardProps): React.ReactElement {
++  const ordersQuery = useLabOrders(salonId, customerId);
++  const createOrder = useCreateLabOrder(salonId, customerId);
++  const markReceived = useMarkLabOrderReceived(salonId, customerId);
++  const markDelivered = useMarkLabOrderDelivered(salonId, customerId);
++  const deleteOrder = useDeleteLabOrder(salonId, customerId);
++
++  const [kind, setKind] = useState<LabOrderKind>("alineadores");
++  const [labName, setLabName] = useState("");
++  const [sentAt, setSentAt] = useState(todayIso());
++  const [notes, setNotes] = useState("");
++  const [formError, setFormError] = useState<string | null>(null);
++
++  // Las acciones de fila (marcar recibido/entregado, borrar) comparten un
++  // único error local: solo suele haber una en curso a la vez, mismo
++  // espíritu que `unpayError` en OrthoPaymentPlanCard.
++  const [actionError, setActionError] = useState<string | null>(null);
++
++  // Confirmación de borrado (acción destructiva) — mismo patrón que el
++  // diálogo de cancelación del plan de pago.
++  const [deleteTarget, setDeleteTarget] = useState<LabOrder | null>(null);
++
++  function submit(): void {
++    setFormError(null);
++    createOrder.mutate(
++      { kind, labName: labName || null, sentAt, notes: notes || null },
++      {
++        onSuccess: () => {
++          setLabName("");
++          setNotes("");
++        },
++        onError: (e) =>
++          setFormError(e instanceof Error ? e.message : "No se pudo crear el pedido."),
++      },
++    );
++  }
++
++  function handleMarkReceived(orderId: string): void {
++    setActionError(null);
++    markReceived.mutate(
++      { orderId, input: { date: todayIso() } },
++      {
++        onError: (e) =>
++          setActionError(e instanceof Error ? e.message : "No se pudo marcar como recibido."),
++      },
++    );
++  }
++
++  function handleMarkDelivered(orderId: string): void {
++    setActionError(null);
++    markDelivered.mutate(
++      { orderId, input: { date: todayIso() } },
++      {
++        onError: (e) =>
++          setActionError(e instanceof Error ? e.message : "No se pudo marcar como entregado."),
++      },
++    );
++  }
++
++  function handleConfirmDelete(): void {
++    if (deleteTarget === null) return;
++    setActionError(null);
++    deleteOrder.mutate(deleteTarget.id, {
++      onSuccess: () => setDeleteTarget(null),
++      onError: (e) =>
++        setActionError(e instanceof Error ? e.message : "No se pudo borrar el pedido."),
++    });
++  }
++
++  const orders = ordersQuery.data ?? [];
++
++  return (
++    <Card>
++      <CardHeader className="flex flex-row items-center gap-3 space-y-0">
++        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
++          <FlaskConical className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />
++        </span>
++        <div>
++          <CardTitle className="text-xl">Laboratorio</CardTitle>
++          <p className="text-sm text-muted-foreground">
++            Modelos, retenedores y alineadores enviados y recibidos del laboratorio.
++          </p>
++        </div>
++      </CardHeader>
++      <CardContent className="space-y-6">
++        <NewOrderForm
++          kind={kind}
++          onKindChange={setKind}
++          labName={labName}
++          onLabNameChange={setLabName}
++          sentAt={sentAt}
++          onSentAtChange={setSentAt}
++          notes={notes}
++          onNotesChange={setNotes}
++          error={formError}
++          creating={createOrder.isPending}
++          onSubmit={submit}
++        />
++
++        {actionError !== null && (
++          <p
++            role="alert"
++            className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
++          >
++            <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++            {actionError}
++          </p>
++        )}
++
++        {ordersQuery.isPending ? (
++          <OrdersSkeleton />
++        ) : ordersQuery.isError ? (
++          <OrdersError
++            message={
++              ordersQuery.error instanceof Error
++                ? ordersQuery.error.message
++                : "No se pudieron cargar los pedidos de laboratorio."
++            }
++            onRetry={() => void ordersQuery.refetch()}
++          />
++        ) : orders.length === 0 ? (
++          <OrdersEmpty />
++        ) : (
++          <ul className="space-y-3">
++            {orders.map((o) => (
++              <LabOrderRow
++                key={o.id}
++                order={o}
++                onMarkReceived={() => handleMarkReceived(o.id)}
++                onMarkDelivered={() => handleMarkDelivered(o.id)}
++                onDelete={() => setDeleteTarget(o)}
++                receivingPending={markReceived.isPending}
++                deliveringPending={markDelivered.isPending}
++              />
++            ))}
++          </ul>
++        )}
++      </CardContent>
++
++      {/* Confirmación de borrado (acción destructiva). */}
++      <Dialog
++        open={deleteTarget !== null}
++        onOpenChange={(open) => {
++          if (!open) setDeleteTarget(null);
++        }}
++      >
++        <DialogContent>
++          <DialogHeader>
++            <div className="mb-1 flex h-11 w-11 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
++              <Trash2 className="h-5 w-5" aria-hidden="true" />
++            </div>
++            <DialogTitle>¿Borrar este pedido de laboratorio?</DialogTitle>
++            <DialogDescription>
++              {deleteTarget !== null &&
++                `${LAB_ORDER_KIND_LABELS[deleteTarget.kind]}${
++                  deleteTarget.lab_name !== null ? ` · ${deleteTarget.lab_name}` : ""
++                } · enviado el ${formatDate(deleteTarget.sent_at)}. `}
++              Esta acción no se puede deshacer.
++            </DialogDescription>
++          </DialogHeader>
++
++          {actionError !== null && (
++            <p
++              role="alert"
++              className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
++            >
++              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++              {actionError}
++            </p>
++          )}
++
++          <DialogFooter>
++            <Button
++              type="button"
++              variant="ghost"
++              onClick={() => setDeleteTarget(null)}
++              disabled={deleteOrder.isPending}
++            >
++              Cancelar
++            </Button>
++            <Button
++              type="button"
++              variant="destructive"
++              className="gap-1.5"
++              disabled={deleteOrder.isPending}
++              onClick={handleConfirmDelete}
++            >
++              {deleteOrder.isPending ? (
++                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
++              ) : (
++                <Trash2 className="h-4 w-4" aria-hidden="true" />
++              )}
++              {deleteOrder.isPending ? "Borrando…" : "Sí, borrar"}
++            </Button>
++          </DialogFooter>
++        </DialogContent>
++      </Dialog>
++    </Card>
++  );
++}
++
++// --- Formulario de nuevo pedido ---------------------------------------------
++
++interface NewOrderFormProps {
++  kind: LabOrderKind;
++  onKindChange: (k: LabOrderKind) => void;
++  labName: string;
++  onLabNameChange: (v: string) => void;
++  sentAt: string;
++  onSentAtChange: (v: string) => void;
++  notes: string;
++  onNotesChange: (v: string) => void;
++  error: string | null;
++  creating: boolean;
++  onSubmit: () => void;
++}
++
++function NewOrderForm({
++  kind,
++  onKindChange,
++  labName,
++  onLabNameChange,
++  sentAt,
++  onSentAtChange,
++  notes,
++  onNotesChange,
++  error,
++  creating,
++  onSubmit,
++}: NewOrderFormProps): React.ReactElement {
++  return (
++    <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-5">
++      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
++        Nuevo pedido
++      </p>
++      <div className="grid gap-4 sm:grid-cols-2">
++        <div className="space-y-1.5">
++          <Label htmlFor="lab-kind">Tipo</Label>
++          <Select value={kind} onValueChange={(v) => onKindChange(v as LabOrderKind)}>
++            <SelectTrigger id="lab-kind">
++              <SelectValue />
++            </SelectTrigger>
++            <SelectContent>
++              {KINDS.map((k) => (
++                <SelectItem key={k} value={k}>
++                  {LAB_ORDER_KIND_LABELS[k]}
++                </SelectItem>
++              ))}
++            </SelectContent>
++          </Select>
++        </div>
++        <div className="space-y-1.5">
++          <Label htmlFor="lab-name">Laboratorio</Label>
++          <Input
++            id="lab-name"
++            placeholder="Nombre del laboratorio"
++            value={labName}
++            onChange={(e) => onLabNameChange(e.target.value)}
++          />
++        </div>
++        <div className="space-y-1.5">
++          <Label htmlFor="lab-sent">
++            Fecha de envío <span className="text-destructive">*</span>
++          </Label>
++          <Input
++            id="lab-sent"
++            type="date"
++            value={sentAt}
++            onChange={(e) => onSentAtChange(e.target.value)}
++          />
++        </div>
++        <div className="space-y-1.5 sm:col-span-2">
++          <Label htmlFor="lab-notes">Notas</Label>
++          <Textarea
++            id="lab-notes"
++            placeholder="Instrucciones, color, observaciones…"
++            rows={2}
++            value={notes}
++            onChange={(e) => onNotesChange(e.target.value)}
++          />
++        </div>
++      </div>
++
++      {error !== null && (
++        <p
++          role="alert"
++          className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
++        >
++          <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++          {error}
++        </p>
++      )}
++
++      <Button
++        type="button"
++        className="gap-1.5"
++        onClick={onSubmit}
++        disabled={creating || sentAt.trim() === ""}
++      >
++        {creating ? (
++          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
++        ) : (
++          <Send className="h-4 w-4" aria-hidden="true" />
++        )}
++        {creating ? "Creando…" : "Nuevo pedido"}
++      </Button>
++    </div>
++  );
++}
++
++// --- Loading / error / empty -------------------------------------------------
++
++function OrdersSkeleton(): React.ReactElement {
++  return (
++    <div aria-busy="true" aria-live="polite" className="space-y-3">
++      <span className="sr-only">Cargando pedidos de laboratorio…</span>
++      {Array.from({ length: 2 }).map((_, i) => (
++        <Skeleton key={i} className="h-24 w-full rounded-xl" />
++      ))}
++    </div>
++  );
++}
++
++function OrdersError({
++  message,
++  onRetry,
++}: {
++  message: string;
++  onRetry: () => void;
++}): React.ReactElement {
++  return (
++    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-destructive/30 bg-destructive/5 px-4 py-10 text-center">
++      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
++        <AlertCircle className="h-5 w-5" aria-hidden="true" />
++      </span>
++      <p className="text-sm font-medium text-foreground">No se pudieron cargar los pedidos</p>
++      <p className="max-w-[32ch] text-xs text-muted-foreground">{message}</p>
++      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
++        Reintentar
++      </Button>
++    </div>
++  );
++}
++
++function OrdersEmpty(): React.ReactElement {
++  return (
++    <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border/70 px-4 py-10 text-center">
++      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
++        <FlaskConical className="h-5 w-5" aria-hidden="true" />
++      </span>
++      <p className="text-sm font-medium text-foreground">Sin pedidos de laboratorio</p>
++      <p className="max-w-[32ch] text-xs text-muted-foreground">
++        Los pedidos que envíes al laboratorio aparecerán aquí.
++      </p>
++    </div>
++  );
++}
++
++// --- Fila de pedido ----------------------------------------------------------
++
++function LabOrderRow({
++  order,
++  onMarkReceived,
++  onMarkDelivered,
++  onDelete,
++  receivingPending,
++  deliveringPending,
++}: {
++  order: LabOrder;
++  onMarkReceived: () => void;
++  onMarkDelivered: () => void;
++  onDelete: () => void;
++  receivingPending: boolean;
++  deliveringPending: boolean;
++}): React.ReactElement {
++  const status = labOrderStatus({
++    sentAt: order.sent_at,
++    receivedAt: order.received_at,
++    deliveredAt: order.delivered_at,
++  });
++
++  return (
++    <li className="rounded-xl border border-border/70 p-4 transition-colors duration-150 ease-apple-out hover:border-ring/30">
++      <div className="flex flex-wrap items-start justify-between gap-2">
++        <div>
++          <p className="font-medium text-foreground">
++            {LAB_ORDER_KIND_LABELS[order.kind]}
++            {order.lab_name !== null && (
++              <span className="font-normal text-muted-foreground"> · {order.lab_name}</span>
++            )}
++          </p>
++          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
++            <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
++            <span>
++              Enviado {formatDate(order.sent_at)}
++              {order.received_at !== null && ` · Recibido ${formatDate(order.received_at)}`}
++              {order.delivered_at !== null && ` · Entregado ${formatDate(order.delivered_at)}`}
++            </span>
++          </p>
++        </div>
++        <StatusBadge status={status} />
++      </div>
++
++      {order.notes !== null && (
++        <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted/40 p-2.5 text-sm text-foreground">
++          {order.notes}
++        </p>
++      )}
++
++      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
++        {status === "enviado" && (
++          <Button
++            type="button"
++            size="sm"
++            variant="outline"
++            className="gap-1.5"
++            disabled={receivingPending}
++            onClick={onMarkReceived}
++          >
++            {receivingPending ? (
++              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++            ) : (
++              <PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />
++            )}
++            Marcar recibido
++          </Button>
++        )}
++        {status === "recibido" && (
++          <Button
++            type="button"
++            size="sm"
++            variant="outline"
++            className="gap-1.5"
++            disabled={deliveringPending}
++            onClick={onMarkDelivered}
++          >
++            {deliveringPending ? (
++              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
++            ) : (
++              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
++            )}
++            Marcar entregado
++          </Button>
++        )}
++        <Button
++          type="button"
++          size="sm"
++          variant="ghost"
++          className="ml-auto gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
++          onClick={onDelete}
++        >
++          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
++          Borrar
++        </Button>
++      </div>
++    </li>
++  );
++}
++
++/** Chip de estado: color + icono (nunca solo color) para las tres fases del pedido. */
++function StatusBadge({ status }: { status: LabOrderStatus }): React.ReactElement {
++  if (status === "entregado") {
++    return (
++      <Badge variant="outline" className="gap-1 border-success/30 bg-success/10 text-success">
++        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
++        {LAB_ORDER_STATUS_LABELS.entregado}
++      </Badge>
++    );
++  }
++  if (status === "recibido") {
++    return (
++      <Badge variant="outline" className="gap-1 border-info/30 bg-info/10 text-info">
++        <PackageCheck className="h-3 w-3" aria-hidden="true" />
++        {LAB_ORDER_STATUS_LABELS.recibido}
++      </Badge>
++    );
++  }
++  return (
++    <Badge variant="outline" className="gap-1 text-muted-foreground">
++      <Send className="h-3 w-3" aria-hidden="true" />
++      {LAB_ORDER_STATUS_LABELS.enviado}
++    </Badge>
++  );
++}

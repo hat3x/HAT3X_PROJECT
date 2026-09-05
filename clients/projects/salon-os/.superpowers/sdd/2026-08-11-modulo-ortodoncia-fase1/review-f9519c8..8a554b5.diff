@@ -1,0 +1,93 @@
+# Review package: f9519c8387774121957c935de4fd322b10b3b77b..8a554b5
+
+## Commits
+8a554b5 feat(ortodoncia): ruta /ortodoncia (layout + page + stub vista)
+
+## Files changed
+ src/app/(dashboard)/ortodoncia/layout.tsx |  9 +++++++
+ src/app/(dashboard)/ortodoncia/page.tsx   | 44 +++++++++++++++++++++++++++++++
+ src/components/dental/ortodoncia-view.tsx | 10 +++++++
+ 3 files changed, 63 insertions(+)
+
+## Diff
+diff --git a/src/app/(dashboard)/ortodoncia/layout.tsx b/src/app/(dashboard)/ortodoncia/layout.tsx
+new file mode 100644
+index 0000000..af756f0
+--- /dev/null
++++ b/src/app/(dashboard)/ortodoncia/layout.tsx
+@@ -0,0 +1,9 @@
++import { SectorGate } from "@/components/guards/sector-gate";
++
++export default function OrtodonciaLayout({
++  children,
++}: {
++  children: React.ReactNode;
++}): React.ReactElement {
++  return <SectorGate required="odontologia">{children}</SectorGate>;
++}
+diff --git a/src/app/(dashboard)/ortodoncia/page.tsx b/src/app/(dashboard)/ortodoncia/page.tsx
+new file mode 100644
+index 0000000..44ed132
+--- /dev/null
++++ b/src/app/(dashboard)/ortodoncia/page.tsx
+@@ -0,0 +1,44 @@
++import type { Metadata } from "next";
++
++import { OrtodonciaView } from "@/components/dental/ortodoncia-view";
++import { PatientSelector } from "@/components/dental/patient-selector";
++import { Card, CardContent } from "@/components/ui/card";
++import { getActiveSalonId } from "@/lib/salon";
++
++export const metadata: Metadata = { title: "Ortodoncia" };
++
++export default async function OrtodonciaPage({
++  searchParams,
++}: {
++  searchParams: Promise<{ paciente?: string }>;
++}): Promise<React.ReactElement> {
++  const [salonId, params] = await Promise.all([getActiveSalonId(), searchParams]);
++
++  const customerId = params.paciente ?? "";
++  const hasPatient = customerId.length > 0;
++
++  return (
++    <main className="container max-w-4xl py-10 sm:py-12">
++      <div className="mb-8 space-y-1">
++        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Ortodoncia</h1>
++        <p className="text-muted-foreground">Ficha, tratamiento, visitas y consentimiento</p>
++      </div>
++
++      {salonId === null ? (
++        <Card>
++          <CardContent className="py-10 text-center text-sm text-muted-foreground">
++            No tienes una clínica asignada.
++          </CardContent>
++        </Card>
++      ) : !hasPatient ? (
++        <PatientSelector
++          salonId={salonId}
++          hrefBase="/ortodoncia"
++          purposeLabel="ver su ortodoncia"
++        />
++      ) : (
++        <OrtodonciaView salonId={salonId} customerId={customerId} />
++      )}
++    </main>
++  );
++}
+diff --git a/src/components/dental/ortodoncia-view.tsx b/src/components/dental/ortodoncia-view.tsx
+new file mode 100644
+index 0000000..5259fbb
+--- /dev/null
++++ b/src/components/dental/ortodoncia-view.tsx
+@@ -0,0 +1,10 @@
++"use client";
++
++export interface OrtodonciaViewProps {
++  salonId: string;
++  customerId: string;
++}
++
++export function OrtodonciaView(_props: OrtodonciaViewProps): React.ReactElement | null {
++  return null;
++}

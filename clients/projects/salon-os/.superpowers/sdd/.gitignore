@@ -1,0 +1,7 @@
+# Las specs se versionan enteras: son el registro de como se hizo y verifico
+# cada cosa. Solo se quedan fuera los ficheros de trabajo sin valor.
+*
+!*/
+!*.md
+!*.diff
+!*.txt

@@ -1,0 +1,80 @@
+﻿KAIROS - AGENTE DE IMAGEN
+=========================
+
+Que es
+------
+Un programa pequeno que se instala UNA VEZ en el ordenador que tiene conectado
+el equipo de rayos. Su trabajo es que las radiografias lleguen solas a la ficha
+del paciente en Kairos, sin exportar nada a mano ni arrastrar ficheros.
+
+No cambia nada del equipo de rayos. Su programa de siempre sigue funcionando
+exactamente igual.
+
+
+Que hace falta antes de empezar
+-------------------------------
+Tener a mano tres datos. Los tres estan en Kairos:
+
+    Ajustes  ->  Equipos de imagen
+
+    1. El token de emparejamiento   (un codigo largo)
+    2. El id del equipo             (aparece junto al equipo dado de alta)
+    3. La carpeta donde el aparato deja las imagenes
+
+Si el equipo todavia no esta dado de alta en Kairos, dalo de alta primero:
+sin el paso 2 esto no se puede instalar.
+
+
+Como se instala
+---------------
+1. Copia esta carpeta entera al ordenador de rayos (un pendrive vale).
+2. Haz clic DERECHO sobre INSTALAR.bat y elige "Ejecutar como administrador".
+3. Pega los tres datos cuando te los pida.
+4. Espera al mensaje verde que dice LISTO.
+
+Tarda alrededor de un minuto. Si el ordenador no tiene Node instalado, el
+instalador se descarga una copia solo para Kairos; en ese caso tarda un poco
+mas la primera vez.
+
+
+Como se comprueba que ha ido bien
+---------------------------------
+Abre Kairos en cualquier ordenador de la clinica y entra en
+Ajustes -> Equipos de imagen. El equipo debe aparecer como conectado.
+
+
+Y a partir de ahora
+-------------------
+Nada. No hay que abrir ningun programa, ni por las mananas ni nunca.
+
+El agente arranca solo cada vez que se enciende el ordenador. Esa es la razon
+de instalarlo asi y no dejar un acceso directo en el escritorio: un programa
+que alguien tiene que acordarse de abrir es un programa que un lunes no se
+abre, y ese dia las radiografias dejan de llegar sin que nadie sepa por que.
+
+
+Si algo no va
+-------------
+Lo mas habitual es el cortafuegos de Windows. Reinicia el ordenador y vuelve a
+mirar en Ajustes -> Equipos de imagen.
+
+Si sigue igual, escribenos y manda una captura de la ventana del instalador.
+
+
+Que NO hace este programa
+-------------------------
+  - No guarda ninguna contrasena de Kairos. Si alguien se hiciera con este
+    ordenador, aqui no hay ninguna llave que robar.
+  - No escucha en la red de la clinica: solo atiende a este mismo ordenador.
+  - No abre carpetas de pacientes ni mira radiografias antiguas.
+  - No manda nada a internet por su cuenta. Es el navegador de Kairos, cuando
+    alguien lo abre, quien sube las imagenes.
+
+
+Como se quita
+-------------
+Clic derecho en desinstalar.ps1 -> "Ejecutar con PowerShell" como
+administrador. Si quedaran radiografias sin subir, avisa antes de borrar nada.
+
+
+                                              HAT3X  ·  info@hat3x.com

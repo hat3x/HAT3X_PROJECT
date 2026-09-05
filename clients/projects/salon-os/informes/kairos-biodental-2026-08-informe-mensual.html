@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biodental, agosto 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  html { color-scheme: light dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<style>
+  :root {
+    --ground:#F4F1EA; --surface:#FBFAF7; --surface-alt:#EFEBE1;
+    --text:#16181F; --text-soft:#4C505C; --text-faint:#7C808B;
+    --rule:#DED8CB; --rule-soft:#E8E3D8;
+    --accent:#B4884D; --accent-text:#866226;
+    --exito:#3E8E6E; --aviso:#B37E29; --alerta:#BE543F;
+    --aviso-fondo:#FBF3E2; --exito-fondo:#E9F3EE;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#101218; --surface:#191C24; --surface-alt:#21252F;
+      --text:#ECE8DF; --text-soft:#A8ADB9; --text-faint:#7C818E;
+      --rule:#2C313C; --rule-soft:#232833;
+      --accent:#C99A5C; --accent-text:#D9AE71;
+      --exito:#57A98A; --aviso:#CB9540; --alerta:#D46F5A;
+      --aviso-fondo:#241E12; --exito-fondo:#14231D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#101218; --surface:#191C24; --surface-alt:#21252F;
+    --text:#ECE8DF; --text-soft:#A8ADB9; --text-faint:#7C818E;
+    --rule:#2C313C; --rule-soft:#232833;
+    --accent:#C99A5C; --accent-text:#D9AE71;
+    --exito:#57A98A; --aviso:#CB9540; --alerta:#D46F5A;
+    --aviso-fondo:#241E12; --exito-fondo:#14231D;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    background: var(--ground); color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px; line-height: 1.62; -webkit-font-smoothing: antialiased;
+  }
+  h1,h2,h3 { font-family:"Source Serif 4",Georgia,serif; font-weight:600; margin:0; text-wrap:balance; letter-spacing:-.01em; }
+  h1 { font-size: clamp(1.9rem,4.2vw,2.6rem); line-height:1.14; }
+  h2 { font-size: clamp(1.3rem,2.5vw,1.6rem); line-height:1.24; }
+  h3 { font-size: 1rem; }
+  p,li { margin:0; }
+  p { max-width:68ch; color:var(--text-soft); }
+  strong { color:var(--text); font-weight:600; }
+
+  .hoja { max-width:58rem; margin:0 auto; padding: clamp(1.75rem,4vw,3.5rem) clamp(1.1rem,3.5vw,2.5rem) 5rem; }
+  .eyebrow { font-family:"IBM Plex Mono",monospace; font-size:.7rem; text-transform:uppercase; letter-spacing:.16em; color:var(--accent-text); }
+
+  header { display:flex; flex-direction:column; gap:1rem; padding-bottom:1.75rem; border-bottom:1px solid var(--rule); }
+  .marca { display:flex; align-items:center; gap:.75rem; }
+  .marca span { font-family:"Source Serif 4",Georgia,serif; font-size:1.15rem; }
+  .marca small {
+    font-family:"IBM Plex Mono",monospace; font-size:.66rem; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--text-faint);
+    border-left:1px solid var(--rule); padding-left:.75rem;
+  }
+  .entradilla { font-family:"Source Serif 4",Georgia,serif; font-size:clamp(1.05rem,2vw,1.2rem); color:var(--text-soft); max-width:56ch; line-height:1.55; }
+  .meta { display:flex; flex-wrap:wrap; gap:.4rem 1.5rem; font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--text-faint); }
+
+  section { margin-top: clamp(2.25rem,5vw,3.25rem); display:flex; flex-direction:column; gap:1rem; }
+
+  .cita {
+    border-left:2px solid var(--accent); padding:.2rem 0 .2rem 1.1rem;
+    font-family:"Source Serif 4",Georgia,serif; font-size:1.05rem; color:var(--text);
+    max-width:54ch; font-style:italic;
+  }
+  .cita cite { display:block; font-style:normal; font-family:"IBM Plex Sans",sans-serif; font-size:.8rem; color:var(--text-faint); margin-top:.35rem; }
+
+  .lista { display:flex; flex-direction:column; gap:0; }
+  .item { padding:1rem 0; border-top:1px solid var(--rule-soft); display:flex; flex-direction:column; gap:.3rem; }
+  .item:first-child { border-top:0; }
+  .item p { font-size:.95rem; }
+  .donde { font-family:"IBM Plex Mono",monospace; font-size:.68rem; letter-spacing:.06em; color:var(--text-faint); text-transform:uppercase; }
+
+  .cifras { display:grid; grid-template-columns:repeat(auto-fit,minmax(11rem,1fr)); gap:1px; background:var(--rule-soft); border:1px solid var(--rule-soft); border-radius:3px; overflow:hidden; }
+  .cifra { background:var(--surface); padding:1.1rem 1.2rem; display:flex; flex-direction:column; gap:.2rem; }
+  .cifra .n { font-size:1.7rem; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .cifra .t { font-size:.82rem; color:var(--text-soft); }
+
+  .nota { border-left:3px solid var(--accent); background:var(--surface); padding:.95rem 1.1rem; border-radius:0 3px 3px 0; display:flex; flex-direction:column; gap:.35rem; }
+  .nota.ojo { border-left-color:var(--aviso); background:var(--aviso-fondo); }
+  .nota.bien { border-left-color:var(--exito); background:var(--exito-fondo); }
+  .nota .etiqueta { font-family:"IBM Plex Mono",monospace; font-size:.66rem; text-transform:uppercase; letter-spacing:.14em; color:var(--text-faint); }
+  .nota.ojo .etiqueta { color:var(--aviso); }
+  .nota.bien .etiqueta { color:var(--exito); }
+  .nota p { font-size:.92rem; }
+
+  ol.pide { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:0; }
+  ol.pide li { display:grid; grid-template-columns:2.2rem 1fr; gap:1rem; padding:.9rem 0; border-top:1px solid var(--rule-soft); align-items:start; }
+  ol.pide li:first-child { border-top:0; }
+  ol.pide .n { font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--accent-text); font-variant-numeric:tabular-nums; padding-top:.16rem; }
+  ol.pide p { font-size:.95rem; }
+
+  footer { margin-top:3.5rem; padding-top:1.4rem; border-top:1px solid var(--rule); font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--text-faint); display:flex; flex-wrap:wrap; gap:.5rem 1.5rem; justify-content:space-between; }
+</style>
+
+<div class="hoja">
+
+  <header>
+    <div class="marca">
+      <svg width="40" height="40" viewBox="0 0 48 48" role="img" aria-label="Kairos">
+        <circle cx="24" cy="24" r="19" fill="none" stroke="var(--text-soft)" stroke-width="1.25"/>
+        <line x1="24" y1="24" x2="24" y2="9.5" stroke="var(--text)" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="24" cy="9.5" r="2.6" fill="var(--accent)"/>
+        <circle cx="24" cy="24" r="1.6" fill="var(--text)"/>
+      </svg>
+      <span>Kairos</span>
+      <small>Biodental · Informe de agosto</small>
+    </div>
+
+    <h1>Lo entregado en agosto</h1>
+    <p class="entradilla">
+      El mes en el que la clínica dejó de ser una agenda con fichas y pasó a llevar el
+      recorrido entero: del diente al presupuesto, del presupuesto a la caja y de la caja a la
+      factura.
+    </p>
+    <div class="meta">
+      <span>1 al 31 de agosto de 2026</span>
+      <span>kairosmanager.app</span>
+      <span>Preparado por HAT3X</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="cifras">
+      <div class="cifra"><span class="n">62</span><span class="t">entregas al mes</span></div>
+      <div class="cifra"><span class="n">2.482</span><span class="t">comprobaciones automáticas</span></div>
+      <div class="cifra"><span class="n">4.626</span><span class="t">presupuestos reconectados con su hallazgo</span></div>
+      <div class="cifra"><span class="n">5.794</span><span class="t">fichas numeradas para el equipo de rayos</span></div>
+    </div>
+  </section>
+
+  <!-- ── Lo que pedisteis ──────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Lo que pedisteis</p>
+    <h2>Las cosas que nos trasladasteis, resueltas</h2>
+
+    <p class="cita">
+      «Quiero poder dar la cita a la hora que quiera, y modificarla como quiera. Como si hago
+      una revisión de dos minutos.»
+      <cite>Nadia</cite>
+    </p>
+
+    <div class="lista">
+      <div class="item">
+        <h3>Citas a cualquier hora y con la duración que sea</h3>
+        <p>
+          Al crear una cita hay un enlace de <strong>poner hora y duración a mano</strong>. La
+          rejilla de cuartos de hora sigue siendo lo primero que ves, porque para el día normal
+          es más rápida; el modo manual está para cuando no encaja.
+        </p>
+        <p class="donde">Citas → Nueva cita</p>
+      </div>
+
+      <div class="item">
+        <h3>Solapar una cita, cuando hace falta</h3>
+        <p>
+          Si el hueco está ocupado, ahora se puede crear igualmente: sale un aviso en rojo
+          diciendo con qué hora choca y hay que confirmarlo. <strong>Solo Nadia</strong> tiene
+          ese permiso; a Nicolás y a Kristel ni les aparece el botón.
+        </p>
+        <p class="donde">Citas → Nueva cita</p>
+      </div>
+
+      <div class="item">
+        <h3>La casilla de operación exenta de IVA</h3>
+        <p>
+          En la caja, con su mención legal en la factura. Se marca en cada cobro y no
+          automáticamente, porque la asistencia dental está exenta pero un blanqueamiento es
+          estética y va al 21 %.
+        </p>
+        <p class="donde">Caja</p>
+      </div>
+
+      <div class="item">
+        <h3>Borrar un presupuesto en borrador</h3>
+        <p>Era un fallo: la acción existía y el botón no. Ya está.</p>
+        <p class="donde">Ficha del paciente → Planes</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── El dinero ─────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Lo más grande del mes</p>
+    <h2>Del diente al cobro, sin escribirlo tres veces</h2>
+    <p>
+      Antes el presupuesto y el cobro eran dos mundos: se presupuestaba en la ficha y se
+      cobraba en la caja, tecleando otra vez lo mismo. Ahora es un solo recorrido.
+    </p>
+
+    <div class="lista">
+      <div class="item">
+        <h3>El presupuesto lleva dos estados, no uno</h3>
+        <p>
+          El del <strong>tratamiento</strong> y el del <strong>cobro</strong>, por separado.
+          En una clínica se cobra antes de hacer y se hace antes de cobrar según el caso: una
+          endodoncia puede estar prevista y cobrada a la vez sin que el programa mienta.
+        </p>
+        <p class="donde">Ficha → Planes</p>
+      </div>
+      <div class="item">
+        <h3>Pasar líneas a caja, y cobrarlas</h3>
+        <p>
+          Se marcan las líneas que toca y se crea un ticket. Aparece en la pestaña de
+          Facturación del paciente como <strong>«Sin cobrar»</strong>, con su botón de cobrar
+          que lleva a la caja con todo puesto.
+        </p>
+        <p class="donde">Ficha → Planes · Ficha → Facturación</p>
+      </div>
+      <div class="item">
+        <h3>El odontograma enseña lo presupuestado en cada diente</h3>
+        <p>
+          Al pulsar una pieza sale lo que se le ha presupuestado, <strong>cruzando todos sus
+          planes</strong>: la endodoncia de marzo y la corona de septiembre son el mismo diente.
+        </p>
+        <p class="donde">Odontograma</p>
+      </div>
+      <div class="item">
+        <h3>Emitir factura desde la caja y desde el ticket</h3>
+        <p>Simplificada o completa. Y ya no deja volver a facturar una venta traída del sistema anterior.</p>
+        <p class="donde">Caja · Facturación</p>
+      </div>
+    </div>
+
+    <div class="nota bien">
+      <span class="etiqueta">Una reparación que no se ve</span>
+      <p>
+        Al volcar los datos del programa anterior, los presupuestos y los hallazgos del
+        odontograma entraron por separado y nunca se unieron: las <strong>7.932 líneas</strong>
+        estaban sueltas. Se han reconectado <strong>4.626</strong> con su hallazgo. Las 516 que
+        no se pudieron decidir con certeza se han dejado sin enlazar a propósito: un enlace
+        clínico inventado es peor que ninguno.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── La agenda ─────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">La agenda</p>
+    <h2>Lo que se rompía, y lo que faltaba</h2>
+
+    <div class="lista">
+      <div class="item">
+        <h3>El horario dejaba pasar citas fuera de hora</h3>
+        <p>Corregido. La reserva online ya no puede dar cita con la clínica cerrada.</p>
+      </div>
+      <div class="item">
+        <h3>Abrir un día suelto sin tocar el horario semanal</h3>
+        <p>
+          Un sábado concreto, o cerrar un puente, sin que eso abra todos los sábados. Y el
+          horario especial ahora avisa de que sustituye al día entero.
+        </p>
+        <p class="donde">Ajustes → Horarios</p>
+      </div>
+      <div class="item">
+        <h3>Gabinetes como recurso</h3>
+        <p>
+          El gabinete cuenta para la disponibilidad: dos profesionales no pueden ocupar el
+          mismo a la vez.
+        </p>
+        <p class="donde">Ajustes → Gabinetes</p>
+      </div>
+      <div class="item">
+        <h3>Lista de espera</h3>
+        <p>Cuando se libera un hueco, avisa de a quién le encaja.</p>
+      </div>
+      <div class="item">
+        <h3>La agenda arranca bloqueada</h3>
+        <p>
+          Arrastrar una cita sin querer y mover a un paciente de hora era demasiado fácil.
+          Ahora editar es una decisión.
+        </p>
+      </div>
+      <div class="item">
+        <h3>La agenda del día, rehecha para el móvil</h3>
+        <p>Y Kairos se instala como aplicación en el móvil.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── La clínica ────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Lo clínico</p>
+    <h2>Documentación y trazabilidad</h2>
+
+    <div class="lista">
+      <div class="item">
+        <h3>Consentimientos firmados a mano y sellados</h3>
+        <p>
+          El paciente firma en pantalla. Se archiva un PDF con el texto exacto que firmó, el
+          trazo y un sello que permite comprobarlo después. Y ya se puede
+          <strong>imprimir</strong> para dárselo.
+        </p>
+        <p class="donde">Ficha → Expediente</p>
+      </div>
+      <div class="item">
+        <h3>Recetas imprimibles, con los datos que exige la ley</h3>
+        <p>
+          Se añadieron el número de colegiado, el principio activo, la forma farmacéutica y la
+          vía, que son lo que pide el Real Decreto 1718/2010. Si a una receta le falta algo, el
+          papel lo dice arriba y en rojo en vez de salir bonito y fallar en la farmacia.
+        </p>
+        <p class="donde">Ficha → Expediente · Ajustes → Equipo</p>
+      </div>
+      <div class="item">
+        <h3>Trazabilidad de implantes</h3>
+        <p>
+          Lote y caducidad, y la pregunta que importa cuando el fabricante avisa de un
+          problema: <strong>a qué pacientes afecta este lote</strong>.
+        </p>
+      </div>
+      <div class="item">
+        <h3>Indicadores propios de clínica</h3>
+        <p>Los de una clínica dental, no los de una peluquería.</p>
+        <p class="donde">Analítica</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Radiología ────────────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Radiología</p>
+    <h2>A medio camino, y a la espera de un paso vuestro</h2>
+    <p>
+      El objetivo es que Kristel elija al paciente <strong>en la pantalla del equipo</strong>,
+      dispare, y la imagen aparezca sola en el expediente. Sin exportar a una carpeta ni subir
+      ficheros a mano.
+    </p>
+
+    <div class="lista">
+      <div class="item">
+        <h3>Ya funciona: la carpeta vigilada</h3>
+        <p>
+          Sirve con cualquier equipo capaz de exportar a disco. Es el suelo: ninguna clínica se
+          queda fuera aunque su aparato no hable DICOM.
+        </p>
+      </div>
+      <div class="item">
+        <h3>Ya está escrito: la identidad y el emparejado</h3>
+        <p>
+          El código con el que cada paciente viaja al equipo (5.794 fichas numeradas, sin
+          duplicados), la lista de trabajo que el equipo lee, y la pieza que decide en qué ficha
+          entra la imagen que vuelve.
+        </p>
+      </div>
+      <div class="item">
+        <h3>Falta: que el agente hable DICOM, y la pantalla</h3>
+        <p>
+          El programa que hace de puente en el ordenador del gabinete y la vista de
+          radiografías en la ficha. Es lo que estamos escribiendo ahora.
+        </p>
+      </div>
+    </div>
+
+    <div class="nota ojo">
+      <span class="etiqueta">Lo único que necesitamos de vosotros aquí</span>
+      <p>
+        En la configuración de vuestro equipo, el nodo de recepción
+        (<strong>XP-STR-SCP</strong>, 192.168.0.1:104) está <strong>sin habilitar</strong>.
+        Hasta que alguien lo active y use el botón de «Conexión de prueba» del propio equipo,
+        podemos escribirlo todo pero no podemos comprobar que funciona de verdad.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Lo que necesitamos ────────────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">Para septiembre</p>
+    <h2>Lo que necesitamos de la clínica</h2>
+    <p>Cinco cosas, por orden de lo que más desbloquea.</p>
+
+    <ol class="pide">
+      <li>
+        <span class="n">01</span>
+        <div>
+          <h3>Habilitar el nodo de rayos y probar la conexión</h3>
+          <p>Es lo que nos permite terminar la radiología y demostrar que funciona.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">02</span>
+        <div>
+          <h3>Los datos de Kristel para recetar</h3>
+          <p>
+            Su nombre completo tal y como aparece en el impreso del Colegio, y su dirección,
+            correo y teléfono profesionales. El número de colegiado ya lo tenemos. Sin lo demás,
+            las recetas salen marcadas como no válidas.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">03</span>
+        <div>
+          <h3>Llamar al Colegio de Odontólogos</h3>
+          <p>
+            Para preguntarles si autorizan que un programa imprima sobre su talonario, y qué
+            hace falta para la receta electrónica (SREP). Ese trámite tarda y no depende de
+            nosotros: cuanto antes se abra, antes se cierra.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">04</span>
+        <div>
+          <h3>Decidir cómo tratar el IVA por defecto</h3>
+          <p>
+            Si queréis que un cobro que viene de presupuesto llegue ya con la exención marcada
+            —y se quite para un blanqueamiento—, o que se marque siempre a mano. Es una
+            decisión fiscal: conviene confirmarla con vuestro gestor.
+          </p>
+        </div>
+      </li>
+      <li>
+        <span class="n">05</span>
+        <div>
+          <h3>Ir rellenando el NIF de los pacientes</h3>
+          <p>
+            Lo tienen <strong>461 de 1.197</strong>. Hace falta para la factura y para la
+            receta; no corre prisa, pero cuantos más haya, menos avisos saltarán.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>HAT3X · Kairos en Biodental · Informe de agosto de 2026</span>
+    <span>2 de septiembre de 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,328 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Kairos — Sistema de diseño premium (estilo Apple)
+ * ----------------------------------------------------
+ * Base neutra cálida + primary en TINTA (near-black cálido) + acento de marca LATÓN
+ * (token propio --brand, #B4884D ≈ 34 41% 50%), usado con cuentagotas (símbolo, nav
+ * activa, foco, señales). El violeta anterior queda retirado. El white-label del tenant
+ * sigue sobrescribiendo --primary/--accent/--ring vía [data-salon-brand].
+ * Todos los tokens son variables CSS consumidas por tailwind.config.ts,
+ * de modo que el tema claro/oscuro y los componentes shadcn comparten
+ * una única fuente de verdad. NO contiene lógica de negocio.
+ *
+ * Convención de color: HSL sin `hsl()` (formato shadcn) → `H S% L%`.
+ * Se consume con `hsl(var(--token))` para permitir opacidad (`/`).
+ */
+
+@layer base {
+  :root {
+    /* ---- Superficies (base neutra cálida) ---- */
+    --background: 40 33% 98%;
+    --foreground: 30 10% 15%;
+
+    --card: 40 40% 99.5%;
+    --card-foreground: 30 10% 15%;
+
+    --popover: 40 40% 99.5%;
+    --popover-foreground: 30 10% 15%;
+
+    /* ---- Primary = TINTA (botones oscuros, texto porcelana) ---- */
+    --primary: 32 11% 11%;
+    --primary-foreground: 40 40% 99%;
+
+    /* ---- Marca: LATÓN (acento propio Kairos, no derivado del tenant) ---- */
+    --brand: 34 41% 50%;
+    --brand-foreground: 32 11% 11%;
+
+    /* ---- Neutros de apoyo (cálidos) ---- */
+    --secondary: 40 20% 94%;
+    --secondary-foreground: 30 12% 22%;
+
+    --muted: 40 20% 95.5%;
+    /* L42% (antes 44%) para alcanzar AA 4.5:1 también sobre --muted */
+    --muted-foreground: 30 6% 42%;
+
+    /* Acento sutil: lavado LATÓN para hover/estado activo (nav) */
+    --accent: 40 52% 90%;
+    --accent-foreground: 38 55% 32%;
+
+    /* ---- Semánticos ---- */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 40 40% 99%;
+
+    /* L32% (antes 38%) para que el texto blanco pase AA 4.5:1 en badges */
+    --success: 145 63% 32%;
+    --success-foreground: 40 40% 99%;
+
+    --warning: 38 92% 48%;
+    --warning-foreground: 30 20% 12%;
+
+    --info: 205 70% 40%;
+    --info-foreground: 40 40% 99%;
+
+    /* ---- Líneas y foco ---- */
+    --border: 38 20% 89%;
+    --input: 38 20% 89%;
+    --ring: 32 11% 11%;
+
+    /* ---- Radios (base premium generosa) ---- */
+    --radius: 0.75rem;
+
+    /* ---- Sombras suaves (color cálido, baja opacidad) ---- */
+    --shadow-color: 30 25% 22%;
+    --shadow-xs: 0 1px 2px 0 hsl(var(--shadow-color) / 0.04);
+    --shadow-sm: 0 1px 3px 0 hsl(var(--shadow-color) / 0.06),
+      0 1px 2px -1px hsl(var(--shadow-color) / 0.06);
+    --shadow: 0 4px 12px -2px hsl(var(--shadow-color) / 0.08),
+      0 2px 6px -2px hsl(var(--shadow-color) / 0.05);
+    --shadow-md: 0 8px 22px -4px hsl(var(--shadow-color) / 0.1),
+      0 4px 8px -4px hsl(var(--shadow-color) / 0.06);
+    --shadow-lg: 0 16px 34px -8px hsl(var(--shadow-color) / 0.12),
+      0 6px 12px -6px hsl(var(--shadow-color) / 0.08);
+    --shadow-xl: 0 24px 50px -12px hsl(var(--shadow-color) / 0.16),
+      0 8px 16px -8px hsl(var(--shadow-color) / 0.1);
+    --shadow-2xl: 0 40px 80px -20px hsl(var(--shadow-color) / 0.22);
+    /* Realce de foco/marca */
+    --shadow-focus: 0 0 0 3px hsl(var(--ring) / 0.35);
+    --shadow-brand: 0 8px 24px -6px hsl(var(--primary) / 0.35);
+
+    /* ---- Liquid Glass (cristal) + Aurora — capa premium estilo Atlas ----
+       El cristal es translúcido; la variante DENSA se opaca para datos con
+       letra pequeña. La aurora deriva de --brand, así el white-label del
+       tenant tiñe también el ambiente automáticamente. */
+    --glass-bg: hsl(0 0% 100% / 0.62);
+    --glass-panel: hsl(40 40% 99.5% / 0.72);
+    --glass-bg-dense: hsl(40 40% 99.5% / 0.86);
+    --glass-border: hsl(0 0% 100% / 0.9);
+    --glass-shadow: 0 8px 30px -6px hsl(var(--shadow-color) / 0.16);
+    --aurora-1: hsl(var(--brand) / 0.22);
+    --aurora-2: hsl(var(--brand) / 0.10);
+  }
+
+  .dark {
+    /* ---- Superficies (charcoal cálido, no negro puro) ---- */
+    --background: 30 9% 8%;
+    --foreground: 40 22% 96%;
+
+    --card: 30 8% 11%;
+    --card-foreground: 40 22% 96%;
+
+    --popover: 30 8% 11%;
+    --popover-foreground: 40 22% 96%;
+
+    /* ---- Primary = PORCELANA en oscuro (botón claro, texto tinta) ---- */
+    --primary: 40 22% 94%;
+    --primary-foreground: 30 12% 10%;
+
+    /* ---- Marca: LATÓN (más claro sobre charcoal) ---- */
+    --brand: 40 56% 66%;
+    --brand-foreground: 30 12% 10%;
+
+    /* ---- Neutros de apoyo ---- */
+    --secondary: 30 6% 17%;
+    --secondary-foreground: 40 22% 96%;
+
+    --muted: 30 6% 16%;
+    --muted-foreground: 40 8% 64%;
+
+    /* Acento sutil: lavado LATÓN profundo */
+    --accent: 38 30% 16%;
+    --accent-foreground: 40 58% 74%;
+
+    /* ---- Semánticos ---- */
+    /* L50% (antes 52%) para superar con holgura AA 4.5:1 con texto claro */
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 40 22% 96%;
+
+    --success: 145 52% 52%;
+    --success-foreground: 30 12% 10%;
+
+    --warning: 38 90% 58%;
+    --warning-foreground: 30 20% 10%;
+
+    --info: 205 70% 62%;
+    --info-foreground: 30 12% 10%;
+
+    /* ---- Líneas y foco ---- */
+    --border: 30 6% 20%;
+    --input: 30 6% 22%;
+    --ring: 40 22% 94%;
+
+    /* ---- Sombras (negras, más presentes sobre fondo oscuro) ---- */
+    --shadow-color: 0 0% 0%;
+    --shadow-xs: 0 1px 2px 0 hsl(var(--shadow-color) / 0.3);
+    --shadow-sm: 0 1px 3px 0 hsl(var(--shadow-color) / 0.4),
+      0 1px 2px -1px hsl(var(--shadow-color) / 0.4);
+    --shadow: 0 4px 12px -2px hsl(var(--shadow-color) / 0.5),
+      0 2px 6px -2px hsl(var(--shadow-color) / 0.4);
+    --shadow-md: 0 8px 22px -4px hsl(var(--shadow-color) / 0.55),
+      0 4px 8px -4px hsl(var(--shadow-color) / 0.4);
+    --shadow-lg: 0 16px 34px -8px hsl(var(--shadow-color) / 0.6),
+      0 6px 12px -6px hsl(var(--shadow-color) / 0.45);
+    --shadow-xl: 0 24px 50px -12px hsl(var(--shadow-color) / 0.65),
+      0 8px 16px -8px hsl(var(--shadow-color) / 0.5);
+    --shadow-2xl: 0 40px 80px -20px hsl(var(--shadow-color) / 0.7);
+    --shadow-focus: 0 0 0 3px hsl(var(--ring) / 0.4);
+    --shadow-brand: 0 8px 24px -6px hsl(var(--primary) / 0.45);
+
+    /* ---- Liquid Glass + Aurora (oscuro): cristal más tenue, aurora más viva ---- */
+    --glass-bg: hsl(0 0% 100% / 0.06);
+    --glass-panel: hsl(var(--card) / 0.5);
+    --glass-bg-dense: hsl(var(--card) / 0.9);
+    --glass-border: hsl(0 0% 100% / 0.12);
+    --glass-shadow: 0 10px 34px -6px hsl(0 0% 0% / 0.5);
+    --aurora-1: hsl(var(--brand) / 0.4);
+    --aurora-2: hsl(var(--brand) / 0.22);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /* Sincroniza controles nativos (scrollbars, inputs de fecha, autofill)
+   * con el tema activo. Evita scrollbars blancos en modo oscuro. */
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
+
+  /* ---- Paletas de ambiente (multi-paleta estilo Atlas) ------------------
+     Cada paleta redefine SOLO --brand, del que derivan la aurora y el tinte
+     de marca (::selection, bg-brand). "latón" es el valor por defecto de
+     :root/.dark (sin regla). El white-label del tenant sigue mandando en el
+     acento (--primary/--accent), así que esto es puramente el AMBIENTE. */
+  [data-paleta="zafiro"] { --brand: 211 90% 46%; }
+  .dark[data-paleta="zafiro"] { --brand: 211 90% 64%; }
+  [data-paleta="oceano"] { --brand: 191 82% 34%; }
+  .dark[data-paleta="oceano"] { --brand: 189 75% 55%; }
+  [data-paleta="nebulosa"] { --brand: 245 70% 60%; }
+  .dark[data-paleta="nebulosa"] { --brand: 250 88% 76%; }
+  [data-paleta="grafito"] { --brand: 215 25% 42%; }
+  .dark[data-paleta="grafito"] { --brand: 215 20% 68%; }
+  [data-paleta="crepusculo"] { --brand: 350 66% 52%; }
+  .dark[data-paleta="crepusculo"] { --brand: 350 85% 74%; }
+
+  /* Scrollbars finas e integradas con el fondo (thumb "flotante" gracias al
+   * borde transparente + background-clip), en lugar de la barra nativa gruesa.
+   * Coherentes en toda la app y en claro/oscuro vía tokens del tema. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /* Renderizado tipográfico nítido estilo Apple */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Selección con tinte de marca */
+  ::selection {
+    background-color: hsl(var(--brand) / 0.22);
+    color: hsl(var(--foreground));
+  }
+
+  /* Anillo de foco coherente y accesible en toda la app */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Respeta a quien prefiere menos movimiento (WCAG 2.3.3): anula las
+   * animaciones de entrada/reveal y las transiciones largas sin perder
+   * la interactividad. El foco y los cambios de estado siguen visibles. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Liquid Glass: superficie translúcida con blur + saturación (chrome flotante:
+     rail, barras, drawers, tarjetas). NO usar sobre datos densos con letra
+     pequeña — para eso, añadir `.cristal-densa` (se opaca). */
+  .cristal {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+  .cristal-densa {
+    background: var(--glass-bg-dense);
+  }
+
+  /* Panel de contenido: cristal más DEFINIDO que el rail (para tarjetas,
+     modales y formularios) — translúcido pero legible, deja ver la aurora. */
+  .cristal-panel {
+    background: var(--glass-panel);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  /* Aurora: dos glows difuminados (derivados de --brand) detrás del contenido.
+     Se coloca en un contenedor `relative`; el contenido va por encima. */
+  .kairos-aurora {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .kairos-aurora::before,
+  .kairos-aurora::after {
+    content: "";
+    position: absolute;
+    width: 70vw;
+    height: 70vw;
+    border-radius: 9999px;
+    filter: blur(80px);
+  }
+  .kairos-aurora::before {
+    top: -24vw;
+    left: -14vw;
+    background: radial-gradient(circle at center, var(--aurora-1), transparent 68%);
+  }
+  .kairos-aurora::after {
+    bottom: -26vw;
+    right: -16vw;
+    background: radial-gradient(circle at center, var(--aurora-2), transparent 66%);
+  }
+}

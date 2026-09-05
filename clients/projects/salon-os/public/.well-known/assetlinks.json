@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.kairosmanager.twa",
+      "sha256_cert_fingerprints": [
+        "52:21:C1:37:3A:C3:FD:DB:9E:2F:43:4C:BB:BD:3D:77:A1:7B:ED:C9:24:E5:D1:86:85:38:B1:94:D9:7B:65:EA"
+      ]
+    }
+  }
+]

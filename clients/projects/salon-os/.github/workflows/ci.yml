@@ -1,0 +1,62 @@
+# Comprobaciones automáticas de Kairos.
+#
+# Hasta ahora este repositorio no tenía ninguna: los 2.162 tests existían pero
+# solo corrían si alguien se acordaba de lanzarlos a mano. Kairos tiene clínicas
+# y salones reales dentro, así que era justo el repo sin red.
+#
+# LAS RAMAS IMPORTAN. El trabajo aquí vive en ramas `hat3x/**`, no en `feat/**`.
+# Un CI que solo vigilara main/master/feat no se ejecutaría nunca sobre el
+# trabajo real — que es exactamente lo que ya pasó una vez en el repo padre.
+#
+# Solo se incluye lo que pasa en verde. Un CI que nace en rojo se ignora, y un
+# CI ignorado no protege nada. Quedan fuera, a propósito:
+#   · `npm run lint` — ESLint no está configurado: `next lint` abre un asistente
+#     interactivo y en CI se colgaría.
+#   · `next build` — necesita variables NEXT_PUBLIC_* que no deben vivir aquí.
+# Cuando alguno se arregle, se añade su paso.
+
+name: CI
+
+on:
+  push:
+    branches: [master, main, "hat3x/**", "feat/**", "feature/**"]
+  pull_request:
+    branches: [master, main]
+
+# Un push nuevo sobre la misma rama cancela la ejecución anterior: no tiene
+# sentido gastar minutos comprobando un commit que ya está superado.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests y tipos
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # `npm ci` en vez de `npm install`: instala exactamente el
+      # package-lock.json, así el CI comprueba las mismas versiones que se
+      # despliegan y no unas resueltas de nuevo.
+      - run: npm ci
+
+      # Los tests no leen variables de entorno (mockean Supabase), por eso este
+      # job no necesita ningún secreto.
+      - name: Tests
+        run: npm test
+
+      - name: Tipos
+        run: npx tsc --noEmit
+
+      # Los scripts (siembra de demo, teardown) tienen su propio tsconfig y no
+      # entran en el anterior. Son los que tocan datos de salones reales, asi
+      # que conviene que compilen igual de limpios.
+      - name: Tipos de los scripts
+        run: npm run typecheck:scripts

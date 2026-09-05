@@ -1,0 +1,151 @@
+# Review package: 26adf8312d3c088cf210a9fcc315dd287ad01bc0..HEAD
+
+## Commits
+71d1d19 feat(ortodoncia): tabla lab_order + tipo (RLS por tenant)
+
+## Files changed
+ src/types/database.ts                            | 49 ++++++++++++++++++++++++
+ supabase/migrations/20260811140000_lab_order.sql | 39 +++++++++++++++++++
+ 2 files changed, 88 insertions(+)
+
+## Diff
+diff --git a/src/types/database.ts b/src/types/database.ts
+index 0d33e4b..2a9e4fc 100644
+--- a/src/types/database.ts
++++ b/src/types/database.ts
+@@ -3382,20 +3382,68 @@ export interface Database {
+         Relationships: [
+           {
+             foreignKeyName: "ortho_installment_plan_fk";
+             columns: ["plan_id", "salon_id"];
+             isOneToOne: false;
+             referencedRelation: "ortho_payment_plan";
+             referencedColumns: ["id", "salon_id"];
+           },
+         ];
+       };
++      // Ortodoncia — pedidos a laboratorio (Fase 4). Estado (enviado/recibido/
++      // entregado) derivado en la app de sent_at/received_at/delivered_at.
++      // Ver migración 20260811140000_lab_order.sql.
++      lab_order: {
++        Row: {
++          id: string;
++          salon_id: string;
++          customer_id: string;
++          kind: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
++          lab_name: string | null;
++          sent_at: string;
++          received_at: string | null;
++          delivered_at: string | null;
++          notes: string | null;
++          created_by: string | null;
++          created_at: string;
++          updated_at: string;
++        };
++        Insert: {
++          id?: string;
++          salon_id: string;
++          customer_id: string;
++          kind: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
++          lab_name?: string | null;
++          sent_at: string;
++          received_at?: string | null;
++          delivered_at?: string | null;
++          notes?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Update: {
++          id?: string;
++          salon_id?: string;
++          customer_id?: string;
++          kind?: "modelo" | "retenedor" | "alineadores" | "ortopedia" | "otro";
++          lab_name?: string | null;
++          sent_at?: string;
++          received_at?: string | null;
++          delivered_at?: string | null;
++          notes?: string | null;
++          created_by?: string | null;
++          created_at?: string;
++          updated_at?: string;
++        };
++        Relationships: [];
++      };
+       // Planes de tratamiento — fases (1:N desde treatment_plan vía
+       // plan_id+salon_id). Sin updated_at (solo created_at). Ver migración
+       // 20260801100000_treatment_plans.sql.
+       plan_phase: {
+         Row: {
+           id: string;
+           salon_id: string;
+           plan_id: string;
+           position: number;
+           name: string;
+@@ -4237,20 +4285,21 @@ export type PerioSiteInsert = TablesInsert<"perio_site">;
+ 
+ // Ortodoncia — log de progreso por visita (Fase 1). Ficha y tratamiento en
+ // clinical_records.data.ortho (JSONB); esta tabla registra una entrada por
+ // visita.
+ export type OrthoVisit = Tables<"ortho_visit">;
+ 
+ // Ortodoncia — plan de pago (Fase 2 económico) — cabecera (ortho_payment_plan)
+ // y cuotas (ortho_installment). Creación atómica vía RPC create_ortho_payment_plan.
+ export type OrthoPaymentPlan = Tables<"ortho_payment_plan">;
+ export type OrthoInstallment = Tables<"ortho_installment">;
++export type LabOrder = Tables<"lab_order">;
+ 
+ // Mutuas y seguros (odontología) — aseguradoras (insurer), póliza del paciente
+ // (customer_insurance) y baremo por servicio (insurer_service_price).
+ export type Insurer = Tables<"insurer">;
+ export type InsurerInsert = TablesInsert<"insurer">;
+ export type CustomerInsurance = Tables<"customer_insurance">;
+ export type CustomerInsuranceInsert = TablesInsert<"customer_insurance">;
+ export type InsurerServicePrice = Tables<"insurer_service_price">;
+ export type InsurerServicePriceInsert = TablesInsert<"insurer_service_price">;
+ 
+diff --git a/supabase/migrations/20260811140000_lab_order.sql b/supabase/migrations/20260811140000_lab_order.sql
+new file mode 100644
+index 0000000..451f8df
+--- /dev/null
++++ b/supabase/migrations/20260811140000_lab_order.sql
+@@ -0,0 +1,39 @@
++-- supabase/migrations/20260811140000_lab_order.sql
++-- Pedidos a laboratorio de ortodoncia (Fase 4). Estado derivado de las fechas en la app.
++--
++-- APLICACIÓN VÍA MANAGEMENT API (la aplica el usuario en el SQL editor):
++--   POST https://api.supabase.com/v1/projects/jztoyekixcziaicrnlce/database/migrations
++--   Content-Type: application/sql
++--   Body: <contenido de este archivo>
++
++begin;
++
++create type public.lab_order_kind as enum ('modelo', 'retenedor', 'alineadores', 'ortopedia', 'otro');
++
++create table public.lab_order (
++  id           uuid primary key default gen_random_uuid(),
++  salon_id     uuid not null references public.salons(id) on delete cascade,
++  customer_id  uuid not null,
++  kind         public.lab_order_kind not null,
++  lab_name     text,
++  sent_at      date not null,
++  received_at  date,
++  delivered_at date,
++  notes        text,
++  created_by   uuid,
++  created_at   timestamptz not null default now(),
++  updated_at   timestamptz not null default now(),
++  constraint lab_order_customer_fk
++    foreign key (customer_id, salon_id)
++    references public.clinical_records (customer_id, salon_id) on delete cascade
++);
++
++create index lab_order_customer_idx on public.lab_order (salon_id, customer_id, sent_at desc);
++
++alter table public.lab_order enable row level security;
++
++create policy lab_order_rw on public.lab_order
++  for all using (salon_id in (select app.user_salon_ids()))
++  with check (salon_id in (select app.user_salon_ids()));
++
++commit;
