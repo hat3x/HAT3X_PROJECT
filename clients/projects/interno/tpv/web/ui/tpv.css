@@ -1,0 +1,446 @@
+/* ==========================================================================
+   TPV · UI · Estilos de componentes
+   --------------------------------------------------------------------------
+   Consume los tokens de tokens.css. Estructura de dos paneles para tablet en
+   horizontal: catálogo (izquierda, scroll) + rail del ticket (derecha, fijo).
+   El cobro y la confirmación entran como overlay a pantalla completa.
+
+   Feedback táctil: cada control pulsable se hunde en :active (translateY +
+   sombra interior) para dar sensación física; el hover sólo se activa en
+   dispositivos con puntero fino (no deja estados "pegados" en pantalla táctil).
+   ========================================================================== */
+
+@import './tokens.css';
+
+/* -- Reset acotado al TPV (no contamina el resto de la app) --------------- */
+.tpv, .tpv *, .tpv *::before, .tpv *::after { box-sizing: border-box; }
+
+.tpv {
+  --rail: 26rem;                 /* ancho del rail del ticket en tablet         */
+  display: grid;
+  grid-template-columns: 1fr var(--rail);
+  gap: var(--s-4);
+  height: 100dvh;
+  padding: var(--s-4);
+  background:
+    radial-gradient(120% 80% at 100% 0%, var(--paper-2), var(--paper) 60%);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: 1.35;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+
+.tpv :is(button, input) { font: inherit; color: inherit; }
+.tpv [hidden] { display: none !important; }
+
+/* Cifras tabulares para todo importe monetario */
+.tpv .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+   Botón base + variantes
+   ========================================================================== */
+.tpv-btn {
+  --btn-bg: var(--card);
+  --btn-fg: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: var(--touch);
+  padding: 0 var(--s-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--t-fast), box-shadow var(--t-fast),
+              background var(--t-fast), border-color var(--t-fast);
+  box-shadow: var(--shadow-1);
+}
+.tpv-btn:active { transform: translateY(1px) scale(0.99); box-shadow: var(--shadow-pressed); }
+.tpv-btn:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.tpv-btn[disabled] { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
+@media (hover: hover) {
+  .tpv-btn:not([disabled]):hover { border-color: var(--ink-3); }
+}
+
+.tpv-btn--primary {
+  --btn-bg: var(--brand);
+  --btn-fg: var(--brand-ink);
+  border-color: transparent;
+  box-shadow: var(--shadow-2);
+}
+.tpv-btn--primary:active { background: var(--brand-press); }
+.tpv-btn--ghost { --btn-bg: transparent; border-color: var(--line); box-shadow: none; }
+.tpv-btn--danger { --btn-fg: var(--danger); border-color: color-mix(in oklch, var(--danger) 40%, var(--line-strong)); }
+.tpv-btn--block { width: 100%; }
+.tpv-btn--lg { min-height: var(--touch-lg); font-size: var(--fs-lg); border-radius: var(--r-lg); }
+
+/* ==========================================================================
+   Panel catálogo
+   ========================================================================== */
+.tpv-catalogo {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.tpv-catalogo__head {
+  display: grid;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+
+.tpv-buscar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  height: var(--touch);
+  padding: 0 var(--s-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--paper);
+}
+.tpv-buscar:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
+.tpv-buscar input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; }
+.tpv-buscar input::placeholder { color: var(--ink-3); }
+.tpv-buscar__icono { color: var(--ink-3); flex: none; }
+.tpv-buscar__x {
+  flex: none; display: grid; place-items: center;
+  width: 2rem; height: 2rem; border: 0; border-radius: var(--r-full);
+  background: var(--paper-2); color: var(--ink-2); cursor: pointer;
+}
+
+.tpv-tabs { display: flex; gap: var(--s-2); overflow-x: auto; scrollbar-width: none; }
+.tpv-tabs::-webkit-scrollbar { display: none; }
+.tpv-tab {
+  flex: none; height: 2.75rem; padding: 0 var(--s-4);
+  border: 1px solid var(--line-strong); border-radius: var(--r-full);
+  background: var(--paper); color: var(--ink-2); font-weight: 600; font-size: var(--fs-sm);
+  cursor: pointer; transition: all var(--t-fast); white-space: nowrap;
+}
+.tpv-tab[aria-pressed='true'] {
+  background: var(--ink); color: var(--paper); border-color: var(--ink);
+}
+.tpv-tab:active { transform: translateY(1px); }
+
+.tpv-catalogo__scroll { min-height: 0; overflow-y: auto; padding: var(--s-4); scroll-padding-top: var(--s-4); }
+.tpv-catalogo__scroll::-webkit-scrollbar { width: 10px; }
+.tpv-catalogo__scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: var(--r-full); }
+
+.tpv-seccion + .tpv-seccion { margin-top: var(--s-6); }
+.tpv-seccion__titulo {
+  display: flex; align-items: baseline; gap: var(--s-3);
+  margin: 0 0 var(--s-3);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);
+}
+.tpv-seccion__titulo::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+/* Rejilla de ítems: se adapta con auto-fill, no encoge tiles bajo lo usable */
+.tpv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--s-3);
+}
+
+.tpv-item {
+  position: relative;
+  display: flex; flex-direction: column; justify-content: space-between;
+  gap: var(--s-4);
+  min-height: 6.5rem; padding: var(--s-4);
+  text-align: left;
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--card); color: var(--ink);
+  cursor: pointer;
+  box-shadow: var(--shadow-1);
+  transition: transform var(--t-fast), box-shadow var(--t-fast), border-color var(--t-fast);
+}
+.tpv-item::before {                       /* pastilla de color por tipo, sutil */
+  content: ''; position: absolute; inset: 0 auto 0 0; width: 4px;
+  border-radius: var(--r-md) 0 0 var(--r-md);
+  background: var(--brand);
+}
+.tpv-item--producto::before { background: var(--ink-3); }
+.tpv-item:active { transform: translateY(2px) scale(0.985); box-shadow: var(--shadow-pressed); }
+.tpv-item:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+@media (hover: hover) {
+  .tpv-item:hover { border-color: var(--brand); box-shadow: var(--shadow-2); }
+}
+.tpv-item__nombre { font-weight: 650; font-size: var(--fs-base); line-height: 1.2; }
+.tpv-item__pie { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s-2); }
+.tpv-item__meta { font-size: var(--fs-xs); color: var(--ink-3); }
+.tpv-item__precio { font-size: var(--fs-lg); font-weight: 700; }
+/* Micro-feedback al añadir: destello del acento */
+.tpv-item.is-added { animation: tpv-pulse 420ms var(--ease); }
+@keyframes tpv-pulse {
+  0% { box-shadow: 0 0 0 0 var(--brand-tint); }
+  40% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--brand) 22%, transparent); }
+  100% { box-shadow: var(--shadow-1); }
+}
+
+/* ==========================================================================
+   Rail del ticket
+   ========================================================================== */
+.tpv-ticket {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  min-height: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+
+.tpv-ticket__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px dashed var(--line-strong);   /* aire de "ticket troquelado" */
+  background: var(--paper);
+}
+.tpv-ticket__titulo { display: flex; flex-direction: column; }
+.tpv-ticket__titulo b { font-family: var(--font-display); font-size: var(--fs-lg); font-weight: 750; }
+.tpv-ticket__titulo span { font-size: var(--fs-xs); color: var(--ink-3); }
+.tpv-badge {
+  display: inline-grid; place-items: center; min-width: 2rem; height: 2rem; padding: 0 var(--s-2);
+  border-radius: var(--r-full); background: var(--brand-tint); color: var(--brand-press);
+  font-size: var(--fs-sm); font-weight: 700;
+}
+
+.tpv-ticket__lineas { min-height: 0; overflow-y: auto; padding: var(--s-2) var(--s-3); }
+.tpv-ticket__lineas::-webkit-scrollbar { width: 8px; }
+.tpv-ticket__lineas::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: var(--r-full); }
+
+.tpv-linea {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-1) var(--s-3);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  animation: tpv-slide-in 220ms var(--ease);
+}
+.tpv-linea + .tpv-linea { border-top: 1px solid var(--line); }
+@keyframes tpv-slide-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.tpv-linea__desc { font-weight: 600; }
+.tpv-linea__sub { grid-column: 1; font-size: var(--fs-xs); color: var(--ink-3); }
+.tpv-linea__precio { grid-column: 2; grid-row: 1; text-align: right; font-weight: 700; }
+.tpv-linea__precio del { color: var(--ink-3); font-weight: 500; margin-right: var(--s-2); }
+.tpv-linea__acciones { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-2); }
+
+.tpv-chip {
+  display: inline-flex; align-items: center; gap: var(--s-1);
+  height: 2rem; padding: 0 var(--s-3);
+  border: 0; border-radius: var(--r-full);
+  background: var(--brand-tint); color: var(--brand-press);
+  font-size: var(--fs-xs); font-weight: 700; cursor: pointer;
+}
+.tpv-chip:active { transform: translateY(1px); }
+.tpv-chip--add { background: var(--paper-2); color: var(--ink-2); border: 1px dashed var(--line-strong); }
+
+/* Stepper de cantidad (grande, para el pulgar) */
+.tpv-stepper { display: inline-flex; align-items: center; gap: 0; }
+.tpv-stepper__btn {
+  width: 2.75rem; height: 2.75rem; display: grid; place-items: center;
+  border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink);
+  font-size: var(--fs-lg); font-weight: 700; cursor: pointer;
+}
+.tpv-stepper__btn:first-child { border-radius: var(--r-md) 0 0 var(--r-md); }
+.tpv-stepper__btn:last-child { border-radius: 0 var(--r-md) var(--r-md) 0; }
+.tpv-stepper__btn:active { background: var(--paper-2); transform: translateY(1px); }
+.tpv-stepper__val {
+  min-width: 2.75rem; height: 2.75rem; display: grid; place-items: center;
+  border-block: 1px solid var(--line-strong); background: var(--card);
+  font-variant-numeric: tabular-nums; font-weight: 700;
+}
+.tpv-linea__eliminar { margin-left: auto; color: var(--danger); background: transparent; border: 0; cursor: pointer; padding: var(--s-2); border-radius: var(--r-sm); }
+.tpv-linea__eliminar:active { background: var(--danger-tint); }
+
+/* Totales */
+.tpv-ticket__totales {
+  display: grid; gap: var(--s-1);
+  padding: var(--s-4) var(--s-5);
+  border-top: 1px dashed var(--line-strong);
+  background: var(--paper);
+}
+.tpv-total-row { display: flex; align-items: baseline; justify-content: space-between; font-size: var(--fs-sm); color: var(--ink-2); }
+.tpv-total-row--dto { color: var(--brand-press); }
+.tpv-total-row--grande {
+  margin-top: var(--s-2); padding-top: var(--s-3); border-top: 1px solid var(--line-strong);
+}
+.tpv-total-row--grande dt { font-family: var(--font-display); font-size: var(--fs-lg); font-weight: 750; color: var(--ink); }
+.tpv-total-row--grande dd { font-size: var(--fs-3xl); font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+.tpv-total-row dt, .tpv-total-row dd { margin: 0; }
+
+.tpv-ticket__footer { display: grid; grid-template-columns: auto 1fr; gap: var(--s-3); padding: var(--s-4) var(--s-5) var(--s-5); }
+
+/* ==========================================================================
+   Empty states
+   ========================================================================== */
+.tpv-vacio {
+  display: grid; place-content: center; justify-items: center; gap: var(--s-3);
+  height: 100%; min-height: 12rem; padding: var(--s-8) var(--s-6); text-align: center;
+}
+.tpv-vacio__icono {
+  display: grid; place-items: center; width: 4.5rem; height: 4.5rem;
+  border-radius: var(--r-full); background: var(--paper-2); color: var(--ink-3);
+}
+.tpv-vacio__titulo { font-family: var(--font-display); font-size: var(--fs-lg); font-weight: 700; }
+.tpv-vacio__texto { max-width: 22ch; color: var(--ink-3); font-size: var(--fs-sm); }
+
+/* ==========================================================================
+   Skeletons de carga (shimmer discreto)
+   ========================================================================== */
+.tpv-skel {
+  --skel: color-mix(in oklch, var(--ink) 8%, var(--paper-2));
+  position: relative; overflow: hidden;
+  background: var(--skel); border-radius: var(--r-sm);
+}
+.tpv-skel::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--card) 70%, transparent), transparent);
+  transform: translateX(-100%); animation: tpv-shimmer 1.25s infinite;
+}
+@keyframes tpv-shimmer { to { transform: translateX(100%); } }
+.tpv-skel--tile { min-height: 6.5rem; border-radius: var(--r-md); }
+.tpv-skel--linea { height: 3.5rem; margin: var(--s-2); }
+.tpv-skel--texto { height: 0.9rem; }
+.tpv-skel--total { height: 2.5rem; }
+
+/* ==========================================================================
+   Overlay de cobro + confirmación
+   ========================================================================== */
+.tpv-overlay {
+  position: fixed; inset: 0; z-index: 40;
+  display: grid; place-items: end center;
+  padding: var(--s-4);
+  background: oklch(0.245 0.02 62 / 0.44);
+  animation: tpv-fade 160ms var(--ease);
+}
+@keyframes tpv-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.tpv-panel {
+  width: min(46rem, 100%); max-height: 94dvh; display: grid; grid-template-rows: auto 1fr auto;
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: var(--shadow-2); overflow: hidden;
+  animation: tpv-rise 260ms var(--ease);
+}
+@keyframes tpv-rise { from { transform: translateY(2rem); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.tpv-panel__head { display: flex; align-items: center; justify-content: space-between; padding: var(--s-5) var(--s-6); border-bottom: 1px solid var(--line); }
+.tpv-panel__head h2 { margin: 0; font-family: var(--font-display); font-size: var(--fs-xl); font-weight: 750; }
+.tpv-panel__cerrar { width: var(--touch); height: var(--touch); border-radius: var(--r-full); border: 1px solid var(--line-strong); background: var(--card); font-size: var(--fs-xl); cursor: pointer; }
+.tpv-panel__body { min-height: 0; overflow-y: auto; padding: var(--s-6); display: grid; gap: var(--s-5); }
+.tpv-panel__footer { padding: var(--s-5) var(--s-6); border-top: 1px solid var(--line); background: var(--card); display: grid; gap: var(--s-3); }
+
+/* A cobrar destacado */
+.tpv-cobrar-total {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: var(--s-4) var(--s-5); border-radius: var(--r-md);
+  background: var(--ink); color: var(--paper);
+}
+.tpv-cobrar-total small { font-size: var(--fs-sm); opacity: 0.75; text-transform: uppercase; letter-spacing: 0.1em; }
+.tpv-cobrar-total b { font-size: var(--fs-2xl); font-weight: 800; }
+
+/* Métodos de pago */
+.tpv-metodos { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--s-3); }
+.tpv-metodo {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s-2);
+  min-height: var(--touch-lg); padding: var(--s-4);
+  border: 2px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--card); cursor: pointer; font-weight: 650;
+  transition: all var(--t-fast);
+}
+.tpv-metodo:active { transform: translateY(1px); }
+.tpv-metodo[aria-pressed='true'] { border-color: var(--brand); background: var(--brand-tint); color: var(--brand-press); box-shadow: var(--shadow-1); }
+.tpv-metodo__icono { font-size: var(--fs-xl); }
+
+/* Teclado numérico para efectivo */
+.tpv-teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.tpv-tecla {
+  min-height: var(--touch); border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--card); font-size: var(--fs-xl); font-weight: 650; cursor: pointer;
+}
+.tpv-tecla:active { background: var(--paper-2); transform: translateY(1px); box-shadow: var(--shadow-pressed); }
+.tpv-tecla--util { background: var(--paper-2); color: var(--ink-2); font-size: var(--fs-base); }
+
+.tpv-entregado { display: flex; align-items: baseline; justify-content: space-between; padding: var(--s-3) var(--s-4); border: 1px solid var(--line-strong); border-radius: var(--r-md); }
+.tpv-entregado b { font-size: var(--fs-2xl); font-weight: 800; }
+.tpv-atajos { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.tpv-atajo { height: 2.75rem; padding: 0 var(--s-4); border-radius: var(--r-full); border: 1px solid var(--line-strong); background: var(--card); font-weight: 650; cursor: pointer; }
+.tpv-atajo:active { transform: translateY(1px); }
+
+/* Fila de saldo (cambio / pendiente) */
+.tpv-saldo { display: flex; align-items: center; justify-content: space-between; padding: var(--s-3) var(--s-4); border-radius: var(--r-md); font-weight: 700; }
+.tpv-saldo--cambio { background: var(--ok-tint); color: var(--ok); }
+.tpv-saldo--pendiente { background: var(--warn-tint); color: color-mix(in oklch, var(--warn) 70%, var(--ink)); }
+.tpv-saldo--cubierto { background: var(--ok-tint); color: var(--ok); }
+.tpv-saldo b { font-size: var(--fs-xl); }
+
+/* Lista de pagos (mixto) */
+.tpv-pagos-mixto { display: grid; gap: var(--s-2); }
+.tpv-pago-item { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-3) var(--s-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--card); }
+.tpv-pago-item__quitar { border: 0; background: transparent; color: var(--danger); cursor: pointer; padding: var(--s-2); }
+
+/* Mensaje de error inline */
+.tpv-error {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3) var(--s-4); border-radius: var(--r-md);
+  background: var(--danger-tint); color: var(--danger); font-size: var(--fs-sm); font-weight: 600;
+}
+
+/* ==========================================================================
+   Confirmación
+   ========================================================================== */
+.tpv-confirm { display: grid; justify-items: center; gap: var(--s-4); padding: var(--s-10) var(--s-6); text-align: center; }
+.tpv-confirm__check {
+  width: 5.5rem; height: 5.5rem; display: grid; place-items: center;
+  border-radius: var(--r-full); background: var(--ok-tint); color: var(--ok);
+  animation: tpv-pop 380ms var(--ease);
+}
+@keyframes tpv-pop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+.tpv-confirm__check svg { width: 3rem; height: 3rem; }
+.tpv-confirm h2 { margin: 0; font-family: var(--font-display); font-size: var(--fs-2xl); font-weight: 800; }
+.tpv-confirm__cambio { display: grid; gap: var(--s-1); padding: var(--s-4) var(--s-6); border-radius: var(--r-md); background: var(--card); border: 1px solid var(--line); }
+.tpv-confirm__cambio small { color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.1em; font-size: var(--fs-xs); }
+.tpv-confirm__cambio b { font-size: var(--fs-3xl); font-weight: 800; }
+.tpv-confirm__acciones { display: flex; gap: var(--s-3); margin-top: var(--s-2); }
+
+/* ==========================================================================
+   Entrada / arranque del turno (sin ticket abierto)
+   ========================================================================== */
+.tpv-arranque { display: grid; place-content: center; justify-items: center; gap: var(--s-5); grid-column: 1 / -1; text-align: center; }
+.tpv-arranque__marca { font-family: var(--font-display); font-size: var(--fs-3xl); font-weight: 800; letter-spacing: -0.02em; }
+
+/* ==========================================================================
+   Responsive: tablet vertical / móvil grande → una columna, ticket abajo
+   ========================================================================== */
+@media (max-width: 56rem) {
+  .tpv { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .tpv-ticket { max-height: 48dvh; }
+}
+
+/* Reveal escalonado del primer pintado (un solo momento, con carácter) */
+.tpv--montado .tpv-catalogo { animation: tpv-in-left 340ms var(--ease) both; }
+.tpv--montado .tpv-ticket { animation: tpv-in-right 340ms 60ms var(--ease) both; }
+@keyframes tpv-in-left { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes tpv-in-right { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+
+/* Respeto por usuarios con movimiento reducido */
+@media (prefers-reduced-motion: reduce) {
+  .tpv *, .tpv *::after, .tpv *::before { animation: none !important; transition-duration: 1ms !important; }
+}

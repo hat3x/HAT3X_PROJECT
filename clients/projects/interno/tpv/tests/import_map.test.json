@@ -1,0 +1,7 @@
+{
+  "//": "Import map SÓLO para los tests. Redirige @supabase/supabase-js al stub local (fakeSupabase se inyecta a mano) para correr los tests de integración/e2e sin red ni base de datos. zod se resuelve vía npm (sólo lo necesitan los tests de esquemas).",
+  "imports": {
+    "@supabase/supabase-js": "./stubs/supabase-js.ts",
+    "zod": "npm:zod@3.23.8"
+  }
+}

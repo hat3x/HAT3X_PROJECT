@@ -1,0 +1,102 @@
+# CI del módulo TPV — valida antes de cualquier despliegue (sub-10).
+# NO despliega: el deploy a producción es manual y está documentado en
+# tpv/DEPLOY.md (líneas rojas del proceso de release de HAT3X).
+name: tpv-ci
+
+on:
+  push:
+    paths: ['db/**', 'tpv/**', '.github/workflows/tpv-ci.yml']
+  pull_request:
+    paths: ['db/**', 'tpv/**', '.github/workflows/tpv-ci.yml']
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Núcleo puro + integración/e2e (Deno, sin red).
+  # ---------------------------------------------------------------------------
+  deno-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Núcleo puro (money, factura, caja)
+        run: deno test tpv/shared/
+      - name: Integración + e2e (stub de Supabase en memoria)
+        run: deno test --import-map=tpv/tests/import_map.test.json tpv/tests/
+
+  # ---------------------------------------------------------------------------
+  # 2. Migraciones aditivas + suite SQL sobre Postgres 16 real.
+  #    Verifica aislamiento RLS, aditividad, integración con reservas y el
+  #    smoke post-deploy — el mismo que se corre tras desplegar (DEPLOY.md §5).
+  # ---------------------------------------------------------------------------
+  sql-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Semilla mínima: el TPV asume public.salones(id uuid PK). reservas/ajustes
+      # son opcionales; las migraciones son tolerantes a su ausencia.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semilla mínima production-like (roles Supabase + salones/reservas/ajustes)
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE EXTENSION IF NOT EXISTS pgcrypto;
+          -- Roles que Supabase provee y que usan los GRANT de las migraciones.
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon')          THEN CREATE ROLE anon NOLOGIN; END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role')  THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
+          END $$;
+          -- Tabla requerida por las FKs del TPV.
+          CREATE TABLE IF NOT EXISTS public.salones (id uuid PRIMARY KEY DEFAULT gen_random_uuid());
+          -- Preexistentes opcionales: presentes para ejercitar la integración (vistas 0005)
+          -- y la comprobación de aditividad del smoke sobre tablas reales.
+          CREATE TABLE IF NOT EXISTS public.reservas (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            salon_id uuid, cliente_id uuid, empleado_id uuid, servicio_id uuid,
+            servicio_nombre text, precio numeric(12,2), tipo_impuesto numeric(5,2),
+            estado text, inicio_at timestamptz);
+          CREATE TABLE IF NOT EXISTS public.ajustes (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(), salon_id uuid, clave text, valor text);
+          SQL
+
+      - name: Aplicar migraciones aditivas en orden (0001 → 0006)
+        run: |
+          for f in $(ls db/migrations/*.up.sql | sort); do
+            echo ">> $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Smoke post-deploy (objetos + RLS + aditividad)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/post_deploy_smoke.sql
+
+      - name: Aislamiento multi-tenant cruzado
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/rls_tpv_isolation_test.sql
+
+      - name: Regresión de aditividad (agenda/reservas/ajustes intactas)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/tpv_aditividad_regresion_test.sql
+
+      - name: Integración con reservas
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/tpv_reservas_integracion_test.sql
+
+      - name: RLS de config/facturación
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/rls_tpv_config_facturacion_test.sql
+
+      - name: Reversa completa (down en orden inverso) — no debe fallar
+        run: |
+          for f in $(ls db/migrations/*.down.sql | sort -r); do
+            echo ">> $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
