@@ -11,6 +11,7 @@ import {
 import { buildLogoSrc } from "@/lib/salon-branding/branding";
 import { getActiveSalonBranding } from "@/lib/salon-branding/server";
 import { BRAND_SCOPE_ATTR } from "@/lib/salon-branding/theme";
+import { canEnterSettings } from "@/lib/settings/access";
 
 /**
  * Layout compartido de las rutas autenticadas del panel.
@@ -38,7 +39,10 @@ export default async function DashboardLayout({
     getActiveSalonBranding(),
     getActiveSalonFeatureFlags(),
   ]);
-  const showSettings = canManageSettings(membership?.role);
+  // La MISMA regla que usa el área de ajustes. Con `canManageSettings` el
+  // enlace se le ocultaba a `staff` aunque dentro sí tuviera secciones suyas:
+  // Kristel podía entrar escribiendo la URL, pero no había forma de llegar.
+  const showSettings = canEnterSettings(membership?.role);
   const sector = salon?.sector ?? "peluqueria";
 
   return (

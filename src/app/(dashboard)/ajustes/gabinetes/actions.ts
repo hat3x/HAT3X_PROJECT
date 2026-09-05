@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { canManageSettings, getActiveMembership, getActiveSalon } from "@/lib/salon";
+import { getActiveMembership, getActiveSalon } from "@/lib/salon";
+import { canAccessSettingsSection } from "@/lib/settings/access";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -24,8 +25,11 @@ async function requireManager(): Promise<
   if (salon.sector !== "odontologia") {
     return { ok: false, error: "Los gabinetes son propios de clínicas dentales." };
   }
+  // La misma regla que abre la sección. Con `canManageSettings` la pantalla se
+  // le mostraba a `staff` pero cualquier cambio se rechazaba: un botón que no
+  // hace nada es peor que no tenerlo.
   const membership = await getActiveMembership();
-  if (membership === null || !canManageSettings(membership.role)) {
+  if (membership === null || !canAccessSettingsSection("gabinetes", membership.role)) {
     return { ok: false, error: "No tienes permiso para gestionar gabinetes." };
   }
   return { ok: true, salonId: salon.id };
