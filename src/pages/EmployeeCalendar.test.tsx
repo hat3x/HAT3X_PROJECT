@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, type UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import type { User } from '@supabase/supabase-js';
 
 // Salón resuelto fijo: la resolución en runtime no es lo que se prueba aquí.
 vi.mock('@/lib/salon-context', () => ({ useSalonId: () => 'salon-1' }));
@@ -18,9 +19,13 @@ vi.mock('@/hooks/use-appointment-blocks', () => ({ useAppointmentBlocks: vi.fn()
 // La consulta del selector de profesionales (useQuery directo) delega en esta función de datos.
 vi.mock('@/lib/professionals-queries', () => ({ fetchProfessionals: vi.fn() }));
 
+// Identidad de sesión: se mockea SOLO useAuth (la pantalla ahora la usa para autoseleccionar).
+vi.mock('@/lib/auth', () => ({ useAuth: vi.fn() }));
+
 import { useDayAppointments, useWeekAppointments } from '@/hooks/use-appointments';
 import { useAppointmentBlocks } from '@/hooks/use-appointment-blocks';
 import { fetchProfessionals } from '@/lib/professionals-queries';
+import { useAuth, type MemberRole } from '@/lib/auth';
 import type { AppointmentListItem } from '@/lib/appointments';
 import type { AppointmentBlock } from '@/lib/appointment-blocks';
 import type { ProfessionalListItem } from '@/lib/professionals';
@@ -30,6 +35,7 @@ const mockedUseDay = vi.mocked(useDayAppointments);
 const mockedUseWeek = vi.mocked(useWeekAppointments);
 const mockedUseBlocks = vi.mocked(useAppointmentBlocks);
 const mockedFetchPros = vi.mocked(fetchProfessionals);
+const mockedUseAuth = vi.mocked(useAuth);
 
 /** Resultado de agenda controlable (por defecto: éxito con lista vacía). */
 function agendaResult(
@@ -111,9 +117,78 @@ function renderPage(node: ReactNode) {
   return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
 }
 
+/**
+ * Resultado de `useAuth` controlable. Por defecto: sin sesión pero `isManager: true`, para que
+ * las pruebas que NO tocan la identidad (todas las que ya existían antes de la autoselección)
+ * sigan viendo el selector de profesional exactamente como antes.
+ */
+function authResult(overrides: Partial<ReturnType<typeof useAuth>> = {}): ReturnType<typeof useAuth> {
+  return {
+    user: null,
+    session: null,
+    roles: [],
+    isStaff: true,
+    isManager: true,
+    isAdmin: false,
+    loading: false,
+    error: null,
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    hasStaffAccess: true,
+    ...overrides,
+  } as ReturnType<typeof useAuth>;
+}
+
+/** Forma mínima de profesional que aceptan las pruebas de autoselección (nombres de columna). */
+interface RenderCalendarProfessional {
+  id: string;
+  full_name: string;
+  user_id: string | null;
+}
+
+/**
+ * Helper de render para las pruebas de autoselección por vínculo. Fija la identidad (`user` +
+ * `role`) y la lista de profesionales (con su `user_id`) antes de montar la pantalla; el resto
+ * de consultas (agenda, tramos) quedan con sus valores por defecto salvo que la propia prueba
+ * los sobrescriba tras llamar a este helper.
+ */
+function renderCalendar({
+  user = null,
+  role = 'staff',
+  professionals = [],
+}: {
+  user?: { id: string } | null;
+  role?: MemberRole;
+  professionals?: RenderCalendarProfessional[];
+} = {}) {
+  mockedUseAuth.mockReturnValue(
+    authResult(
+      user
+        ? {
+            user: { id: user.id } as unknown as User,
+            roles: [role],
+            isStaff: true,
+            isManager: role === 'owner' || role === 'manager',
+            isAdmin: role === 'owner',
+            hasStaffAccess: true,
+          }
+        : {},
+    ),
+  );
+  mockedFetchPros.mockResolvedValue(
+    professionals.map((p) => makePro({ id: p.id, fullName: p.full_name, userId: p.user_id })),
+  );
+  mockedUseDay.mockReturnValue(agendaResult());
+  mockedUseWeek.mockReturnValue(agendaResult());
+  return renderPage(<EmployeeCalendar />);
+}
+
 beforeEach(() => {
   // Por defecto no hay tramos: las pruebas que los necesiten sobrescriben el mock.
   mockedUseBlocks.mockReturnValue(blocksResult());
+  // Por defecto sin sesión conocida pero con selector visible (ver `authResult`): las pruebas
+  // ya existentes no dependen de la identidad y deben seguir viendo el comportamiento previo.
+  mockedUseAuth.mockReturnValue(authResult());
 });
 
 afterEach(() => {
@@ -242,5 +317,41 @@ describe('EmployeeCalendar — modelo de 3 fases (sub-7)', () => {
     expect(screen.getByText('Alan Turing')).toBeInTheDocument();
     // No se emite ninguna alerta de error por el solape.
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('autoseleccion por vinculo', () => {
+  it('un staff con ficha ligada abre su agenda sin tocar el selector', async () => {
+    renderCalendar({
+      user: { id: 'u3' },
+      role: 'staff',
+      professionals: [
+        { id: 'p1', full_name: 'Ana', user_id: null },
+        { id: 'p3', full_name: 'Marta', user_id: 'u3' },
+      ],
+    });
+
+    expect(await screen.findByText('Marta')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/profesional/i)).toBeNull();
+  });
+
+  it('un staff sin vinculo conserva el selector', async () => {
+    renderCalendar({
+      user: { id: 'u9' },
+      role: 'staff',
+      professionals: [{ id: 'p1', full_name: 'Ana', user_id: null }],
+    });
+
+    expect(await screen.findByLabelText(/profesional/i)).toBeInTheDocument();
+  });
+
+  it('un owner conserva el selector aunque tenga ficha', async () => {
+    renderCalendar({
+      user: { id: 'u3' },
+      role: 'owner',
+      professionals: [{ id: 'p3', full_name: 'Marta', user_id: 'u3' }],
+    });
+
+    expect(await screen.findByLabelText(/profesional/i)).toBeInTheDocument();
   });
 });

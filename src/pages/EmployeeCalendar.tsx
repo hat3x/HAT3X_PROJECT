@@ -13,11 +13,13 @@ import {
   Users,
 } from 'lucide-react';
 
+import { useAuth } from '@/lib/auth';
 import { useSalonId } from '@/lib/salon-context';
 import { DEFAULT_WEEK_STARTS_ON, type AppointmentListItem } from '@/lib/appointments';
 import { useDayAppointments, useWeekAppointments } from '@/hooks/use-appointments';
 import { useAppointmentBlocks } from '@/hooks/use-appointment-blocks';
 import { groupBlocksByAppointment, type AppointmentBlock } from '@/lib/appointment-blocks';
+import { findMyProfessionalId } from '@/lib/my-professional';
 import { fetchProfessionals } from '@/lib/professionals-queries';
 import type { ProfessionalListItem } from '@/lib/professionals';
 import {
@@ -44,13 +46,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-// ⚠️ NOTA DE DISEÑO — vínculo usuario↔profesional PENDIENTE.
-// La subtarea pedía mostrar "la agenda del profesional autenticado". La auditoría de esquema
-// (docs/HAT3X-031-auditoria-esquema-salon-os.md, Hallazgo 1) concluyó que HOY NO es posible:
-// `professionals.user_id` es nullable, sin FK a `auth.users` y sin poblar, así que desde la
-// sesión (`auth.uid`) NO se puede saber "qué profesional soy". Por eso esta pantalla NO usa la
-// identidad del usuario para filtrar y ofrece un SELECTOR de profesional (con la limitación
-// marcada como pendiente en la UI). Cuando se pueble `user_id` + FK, se podrá autoseleccionar.
+// Vínculo usuario↔profesional: RESUELTO. `professionals.user_id` (uuid con FK a auth.users)
+// identifica qué ficha es cada cuenta, y un índice único parcial (salon_id, user_id)
+// garantiza que la respuesta sea única dentro del salón. Un `staff` con vínculo abre
+// DIRECTAMENTE su agenda. El selector permanece para `owner` y `manager` —que consultan
+// legítimamente las agendas de todo el equipo— y como degradación para un `staff` cuyo
+// vínculo aún no se haya poblado.
 
 type AgendaView = 'day' | 'week';
 
@@ -82,6 +83,7 @@ function writeStoredProfessional(salonId: string, professionalId: string): void 
 
 export default function EmployeeCalendar() {
   const salonId = useSalonId();
+  const { user, isManager } = useAuth();
 
   const [view, setView] = useState<AgendaView>('day');
   const [refDate, setRefDate] = useState<Date>(() => new Date());
@@ -98,6 +100,26 @@ export default function EmployeeCalendar() {
     staleTime: 5 * 60 * 1000,
   });
   const professionals = professionalsQuery.data ?? EMPTY_PROFESSIONALS;
+
+  // «¿Qué profesional soy?»: resuelve el vínculo cuenta↔ficha (ver `findMyProfessionalId`).
+  // null cuando no hay sesión, la cuenta no tiene ficha, o el vínculo aún no se ha poblado.
+  const myProfessionalId = useMemo(
+    () =>
+      findMyProfessionalId(
+        professionals.map((p) => ({ id: p.id, userId: p.userId })),
+        user?.id ?? null,
+      ),
+    [professionals, user],
+  );
+
+  /** El selector solo se muestra a quien ve varias agendas, o a quien no tiene la suya. */
+  const showSelector = isManager || myProfessionalId === null;
+
+  // En cuanto se conoce la ficha propia, se adopta como selección: un staff con vínculo entra
+  // directo a SU agenda sin pasar por el selector (que, para este caso, ya no se muestra).
+  useEffect(() => {
+    if (myProfessionalId) setManualProfessionalId(myProfessionalId);
+  }, [myProfessionalId]);
 
   // Profesional efectivo: la selección manual (si sigue siendo válida) o, por comodidad, el
   // único profesional cuando solo hay uno. Validar contra la lista descarta un id guardado que
@@ -175,48 +197,59 @@ export default function EmployeeCalendar() {
       {/* Solo visualización en esta fase: la acción de crear queda presente pero inactiva. */}
       <AgendaReadOnlyNotice className="mb-4 animate-slide-up" />
 
-      {/* Selector de profesional (obligatorio: la sesión no identifica al profesional). */}
-      <div className="mb-4 space-y-2">
-        <Label
-          htmlFor="agenda-professional"
-          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-        >
-          Profesional
-        </Label>
-        <Select
-          value={effectiveProfessionalId ?? undefined}
-          onValueChange={setManualProfessionalId}
-          disabled={professionalsQuery.isLoading || professionals.length === 0}
-        >
-          <SelectTrigger id="agenda-professional" aria-label="Seleccionar profesional">
-            <SelectValue
-              placeholder={
-                professionalsQuery.isLoading
-                  ? 'Cargando profesionales…'
-                  : 'Selecciona tu profesional'
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {professionals.map((professional) => (
-              <SelectItem key={professional.id} value={professional.id}>
-                {professional.fullName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Selector de profesional: solo para quien ve varias agendas (owner/manager) o para un
+          staff cuyo vínculo aún no se ha poblado. Quien tiene ficha propia entra directo a ella
+          (ver `showSelector`) y en su lugar se muestra su nombre, sin control de formulario. */}
+      {showSelector ? (
+        <div className="mb-4 space-y-2">
+          <Label
+            htmlFor="agenda-professional"
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+          >
+            Profesional
+          </Label>
+          <Select
+            value={effectiveProfessionalId ?? undefined}
+            onValueChange={setManualProfessionalId}
+            disabled={professionalsQuery.isLoading || professionals.length === 0}
+          >
+            <SelectTrigger id="agenda-professional" aria-label="Seleccionar profesional">
+              <SelectValue
+                placeholder={
+                  professionalsQuery.isLoading
+                    ? 'Cargando profesionales…'
+                    : 'Selecciona tu profesional'
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {professionals.map((professional) => (
+                <SelectItem key={professional.id} value={professional.id}>
+                  {professional.fullName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        {professionalsQuery.isSuccess && professionals.length > 0 && (
-          <p role="note" className="flex items-start gap-1.5 text-xs text-muted-foreground">
-            <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-            <span>
-              De momento la app no reconoce automáticamente tu ficha de profesional; selecciónala
-              en la lista.
-              <span className="font-medium"> (pendiente)</span>
-            </span>
+          {professionalsQuery.isSuccess && professionals.length > 0 && (
+            <p role="note" className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+              <span>
+                De momento la app no reconoce automáticamente tu ficha de profesional; selecciónala
+                en la lista.
+                <span className="font-medium"> (pendiente)</span>
+              </span>
+            </p>
+          )}
+        </div>
+      ) : (
+        selectedProfessional && (
+          <p className="mb-4 flex items-center gap-2 text-sm font-medium text-foreground">
+            <User className="h-4 w-4 flex-shrink-0 text-primary" aria-hidden="true" />
+            {selectedProfessional.fullName}
           </p>
-        )}
-      </div>
+        )
+      )}
 
       {/* Cambio de vista día / semana. */}
       <div className="mb-3 flex gap-2" role="group" aria-label="Vista de la agenda">
