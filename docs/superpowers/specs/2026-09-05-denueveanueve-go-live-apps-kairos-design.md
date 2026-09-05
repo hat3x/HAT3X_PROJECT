@@ -85,26 +85,45 @@ despliegue y un ajuste acotado.
 
 ### 4.1 Acceso del equipo (nuevo)
 
-**Modelo.** `salon_members` gana `professional_id uuid null references professionals(id)`,
-con índice único parcial sobre `(salon_id, professional_id)` cuando no es nulo. Nullable a
-propósito: un owner o un manager puede no ser profesional, y esas membresías seguirán sin
-vínculo. La columna es aditiva y no afecta a las membresías existentes.
+**Modelo.** El vínculo cuenta↔profesional **ya existe**: `professionals.user_id`, uuid
+nullable con FK `professionals_user_id_fkey` a `auth.users(id) ON DELETE SET NULL`.
+Verificado en la base el 5 de septiembre de 2026, con 3 de 32 profesionales ya poblados.
 
-Con el vínculo, una cuenta sabe **a qué profesional corresponde**, que es lo que hoy falta:
-la app de staff resuelve la agenda propia por un selector porque no tiene forma de saberlo.
+No se crea ninguna columna nueva. Introducir un `salon_members.professional_id` habría
+dejado dos mecanismos compitiendo para lo mismo.
+
+> La nota de diseño en la cabecera de `src/pages/EmployeeCalendar.tsx` (app de staff) afirma
+> que `user_id` está «sin FK a auth.users y sin poblar», citando el hallazgo 1 de
+> `docs/HAT3X-031-auditoria-esquema-salon-os.md`. Era cierto en julio; la FK se añadió
+> después y el comentario quedó obsoleto. **Actualizarlo forma parte de este trabajo.**
+
+Lo único que falta en el esquema es una garantía de unicidad: un índice único parcial sobre
+`(salon_id, user_id)` en `professionals` cuando `user_id` no es nulo, para que una misma
+cuenta no quede ligada a dos fichas dentro del mismo salón. Entre salones distintos sí puede
+repetirse: una persona que trabaja en dos salones es un caso legítimo.
+
+Nullable se mantiene a propósito: un profesional puede no tener acceso a la app, y un owner
+o manager puede no ser profesional.
+
+Con el vínculo poblado, una cuenta sabe **a qué profesional corresponde**, que es lo que hoy
+falta: la app de staff resuelve la agenda propia por un selector porque no tiene forma de
+saberlo.
 
 **Server Actions** (en `src/app/(dashboard)/ajustes/personal/actions.ts`, junto a las de
 ficha), todas restringidas a `owner` y `manager` y apoyadas en el cliente admin existente
 `@/lib/supabase/admin`:
 
 - `grantProfessionalAccess(professionalId, email, role)` — invita al usuario por email,
-  inserta la fila de `salon_members` con el rol elegido y el `professional_id`. Idempotente:
-  repetirla sobre un profesional que ya tiene acceso no duplica ni rompe; reenvía la
-  invitación.
+  inserta su fila en `salon_members` con el rol elegido, y escribe el `user_id` resultante en
+  la ficha de `professionals`. Las dos escrituras van juntas: una membresía sin vínculo deja
+  a la persona dentro de la app pero sin agenda propia, y un vínculo sin membresía no deja
+  entrar. Idempotente: repetirla sobre un profesional que ya tiene acceso no duplica ni
+  rompe; reenvía la invitación.
 - `changeProfessionalRole(professionalId, role)` — cambia el rol de una membresía ya
   existente. Sin esto, un ascenso a manager volvería a pasar por HAT3X.
-- `revokeProfessionalAccess(professionalId)` — elimina la membresía. **No** borra el usuario
-  de Supabase Auth ni la ficha del profesional: el histórico de citas y visitas se conserva.
+- `revokeProfessionalAccess(professionalId)` — elimina la membresía y pone `user_id` a nulo
+  en la ficha. **No** borra el usuario de Supabase Auth ni la ficha del profesional: el
+  histórico de citas y visitas se conserva.
 
 Las tres se apoyan en las políticas RLS que ya existen (`owners_managers_insert_members`,
 `owners_managers_update_members`, `owners_delete_members`), de modo que el permiso está
@@ -114,12 +133,13 @@ impuesto en el servidor y no solo en la Server Action.
 (sin acceso · invitado · activo, con el rol) y las acciones correspondientes. El email lo
 teclea el owner en el momento de dar acceso; HAT3X no recoge ni gestiona esos datos.
 
-**App de staff.** El profesional propio se resuelve por el vínculo, no por selección
-manual: `src/lib/employee-agenda.ts` y `src/hooks/use-professionals.ts` pasan a leer el
-`professional_id` de la membresía del usuario. El selector **permanece** para `owner` y
-`manager`, que legítimamente consultan las agendas de todo el equipo. Un `staff` con
+**App de staff.** El profesional propio se resuelve por el vínculo, no por selección manual:
+la ficha propia se busca por `professionals.user_id = auth.uid()` dentro del salón resuelto,
+y `src/pages/EmployeeCalendar.tsx` la autoselecciona. El selector **permanece** para `owner`
+y `manager`, que legítimamente consultan las agendas de todo el equipo. Un `staff` con
 vínculo abre directamente su agenda; un `staff` sin vínculo (caso heredado) conserva el
-selector como degradación.
+selector como degradación, y la nota de diseño obsoleta de esa pantalla se sustituye por el
+comportamiento real.
 
 ### 4.2 Direccionamiento
 
@@ -169,8 +189,12 @@ mano sobre datos reales.
   pertenecer a varios salones, que es el comportamiento correcto en multi-tenant.
 - **Revocar y volver a dar acceso.** La segunda invitación reutiliza el usuario; el
   histórico de la persona sigue ligado a su ficha de profesional, no a la membresía.
-- **Profesional con acceso que se elimina.** Borrar la ficha con una membresía viva debe
-  bloquearse o revocar primero, nunca dejar una membresía apuntando a una ficha inexistente.
+- **Profesional con acceso que se elimina.** Borrar la ficha deja al usuario con membresía
+  pero sin ficha: entra en la app y no tiene agenda. La eliminación debe revocar primero, o
+  bloquearse mientras haya acceso vivo.
+- **Usuario borrado en Supabase Auth.** La FK existente pone `user_id` a nulo por sí sola,
+  pero la fila de `salon_members` quedaría huérfana. La revocación es siempre la vía
+  correcta; el borrado directo de usuarios no forma parte de ningún flujo de la app.
 - **Último owner.** Revocar o degradar al único `owner` de un salón se rechaza: dejaría el
   salón sin nadie capaz de gestionar accesos.
 - **Credenciales.** No se envían contraseñas en texto plano por ningún canal. El acceso se
