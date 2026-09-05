@@ -42,8 +42,6 @@ dist/
 # Estado local de la CLI de Supabase (referencia al proyecto enlazado).
 **/supabase/.temp/
 
-# Proyectos de cliente con repositorio propio (ver clients/projects/README.md)
-clients/projects/salon-os/
-clients/projects/interno/
-clients/projects/kairos-admin/
-clients/projects/denueveanueve-staff/
+# Los proyectos de cliente YA NO se excluyen: viven en este repositorio.
+# Clonar HAT3X_PROJECT trae el proyecto ENTERO, que era justo lo que fallaba —
+# en una maquina nueva esas carpetas venian vacias y faltaban archivos.
