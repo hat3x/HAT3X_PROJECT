@@ -1,7 +1,14 @@
 /**
  * Unicidad por teléfono canónico — "un teléfono = una ficha por salón".
  *
- * En la BD, el índice ÚNICO PARCIAL `idx_customers_salon_phone_e164 (salon_id,
+ * NOTA: este fichero nació fijando "un teléfono = una ficha por salón". Esa regla
+ * se RETIRÓ a conciencia: en una clínica las familias comparten móvil, y exigirla
+ * dejaba a 397 de las 1.200 fichas de Biodental sin número de contacto — y por
+ * tanto sin recordatorios de cita. Lo que sigue siendo único es `(salon_id,
+ * user_id)`: una cuenta enlaza con UNA ficha, porque enlazarla a dos le daría a
+ * alguien el historial clínico de otra persona.
+ *
+ * (Histórico) En la BD, el índice ÚNICO PARCIAL `idx_customers_salon_phone_e164 (salon_id,
  * phone_e164) where phone_e164 is not null` (migración 20260717110000) prohíbe DOS
  * fichas con el mismo teléfono canónico DENTRO de un salón, pero PERMITE la misma
  * persona (mismo teléfono) en salones distintos —Salón OS es multi-tenant—. Aquí no
@@ -75,16 +82,18 @@ function makeBuilder(table: string) {
     return row;
   }
 
-  /** ¿La fila candidata viola una única parcial ya presente en la tabla? */
+  /**
+   * ¿La fila candidata viola una única parcial ya presente en la tabla?
+   *
+   * El TELÉFONO ya no está aquí: dejó de ser único cuando se admitió que una
+   * familia comparta móvil (la madre da su número para ella y para sus hijos).
+   * Lo que SÍ sigue siendo único es `user_id` — una cuenta enlaza con UNA ficha
+   * por salón, porque enlazarla a dos sería darle a alguien el historial de dos
+   * personas.
+   */
   function uniqueViolation(candidate: Row): boolean {
     if (table !== "customers") return false;
     const sameSalon = (r: Row): boolean => r.salon_id === candidate.salon_id && r !== candidate;
-    if (
-      candidate.phone_e164 != null &&
-      rows().some((r) => sameSalon(r) && r.phone_e164 === candidate.phone_e164)
-    ) {
-      return true;
-    }
     if (
       candidate.user_id != null &&
       rows().some((r) => sameSalon(r) && r.user_id === candidate.user_id)
@@ -179,6 +188,7 @@ function makeBuilder(table: string) {
       pending = { op: "update", payload };
       return b;
     },
+    order: (_col: string, _opts?: { ascending: boolean }) => b,
     maybeSingle: () => Promise.resolve(resolveSingle()),
     single: () => Promise.resolve(resolveSingle()),
     then: (onFulfilled: (v: { data: Row[]; error: WriteResult["error"] }) => unknown) =>
@@ -240,24 +250,31 @@ beforeEach(() => {
 // El doble modela FIELMENTE el índice único parcial (base de todo lo demás).
 // ─────────────────────────────────────────────────────────────────────────────
 describe("el índice único parcial (salon_id, phone_e164) queda bien modelado", () => {
-  it("rechaza (23505) una segunda ficha con el MISMO teléfono en el MISMO salón", async () => {
+  it("ADMITE dos fichas con el mismo teléfono en el mismo salón: son una familia", async () => {
+    // Este test afirmaba lo CONTRARIO. La regla cambió a conciencia: exigir un
+    // teléfono por ficha dejaba a 397 de las 1.200 fichas de Biodental sin
+    // número de contacto —y por tanto sin recordatorios—, porque en una clínica
+    // la madre da su móvil para ella y para sus hijos.
     const admin = makeClient();
-    const first = await admin
+    const madre = await admin
       .from("customers")
-      .insert({ salon_id: SALON_A, full_name: "Ana", phone: "612345678" })
+      .insert({ salon_id: SALON_A, full_name: "Ana Ruiz", phone: "612345678" })
       .select("*")
       .single();
-    expect(first.error).toBeNull();
+    expect(madre.error).toBeNull();
 
-    // Otro formato del MISMO número → mismo phone_e164 → colisión en el salón A.
-    const second = await admin
+    // Otro formato del MISMO número → mismo phone_e164. Antes chocaba; ahora no.
+    const hijo = await admin
       .from("customers")
-      .insert({ salon_id: SALON_A, full_name: "Ana (dup)", phone: "+34 612 345 678" })
+      .insert({ salon_id: SALON_A, full_name: "Santiago Ruiz", phone: "+34 612 345 678" })
       .select("*")
       .single();
 
-    expect(second.error).toMatchObject({ code: "23505" });
-    expect(customers()).toHaveLength(1); // el duplicado NO se persistió
+    expect(hijo.error).toBeNull();
+    expect(customers()).toHaveLength(2);
+    // Y comparten la forma canónica, que es lo que hace falta para encontrarlos
+    // a los dos cuando llame ese número.
+    expect(customers()[0]?.phone_e164).toBe(customers()[1]?.phone_e164);
   });
 
   it("PERMITE el mismo teléfono en salones DISTINTOS (único acotado por salón)", async () => {
@@ -373,10 +390,17 @@ describe("linkOrCreateCustomerAccount — unicidad por salón, de extremo a extr
     expect(customers()).toHaveLength(1);
   });
 
-  it("el índice es el BACKSTOP: una carrera (23505) se re-resuelve enlazando, sin duplicar", async () => {
-    // Ficha existente sin cuenta cuyo phone_e164 coincide con el de Ana, pero que el
-    // PRIMER pre-chequeo por teléfono no verá (simula la carrera): el código intentará
-    // insertar, chocará con el único (23505) y re-resolverá enlazándola.
+  it("sin el indice, una carrera del alta puede duplicar la ficha (coste asumido)", async () => {
+    // Este test decia lo contrario, y el cambio NO es cosmetico: el indice unico
+    // por telefono hacia de RED DE SEGURIDAD para esta carrera —el pre-chequeo
+    // no ve la ficha, el insert chocaba con 23505 y se re-resolvia enlazando—.
+    // Al quitarlo, esa red desaparece.
+    //
+    // Se asume a conciencia: la carrera exige que la lectura no vea una fila que
+    // ya existe, es rara, y su consecuencia es una ficha duplicada —molesta pero
+    // reparable—. A cambio, 397 de las 1.200 fichas de Biodental pueden tener por
+    // fin un telefono de contacto. La red que SIGUE puesta es la de `user_id`:
+    // una cuenta nunca acaba enlazada a dos fichas del mismo salon.
     holder.currentUser = { id: USER_ANA };
     customers().push({
       id: "cust-ana",
@@ -386,7 +410,7 @@ describe("linkOrCreateCustomerAccount — unicidad por salón, de extremo a extr
       phone: "612345678",
       phone_e164: PHONE_ANA,
     });
-    holder.hidePhoneOnce.add(`${SALON_A}::${PHONE_ANA}`); // el pre-chequeo fallará una vez
+    holder.hidePhoneOnce.add(`${SALON_A}::${PHONE_ANA}`); // el pre-chequeo no la ve
 
     const result = await linkOrCreateCustomerAccount({
       salon_id: SALON_A,
@@ -395,18 +419,19 @@ describe("linkOrCreateCustomerAccount — unicidad por salón, de extremo a extr
       full_name: "Ana",
     });
 
-    // Perdió la carrera del insert pero convergió: enlazó la ficha existente.
-    expect(result.outcome).toBe("linked");
-    expect(result.customer.id).toBe("cust-ana");
-    expect(result.customer.user_id).toBe(USER_ANA);
-    expect(customers()).toHaveLength(1); // jamás una segunda ficha
+    expect(result.outcome).toBe("created");
+    expect(customers()).toHaveLength(2); // la duplicada: el coste de admitir familias
   });
 
-  it("carrera perdida ante OTRA cuenta (23505) ⇒ conflicto, sin enlazar ni duplicar", async () => {
-    // Como el anterior, pero la ficha 'oculta' es de OTRA persona (Bea). Ana pierde
-    // la carrera del insert (23505) y, al re-resolver por teléfono, encuentra la
-    // ficha de Bea → conflicto claro (ejercita la rama byPhone del recovery 23505
-    // en account.ts, con existing.user_id de un tercero, no null).
+  it("una ficha ajena con el mismo telefono ya NO impide crear la propia", async () => {
+    // Bea (la madre) tiene ficha con ese movil. Ana (la hija) se da de alta con
+    // el mismo numero. Antes esto era un conflicto —"ese telefono es de otra
+    // persona"—; ahora son dos personas de la misma casa, que es la realidad.
+    //
+    // El pre-chequeo no ve la ficha de Bea (carrera simulada), asi que Ana crea
+    // la suya. Sin la carrera, el pre-chequeo SI la veria y daria conflicto: el
+    // alta por cuenta propia no sabe distinguir a dos miembros de una familia, y
+    // ante esa duda no enlaza — lo resuelve la clinica, que sabe quien es quien.
     holder.currentUser = { id: USER_ANA };
     customers().push({
       id: "cust-bea",
@@ -418,16 +443,16 @@ describe("linkOrCreateCustomerAccount — unicidad por salón, de extremo a extr
     });
     holder.hidePhoneOnce.add(`${SALON_A}::${PHONE_ANA}`);
 
-    await expect(
-      linkOrCreateCustomerAccount({
-        salon_id: SALON_A,
-        user_id: USER_ANA,
-        phone: PHONE_ANA,
-        full_name: "Ana",
-      }),
-    ).rejects.toMatchObject({ code: "conflict", status: 409 });
+    const result = await linkOrCreateCustomerAccount({
+      salon_id: SALON_A,
+      user_id: USER_ANA,
+      phone: PHONE_ANA,
+      full_name: "Ana",
+    });
 
-    expect(customers()).toHaveLength(1); // no se creó ninguna ficha
-    expect(customers()[0]?.user_id).toBe(USER_BEA); // la de Bea, intacta
+    expect(result.outcome).toBe("created");
+    expect(customers()).toHaveLength(2);
+    // Y la de Bea sigue siendo de Bea: nadie le ha tocado la suya.
+    expect(customers().find((c) => c.id === "cust-bea")?.user_id).toBe(USER_BEA);
   });
 });

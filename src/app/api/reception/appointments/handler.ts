@@ -131,8 +131,12 @@ function bookingErrorToReception(error: unknown): ReceptionError {
   if (error instanceof BookingError) {
     switch (error.status) {
       case 400:
+        // El motor dice QUÉ campo falla cuando no es el teléfono: un número que
+        // está en varias fichas de la misma familia es un problema del NOMBRE
+        // —hace falta para desempatar—, y señalar el teléfono haría corregir lo
+        // que no era.
         return ReceptionError.validation([
-          { field: "customer.phone", message: error.message },
+          { field: error.field ?? "customer.phone", message: error.message },
         ]);
       case 404:
         return ReceptionError.noAvailability();

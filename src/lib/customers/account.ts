@@ -203,7 +203,19 @@ async function requireMembershipForSalon(salonId: string): Promise<void> {
 // Helpers de datos (cliente admin — acotado a mano por salon_id)
 // -----------------------------------------------------------------------------
 
-/** Ficha del salón con ese teléfono canónico, o null. Usa el índice único (salon_id, phone_e164). */
+/**
+ * La ficha del salón con ese teléfono canónico.
+ *
+ * ── POR QUÉ PUEDE HABER VARIAS ──────────────────────────────────────────────
+ * Un teléfono es de una FAMILIA: la madre da su móvil para ella y para sus
+ * hijos, y cada uno tiene su ficha. Antes lo impedía un índice único; ahora no,
+ * porque impedirlo dejaba a un tercio de los pacientes sin número de contacto.
+ *
+ * Con varias fichas NO se elige una. Este camino enlaza una CUENTA con una
+ * ficha, y enlazarla a la persona equivocada le daría acceso al historial
+ * clínico de un familiar. Se falla en claro y lo resuelve la clínica, que sabe
+ * quién es quién.
+ */
 async function findCustomerByPhoneE164(
   admin: AdminClient,
   salonId: string,
@@ -214,11 +226,21 @@ async function findCustomerByPhoneE164(
     .select("*")
     .eq("salon_id", salonId)
     .eq("phone_e164", phoneE164)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
   if (error !== null) {
     throw new CustomerAccountError("internal", 500, "No se pudo buscar la ficha por teléfono.");
   }
-  return data;
+  const filas = data ?? [];
+  if (filas.length === 0) return null;
+  if (filas.length > 1) {
+    throw new CustomerAccountError(
+      "conflict",
+      409,
+      "Ese teléfono está en varias fichas de la clínica. Pídeles que enlacen la tuya: " +
+        "desde aquí no podemos saber cuál es la tuya sin arriesgarnos a darte la de otra persona.",
+    );
+  }
+  return filas[0] ?? null;
 }
 
 /** Ficha del salón enlazada a esa cuenta, o null. Usa el índice único (salon_id, user_id). */

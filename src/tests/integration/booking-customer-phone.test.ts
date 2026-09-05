@@ -228,12 +228,16 @@ describe("reserva pública — identidad por teléfono (integración)", () => {
   it("(2) reutiliza la ficha existente con el mismo teléfono canónico, sin crear otra", async () => {
     // La ficha existe (misma persona por teléfono); trae user_id y nombre que NO
     // se deben pisar. El teléfono '612 34 56 78' y '+34612345678' son el mismo.
+    // Desde que un teléfono puede ser de una familia, la búsqueda devuelve
+    // LISTA: con una sola ficha se reutiliza igual que siempre.
     const { inserts } = setup({
-      customers: {
-        id: "cust-existente",
-        user_id: "user-9",
-        full_name: "Nombre Previo",
-      },
+      customers: [
+        {
+          id: "cust-existente",
+          user_id: "user-9",
+          full_name: "Nombre Previo",
+        },
+      ],
     });
 
     const confirmation = await createBooking(SLUG, bookingInput("612 34 56 78"));
@@ -262,14 +266,14 @@ describe("reserva pública — identidad por teléfono (integración)", () => {
 
   it("(4) carrera: 23505 en el INSERT → re-resuelve por teléfono y reutiliza la ficha ganadora", async () => {
     // La pre-lectura NO ve ficha (winner aún no visible) → intenta INSERT. El rival
-    // gana la carrera: el índice único parcial `(salon_id, phone_e164)` rechaza el
+    // gana la carrera: el índice único `(salon_id, email)` rechaza el
     // insert (23505) y, a partir de ahí, la ficha ganadora ya es visible.
     let winnerVisible = false;
     const { inserts } = setup({
-      customers: () => (winnerVisible ? { id: "cust-ganadora" } : null),
+      customers: () => (winnerVisible ? [{ id: "cust-ganadora", full_name: "Ana" }] : []),
       customerInsertError: () => {
         winnerVisible = true; // el rival ya insertó SU ficha: ahora la vemos
-        return { code: "23505" }; // unique_violation en (salon_id, phone_e164)
+        return { code: "23505" }; // unique_violation en (salon_id, email)
       },
     });
 

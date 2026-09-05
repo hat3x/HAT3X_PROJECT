@@ -2,8 +2,13 @@
  * `POST /api/reception/identify` — el recepcionista IA reconoce a quien llama.
  *
  * Entrada `{ phone }` (en cualquier formato). Devuelve, para el salón de la `x-api-key`:
- *   · `{ found: false }` si el teléfono no casa con ninguna ficha; o
- *   · `{ found: true, customer: { id, full_name }, upcoming: [...] }` con sus próximas citas.
+ *   · `{ found: false }` si el teléfono no casa con ninguna ficha;
+ *   · `{ found: true, customer: { id, full_name }, upcoming: [...] }` con sus próximas citas; o
+ *   · `{ found: true, ambiguous: true, candidates: [{ id, full_name }, …] }` cuando VARIAS
+ *     fichas comparten ese teléfono — una familia con un solo móvil, que es lo normal en
+ *     una clínica. Entonces NO viajan `customer` ni `upcoming`: dar por buena la primera
+ *     ficha sería contarle a quien llama las citas de otra persona. Quien atiende pregunta
+ *     por el nombre ("¿hablo con Ana o con Santiago?"), igual que una recepcionista.
  *
  * El GUARD común ({@link withReceptionGuard}) resuelve ANTES la `x-api-key → salón` (401 si
  * falla) y exige el add-on `ai_receptionist` (403 si no), de modo que aquí `salonId` es de

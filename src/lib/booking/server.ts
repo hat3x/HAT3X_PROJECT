@@ -18,6 +18,7 @@ import {
 } from "@/lib/booking/availability";
 import { normalizeEmail, type CreateBookingInput } from "@/lib/booking/schema";
 import { localDateInZone, weekdayOfLocalDate, zonedWallTimeToUtc } from "@/lib/booking/timezone";
+import { resolveHouseholdMatch, type HouseholdCandidate } from "@/lib/reception/household";
 import { normalizePhone } from "@/lib/customers/normalize-phone";
 import type {
   BookingBootstrap,
@@ -31,6 +32,13 @@ export class BookingError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /**
+     * Campo del cuerpo al que apunta el fallo, para que quien traduzca el error
+     * señale el sitio correcto. Sin esto, un problema con el NOMBRE se
+     * reportaba como un problema del teléfono, y quien lo leyera corregiría lo
+     * que no era.
+     */
+    public readonly field?: string,
   ) {
     super(message);
     this.name = "BookingError";
@@ -675,19 +683,19 @@ export async function getAvailabilityForSalon(
  * índice único parcial `(salon_id, phone_e164)` — la clave de dedup por teléfono —
  * SIEMPRE acotada por `salon_id` (el cliente admin omite RLS: aislamiento a mano).
  */
-async function findCustomerIdByPhoneE164(
+async function findCustomersByPhoneE164(
   admin: AdminClient,
   salonId: string,
   phoneE164: string,
-): Promise<string | null> {
+): Promise<HouseholdCandidate[]> {
   const { data, error } = await admin
     .from("customers")
-    .select("id")
+    .select("id, full_name")
     .eq("salon_id", salonId)
     .eq("phone_e164", phoneE164)
-    .maybeSingle();
+    .order("full_name", { ascending: true });
   if (error) throw new BookingError(500, "Error al buscar el cliente por teléfono.");
-  return data?.id ?? null;
+  return (data ?? []).map((row) => ({ id: row.id, fullName: row.full_name }));
 }
 
 /**
@@ -700,9 +708,22 @@ async function findExistingCustomerId(
   salonId: string,
   phoneE164: string,
   email: string | null,
+  fullName: string,
 ): Promise<string | null> {
-  const byPhone = await findCustomerIdByPhoneE164(admin, salonId, phoneE164);
-  if (byPhone) return byPhone;
+  // Un teléfono puede ser de toda una familia (la madre da su móvil para ella
+  // y para sus hijos). El nombre que se ha dado al reservar desempata; si no
+  // desempata, NO se elige uno — se pide que lo aclaren.
+  const household = await findCustomersByPhoneE164(admin, salonId, phoneE164);
+  const match = resolveHouseholdMatch(household, { fullName });
+  if (match.kind === "one") return match.customerId;
+  if (match.kind === "ambiguous") {
+    const nombres = match.candidates.map((c) => c.fullName).join(", ");
+    throw new BookingError(
+      400,
+      `Ese teléfono está en varias fichas (${nombres}). Dime el nombre completo de la persona de la cita.`,
+      "customer.full_name",
+    );
+  }
 
   if (email) {
     const { data, error } = await admin
@@ -748,7 +769,13 @@ async function findOrCreateCustomer(
   }
 
   // ¿Ya existe la persona (por teléfono, o por email) en ESTE salón? Reutilizar.
-  const existingId = await findExistingCustomerId(admin, salonId, phoneE164, email);
+  const existingId = await findExistingCustomerId(
+    admin,
+    salonId,
+    phoneE164,
+    email,
+    customer.fullName,
+  );
   if (existingId) return existingId;
 
   const { data: created, error } = await admin
@@ -766,14 +793,23 @@ async function findOrCreateCustomer(
   if (error === null && created !== null) return created.id;
 
   // Carrera (p. ej. doble envío del formulario): entre la re-lectura previa y este
-  // INSERT, otra petición creó la ficha y el índice único parcial `(salon_id,
-  // phone_e164)` —o `(salon_id, email)`— rechazó la segunda inserción con `23505`.
-  // RE-RESOLVEMOS por teléfono (clave natural) acotado al salón —y, si no, por
-  // email— y REUTILIZAMOS la ficha ganadora en lugar de propagar un 500 espurio.
+  // INSERT, otra petición creó la ficha y el índice único `(salon_id, email)`
+  // rechazó la segunda inserción con `23505`. RE-RESOLVEMOS acotado al salón y
+  // REUTILIZAMOS la ficha ganadora en lugar de propagar un 500 espurio.
+  //
+  // El teléfono ya NO entra en esta carrera: dejó de ser único cuando se admitió
+  // que una familia comparta móvil. Dos altas simultáneas con el mismo número
+  // crean dos fichas, y eso es correcto — son dos personas.
   // Mismo criterio que `linkOrCreateCustomerAccount` (@/lib/customers/account) para
   // el `23505`. Si aun así no se re-resuelve, el error es real: se propaga (500).
   if (error !== null && error.code === "23505") {
-    const raced = await findExistingCustomerId(admin, salonId, phoneE164, email);
+    const raced = await findExistingCustomerId(
+      admin,
+      salonId,
+      phoneE164,
+      email,
+      customer.fullName,
+    );
     if (raced) return raced;
   }
 

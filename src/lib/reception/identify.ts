@@ -87,6 +87,18 @@ export interface IdentifyResult {
   found: boolean;
   customer?: IdentifiedCustomer;
   upcoming?: UpcomingAppointment[];
+  /**
+   * `true` cuando VARIAS fichas comparten ese teléfono y no se puede saber a
+   * cuál corresponde la llamada. Entonces NO viajan `customer` ni `upcoming`:
+   * dar por buena la primera ficha sería contarle a quien llama las citas de
+   * otra persona, aunque viva en la misma casa.
+   */
+  ambiguous?: boolean;
+  /**
+   * Las fichas de ese teléfono, para que quien atiende pregunte por su nombre
+   * ("¿hablo con Ana o con Santiago?"). Solo se rellena si `ambiguous`.
+   */
+  candidates?: IdentifiedCustomer[];
 }
 
 /** Dependencias INYECTABLES (tests deterministas). En producción se omiten. */
@@ -117,25 +129,34 @@ function embeddedOne<T>(value: T | T[] | null | undefined): T | null {
  * por salón" — con el cliente admin. Un fallo REAL de consulta ⇒ `INTERNAL_ERROR` (500),
  * sin filtrar la causa.
  */
-async function findCustomerByPhoneE164(
+/**
+ * TODAS las fichas del salón con ese teléfono canónico.
+ *
+ * Devuelve lista y no una fila porque un teléfono es de una FAMILIA: la madre
+ * da su móvil para ella y para sus hijos. Con `maybeSingle()` —como estaba— dos
+ * hermanos hacían reventar la consulta y la llamada se caía.
+ *
+ * Ordenadas por nombre para que quien atiende lea siempre los mismos candidatos
+ * en el mismo orden.
+ */
+async function findCustomersByPhoneE164(
   admin: AdminClient,
   salonId: string,
   phoneE164: string,
-): Promise<IdentifiedCustomer | null> {
+): Promise<IdentifiedCustomer[]> {
   const { data, error } = await admin
     .from("customers")
     .select("id, full_name")
     .eq("salon_id", salonId)
     .eq("phone_e164", phoneE164)
-    .maybeSingle();
+    .order("full_name", { ascending: true });
 
   if (error !== null) {
     throw ReceptionError.internal(error, "No se pudo identificar al cliente por teléfono.");
   }
-  if (data === null) return null;
-  // Proyección EXPLÍCITA: la mínima exposición no depende de acordarse de acotar el
-  // `select` — aunque la fila trajera de más, solo salen `id` y `full_name`.
-  return { id: data.id, full_name: data.full_name };
+  // Proyección EXPLÍCITA: la mínima exposición no depende de acordarse de acotar
+  // el `select` — aunque la fila trajera de más, solo salen `id` y `full_name`.
+  return (data ?? []).map((row) => ({ id: row.id, full_name: row.full_name }));
 }
 
 /** Fila cruda de la consulta de próximas citas (embeds to-one de servicio/profesional). */
@@ -215,11 +236,19 @@ export async function identifyCustomer(
 
   const admin = deps.admin ?? createAdminClient();
 
-  const customer = await findCustomerByPhoneE164(admin, salonId, phoneE164);
-  if (customer === null) {
+  const matches = await findCustomersByPhoneE164(admin, salonId, phoneE164);
+  if (matches.length === 0) {
     return { found: false };
   }
 
+  // Varias fichas con ese número: no se elige, se pregunta. Y no se consultan
+  // las citas de nadie — sin saber quién llama, enseñar una agenda es filtrar
+  // datos de un tercero.
+  if (matches.length > 1) {
+    return { found: true, ambiguous: true, candidates: matches };
+  }
+
+  const customer = matches[0]!;
   const nowIso = (deps.now?.() ?? new Date()).toISOString();
   const upcoming = await fetchUpcomingAppointments(admin, salonId, customer.id, nowIso);
 

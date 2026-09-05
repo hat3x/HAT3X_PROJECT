@@ -81,12 +81,19 @@ function fakeAdmin(config: FakeConfig): {
             filters[col] = val;
             return builder;
           },
-          maybeSingle() {
-            customerCalls.push({ columns, filters: { ...filters } });
+          order(col: string, opts: { ascending: boolean }) {
+            // Desde que un teléfono puede ser de toda una familia, la búsqueda
+            // devuelve LISTA ordenada y no una fila: `maybeSingle()` reventaría
+            // con dos hermanos.
+            customerCalls.push({
+              columns,
+              filters: { ...filters },
+              order: { column: col, ascending: opts.ascending },
+            });
             if (config.customerThrows === true) {
               return Promise.reject(new Error("fallo al leer customers"));
             }
-            return Promise.resolve(config.customer ?? { data: null, error: null });
+            return Promise.resolve(config.customer ?? { data: [], error: null });
           },
         };
         return builder;
@@ -138,7 +145,16 @@ const NOW_ISO = "2026-07-23T10:00:00.000Z";
 
 /** Fila de una ficha existente (con campos de MÁS para probar la mínima exposición). */
 const CUSTOMER_ROW: QueryResult = {
-  data: { id: "cust-1", full_name: "Ana Ruiz", phone: "+34612345678", email: "ana@x.com" },
+  data: [{ id: "cust-1", full_name: "Ana Ruiz", phone: "+34612345678", email: "ana@x.com" }],
+  error: null,
+};
+
+/** Dos hermanos con el mismo móvil: el caso que antes la base prohibía. */
+const FAMILIA: QueryResult = {
+  data: [
+    { id: "cust-1", full_name: "Ana Ruiz" },
+    { id: "cust-2", full_name: "Santiago Ruiz" },
+  ],
   error: null,
 };
 
@@ -181,7 +197,7 @@ describe("identifyCustomer — no reconoce (found: false)", () => {
 
   it("ficha inexistente ⇒ { found: false } y NO consulta citas", async () => {
     const { admin, customerCalls, appointmentCalls } = fakeAdmin({
-      customer: { data: null, error: null },
+      customer: { data: [], error: null },
     });
 
     const result = await identifyCustomer(SALON, "612345678", { admin, now: NOW });
@@ -292,7 +308,7 @@ describe("identifyCustomer — reutiliza normalizePhone (busca por E.164 canóni
     ["0034612345678", "+34612345678"],
     ["(612) 345-678", "+34612345678"],
   ])("normaliza %s → %s antes de consultar phone_e164", async (input, canonical) => {
-    const { admin, customerCalls } = fakeAdmin({ customer: { data: null, error: null } });
+    const { admin, customerCalls } = fakeAdmin({ customer: { data: [], error: null } });
 
     await identifyCustomer(SALON, input, { admin, now: NOW });
 
@@ -392,5 +408,87 @@ describe("identifyCustomer — 500 INTERNAL_ERROR (sin fuga de la causa interna)
     expect(caught).toBeInstanceOf(ReceptionError);
     expect(caught).toMatchObject({ code: "INTERNAL_ERROR", status: 500 });
     expect((caught as ReceptionError).message).not.toContain("42P01");
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Un teléfono es de una FAMILIA
+//
+// Desde que varias fichas pueden compartir número, identificar deja de tener
+// siempre una respuesta. Cuando no la tiene, Sara pregunta — con los nombres,
+// que es lo que hace una recepcionista humana ("¿hablo con Ana o con
+// Santiago?").
+// -----------------------------------------------------------------------------
+
+describe("identifyCustomer · familias que comparten teléfono", () => {
+  it("con UNA ficha, el contrato no cambia: found + customer + upcoming", async () => {
+    // Es el 90 % de las llamadas. Que existan las familias no puede cambiarle
+    // el comportamiento al caso normal.
+    const { admin } = fakeAdmin({ customer: CUSTOMER_ROW, appointments: { data: [], error: null } });
+    const r = await identifyCustomer(SALON, "612 34 56 78", { admin, now: NOW });
+
+    expect(r.found).toBe(true);
+    expect(r.customer).toEqual({ id: "cust-1", full_name: "Ana Ruiz" });
+    expect(r.ambiguous).toBeUndefined();
+  });
+
+  it("con VARIAS fichas, avisa de la ambiguedad y da los nombres", async () => {
+    const { admin } = fakeAdmin({ customer: FAMILIA });
+    const r = await identifyCustomer(SALON, "612 34 56 78", { admin, now: NOW });
+
+    expect(r.found).toBe(true);
+    expect(r.ambiguous).toBe(true);
+    expect(r.candidates).toEqual([
+      { id: "cust-1", full_name: "Ana Ruiz" },
+      { id: "cust-2", full_name: "Santiago Ruiz" },
+    ]);
+  });
+
+  it("siendo ambiguo NO devuelve un cliente elegido a dedo", async () => {
+    // El fallo grave: dar por buena a la primera ficha y contarle a quien llama
+    // las citas de su hermano.
+    const { admin } = fakeAdmin({ customer: FAMILIA });
+    const r = await identifyCustomer(SALON, "612 34 56 78", { admin, now: NOW });
+
+    expect(r.customer).toBeUndefined();
+  });
+
+  it("siendo ambiguo NO consulta citas de nadie", async () => {
+    // Sin saber de quién es la llamada, mirar la agenda de alguien es filtrar
+    // datos de un tercero — aunque viva en la misma casa.
+    const { admin, appointmentCalls } = fakeAdmin({ customer: FAMILIA });
+    await identifyCustomer(SALON, "612 34 56 78", { admin, now: NOW });
+
+    expect(appointmentCalls).toHaveLength(0);
+  });
+
+  it("la busqueda sigue acotada al salon", async () => {
+    const { admin, customerCalls } = fakeAdmin({ customer: FAMILIA });
+    await identifyCustomer(SALON, "612 34 56 78", { admin, now: NOW });
+
+    expect(customerCalls[0]?.filters.salon_id).toBe(SALON);
+  });
+
+  it("los candidatos salen en orden estable, para que Sara los lea igual siempre", async () => {
+    const { admin, customerCalls } = fakeAdmin({ customer: FAMILIA });
+    await identifyCustomer(SALON, "612 34 56 78", { admin, now: NOW });
+
+    expect(customerCalls[0]?.order).toEqual({ column: "full_name", ascending: true });
+  });
+
+  it("de los candidatos solo salen id y nombre, nunca telefono ni email", async () => {
+    const conDeMas: QueryResult = {
+      data: [
+        { id: "a", full_name: "Ana Ruiz", phone: "+34612345678", email: "ana@x.com" },
+        { id: "b", full_name: "Santiago Ruiz", phone: "+34612345678", email: "s@x.com" },
+      ],
+      error: null,
+    };
+    const { admin } = fakeAdmin({ customer: conDeMas });
+    const r = await identifyCustomer(SALON, "612 34 56 78", { admin, now: NOW });
+
+    for (const c of r.candidates ?? []) {
+      expect(Object.keys(c).sort()).toEqual(["full_name", "id"]);
+    }
   });
 });

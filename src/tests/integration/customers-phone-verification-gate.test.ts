@@ -482,7 +482,9 @@ describe("(sub-5) la reserva pública sigue SIN verificación de teléfono", () 
 
   it("reutiliza la ficha existente por teléfono, también sin verificación", async () => {
     const { inserts } = setupBooking({
-      customers: { id: "cust-existente", user_id: "user-9", full_name: "Nombre Previo" },
+      // La búsqueda por teléfono devuelve LISTA desde que un número puede ser
+      // de toda una familia; con una sola ficha se reutiliza igual que siempre.
+      customers: [{ id: "cust-existente", user_id: "user-9", full_name: "Nombre Previo" }],
     });
     const confirmation = await createBooking(SLUG, bookingInput("612 34 56 78"));
 
